@@ -1,4 +1,4 @@
-import { costLines, byUrgency, estimateFrom, describeEstimate, partyOf, describeGroup, COST_KIND } from "../utils/costLedger";
+import { costLines, byUrgency, estimateFrom, describeEstimate, partyOf, partyFrom, describeGroup, COST_KIND } from "../utils/costLedger";
 import { partnerDisclosure, outboundLink } from "../utils/affiliates";
 import { tripDayDate } from "../utils/guideReading";
 
@@ -41,6 +41,25 @@ export const CostsBlock = ({ guide, C, rowFor, now = new Date() }) => {
   // Nothing rather than a labelled empty row. A trip with nothing to pay for is
   // a real trip and the block should not appear on it.
   if (!lines.length) return null;
+// ── "EVERYTHING ELSE IS JUST A LONG LIST OF CHECK PRICES" ──
+  //
+  // Oliver, 19 Sep 2026, of a screenshot of his own guide: "look at the payment
+  // thing. Estimated 250 kroner or smth, and everything else is just a long
+  // list of check prices."
+  //
+  // He is describing one list doing two jobs. A museum with a figure on it and
+  // a ferry whose fare depends on the sailing are both true rows, and they
+  // answer different questions: one is money to budget, the other is a thing to
+  // arrange. Printed together under a heading that says "What you pay", the
+  // second kind reads as a failure to find prices, and the estimate reads as
+  // the cost of a week in Denmark.
+  //
+  // So they are two lists with two headings, and the estimate sits under the
+  // first one, where it covers everything above it and nothing below it. No
+  // line is dropped: a ferry nobody can price is still a ferry they have to
+  // catch, and that was never the complaint.
+  const priced = lines.filter(l => String(l.price || "").trim());
+  const toArrange = lines.filter(l => !String(l.price || "").trim());
   // ── AND THE DOOR, NOT THE STORED STRING ──────────
   // 18 Sep 2026, the day Booking.com started paying. Every other kind on this
   // list stores an already-tracked URL, so this block could draw l.href
@@ -65,11 +84,9 @@ export const CostsBlock = ({ guide, C, rowFor, now = new Date() }) => {
       : kind === COST_KIND.AUDIO ? "Listen to a sample"
       : "Buy tickets";
 
-  return (
-    <div style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
-      <span style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, letterSpacing: 0.8, textTransform: "uppercase", flexShrink: 0, width: 92 }}>What you pay</span>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        {lines.map((l, i) => (
+  // One row, drawn the same way under either heading, because a reader should
+  // not have to learn two layouts to read one block.
+  const row = (l, i) => (
           <div key={`${l.kind}-${l.name}-${i}`} style={{ paddingTop: i ? 9 : 0, marginTop: i ? 9 : 0, borderTop: i ? `1px solid ${C.border}` : "none" }}>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "0 8px", alignItems: "baseline" }}>
               <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{l.name}</span>
@@ -114,7 +131,19 @@ export const CostsBlock = ({ guide, C, rowFor, now = new Date() }) => {
               </div>
             )}
           </div>
-        ))}
+  );
+
+  const heading = (text) => (
+    <span style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, letterSpacing: 0.8, textTransform: "uppercase", flexShrink: 0, width: 92 }}>{text}</span>
+  );
+
+  return (
+    <div>
+    {priced.length > 0 && (
+    <div style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
+      {heading("What you pay")}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        {priced.map(row)}
         {/* ── THE ESTIMATE, UNDER THE LINES IT IS MADE OF ──────
             Oliver, 18 Sep 2026: "can you implement estimated cost into the
             guide?"
@@ -125,7 +154,7 @@ export const CostsBlock = ({ guide, C, rowFor, now = new Date() }) => {
             conditions on it that only make sense after them. See estimateFrom
             in utils/costLedger.js for why it is a floor. */}
         {(() => {
-          const est = estimateFrom(lines);
+          const est = estimateFrom(priced);
           if (!est) return null;
           return (
             <div style={{ marginTop: 10, paddingTop: 9, borderTop: `1px solid ${C.gold}44` }}>
@@ -140,15 +169,22 @@ export const CostsBlock = ({ guide, C, rowFor, now = new Date() }) => {
                   partyOf refuses a count it cannot read rather than guessing
                   one, so this line is absent more often than it is wrong. */}
               {(() => {
-                const party = partyOf(guide?._travelers);
+                // The counts the brief read, when it read any, and the
+                // sentence only as a fallback for a guide built before
+                // `_party` existed. See partyFrom in utils/costLedger.js.
+                const party = partyFrom(guide?._party) || partyOf(guide?._travelers);
                 const said = describeGroup(est, party);
                 if (!said) return null;
                 return <div style={{ fontSize: 12, color: C.text, lineHeight: 1.5, marginTop: 3 }}>{said}</div>;
               })()}
               <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 3 }}>{describeEstimate(est)}</div>
-              {est.missing.length > 0 && (
+              {/* The unpriced rows are a list of their own under this one
+                  now, so naming them here as well was the same information
+                  twice. What is worth saying is that the figure stops where
+                  this list stops. */}
+              {toArrange.length > 0 && (
                 <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 2 }}>
-                  Not in the figure: {est.missing.join(", ")}.
+                  Nothing below this figure is in it: {toArrange.length} {toArrange.length === 1 ? "thing" : "things"} on this trip {toArrange.length === 1 ? "has" : "have"} no price until you pick a time or a room.
                 </div>
               )}
               {/* THE ARITHMETIC CLOSES. Named with their prices, so a reader
@@ -163,15 +199,34 @@ export const CostsBlock = ({ guide, C, rowFor, now = new Date() }) => {
             </div>
           );
         })()}
-        {/* Printed from the links that are on the page, never typed, so
-            it cannot say "this pays us" over a list that happens to contain no
-            partner link at all. */}
-        {partnered.length > 0 && (
-          <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 8 }}>
-            {partnerDisclosure(partnered[0])}
-          </div>
-        )}
       </div>
+    </div>
+    )}
+    {/* ── AND THE THINGS THAT HAVE NO PRICE YET ──────────────
+        A bed, a crossing, a fare that depends on the sailing. Each one is a
+        thing to arrange rather than a number to budget, and under its own
+        heading it reads as the list it is instead of as prices nobody could
+        find. */}
+    {toArrange.length > 0 && (
+    <div style={{ display: "flex", gap: 12, alignItems: "baseline", marginTop: priced.length ? 16 : 0 }}>
+      {heading("To arrange")}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        {toArrange.map(row)}
+        <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 8 }}>
+          These have no figure because the figure depends on when you go and what you pick, so they are not in the estimate above.
+        </div>
+      </div>
+    </div>
+    )}
+    {/* Printed from the links that are on the page, never typed, so it cannot
+        say "this pays us" over a list that happens to contain no partner link
+        at all. Once, at the foot of both lists, since a paid link can sit in
+        either of them. */}
+    {partnered.length > 0 && (
+      <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 10 }}>
+        {partnerDisclosure(partnered[0])}
+      </div>
+    )}
     </div>
   );
 };

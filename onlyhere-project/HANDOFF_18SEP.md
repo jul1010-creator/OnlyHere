@@ -2,7 +2,7 @@
 
 Written for the next session. Oliver ran this one on Opus 5.
 
-**17,953 assertions pass and the build is green.** That is up 262 from the
+**17,999 assertions pass and the build is green.** That is up 262 from the
 17,620 the 17 Sep handoff claimed, and 298 from the 17,584 that were committed
 at the time.
 
@@ -71,9 +71,10 @@ were taken. The source-trust and glance clusters were decided in-session.
    the suite and a build: both pass here.
 2. **The three SQL scripts**, if they are not run yet. `gemlyx_tables_18sep.sql`
    is in the chat sidebar with all three in one paste, safe to re-run.
-3. **Name the two partner-ads banners.** One line each in `src/config.js`. It
-   is now the only thing blocking two features that are both finished, which was
-   not true when this file first said it: see section 2.19.
+3. ~~Name the two partner-ads banners.~~ **Done, 19 Sep**, off his own two
+   program pages: banner 77692 is Hotel Viking in Saeby (programinfo id 8081)
+   and 112737 is Travelbetter.dk (id 11663). Both are in `config.js` and both
+   render. What is left for him is the third bullet under point 4.
    ```js
    export const PARTNER_ADS_BANNERS = {
      [PARTNER_ADS_STAY_BANNER]: { merchant: "Hotel Name", site: "https://hotel.dk", town: "Aarhus" },
@@ -97,9 +98,11 @@ were taken. The source-trust and glance clusters were decided in-session.
      `utils/affiliates.js`. If the two pages come back in the same order,
      Booking is ignoring the key and the two labels are a distinction the page
      cannot keep.
-   - **The named hotel**, once the banner is named. It should reach partner-ads
-     and then the hotel, and it only appears on a day the route already spends
-     in that town.
+   - **Both partner-ads buttons.** The hotel on a guide whose day is in Saeby,
+     and the Travelbetter.dk button on the Tips tab. Each should pass through
+     `partner-ads.com/dk/klikbanner.php` and land on the advertiser. Worth
+     checking the click registers in his partner-ads dashboard, since that is
+     the half no assertion here can see.
 
 ---
 
@@ -460,6 +463,46 @@ answers null everywhere else, because multiplying money by a wrong count is wors
 than printing nothing. With children in the party the line says everybody was
 counted at the adult price and that the real figure is usually lower.
 
+### 2.20 Both banners named, off his own program pages
+
+19 Sep 2026. He sent screenshots of partner-ads programinfo for both, which is
+where the names came from: **Hotel Viking Aqua, Spa & Wellness** (id 8081,
+banner 77692) and **Travelbetter.dk** (id 11663, banner 112737). The hotel's
+town and site were checked against the hotel's own pages rather than assumed,
+because `town` is what the row is matched against: Saeby, in Frederikshavn
+kommune, and hotelviking.dk.
+
+Three things came out of naming them that were not visible while the config was
+empty.
+
+**A klikbanner URL does carry a destination.** Every comment in affiliates.js
+said it did not, which was true of the link he pasted and false of the network:
+his program page offers `&htmlurl=PRODUKTLINK`, which lands the click inside the
+advertiser's own site. `partnerAdsUrl(banner, { to })` now supports it, and the
+guard is the feature: a destination is only sent when its host matches the
+`site` configured for that banner, so the hotel's banner cannot be pointed at
+the shop and neither can be pointed at anywhere else. `deepLink` is optional and
+unset for both, because nothing here should guess a path on somebody else's
+website.
+
+**A town match that dies on one letter.** `sameTown` compared lowercased
+strings, so a guide spelling it "Saeby", which half of Danish web writing does
+and which this app's own danishNames.js exists for, would never have matched
+"Saeby" written with the Danish letter. The hotel would simply not have
+appeared: nothing on screen, nothing in a log, a paid placement that looks
+unconfigured. It goes through `fold` now, and five spellings are asserted.
+
+**A shop is not booked on.** `linkLabel` said "Book on X" for every named
+partner, which is the wrong sentence about a rucksack. `partnerAdsSlot` is now
+one definition of which banner is which, read by the placements, the roster
+wording and the verb, so the hotel says Book on and the shop says Shop at.
+
+The refusal for an unnamed banner did not go anywhere: it is asserted against a
+banner id that is not in config, which is the state the next banner he is given
+will be in until he pastes one line. Same for the pending row on the affiliates
+page, which retired itself when the second name went in and is now tested
+through its argument rather than through a config state nobody is in.
+
 ---
 
 ## 3. WHAT IS STILL OPEN
@@ -495,9 +538,11 @@ remains, and what the new work opened:
    `bookingUrl` is a search, not a quote. If he ever wants a bed inside the
    number, that is where it would come from, and the caveat sentence already
    knows how to disappear.
-6. **`partnerAdsPlacements` is empty until he names the banners.** Not a bug and
-   not a follow-up for a session: two finished features have no button until
-   those two lines exist in `config.js`. Everything else about them is live.
+6. **A deep link for either partner-ads banner.** `deepLink` in
+   `PARTNER_ADS_BANNERS` is supported, guarded to the advertiser's own host, and
+   unset. A hotel link that lands on the booking page rather than the front page
+   is worth more than one that does not, and the path has to come from somebody
+   who has looked at the site.
 7. **Nothing from 18 or 19 Sep is deployed.** The whole of it is uncommitted on
    one laptop, and OneDrive rather than git is what saved the source directory on
    the 18th. Worth splitting into three or four commits before pushing: the

@@ -44,7 +44,7 @@
 // repeating: the app suggests things, so one sentence back from it reading
 // "Copenhagen has excellent museums" would otherwise become evidence that the
 // traveller asked for museums.
-import { arrivalDateIn, dateRangeIn, departureDateIn, dayCountIn, monthOnlyIn, latestRelativeAnswer, relativeAnswerIn, daysBetween, MAX_TRIP_DAYS } from "./tripEvents";
+import { arrivalDateIn, dateRangeIn, departureDateIn, dayCountIn, monthOnlyIn, latestRelativeAnswer, relativeAnswerIn, daysBetween, tripDays, MAX_TRIP_DAYS } from "./tripEvents";
 import { PARTY_BARE, PARTY_POSSESSIVE, PARTY_POSSESSIVES, PARTY_COUNT, TRAVEL_VERBS, FROM_WORDS, TRANSPORT_PREPS, VEHICLE_WORDS, TRANSPORT_VERBS, PUBLIC_TRANSPORT, alt, LETTER, INTEREST_ALL_WORDS, INTEREST_WORD_TERM, NAMES_A_CHILD } from "./travellerWords";
 import { dayStart } from "./calendarDay";
 import { travelModeKey, withoutNonModes } from "./routeOrder";
@@ -258,7 +258,12 @@ const readWhen = (text, turns, intakeArrival, intakeDeparture, today) => {
 };
 
 const readDays = (text, intakeArrival, intakeDeparture, today = new Date(), turns = null, answering = null) => {
-  const both = daysBetween(intakeArrival, intakeDeparture);
+  // ── THROUGH THE ONE READER, 19 SEP 2026 ─────────────────────────
+  // This used daysBetween, which is calendar inclusive, while the form the
+  // traveller filled in printed the elapsed figure and the guide builder read
+  // that printed line back as prose. One question, four answers, and a guide
+  // built for seven days over a brief that said eight. See tripDays.
+  const both = tripDays(intakeArrival, intakeDeparture);
   if (both && both > 0) return { value: both, source: "intake" };
   // ── THE LAST NUMBER THEY SAID, NOT THE FIRST ──────────────────────
   //
@@ -384,8 +389,10 @@ const readDays = (text, intakeArrival, intakeDeparture, today = new Date(), turn
   // you got?" — which he had answered twice in his first sentence.
   //
   // Counted INCLUSIVELY, the way a person counts a trip: in on the 8th, out on
-  // the 12th, and they will tell you that is five days. daysBetween does the same
-  // for the intake pickers above, so the two paths cannot disagree.
+  // the 12th, and they will tell you that is five days. A spoken range carries
+  // no hour, so tripDays counts it the same way for the intake pickers above
+  // and the two paths cannot disagree. The pickers differ only when a departure
+  // time is given and it is before the afternoon.
   // A range that lost the last-wins comparison above still answers this slot
   // when no count was ever spoken at all, which is the ordinary case: "I'm here
   // the 14th till 17th" and nothing else. departureDateIn below cannot reach it,
@@ -1369,12 +1376,36 @@ export const readBrief = ({ travellerText = "", travellerTurns = null, intake = 
     ...(known.when?.precision === "month" ? ["when"] : []),
     ...(childrenAlone ? ["party"] : []),
   ];
-  const vagueToAsk = vague.filter(k => !wasAsked.has(k));
+// ── AND THE SHARPENING QUESTION COULD NEVER BE ASKED ────
+  //
+  // Found 19 Sep 2026 by a review of one of his real exports. The traveller said
+  // "5 kids around 5-10 years old", the brief read five children and no adults,
+  // childrenAlone fired, `vague` held party, and the next question was about
+  // interests. Then the block said "YOU HAVE EVERYTHING YOU NEED. Do not ask
+  // another question." over a plan for five unaccompanied children.
+  //
+  // The reason is one line: this filtered on the SLOT key, and the slot had been
+  // asked. "Who's coming along?" is the base question and it was asked at turn
+  // 2; "how many adults are with them" is a different question about the answer
+  // to it. Sharing one key meant the second could only ever be asked when the
+  // party was volunteered BEFORE being asked, which is the abnormal path. The
+  // machinery `when` uses had the same hole for the same reason.
+  //
+  // So a sharpening ask carries a key of its own. It is still asked once, and
+  // App.jsx records THAT key rather than the slot's, so the base question does
+  // not come back and this one does not repeat.
+  const vagueToAsk = vague.filter(k => !wasAsked.has(sharperAsk(k)));
   // Asked, unanswered, and required anyway. Kept apart from `missing` so the
   // asking cadence is unchanged and only the BUILD is gated.
   const unanswered = HARD_SLOTS.filter(k => !known[k] && wasAsked.has(k));
   return { known, missing, declined, vague, vagueToAsk, unanswered, unread, cappedDays, ready: missing.length === 0 && unanswered.length === 0 };
 };
+
+// The key a sharpening question is recorded under. Exported because App.jsx
+// writes it and the suite pins the pair: a question recorded under the wrong
+// key is either asked forever or never asked at all, and this file has shipped
+// both.
+export const sharperAsk = (key) => `${key}:sharper`;
 
 export const briefReady = (brief) => !!brief && brief.missing.length === 0 && !(brief.unanswered || []).length;
 
@@ -1425,9 +1456,16 @@ export const nextAsks = (brief, { limit = MAX_ASKS_AT_ONCE } = {}) => {
     ...fresh.sort((a, b) => order.indexOf(a) - order.indexOf(b)),
     ...again.sort((a, b) => order.indexOf(a) - order.indexOf(b)),
   ];
+  // A SHARPENING ASK IS MARKED AS ONE, so the caller records it under its own
+  // key. Same slot, same question text, different thing being asked: the slot
+  // is answered and what is wanted is one missing part of the answer.
+  const sharpening = new Set((brief.vagueToAsk || []).filter(k => brief.known?.[k]));
   return pick
     .slice(0, Math.max(0, limit))
-    .map(k => BRIEF_SLOTS.find(s => s.key === k))
+    .map(k => {
+      const slot = BRIEF_SLOTS.find(s => s.key === k);
+      return slot && sharpening.has(k) ? { ...slot, sharpen: true } : slot;
+    })
     .filter(Boolean);
 };
 

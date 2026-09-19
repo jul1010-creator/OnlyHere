@@ -53,6 +53,7 @@ import { SUPABASE_URL, SUPABASE_KEY, APP_VERSION } from "../config";
 import { getStoredSession } from "../utils/auth";
 import { withContext, readBrowserFacts } from "../utils/problemContext";
 import { GemlyxLogo } from "./GemlyxLogo";
+import { ME_PATH } from "../utils/tabUrl";
 import {
   SUPPORT_TOPICS, REPORT_TOPIC, PROBLEM_TOPIC, GOOD_FAITH_STATEMENT, MESSAGE_MAX, NAME_MAX, isTopic,
   messagePrompt, supportProblems, problemFor, supportPayload, supportReference,
@@ -236,10 +237,11 @@ export const SupportPage = () => {
   const shell = (children) => (
     <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif" }}>
       <div style={{ maxWidth: 620, margin: "0 auto", padding: "28px 20px 64px" }}>
-        <button onClick={() => navigate("/")}
+        {/* The menu, which is where every route into this page starts. */}
+        <button onClick={() => navigate(ME_PATH)}
           style={{ background: "none", border: "none", padding: 0, cursor: "pointer", display: "flex", alignItems: "center", gap: 8, marginBottom: 26 }}>
           <GemlyxLogo size={18} color={C.text} />
-          <span style={{ fontSize: 13, color: C.muted }}>Back to Gemlyx</span>
+          <span style={{ fontSize: 13, color: C.muted }}>Back to the menu</span>
         </button>
         {children}
       </div>
@@ -323,7 +325,7 @@ export const SupportPage = () => {
           {/* Home, rather than opening a sheet this page cannot reach. Signing
               in there makes the Feedback row appear in the menu, so the way
               back is the way they came rather than a step to remember. */}
-          <button type="button" onClick={() => navigate("/")}
+          <button type="button" onClick={() => navigate(ME_PATH)}
             style={{ background: C.gold, border: "none", color: C.onGold, borderRadius: 10, padding: "10px 18px", fontSize: 13.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
             Go to Gemlyx and sign in
           </button>

@@ -607,10 +607,35 @@ export const partyAnswer = (turn) => {
   // Ages, when they were given. "aged 4 and 11", "a 4 year old and an 11 year
   // old", "4 and 11". Only read when children were established, because a bare
   // pair of numbers is a pair of numbers.
-  const ages = (kids || NAMES_A_CHILD.test(t))
-    ? (t.match(/\b(\d{1,2})\s*(?:year|yr|år|jahre|jahr)s?[- ]?old\b|\b(?:aged?|(?:kids?|children|b(?:ø|o)rn|kinder|they)\s+(?:are|er|sind))\s+(\d{1,2}(?:\s*(?:,|and|og|und)\s*\d{1,2})*)\b/gi) || [])
-        .join(" ").match(/\d{1,2}/g)?.map(Number).filter(n => n >= 0 && n <= 19) ?? []
+  // ── AND A RANGE IS TWO AGES, NOT ONE ─────────────────────────────
+  //
+  // Oliver, 19 Sep 2026, from a real export. His traveller wrote "5 kids around
+  // 5-10 years old" and the brief recorded "5 children (aged 10)". The first
+  // branch here needs the number immediately before "years old", so it took the
+  // 10 and dropped the 5, and the `aged N` branch accepted a comma, "and", "og"
+  // and "und" between numbers and not a hyphen.
+  //
+  // Both ends matter and they matter in opposite directions: a five year old
+  // rules out a long walk and a ten year old is the reason to mention a climb
+  // into a longship. Reporting only the top of the range plans for the oldest
+  // child in the group.
+  const AGE_SEP = "\\s*(?:,|and|og|und|\\u2013|\\u2014|-|to|til|bis)\\s*";
+  const AGE_RANGE = `\\d{1,2}(?:${AGE_SEP}\\d{1,2})*`;
+  // "years old" in English, and the Danish and German forms, which carry no
+  // word for "old" and so were unreadable here: "i alderen 5 til 10 \u00e5r" is how
+  // his own Danish testers write it.
+  const AGE_UNIT = "(?:years?|yrs?)\\s*old|\\u00e5r(?:\\s*gamle)?|jahre(?:\\s*alt)?";
+  const ageHits = (kids || NAMES_A_CHILD.test(t))
+    ? (t.match(new RegExp(`\\b(${AGE_RANGE})\\s*(?:${AGE_UNIT})\\b|\\b(?:aged?|i\\s+alderen|alderen|(?:kids?|children|b(?:\\u00f8|o)rn|kinder|they)\\s+(?:are|er|sind))\\s+(${AGE_RANGE})\\b`, "gi")) || [])
     : [];
+  const ages = ageHits.join(" ").match(/\d{1,2}/g)?.map(Number).filter(n => n >= 0 && n <= 19) ?? [];
+  // ── AND A RANGE IS NOT A LIST ────────────────────────────────────
+  //
+  // "aged 4 and 11" is two children of four and eleven. "aged 5 to 10" is a
+  // spread nobody has counted out. Same two numbers, different sentence, and
+  // the separator is the only thing that says which, so it is read here rather
+  // than guessed at by the renderer.
+  const spanned = ages.length === 2 && /\d\s*(?:\u2013|\u2014|-|to|til|bis)\s*\d/i.test(ageHits.join(" "));
   const solo = SOLO.test(t) ? 1 : null;
   const couple = COUPLE.test(t) ? 2 : null;
   const adultCount = adults ?? solo ?? couple ?? null;
@@ -644,6 +669,8 @@ export const partyAnswer = (turn) => {
     kids: kids ?? null,
     hasKids,
     kidAges: ages.length ? [...new Set(ages)].sort((a, b) => a - b) : null,
+    // Whether those two numbers are the ends of a range rather than two ages.
+    kidAgesSpan: spanned,
     total: total || null,
     said: t,
   };
@@ -658,7 +685,11 @@ export const partyLine = (p) => {
   const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
   if (p.adults != null) bits.push(plural(p.adults, "adult", "adults"));
   if (p.kids != null) {
-    const ages = p.kidAges?.length ? ` (aged ${p.kidAges.join(", ")})` : "";
+    // A RANGE READS AS A RANGE, and a list as a list. "aged 5, 10" over five
+    // children says two of them have ages; "aged 5 to 10" is what he wrote.
+    const ages = p.kidAges?.length
+      ? ` (aged ${p.kidAgesSpan ? p.kidAges.join(" to ") : p.kidAges.join(", ")})`
+      : "";
     bits.push(plural(p.kids, "child", "children") + ages);
   } else if (p.hasKids) {
     // Said without a number. "children" rather than a made-up count, and rather

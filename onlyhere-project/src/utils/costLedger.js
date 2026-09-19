@@ -71,7 +71,7 @@ import { isFerryText } from "./helpers";
 // was written down in the first place, and stampDay is how the provenance panel
 // already prints this same stamp.
 import { pricesIn, priceLabel } from "./entryAudit";
-import { PRICE_FIELDS } from "./entryPrice";
+import { PRICE_FIELDS, TYPES_WITH_A_DOOR } from "./entryPrice";
 import { stampDay } from "./provenance";
 
 export const COST_KIND = {
@@ -86,6 +86,47 @@ export const COST_KIND = {
   // walking tour. Its own kind, its own action word.
   AUDIO: "audio",
 };
+
+// ── A TOWN HAS NO DOOR, AND WAS SELLING FESTIVAL TICKETS ────────────
+//
+// Oliver, 19 Sep 2026, reading his own published guide 9vkdc564l13: "The
+// Roskilde 'tickets' are literally selling Roskilde Festival tickets."
+//
+// He was reading this list. The stop is the TOWN of Roskilde, one day of a
+// seven day itinerary, and the line printed under it carried 80 kr read off
+// roskildedomkirke.dk beside a Buy tickets button landing on
+// ticketmaster.dk/artist/roskilde-festival. Three different things — a town, a
+// cathedral's admission, a music festival — added up into one charge, and a
+// reader who trusted it would arrive having bought the wrong thing entirely.
+//
+// The cause is that entryLine read whatever the row carried and never asked
+// whether the row is a thing with a way in. entryPrice.js has written down for
+// weeks who is allowed to be asked: "Every check that reasons about 'the ticket
+// price' belongs to this list and nothing else." This file reasons about the
+// ticket price on every line and had never consulted it. affiliateSweep.js asks
+// it as hasADoor before it will let an agent be searched for a row at all, so
+// the question was already answered one module away.
+//
+// WHY IT READS _src AND NOT type. A guide stop is a name, resolved by
+// lookupRealPlace, and what comes back is a pool entry stamped with the pool it
+// was found in. The published `type` does not survive that merge. So the door
+// set is the same TYPES_WITH_A_DOOR, mapped through the one table below saying
+// which pool each doored type lands in, and the suite asserts the table covers
+// every entry of that list: a fourth type added there and missing here fails
+// the suite instead of quietly printing a checkout over a town again.
+export const SRC_OF_DOORED_TYPE = {
+  free: "free",       // an attraction, whose one admission price is the whole point of the type
+  booking: "craft",   // a workshop or bookable experience; craftItemsFallback is the pool it merges into
+  festival: "event",  // events, majorEvents and vikingEvents all stamp _src "event"
+};
+
+export const SRC_WITH_A_DOOR = TYPES_WITH_A_DOOR.map(t => SRC_OF_DOORED_TYPE[t]).filter(Boolean);
+
+// A row a traveller can be charged admission to. Everything else on an
+// itinerary — a town, an island, a restaurant, a bar, a bar street — is a place
+// they walk into, and it may carry neither a price nor a ticket link here no
+// matter what a sweep or a hand edit once wrote onto it.
+export const stopHasADoor = (row) => SRC_WITH_A_DOOR.includes(String(row?._src || "").trim());
 
 // ── WHY A LINE MAY NOT CARRY A BUY LINK ─────────────────────────────
 // One reason string per refusal, written for a traveller rather than for a log,
@@ -210,6 +251,11 @@ const buyLink = (row) => {
 // because that is the only reason this particular charge exists on this
 // particular trip.
 const entryLine = ({ row, name, day, when, shutToday }) => {
+  // THE DOOR FIRST, before the price is even read. A row with no admission has
+  // no figure to print and nothing to sell, so it returns the empty line that
+  // costLines already drops rather than a refusal: a refusal is printed, and
+  // "there is nothing to buy here" is not news about a town.
+  if (!stopHasADoor(row)) return { kind: COST_KIND.ENTRY, name, day, forWhat: `Day ${day}`, price: "", priceFrom: null, href: "", partner: false, refused: "", bookAhead: false };
   const price = readPrice(row);
   const status = normaliseTicketStatus(row?.ticketStatus);
   // Free is a real answer and worth printing: it is the one line on a costs list
@@ -374,8 +420,10 @@ export const costLines = ({
   // Oliver, 6 Sep 2026, choosing where WeGoTrip's audio walks appear: town
   // pages AND guides. This is the guide half, and it is a SECOND pass rather
   // than a branch in the loop above on purpose: entryLine drops a row with no
-  // price and no ticket link, which is exactly what a town row is, so a town
-  // carrying __audio never reaches that loop's output.
+  // door, which is exactly what a town row is, so a town carrying __audio never
+  // reaches that loop's output. That used to be a happy accident of a town
+  // carrying no price and no ticket link, and on 19 Sep 2026 one carried both.
+  // stopHasADoor makes it the rule this pass was always relying on.
   //
   // ONE LINE PER TOWN, not per walk. Copenhagen has eight and __audio already
   // holds the honest single destination for that case, chosen by
@@ -583,6 +631,32 @@ const PEOPLE = "adults?|grown[- ]?ups?|people|persons?|travell?ers?|friends?|kid
 const KIDS = /\b(?:kids?|children|child|babies|baby|toddlers?|b\u00f8rn|boern|barn)\b/i;
 const ALONE = /\b(?:alone|solo|just me|by myself|on my own|alene|selv)\b/i;
 const PARTY_CAP = 12;
+
+// ── AND THE COUNTS, WHEN THE BRIEF ALREADY HAS THEM ────
+//
+// 19 Sep 2026. partyOf reads a sentence, which is the only thing this block
+// used to be given. The guide now carries `_party` as well, read by the brief
+// from the same turns, and a structured count beats a parse of a rendered
+// string every time.
+//
+// AND IT REFUSES AN INCOMPLETE PARTY. "5 children" with no adult count is the
+// shape his own export produced, and multiplying a per person figure by five
+// children would be wrong twice: the adults are missing from the count, and a
+// child's ticket is usually cheaper than the figure being multiplied. No group
+// line is the honest answer until somebody says how many adults are coming,
+// which the brief now asks.
+export const partyFrom = (party) => {
+  if (!party || typeof party !== "object") return null;
+  const adults = Number(party.adults);
+  const kids = Number(party.kids);
+  const total = Number(party.total);
+  const heads = Number.isFinite(total) && total > 0 ? total
+    : (Number.isFinite(adults) && adults > 0 ? adults + (Number.isFinite(kids) && kids > 0 ? kids : 0) : null);
+  // Children and nobody to travel with them is not a headcount to multiply by.
+  if (!heads || (party.hasKids && !(Number.isFinite(adults) && adults > 0))) return null;
+  if (heads > PARTY_CAP) return null;
+  return { heads, hasKids: !!party.hasKids };
+};
 
 export const partyOf = (said) => {
   const text = String(said ?? "").trim();

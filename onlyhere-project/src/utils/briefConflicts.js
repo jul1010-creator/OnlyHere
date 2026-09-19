@@ -127,6 +127,28 @@ export const CONFLICTS = [
     question: () => "They are on foot and have asked for nature. Most of what they mean is an hour or more out of any town by road. Ask whether they will have a car or the train for those days, or whether they would rather it stayed inside walking distance of where they are staying.",
   },
   {
+    // ── "IT SHOULD HAVE RECALCULATED THE TRIP" ────────────────────
+    //
+    // Oliver, 19 Sep 2026: "the moment I said 'can I also go to Jutland?', it
+    // should have recalculated the trip and realised that there probably wasn't
+    // time for Northern Zealand. It should tell that to the user."
+    //
+    // It is a conflict in exactly this file's sense and not a slot: two facts
+    // that are both true, a trip of a given length and a set of regions the
+    // days will not comfortably hold, and no reader of one slot can see it.
+    // Same as eight children and a night out, one axis over.
+    //
+    // THE ARITHMETIC IS NOT DONE HERE. utils/tripScope.js measures it, off the
+    // kommune table and the app's one km-to-time reader, and hands the answer
+    // in as context: this file decides when a question is raised and the
+    // measuring lives with the other measurements. The `when` is therefore
+    // whether a measurement exists, which is the honest shape, because this
+    // file cannot check the figures and should not pretend to.
+    key: "region-does-not-fit",
+    when: (b, ctx) => !!ctx?.scope,
+    question: (b, ctx) => ctx?.scopeSays || "",
+  },
+  {
     key: "budget-and-fine-dining",
     when: (b) => saysAny(b.known?.budget?.value, ["tight", "cheap", "budget"])
       && saysAny(b.known?.interests?.value, ["michelin", "fine dining", "tasting menu", "noma"]),
@@ -139,11 +161,16 @@ export const CONFLICTS = [
 // `settled` is the conflict keys already put to the traveller, recorded the same
 // way `asked` is for slots and for the same reason: a question that keeps coming
 // back is worse than one that was never asked.
-export const briefConflicts = (brief, settled = []) => {
+// `context` carries what the brief cannot. The brief is slots read off the
+// traveller's words and nothing in it knows where a region is or how long the
+// road to it takes, so a rule that needs a measurement is handed one rather
+// than growing a geography table in here. Every rule above it ignores the
+// argument, which is why it could be added without touching them.
+export const briefConflicts = (brief, settled = [], context = null) => {
   if (!brief) return [];
   const done = new Set(Array.isArray(settled) ? settled : []);
-  return CONFLICTS.filter(c => !done.has(c.key) && safely(() => c.when(brief)))
-    .map(c => ({ key: c.key, question: safely(() => c.question(brief)) || "" }))
+  return CONFLICTS.filter(c => !done.has(c.key) && safely(() => c.when(brief, context)))
+    .map(c => ({ key: c.key, question: safely(() => c.question(brief, context)) || "" }))
     .filter(c => has(c.question));
 };
 
@@ -164,6 +191,7 @@ export const conflictLabel = (key) => ({
   "beach-in-winter": "a beach in the Danish winter",
   "walking-a-region": "nature without a way to reach it",
   "budget-and-fine-dining": "a tight budget and a tasting menu",
+  "region-does-not-fit": "a region the days will not hold",
 }[key] || key);
 
 // The slots a conflict is about, so the panel can point at them. Kept as a
@@ -179,4 +207,8 @@ export const conflictSlots = (key) => ({
   "beach-in-winter": ["when", "interests"],
   "walking-a-region": ["transport", "interests"],
   "budget-and-fine-dining": ["budget", "interests"],
+  // `days` and `when` are the two slots the arithmetic reads: the length of the
+  // trip, and the dates that length is measured from. The regions are not a
+  // slot at all, which is the reason this one needed context.
+  "region-does-not-fit": ["days", "when"],
 }[key] || []);

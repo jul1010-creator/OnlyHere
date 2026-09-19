@@ -755,8 +755,55 @@ const QUALIFIABLE_PARTS = ["Jutland", "Zealand"];
 // the screen in the other direction.
 const FROM_ORIGIN = /\b(?:start(?:ing)?|com(?:e|ing)|mov(?:e|ing)|driv(?:e|ing)|travell?(?:ing)?|head(?:ing)?|arriv(?:e|ing)|set\s+off|depart(?:ing)?)\s+(?:up\s+|down\s+|over\s+|across\s+|out\s+)?from\s*$/i;
 
+// ── "WHY WAS AALBORG INCLUDED?" ────────────
+//
+// Oliver, 19 Sep 2026, of a preview for a family going to Copenhagen. The
+// traveller's own words were:
+//
+//   "Bikes and public transport. Is it possible to expand it to Jutland too?"
+//
+// and the assistant had just talked them out of it: two of seven days on
+// trains with five young children. The preview then filtered its whole town
+// list down to Jutland, because this reader saw the word and `wantedRegions`
+// treats a named region as a request.
+//
+// A QUESTION IS NOT A REQUEST. readStay has known this since it was written,
+// in the same words: "Do you have a hotel to recommend?" is not a booked
+// hotel. This reader never did, and the cost is bigger, because a region
+// filter empties the screen of everywhere the traveller is going.
+//
+// Stripped by SENTENCE rather than tested at the end, since the question is
+// usually not the last thing in the text. A region asked about AND stated
+// still counts: "can we do Jutland? we would like to see Aarhus and Jutland"
+// keeps it, because the second sentence is a statement.
+// AND A QUESTION MARK IS OPTIONAL when somebody is typing on a phone. "Is
+// Jutland doable" is the same sentence as "Is Jutland doable?", so an opener
+// that can only begin a question counts as one. Narrow on purpose: the
+// auxiliary needs a pronoun after it, or "Do Jutland first, then Funen" reads
+// as a question and the screen empties for somebody who said where they want
+// to go.
+const SENTENCES = /[^.!?\n]+[.!?]*/g;
+const ASKS = /^\s*(?:is|are|can|could|would|will|do|does|did|should|shall|may|might|kan|kunne|skal|vil|ville)\s+(?:it|we|you|i|they|that|there|det|vi|du|jeg|de|man)\b/i;
+// "Is Jutland doable" and "Can Bornholm be done in a day" too, where the thing
+// after the auxiliary is the place itself rather than a pronoun. Only the
+// auxiliaries with no imperative reading: "Do Jutland first" is an instruction,
+// and "Is Jutland first" is not a sentence anybody writes.
+//
+// Written as a function because the two halves need different case rules: the
+// auxiliary is matched either way somebody typed it, and the word after it has
+// to be capitalised to be a place.
+const AUX_ASKING = /^(?:is|are|can|could|would|will|should|may|might|er|kan|kunne|vil|ville)$/i;
+const asksOfAPlace = (sentence) => {
+  const m = String(sentence || "").trim().match(/^(\S+)\s+(\S)/);
+  return !!m && AUX_ASKING.test(m[1]) && /[A-Z\u00c6\u00d8\u00c5]/.test(m[2]);
+};
+const withoutQuestions = (text) =>
+  (String(text || "").match(SENTENCES) || [])
+    .filter(x => !/\?\s*$/.test(x.trim()) && !ASKS.test(x) && !asksOfAPlace(x))
+    .join(" ");
+
 export const regionsNamed = (convoText) => {
-  const text = String(convoText || "");
+  const text = withoutQuestions(convoText);
   const out = [];
   for (const r of [...PARTS_OF_COUNTRY, ...REGION_NAMES]) {
     // ── "NEW ZEALAND" IS NOT ZEALAND ────────────────────────────

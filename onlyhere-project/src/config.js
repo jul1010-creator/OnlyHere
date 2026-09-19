@@ -175,8 +175,30 @@ export const BOOKING_AFFILIATE_ID = "";
 // So the link is stored here as the CLICK PREFIX and the destination is added
 // at render, by bookingCjUrl in utils/affiliates.js, over the search URL
 // bookingUrl already builds. Asked which shape he wanted, he chose exactly
-// this. BOOKING_AFFILIATE_ID stays: if CJ or Booking ever hand him an aid, it
-// slots in and needs no wrapper at all, and the two are not mutually exclusive.
+// this.
+//
+// ── AND THE TWO ARE MUTUALLY EXCLUSIVE AFTER ALL ──────
+//
+// This said the opposite until 19 Sep, when he sent the CJ link's own
+// destination and it settled the question:
+//
+//   booking.com/?aid=1522413&label=affnetcj-{aid}_pub-{pubCid}_site-{pid}
+//     _pname-{url(pubName)}_clkid-{url(query('sid'))}_cjevent-{eventid}
+//
+// So his aid IS 1522413, and pasting it into BOOKING_AFFILIATE_ID would be a
+// mistake rather than an upgrade. Everything in braces there is a CJ macro that
+// CJ substitutes AT ITS OWN REDIRECT, and `cjevent` is the one that matters: it
+// is the click id the commission is attached to, and it exists only because the
+// click went through kqzyfj.com. A URL this app builds with a bare aid on it
+// would carry no cjevent, would land correctly, and would pay nothing. A link
+// that looks right and tracks nothing is worse than one that is visibly broken,
+// so the code refuses the combination rather than trusting a comment: see
+// bookingUrl in utils/affiliates.js, where the aid is appended only when there
+// is no CJ prefix to go through.
+//
+// `clkid-{url(query('sid'))}` is the useful half of the same label: CJ takes a
+// `sid` parameter off the click URL and hands it to Booking, so a click can say
+// which button it came from. bookingCjUrl derives one from the destination.
 //
 // ONE THING TO TEST, in his own words from 7 Sep: "just make sure that it
 // explicitly tells me that it has inputted an affiliate link, so I can test if
@@ -185,6 +207,63 @@ export const BOOKING_AFFILIATE_ID = "";
 // If it lands on Booking's front page, the programme does not allow deep links
 // and this constant should be emptied rather than left half working.
 export const BOOKING_CJ_LINK = "https://www.kqzyfj.com/click-101858166-13375717";
+
+// ── AND THE SWITCH, WHICH IS OFF ────────────────────────────────────
+//
+// Oliver, 19 Sep 2026, having pressed one of these: "Doesn't work.. let's fix
+// it later." The handoff written earlier that night records it a second time:
+// the click link does not honour `url=`, so every stay button earns and lands
+// on Booking's front page.
+//
+// "Later" is shipping in the meantime, which is why this is a switch rather
+// than a note. A stay button reads "See Hotel Viking on Booking.com" or "Budget
+// hotels in Indre By", and a click that arrives at a front page has not got
+// anybody there. costLedger.js has the rule in capitals about ticket links and
+// it is the same rule: a link is a promise, and one that lands somewhere unable
+// to serve the reader is a worse product than no link at all.
+//
+// So it is FALSE, and the asymmetry is the argument. False costs the Booking
+// commission until one word changes. True costs every stay button on every
+// published guide, silently, to people planning a holiday. The second is worse
+// and the first is reversible in four seconds.
+//
+// NOTHING ELSE IS LOST BY FALSE. bookingUrl refuses to write an `aid` while a
+// CJ link is set, for the reason written beside it, so the click through
+// kqzyfj.com was the only thing in the chain that could ever pay. With this
+// false the links are honest and unpaid, and bookingEarns and every disclosure
+// read that off this same constant, so nothing on the page claims otherwise.
+//
+// TO TURN IT BACK ON, which is the test the comment above already asked for.
+// Paste this into a browser:
+//
+//   https://www.kqzyfj.com/click-101858166-13375717?sid=stay&url=https%3A%2F%2Fwww.booking.com%2Fsearchresults.html%3Fss%3DAarhus%252C%2520Denmark
+//
+//   arrives at Booking's Aarhus results   set this true and every stay button
+//                                         earns from the next deploy
+//   arrives at Booking's front page       leave it false and ask CJ whether
+//                                         this advertiser allows deep linking
+//
+// I could not run that test from here: kqzyfj.com refuses automated readers in
+// robots.txt, and routing around a robots file to generate a click on his own
+// affiliate account is not a thing to do while he is asleep.
+//
+// AND THE WRAPPER'S LOGIC IS STILL TESTED, which is why bookingCjUrl takes the
+// flag rather than reading it. The sid derivation, the destination surviving on
+// `url`, the host guard and the refusal to nest are all still asserted with it
+// forced true, so switching it back on is one word and nothing has to be
+// rediscovered.
+//
+// IF THE PROGRAMME CANNOT DEEP LINK AT ALL, the honest ends are a plain `aid`
+// from Booking's own programme, which bookingUrl starts using the moment
+// BOOKING_CJ_LINK is emptied, or leaving stays unmonetised and earning on the
+// tickets and the gear.
+//
+// A THIRD OPTION IS NOT BUILT because it is a product call: wrapping only the
+// generic "hotels in this area" buttons, where a front page is a smaller broken
+// promise than on a named hotel. That earns something and makes two buttons
+// behave differently, which is worth deciding on purpose rather than finding
+// out about.
+export const BOOKING_CJ_DEEP_LINKS_WORK = false;
 
 // ─ PARTNER-ADS, THE FOURTH NETWORK ────────────────────
 //
@@ -211,16 +290,40 @@ export const PARTNER_ADS_PARTNER_ID = "57554";
 // of the four places it could go and the one he picked. `town` is the town the
 // hotel is IN, spelled the way the app spells it.
 export const PARTNER_ADS_STAY_BANNER = "77692";
-// "and this is for travelling items. Put this on tips." A Tips row is a row in
-// data/essentials.js, so this one needs no code at all once it is named: the
-// link goes on the row and outboundLink does the rest.
+// "and this is for travelling items. Put this on tips."
+//
+// The comment here used to say a Tips row is a row in data/essentials.js so
+// this one "needs no code at all once it is named". That was wrong, and it is
+// why he came back on the 19th with "the tips are still not there": there was
+// nowhere for it to render. The render site is the What To Bring block in
+// App.jsx, and partnerAdsGear in utils/affiliates.js is what it asks.
 export const PARTNER_ADS_GEAR_BANNER = "112737";
+// ── AND WHERE A NAME COMES FROM ──────────
+//
+// Oliver, 19 Sep 2026, with a screenshot of his own partner-ads program page,
+// programinfo.php?id=8081: banner 77692 is the front-page link for **Hotel
+// Viking Aqua, Spa & Wellness**. That is the name the reader is told they are
+// being sent to, shortened to the one the hotel trades under.
+//
+// The town and the site were then checked against the hotel's own pages rather
+// than assumed, because `town` is what the hotel is matched against and a wrong
+// one means the row either never appears or appears in the wrong place. Saeby,
+// in Frederikshavn kommune, and hotelviking.dk.
+//
+// `deepLink` is optional and unset. partner-ads takes an `htmlurl` parameter
+// that lands a click on a page inside the advertiser's own site rather than its
+// front page, and partnerAdsUrl will use it, but only for a URL on the same
+// host as `site`. Nothing here guesses a path on somebody else's website.
 export const PARTNER_ADS_BANNERS = {
-  // Fill one line and the row it belongs to starts working:
-  //   [PARTNER_ADS_STAY_BANNER]: { merchant: "Hotel Name", site: "https://hotel.dk", town: "Aarhus" },
-  //   [PARTNER_ADS_GEAR_BANNER]: { merchant: "Shop Name", site: "https://shop.dk" },
+  [PARTNER_ADS_STAY_BANNER]: { merchant: "Hotel Viking", site: "https://hotelviking.dk", town: "Sæby" },
+  // programinfo.php?id=11663, from his second screenshot: banner 112737 is the
+  // product link for Travelbetter.dk. Named with the domain on purpose, since
+  // that is how the shop brands itself and a reader can see where the button
+  // goes before pressing it.
+  [PARTNER_ADS_GEAR_BANNER]: { merchant: "Travelbetter.dk", site: "https://travelbetter.dk" },
   // `merchant` is what the reader is told they are being sent to, so it is the
-  // advertiser's real name and not a category.
+  // advertiser's real name and not a category. A banner with no line here is
+  // placed nowhere and named nowhere, which is the refusal the suite pins.
 };
 
 // ── TRIP.COM, DIRECT ────────────────────────────────────────────────

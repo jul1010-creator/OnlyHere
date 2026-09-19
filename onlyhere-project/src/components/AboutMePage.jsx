@@ -13,6 +13,7 @@ import { lookupRealPlace } from "../utils/guideEnrichment";
 import { currentTrip, tripStatusLine } from "../utils/tripStatus";
 import { ProfileQuestions } from "./ProfileQuestions";
 import { AFFILIATES_PATH } from "../utils/affiliateRoster";
+import { LIBRARY_PATH } from "../utils/tripLibrary";
 
 // ── INFO ABOUT ME ────────────────────────────────────────────────────
 //
@@ -637,6 +638,23 @@ export const AboutMePage = ({
   // the guides we know least about. Those banners are typographic instead, which
   // is honest and still reads as a banner.
   const tripsSection = (
+    <>
+    {/* ── AND OTHER PEOPLE'S, WHICH IS WHERE THIS BELONGS ──────
+        19 Sep 2026, with the published list. Somebody who opens Saved trips is
+        looking for a trip, and the shortest honest thing to offer a reader who
+        has none of their own yet is somebody else's. One card, above their own,
+        and it says in its own line what was taken out of those trips before
+        they went up. */}
+    <Card>
+      <H>Trips people kept</H>
+      <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.65 }}>
+        Real trips Gemlyx built for other travellers, with the dates, who was coming and the conversation taken out.
+      </div>
+      <a href={LIBRARY_PATH}
+        style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 10, background: `${C.gold}1a`, border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "8px 13px", fontSize: 12.5, fontWeight: 700, textDecoration: "none" }}>
+        Browse them
+      </a>
+    </Card>
     <Card>
       <H>Saved trips</H>
       {!savedGuides.length ? (
@@ -707,6 +725,7 @@ export const AboutMePage = ({
         </>
       )}
     </Card>
+    </>
   );
 
   // ── NEAR YOU ──────────────────────────────────────────────────────

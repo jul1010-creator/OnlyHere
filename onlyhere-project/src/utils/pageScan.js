@@ -1344,6 +1344,103 @@ export const newestDateIn = (text) => {
   return best;
 };
 
+// ── A VALIDITY PERIOD IS A SPAN, NOT A TIMESTAMP ────────────────────
+//
+// Found reading the island runs of 17 Sep 2026, where the Fejø line says
+//
+//   lollandfaergefart.lolland.dk (its newest date is about 8 months old)
+//   kept as background only
+//
+// Eight and a half months back from that run is 1 January 2026, which is the
+// shape of a Danish fare page's own opening line: "Priser gældende fra 1.
+// januar 2026". So the page that states the fare was demoted for stating WHEN
+// THE FARE APPLIES, and factAge's own comment says what that costs: demoted, it
+// cannot carry the citation, and the price trace falls to the best-ranked page
+// that merely contains the number.
+//
+// It is the same asymmetry that comment already names, one turn worse. A fare
+// page with no date scores better than a fare page that says which year its
+// fares are for, so the more precisely an operator publishes, the less this
+// trusts them.
+//
+// AND THE FIX IS NOT TO IGNORE THE DATE. A 2019 validity start is real evidence
+// that the fares are from 2019, and excluding it would let a seven year old
+// price list through as undated, which is the direction that matters most. What
+// is wrong is reading a SPAN as a POINT. "Gældende fra 1. januar 2026" is a
+// claim that the page is current until further notice, and an annual fare list
+// stays true across its year; MAX_FACT_AGE_MONTHS is six, so the second half of
+// every year fails a page that is doing exactly what it should.
+//
+// So three answers, and each one is narrow:
+//
+//   a window that has CLOSED       the page says its own figures expired, which
+//                                  is stronger evidence of staleness than any
+//                                  age, and nothing read it before
+//   a window still OPEN and begun  current, if the start is inside the grace
+//                                  below, which is what fixes Fejø
+//   anything else                  falls through to the ordinary reading with
+//                                  the date still counting, unchanged
+//
+// EIGHTEEN MONTHS, not six. The point is to cover a fare list published for a
+// year and read at the end of it, plus the months an operator takes to publish
+// the next one, which is the ordinary state of a Danish ferry page in the
+// spring. Past that the start is no longer evidence of anything current and the
+// ordinary age rule has it back.
+export const VALIDITY_GRACE_MONTHS = 18;
+
+// "Gældende fra", "gyldig fra", "gælder fra og med", "valid from", "effective
+// from", "as of", "pr." — the words a rules or price page uses about itself.
+// sourcePolicy.QUERY_WORDS has held "gældende" as "what a rules or price page
+// calls itself" since August and nothing had ever read it.
+const VALID_FROM_WORDS = "(?:g(?:æ|ae)ldende|gyldig(?:e|t)?|g(?:æ|ae)lder|takster|priser|sejlplan|valid|effective|applies|in\\s+effect)";
+const VALID_FROM = new RegExp(`${VALID_FROM_WORDS}(?:[^.;:!?]{0,40}?)\\b(?:fra(?:\\s+og\\s+med)?|from|as\\s+of|pr\\.?)\\s*$`, "i");
+// The end of a range, which only counts as one when a start was found before it
+// in the same sentence: a bare "til 31. december" after nothing is a closing
+// time or a season, not a validity window.
+const VALID_TO = /\b(?:til(?:\s+og\s+med)?|to|until|through|t\.o\.m\.?)\s*$/i;
+
+// Every date on the page with the character it starts at, so the words in front
+// of it can be read. One walker over the three shapes newestDateIn already
+// knows, because a fourth date format read only here is how the two come to
+// disagree about what a date is.
+const datesWithPlace = (text) => {
+  const t = String(text || "");
+  const out = [];
+  const take = (at, y, mo, d) => {
+    if (!(y >= 1990 && mo >= 1 && mo <= 12 && d >= 1 && d <= 31)) return;
+    out.push({ at, ms: Date.UTC(y, mo - 1, d) });
+  };
+  let m;
+  DMY.lastIndex = 0; while ((m = DMY.exec(t)) !== null) take(m.index, Number(m[3]), MONTHS[m[2].toLowerCase()], Number(m[1]));
+  MDY.lastIndex = 0; while ((m = MDY.exec(t)) !== null) take(m.index, Number(m[3]), MONTHS[m[1].toLowerCase()], Number(m[2]));
+  ISO.lastIndex = 0; while ((m = ISO.exec(t)) !== null) take(m.index, Number(m[1]), Number(m[2]), Number(m[3]));
+  return out.sort((a, b) => a.at - b.at);
+};
+
+// The newest validity window the page states about itself, or nulls. Newest for
+// the same reason newestDateIn is newest: a page that has carried its fares for
+// three years lists all three, and the current one is the last.
+export const validityWindow = (text) => {
+  const t = String(text || "");
+  let from = null, to = null;
+  let openFrom = null;
+  for (const d of datesWithPlace(t)) {
+    const before = t.slice(Math.max(0, d.at - 60), d.at);
+    if (VALID_FROM.test(before)) {
+      openFrom = d.ms;
+      if (from === null || d.ms > from) { from = d.ms; to = null; }
+      continue;
+    }
+    // An end only closes the window that was opened before it, and only when
+    // nothing but a bridge word sits between the two dates.
+    if (openFrom !== null && from === openFrom && VALID_TO.test(before)) {
+      to = d.ms;
+      openFrom = null;
+    }
+  }
+  return { from, to };
+};
+
 // nowMs is passed in rather than read, so this is pure and so a test can sit on
 // a fixed day. Returns what the page may be used FOR, which is the whole point
 // of his rule: nothing here ever says "drop this page".
@@ -1351,6 +1448,22 @@ export const factAge = (text, nowMs) => {
   const now = Number(nowMs);
   if (!Number.isFinite(now)) return { ageMonths: null, perishableOk: true, why: "no clock was given, so nothing can be aged", dated: false };
   const newest = newestDateIn(text);
+  // ── THE PAGE'S OWN WINDOW, BEFORE ITS AGE ────────────────────────
+  // Asked first because it is a better fact than an age: a page that states the
+  // span its figures apply to has answered the question this function is for,
+  // and in both directions. See validityWindow.
+  {
+    const win = validityWindow(text);
+    const MONTH = 1000 * 60 * 60 * 24 * 30.44;
+    if (win.to !== null && win.to < now) {
+      return { ageMonths: (now - win.to) / MONTH, perishableOk: false, dated: true,
+        why: `it states its own figures were valid until ${new Date(win.to).toISOString().slice(0, 10)}, which has passed` };
+    }
+    if (win.from !== null && win.from <= now && (now - win.from) / MONTH <= VALIDITY_GRACE_MONTHS) {
+      return { ageMonths: (now - win.from) / MONTH, perishableOk: true, dated: true,
+        why: `it states its figures are valid from ${new Date(win.from).toISOString().slice(0, 10)} with no end that has passed` };
+    }
+  }
   // ── A DATE IN THE PROSE IS NOT WHEN THE PAGE WAS WRITTEN ─────────
   //
   // 24 Aug 2026. A Bybjerg run reported `oroeminder.dk (its newest date is

@@ -29,6 +29,7 @@
 // craft for the reason repeated below. A second copy of either would be how the
 // chat and the preview come to disagree about which places were named.
 import { mentionsPlace, isRejectedPlace, onlyAskedAbout, isPassedThrough } from "./previewMatch";
+import { namedNearly } from "./danishNames";
 import { readExclusions, isExcluded } from "./exclusions";
 
 // Three. A reply that names six places and shows six photographs is a gallery
@@ -58,11 +59,13 @@ export const CHAT_PLACE_CAP = 3;
 // because App.jsx already holds them and a second reader of the same transcript
 // is how the arrival anchor once resolved to Copenhagen Airport on an Aalborg
 // brief.
-const mentions = (hay, name) => {
-  const n = String(name || "").trim().toLowerCase();
-  if (!n) return false;
-  return new RegExp(`(?:^|[^\\p{L}])${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}])`, "iu").test(hay);
-};
+//
+// The exact matcher that used to live here went on 19 Sep: it compared the
+// pool's own spelling and nothing else, so one transposed letter in his form
+// ("Copenhagne") put a picture of Copenhagen under a reply to somebody who had
+// just said they were starting there. namedNearly in danishNames.js knows the
+// variants and tolerates one slip on a name long enough for a slip to be
+// unambiguous, which is the same reader the rest of this file uses for names.
 
 // ── needsPhoto: THE CARD RULE THAT MUST NOT LEAK ONTO THE MAP ───────
 //
@@ -120,7 +123,19 @@ export const placesNamedIn = (text, pools, { cap = CHAT_PLACE_CAP, alreadyKnown 
     // THE RULE. Named by the traveller means no card: they know, and the picture
     // is decoration. Named by Gemlyx and not by them is a suggestion, and a
     // suggestion is exactly what a photograph is for.
-    if (theirs && mentions(theirs, name)) continue;
+    //
+    // ── THROUGH THE TOLERANT READER, 19 SEP 2026 ─────────────────
+    //
+    // Oliver: "if I suggest something like Copenhagen, it shouldn't pop up as a
+    // picture in the chat. I clearly already know what Copenhagen is."
+    //
+    // The rule was right and one letter beat it. His form said `Starting point:
+    // Copenhagne`, the reply spelled it properly, and `mentions` compares
+    // exactly. It also only ever compared the POOL's spelling, so a Danish
+    // traveller who typed Kobenhavn had not named Copenhagen either. Both holes
+    // close with the reader that already knows the variants, plus one slip on a
+    // name long enough for a slip to be unambiguous. See namedNearly.
+    if (theirs && namedNearly(theirs, name)) continue;
     // No photograph, no card. The entry may still be excellent; this is a
     // picture feature and an empty frame is worse than nothing. A map pin is
     // not a picture feature, which is what needsPhoto is for.

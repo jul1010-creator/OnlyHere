@@ -59,6 +59,25 @@ export const tabForHash = (hash) => {
 //
 // Anything else, including no hash at all, is a page address to be kept
 // current.
+// ── AND BACK IS NOT THE FRONT PAGE ────────────
+//
+// Oliver, 19 Sep 2026: "Everything that clicks 'back' in some way or another,
+// needs to stop going all the way back to the front page. Guide should go back
+// to the AI page. Back to Gemlyx from 'how we're paid' should go back to the
+// legal page."
+//
+// He is describing one fault with one cause: every back button in the app was
+// written as `navigate("/")`, which is not a way back, it is a way out. A
+// reader who opened "how we are paid" from the Legal card lands on Explore and
+// has to find the menu, the card and the link again to carry on reading.
+//
+// One definition per destination, here with the other addresses, so no back
+// button holds its own opinion about where it came from. The guide's is the
+// chat, because a guide is something the chat made.
+export const DETOUR_PATH = `/${hashForTab("ai")}`;
+export const ME_PATH = "/me";
+export const LEGAL_PATH = `${ME_PATH}/legal`;
+
 export const isEntryHash = (hash) => String(hash || "").startsWith("#/");
 export const STUDIO_HASH = "#studio";
 export const ownsTheAddress = (hash) => !isEntryHash(hash) && String(hash || "") !== STUDIO_HASH;

@@ -74,6 +74,8 @@ import { withContext, readBrowserFacts } from "../utils/problemContext";
 import { APP_VERSION } from "../config";
 import { guideHero, heroCaption } from "../utils/guideHero";
 import { PhotoCredit } from "../components/PhotoCredit";
+import { DETOUR_PATH } from "../utils/tabUrl";
+import { libraryRow, LIBRARY_TABLE } from "../utils/tripLibrary";
 
 // ─── GUIDE PAGE ───────────────────────────────────────────────────
 // The ONLY place a guide is ever shown, per Oliver ("get rid of the popup") —
@@ -505,6 +507,33 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
         const updated = [{ id, title: guide.title, days: guide.days, savedAt: new Date().toISOString(), arrivalDate: guide._arrivalDate || null }, ...bookmarks].slice(0, 20);
         localStorage.setItem("gemlyx_saved_guides", JSON.stringify(updated));
       } catch { /* bookmark list is a convenience, never block the real save over it */ }
+      // ── AND A TRIP SOMEBODY KEPT JOINS THE PUBLISHED LIST ──
+      //
+      // Oliver, 19 Sep 2026: "when someone used a guide, it will be published."
+      // Saving is the closest thing to a vote this app has: it is the moment a
+      // traveller decides the trip is theirs.
+      //
+      // ── A NEW ID, NOT THIS ONE ──────────────────────────────────
+      //
+      // The published copy is stripped of the person and the saved one is not,
+      // and they must not share an address. With one id, a reader who found a
+      // trip on the public list could change /trips/x to /guide/x and read the
+      // conversation it was built from. Two ids, two rows, and the public one
+      // has no way back to the private one. See stripForLibrary.
+      //
+      // FIRE AND FORGET. This is a side effect of a save, so it may not slow
+      // one down and it may not fail one: the table does not exist until the
+      // migration in LIBRARY_SETUP_SQL is run, and a traveller being told their
+      // guide did not save because a list page is not set up yet would be the
+      // worst trade in this file.
+      const published = libraryRow(guide, { id: `lib_${Math.random().toString(36).slice(2, 9)}${Date.now().toString(36).slice(-4)}` });
+      if (published) {
+        fetch(`${SUPABASE_URL}/rest/v1/${LIBRARY_TABLE}`, {
+          method: "POST",
+          headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+          body: JSON.stringify(published),
+        }).catch(() => { /* see above: never a traveller's problem */ });
+      }
       // The guide travels WITH the navigation for two reasons. It skips the
       // refetch-from-Supabase flash on a page the person has been staring at
       // for a minute already, and justSaved opens the share panel — the moment
@@ -699,7 +728,10 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
       <div style={{ minHeight: "100vh", background: C.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24, textAlign: "center" }}>
         <div style={{ fontSize: 16, color: C.text, fontWeight: 700, marginBottom: 8, fontFamily: "'Fraunces', serif" }}>{uiT("guide.notFound", uiLang)}</div>
         <div style={{ fontSize: 13, color: C.muted, marginBottom: 20 }}>{loadError || uiT("guide.loadFailed", uiLang)}</div>
-        <button onClick={() => navigate("/")} style={{ background: C.accent, color: "#fff", border: "none", borderRadius: 100, padding: "10px 20px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{uiT("guide.back", uiLang)}</button>
+        {/* The chat rather than the front page: a guide that failed to load is
+            a reason to build another one, and the front page is where a reader
+            has to start the whole hunt again. See DETOUR_PATH in tabUrl.js. */}
+        <button onClick={() => navigate(DETOUR_PATH)} style={{ background: C.accent, color: "#fff", border: "none", borderRadius: 100, padding: "10px 20px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{uiT("guide.back", uiLang)}</button>
       </div>
     );
   }
@@ -795,6 +827,11 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
     return {
       name: `Day ${st._day} · ${st.name}${c.precise ? "" : town ? ` (somewhere in ${town})` : " (approximate)"}`,
       stopName: st.name,
+      // The day as a field and not only inside the label. pinNumber narrows by
+      // it, so a place visited twice in a week gets each card the number of its
+      // own pin; reading it back out of that string would be parsing a sentence
+      // written for a reader.
+      _day: st._day,
       approx: !c.precise,
       town,
       lat: c.lat,
@@ -836,10 +873,36 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
   // Read off tripRoute itself, so the number under the map and the number ON the
   // map cannot drift. Two stops in one place collapse to one pin by design, and
   // both cards then point at that pin, which is the truth: it is one dot.
-  const pinNumber = (stop) => {
+  // ── AND THE SAME PLACE ON TWO DAYS IS TWO PINS ────────────────────
+  //
+  // Found by Fable reviewing the legs of guide 9vkdc564l13, 19 Sep 2026. This
+  // searched by NAME and took the first match, and tripRoute only collapses
+  // CONSECUTIVE identical coordinates, so a place visited on day 2 and again on
+  // day 6 has two pins and day 6's card carried day 2's number.
+  //
+  // The dot was in the right spot, which is why nobody saw it: the two pins sit
+  // on the same coordinates. The NUMBER was wrong, and the map's own caption
+  // promises every stop below is numbered in order, so a reader counting cards
+  // against pins finds the sequence jump backwards and no explanation.
+  //
+  // The day narrows it, and the name still decides within the day: two stops on
+  // one day that collapsed to one pin keep pointing at that pin, which is the
+  // case the paragraph above this is about and which stays true. `_day` is
+  // stamped onto every entry where tripRoute is built, so this reads the same
+  // field the pin was drawn from rather than a second idea of which day it is.
+  //
+  // `dayNo` is optional and the name-only search is the fallback, so a caller
+  // that has no day in hand behaves exactly as before rather than losing its
+  // number.
+  const pinNumber = (stop, dayNo = null) => {
     const name = String(stop?.name || "");
     if (!name) return null;
-    const at = tripRoute.findIndex(p => String(p.stopName || p.name || "") === name);
+    const sameName = (p) => String(p.stopName || p.name || "") === name;
+    if (dayNo != null) {
+      const onTheDay = tripRoute.findIndex(p => sameName(p) && p._day === dayNo);
+      if (onTheDay >= 0) return onTheDay + 1;
+    }
+    const at = tripRoute.findIndex(sameName);
     return at < 0 ? null : at + 1;
   };
   // How many stops the dedupe removed, said out loud rather than left as a map
@@ -873,7 +936,10 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
         @media (min-width: 900px) { .towns-grid { grid-template-columns: repeat(3, 1fr); gap: 34px 22px; } }
       `}</style>
       <div style={{ position: "sticky", top: 0, zIndex: 10, background: `${C.bg}ee`, backdropFilter: "blur(8px)", borderBottom: `1px solid ${C.border}`, padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <button onClick={() => (onBack ? onBack() : navigate("/"))}
+        {/* `onBack` is the modal case, where the guide is drawn over the chat
+            and the chat is still mounted behind it. On its own route there is
+            nothing behind it, and the page a guide belongs to is the chat. */}
+        <button onClick={() => (onBack ? onBack() : navigate(DETOUR_PATH))}
           style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "8px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>
           ‹ Back
         </button>
@@ -1486,7 +1552,10 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
             // the cache key each computes always matches the other's.
             const legOriginTown = stopTownOf(originName);
             const legDestTown = (day.stops || []).find(s => s.name === destName)?.town;
-            if (isSameTownWalk(mode, legOriginTown, legDestTown, how)) mode = "walking";
+            // The same distance guard as the fetch, computed by the same reader
+            // for the same reason: a render that decides the mode differently
+            // looks up a key the build never wrote. See isSameTownWalk.
+            if (isSameTownWalk(mode, legOriginTown, legDestTown, how, legDistanceKm(originName, destName, geo))) mode = "walking";
             // ── A STORED ZERO IS STILL A ZERO ────────────────────
             // Found on the live site minutes after the fix shipped. Refusing to
             // RECORD a zero minute leg stops the next guide having one; it does
@@ -1976,7 +2045,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                           stop that is not on the map: it keeps its letter rather
                           than being given a number it has not earned. */}
                       <div style={{ position: "absolute", top: 10, right: 10, width: 30, height: 30, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", background: C.scrim || "rgba(10,15,30,0.78)", backdropFilter: "blur(6px)", border: `1px solid ${C.gold}44` }}>
-                        <span style={{ fontFamily: "'Fraunces', serif", fontStyle: pinNumber(stop) ? "normal" : "italic", fontSize: 15, fontWeight: pinNumber(stop) ? 800 : 500, color: C.gold }}>{pinNumber(stop) || (stop.name || "◆").slice(0, 1)}</span>
+                        <span style={{ fontFamily: "'Fraunces', serif", fontStyle: pinNumber(stop, day.day || dayIdx + 1) ? "normal" : "italic", fontSize: 15, fontWeight: pinNumber(stop, day.day || dayIdx + 1) ? 800 : 500, color: C.gold }}>{pinNumber(stop, day.day || dayIdx + 1) || (stop.name || "◆").slice(0, 1)}</span>
                       </div>
                     </div>
                     <div style={{ padding: "12px 14px 14px" }}>{titleRow}</div>
@@ -1997,7 +2066,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                           works. A stop that is not on the map keeps its letter,
                           because giving it a number would be the promise breaking
                           in the other direction. */}
-                      <span style={{ fontFamily: "'Fraunces', serif", fontStyle: pinNumber(stop) ? "normal" : "italic", fontSize: 16, fontWeight: pinNumber(stop) ? 800 : 500, color: C.gold }}>{pinNumber(stop) || (stop.name || "◆").slice(0, 1)}</span>
+                      <span style={{ fontFamily: "'Fraunces', serif", fontStyle: pinNumber(stop, day.day || dayIdx + 1) ? "normal" : "italic", fontSize: 16, fontWeight: pinNumber(stop, day.day || dayIdx + 1) ? 800 : 500, color: C.gold }}>{pinNumber(stop, day.day || dayIdx + 1) || (stop.name || "◆").slice(0, 1)}</span>
                     </div>
                     <div style={{ minWidth: 0, flex: 1 }}>{titleRow}</div>
                   </div>
@@ -2167,10 +2236,12 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                 checkin: fmt(dayDate) || undefined,
                 checkout: fmt(dayDate) ? fmt(nextDate) : undefined,
                 adults,
-                // Sorted by review score only when this is a SEARCH. When the
-                // guide named a property, the link is a lookup for that name
-                // and an order parameter over one hotel means nothing.
-                tier: day.glance.recommendedStay ? "" : "good",
+                // A LOOKUP, NOT A SEARCH, and that is the whole of this one's
+                // job now. An order parameter over one named hotel means
+                // nothing, and until 19 Sep this variable was ALSO the good
+                // slot, which is why a day with a named hostel offered a hostel
+                // and a budget search and no good hotel at all.
+                tier: "",
               });
               // ── "A GOOD HOTEL OR BUDGET HOTEL" ────────────
               //
@@ -2189,8 +2260,25 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                 adults,
                 tier: "budget",
               });
-              // The good slot as a search, for when the partner hotel is
-              // filling the slot itself and a reader wants to pick another.
+              // ── AND THE GOOD SLOT WAS NEVER DRAWN ────────────
+              //
+              // Oliver, 19 Sep 2026, of a screenshot of his own guide: "the last
+              // picture is budget vs budget.. with no links on either."
+              //
+              // He is right twice. This URL was computed on 18 Sep and rendered
+              // nowhere, so whenever the guide named a property the two doors on
+              // screen were that property and a budget search. The named one was
+              // a hostel, so both slots were the cheap end and the pair he asked
+              // for did not exist:
+              //
+              //   "everytime they can pick a hotel make a good hotel or budget
+              //    hotel."
+              //
+              // Three doors now, in one order, every day: the property the guide
+              // named if it named one, then good, then budget. The last two are
+              // always the AREA, because a cheaper or a better-reviewed room is a
+              // different building and sorting a search for one hotel answers
+              // nothing.
               const stayGoodUrl = bookingUrl({
                 area: stayAreaTerm,
                 near: stayTown,
@@ -2284,19 +2372,15 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                         publishers not to do. outboundLink computes the href,
                         the label, the sentence and the rel in one place, which
                         is what it was written for. */}
-                    {stayBookingUrl && (
+                    {stayBookingUrl && day.glance.recommendedStay && (
                       <a href={outboundLink(stayBookingUrl).href || stayBookingUrl} target="_blank" rel={outboundLink(stayBookingUrl).rel}
                         style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 8, marginRight: 8, background: `${C.gold}1a`, border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "8px 14px", fontSize: 13, fontWeight: 700, textDecoration: "none" }}>
-                        {/* THE LABEL SAYS WHICH SLOT THIS IS. With the partner
-                            hotel above it, this button is the way to pick
-                            another, which is what he asked for in the same
-                            message: "make them able to pick another from
-                            Booking." */}
-                        🔎 {day.glance.recommendedStay
-                          ? `See ${day.glance.recommendedStay} on Booking.com`
-                          : featuredStay
-                            ? `Other good hotels in ${stayAreaTerm}`
-                            : `Good hotels in ${stayAreaTerm}`} ↗
+                        {/* ONE THING PER DOOR. This one is the property the
+                            guide named, and the good and budget searches below
+                            are how a reader picks another, which is what he
+                            asked for in the same message: "make them able to
+                            pick another from Booking." */}
+                        🔎 See {day.glance.recommendedStay} on Booking.com ↗
                       </a>
                     )}
                     {/* ── AND THE INLINE COPY WAS DODGING THIS CHECK ──────
@@ -2314,6 +2398,17 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                     {/* The second slot. Same shape as the two beside it, so
                         the three read as a row of doors rather than as a link
                         and its footnotes. */}
+                    {/* THE GOOD SLOT, always, beside the budget one. Same size
+                        as each other and smaller than the named door above
+                        them, so the three read as one choice with a
+                        recommendation at the front rather than as three
+                        competing adverts. */}
+                    {stayGoodUrl && (
+                      <a href={outboundLink(stayGoodUrl).href || stayGoodUrl} target="_blank" rel={outboundLink(stayGoodUrl).rel}
+                        style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 8, marginRight: 8, background: `${C.gold}1a`, border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "8px 13px", fontSize: 12, fontWeight: 700, textDecoration: "none" }}>
+                        ⭐ {(day.glance.recommendedStay || featuredStay) ? "Other good hotels" : "Good hotels"} in {stayAreaTerm} ↗
+                      </a>
+                    )}
                     {stayBudgetUrl && (
                       <a href={outboundLink(stayBudgetUrl).href || stayBudgetUrl} target="_blank" rel={outboundLink(stayBudgetUrl).rel}
                         style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 8, marginRight: 8, background: `${C.gold}1a`, border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "8px 13px", fontSize: 12, fontWeight: 700, textDecoration: "none" }}>
@@ -2326,7 +2421,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                         🏨 Compare hotels on Trip.com ↗
                       </a>
                     )}
-                    {(stayBookingUrl || stayBudgetUrl || stayTripUrl) && dayIdx === 0 && (
+                    {(stayGoodUrl || stayBudgetUrl || stayTripUrl) && dayIdx === 0 && (
                       <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 4 }}>{stayDisclosure({ tripcom: !!stayTripUrl })}</div>
                     )}
                   </div>
@@ -2730,7 +2825,10 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
           // up out of the way below (className gxa-guide-savebar-active).
           <div style={{ position: "sticky", bottom: 16, zIndex: 45, display: "flex", justifyContent: "center", marginTop: 20 }}>
             <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 100, padding: 6, display: "flex", gap: 8, boxShadow: "0 8px 30px rgba(0,0,0,0.6)" }}>
-              <button onClick={() => (onBack ? onBack() : navigate(-1))}
+              {/* It says "Back to chat", so it goes to the chat. navigate(-1)
+                  is the browser's history, which on a guide opened from a link
+                  is whatever site the reader was on before this one. */}
+              <button onClick={() => (onBack ? onBack() : navigate(DETOUR_PATH))}
                 style={{ background: "none", border: "none", color: C.light, borderRadius: 100, padding: "12px 20px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
                 Back to chat
               </button>

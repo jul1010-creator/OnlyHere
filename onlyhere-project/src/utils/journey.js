@@ -320,9 +320,26 @@ export const arrivalGlanceRow = (item, kind) => {
 
 // The block handed to the writer. Every figure carries the name of what it
 // measures, which is the whole fix.
+// ── AND THE BLOCK MAY NOT NAME A FIGURE THE CARD DOES NOT USE ──
+//
+// Found 19 Sep 2026 by a review of the Bornholm run, and it is a hole the
+// WAIT_INSIDE_TOTAL fix opened the day before: this block told the writer
+// "DOOR TO DOOR: 10h 44min. It is the figure travelTime takes", while
+// journeyFigure had started handing the card 3h 13min because the wait was an
+// overnight one. The reader then gets 3h 13min on the card and "about 11 hours
+// door to door" in the paragraph, from one measurement, and both sentences
+// were written by following instructions.
+//
+// So the block asks journeyFigure like everybody else, and when the two differ
+// it says which is which and what to write.
 export const journeyBlock = (parts) => {
   if (!parts) return "";
-  const bits = [`DOOR TO DOOR: ${hm(parts.total)}. This is the whole journey between a point in central Copenhagen and a point in the middle of the destination, INCLUDING the walk at both ends and the wait for the departure. It is the figure travelTime takes.`];
+  const fig = journeyFigure(parts);
+  const cutOut = fig.basis === "moving";
+  const bits = [`DOOR TO DOOR: ${hm(parts.total)}. This is the whole journey between a point in central Copenhagen and a point in the middle of the destination, INCLUDING the walk at both ends and the wait for the departure.${cutOut ? "" : " It is the figure travelTime takes."}`];
+  if (cutOut) {
+    bits.push(`AND travelTime IS ${hm(fig.mins)}, NOT the figure above. The wait is ${hm(fig.waiting)}, which is longer than a connection: it is an evening in a harbour town rather than a journey, so the card shows the time in motion. Write the trip from ${hm(fig.mins)}. If the door to door figure is worth naming too, name the wait in the same sentence, or the two numbers read as a contradiction.`);
+  }
   if (parts.longest) {
     const l = parts.longest;
     bits.push(`ON BOARD: ${hm(parts.onBoard)} of that is moving${parts.changes ? `, across ${parts.changes + 1} legs with ${parts.changes} change${parts.changes === 1 ? "" : "s"}` : ""}. The longest single leg is ${hm(l.mins)}${l.vehicle ? ` by ${l.vehicle}` : ""}${l.line ? ` on ${l.line}` : ""}${l.from && l.to ? `, ${l.from} to ${l.to}` : ""}.`);
@@ -508,6 +525,28 @@ export const sentences = (text) => {
 
 const near = (a, b, slack = 2) => Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= slack;
 
+// ── AND A ROUNDING IS NOT AN INVENTION ────────────
+//
+// Bornholm, 16 Sep 2026. The pipeline measured 10h 44min, the draft wrote
+// "about 11 hours", and this gate reported that figure as measured by nothing
+// and told Oliver to name a source for it or take it out. It is the pipeline's
+// own number, rounded to the unit it was written in.
+//
+// So a claim is allowed the resolution it was written at, and no more: a figure
+// in whole hours may sit half an hour from a measurement, a half hour claim a
+// quarter, and anything written to the minute is still held to two. A precise
+// claim gets no help from this, which is the half that matters: "3h 13min" and
+// "2h51" have to have been measured.
+const WHOLE_HOURS = /^\d{1,2}\s*(?:h|hr|hrs|hour|hours|time|timer)$/i;
+const PART_HOURS = /^(?:\d{1,2}\s*(?:and\s*a\s*)?)?(?:half|quarter|1\/2|1\/4|\u00bd|\u00bc)\s*(?:an?\s*)?(?:h|hr|hour|hours|time|timer)$/i;
+
+const claimSlack = (text) => {
+  const t = String(text || "").trim();
+  if (WHOLE_HOURS.test(t)) return 30;
+  if (PART_HOURS.test(t)) return 15;
+  return 2;
+};
+
 // Interchange names come back as "Odense St." and get joined into a sentence
 // that already ends in a full stop.
 const stripDot = (s) => String(s || "").replace(/\.$/, "");
@@ -547,9 +586,10 @@ export const transitProblems = (prose, { parts, drivingMins } = {}) => {
       // ── THE CONFLATION ────────────────────────────────────────────
       // Only when the two figures actually differ. On a short hop where the
       // ride IS the journey there is nothing to confuse and nothing to flag.
-      if (ride && near(d.mins, parts.total) && parts.onBoard > 0 && !near(parts.total, parts.onBoard, 5)) {
+      const slack = claimSlack(d.text);
+      if (ride && near(d.mins, parts.total, slack) && parts.onBoard > 0 && !near(parts.total, parts.onBoard, 5)) {
         out.push(`"${d.text}" is presented as time on board, and it is the DOOR TO DOOR figure: it includes the walk at both ends and the wait. The measured time moving is ${hm(parts.onBoard)}. Say which one the sentence means, or a reader who checks the timetable will read this as wrong.`);
-      } else if (ours && !measured.some(m => near(d.mins, m))) {
+      } else if (ours && !measured.some(m => near(d.mins, m, slack))) {
         out.push(`"${d.text}" was not measured by anything in this run. The figures that were: ${measured.map(hm).join(", ")}. Either name a source for it or take it out.`);
       }
     }
@@ -931,13 +971,61 @@ export const vehicleMismatches = (prose, legs) => {
 // and without a guide.
 const TRAVEL_TALK = /\b(walk|walks|walking|on foot|ride|rides|journey|travel|get(?:ting)? (?:there|here|to|between|around)|from .{2,30} to |train|bus|ferry|metro|tram|taxi|drive|driving|by car|tog(?:et)?|f[æa]?erge)\b/i;
 
+// ── ONE LEG, ONE ROW, WHICH IT WAS NOT ──────────────────────────────
+//
+// Oliver sent the run log for his guide 9vkdc564l13 on 19 Sep 2026. Step 16 of
+// it prints the measured legs of a 7 day, 16 stop trip as
+//
+//   8min, 17min, 20min, 28min, 1h 37min, 7min, 1h 5min, 14min, 1h 32min,
+//   13min, 13min, 45min, 45min, 15min, 15min, 24min, 58min, 58min
+//
+// Four adjacent pairs, and the arithmetic says they cannot all be real: a 7 day
+// trip with 16 stops has at most (16 - 7) + 6 = 15 legs, and this claims 18.
+//
+// They are not separate legs. fetchExactDurations stores a re-routed leg TWICE,
+// once under the mode it was measured in and once under the walking key it was
+// requested under, and the second write is load bearing: the render computes
+// the walking key too and would find nothing without it. So the duplicate is
+// correct in the map and wrong in a list of what was measured, because this
+// function counted KEYS.
+//
+// It matters more than a miscount. The list is the evidence under a finding
+// that says a number in the guide matches no measured leg, and it is the only
+// part of that finding he can check. A list that says eighteen when fifteen
+// legs were driven invites him to distrust the finding instead of the guide.
+//
+// The alias is identifiable without a flag and without changing what is stored:
+// its key says one mode and its answer was measured in another. Where two rows
+// describe the same pair of ends, the one whose key agrees with its own
+// measurement is the leg and the other is the alias. A walk out and a walk back
+// are two different pairs and both survive, which is right.
+// AND IT COLLAPSES ONLY WHAT IT CAN PROVE. Two rows over one pair of ends are
+// merged when ONE OF THEM IS AN ALIAS and not otherwise. Two keys over the same
+// ends that both agree with their own measurement are two separately measured
+// legs, which is what happens when the same two places sit on different days
+// and a town label resolved the mode differently on each; a rule that merged
+// those on the strength of matching ends would hide a real measurement to tidy
+// up a miscount, and this function's whole job this week is to stop a list of
+// evidence overstating itself.
 export const legMinutesIn = (legs) => {
   const out = [];
+  const seen = new Map();
   for (const [key, d] of Object.entries(legs || {})) {
     const mins = Number(d?.durationMinutes);
     if (!Number.isFinite(mins) || mins <= 0) continue;
     const [from = "", to = "", keyMode = ""] = String(key).split("|");
-    out.push({ key, mins, from, to, mode: String(d.modeUsed || keyMode || "") });
+    const measuredAs = String(d.modeUsed || "");
+    const alias = !!measuredAs && !!keyMode && measuredAs !== keyMode;
+    const row = { key, mins, from, to, mode: String(measuredAs || keyMode || ""), alias };
+    const pair = `${from}|${to}`;
+    const had = seen.get(pair);
+    if (!had) { seen.set(pair, row); out.push(row); continue; }
+    // The real one replaces the alias in place, so the order the list is
+    // printed in stays the order the answers arrived in.
+    if (had.alias && !alias) { out[out.indexOf(had)] = row; seen.set(pair, row); continue; }
+    // The alias arriving second is dropped. Anything else is a second real
+    // measurement and is kept, ends or no ends.
+    if (!alias) out.push(row);
   }
   return out;
 };

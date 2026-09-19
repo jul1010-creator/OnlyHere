@@ -78,6 +78,69 @@ export const daysBetween = (start, end) => {
   return Math.round((b.getTime() - a.getTime()) / MS_DAY) + 1;
 };
 
+// ── AND HOW MANY DAYS THE TRIP HAS, ONCE ────────
+//
+// Oliver, 19 Sep 2026, of a real export: "the preview showed me Aalborg" was
+// one bug and this was the other one underneath it. His traveller's own form
+// said `Exact trip length: 7 days`, the assistant said "7 full days", the brief
+// stored 8, the preview built an 8 day window, and the guide builder was told
+// to produce "exactly 7 days". FOUR readers of one question:
+//
+//   the intake button   Math.floor(elapsedHours / 24)         7
+//   readBrief           daysBetween, calendar inclusive       8
+//   tripWindow          daysBetween off the intake dates      8
+//   the guide's brief   the form re-read as prose, no intake  7
+//
+// So day 8 had no plan, and the preview offered events on a date the planner
+// had no day for. That last part is the failure documented in App.jsx for 9
+// October arriving through a different door.
+//
+// ── A DAY IS A DATE YOU CAN USE ──────────────
+//
+// Neither of the old answers was right, which is why they could both look
+// defensible. 23 September 12:00 to 30 September 12:00 is eight calendar dates,
+// seven nights and seven times twenty four hours. What a traveller has is eight
+// dates of which the last holds a taxi to the airport.
+//
+// So: the dates from arrival to departure, less the departure date when the
+// flight leaves before the afternoon. A noon departure gives the seven the form
+// printed and the assistant said. A ten in the evening departure gives eight,
+// where the elapsed-hours arithmetic would have said seven and lost them a day
+// they have.
+//
+// The hour is LOCAL and read off the raw value, before dayStart flattens it. A
+// date with no time on it names a whole day and keeps it: somebody who wrote
+// "30 September" has not told us when they fly.
+export const DEPARTURE_DAY_ENDS_BY = 12;
+
+const localHour = (v) => {
+  if (v instanceof Date) return Number.isFinite(v.getTime()) ? v.getHours() : null;
+  const s = String(v || "");
+  if (!/\d{1,2}:\d{2}/.test(s)) return null;
+  const d = new Date(s);
+  return Number.isFinite(d.getTime()) ? d.getHours() : null;
+};
+
+export const tripDays = (arrival, departure) => {
+  const span = daysBetween(arrival, departure);
+  if (!span || span < 1) return null;
+  const h = localHour(departure);
+  // Never below one: a trip that arrives and leaves on the same morning is
+  // still a day, and a zero here would read as "no dates" to every caller.
+  if (span > 1 && h !== null && h <= DEPARTURE_DAY_ENDS_BY) return span - 1;
+  return span;
+};
+
+// The last date the plan may put a stop on, which is the same answer read the
+// other way round. Both are here so a caller cannot take one and derive the
+// other slightly differently.
+export const tripLastDay = (arrival, departure) => {
+  const start = dayStart(arrival);
+  const days = tripDays(arrival, departure);
+  if (!start || !days) return null;
+  return new Date(start.getTime() + (days - 1) * MS_DAY);
+};
+
 // ── THE TWO PARSERS generateGuide ALREADY HAD ───────────────────────
 // Lifted out of App.jsx unchanged in behaviour, because the preview screen now
 // needs the same two answers and a second copy of a parser is this project's
@@ -814,7 +877,10 @@ export const tripWindow = ({ arrival, departure, convoText, convoTurns, today = 
   const start = dayStart(arrival);
   const end = dayStart(departure);
   if (start && end && end.getTime() >= start.getTime()) {
-    return { start, end, days: daysBetween(start, end), dated: true, source: "intake" };
+    // THE WINDOW ENDS WHERE THE PLAN ENDS. An event on the morning of a noon
+    // departure is one the traveller cannot attend, and offering it produces a
+    // ticked event the planner has no day to put it on. See tripDays.
+    return { start, end: tripLastDay(arrival, departure) || end, days: tripDays(arrival, departure), dated: true, source: "intake" };
   }
   // ── A STATED RANGE BEATS A COUNTED ONE ──────────────────
   // Both ends said out loud, so neither is derived from the other. Before

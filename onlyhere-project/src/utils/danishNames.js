@@ -381,6 +381,83 @@ export const matchVariantsOf = (name) => {
 // Two names are the same place when any spelling of one folds to any spelling of
 // the other. Place pairs only. Handles the case he named, a source scoped to
 // Copenhagen on an entry called København, in both directions.
+// ── AND A NAME SOMEBODY TYPED WITH A SLIP IN IT ──────
+//
+// Oliver, 19 Sep 2026: "if I suggest something like Copenhagen, it shouldn't
+// pop up as a picture in the chat. I clearly already know what Copenhagen is."
+//
+// It did, and the rule that should have stopped it was already written and
+// already correct: a place the traveller named needs no introducing. What
+// defeated it was one letter. His form said `Starting point: Copenhagne`, the
+// reply spelled it properly, and an exact compare says those are two different
+// places. The same slip cost him a trip anchor: townPointFor("Copenhagne") is
+// null, so nothing measured distances from where they start.
+//
+// DAMERAU RATHER THAN LEVENSHTEIN, because the mistake people make is swapping
+// two letters, and a plain edit distance counts a swap as two changes and
+// refuses it.
+//
+// AND ONLY FOR LONG NAMES. At distance one, "Ribe" is "Rive", "Rise" and
+// "Ride"; Denmark has Ry, Ø, Læsø, Lyø and Lynæs. Seven characters is where a
+// single slip stops being ambiguous between real places, and the comparison is
+// refused below that rather than made carefully, since a wrong match here
+// SUPPRESSES something a reader should have seen.
+export const NEAR_MISS_MIN = 7;
+
+const damerau1 = (a, b) => {
+  if (a === b) return true;
+  const la = a.length, lb = b.length;
+  if (Math.abs(la - lb) > 1) return false;
+  let i = 0;
+  while (i < la && i < lb && a[i] === b[i]) i++;
+  if (i === la && i === lb) return true;
+  // One substitution.
+  if (la === lb) {
+    if (a.slice(i + 1) === b.slice(i + 1)) return true;
+    // One transposition of neighbours.
+    return a[i] === b[i + 1] && a[i + 1] === b[i] && a.slice(i + 2) === b.slice(i + 2);
+  }
+  // One insertion, from whichever side is shorter.
+  const [lng, srt] = la > lb ? [a, b] : [b, a];
+  return lng.slice(i + 1) === srt.slice(i);
+};
+
+// One slip, in a name long enough for one slip to be unambiguous. Folded first,
+// so this is about typing rather than about accents or the Danish letters.
+export const nearlyTheSameName = (a, b) => {
+  const x = fold(a), y = fold(b);
+  if (!x || !y) return false;
+  if (x === y) return true;
+  if (Math.min(x.length, y.length) < NEAR_MISS_MIN) return false;
+  return damerau1(x, y);
+};
+
+// ── AND THE SAME QUESTION ASKED OF A WHOLE SENTENCE ─────────────────
+//
+// containsName answers "is this name in here" exactly. This answers "is this
+// name in here, or something a finger-slip away from it", over the windows of
+// words a multi-word name could occupy. Variants go in, so a Danish traveller
+// who wrote "Kobenhavn" has named Copenhagen and a card for it introduces
+// nothing.
+const WORDS = /[\p{L}\p{N}]+/gu;
+
+export const namedNearly = (haystack, name) => {
+  const hay = String(haystack || "");
+  if (!hay.trim() || !String(name || "").trim()) return false;
+  if (containsName(hay, name)) return true;
+  const forms = variantsOf(name).filter(v => fold(v).length >= NEAR_MISS_MIN);
+  if (!forms.length) return false;
+  const toks = hay.match(WORDS) || [];
+  const widest = Math.max(...forms.map(v => v.trim().split(/\s+/).length));
+  for (let i = 0; i < toks.length; i++) {
+    for (let n = 1; n <= widest && i + n <= toks.length; n++) {
+      const window = toks.slice(i, i + n).join(" ");
+      if (forms.some(v => nearlyTheSameName(window, v))) return true;
+    }
+  }
+  return false;
+};
+
 export const samePlaceName = (a, b) => {
   const A = variantsOf(a).map(fold).filter(Boolean);
   if (!A.length) return false;

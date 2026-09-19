@@ -674,6 +674,30 @@ export const shapeForLive = (type, t) => {
   // a redraft and a hand-pasted one never meets the matcher, so it is asked
   // here as well. Both questions are about WHAT is being sold, which is the
   // thing no amount of name matching answers.
+  // ── AND A DOOR CHECK THAT BELONGS HERE AND IS NOT HERE ───────────
+  //
+  // 19 Sep 2026. Oliver found the published town row for Roskilde carrying a
+  // Ticketmaster link to Roskilde Festival, so his guide's costs list invited a
+  // family of seven to buy festival tickets for a cathedral town. Every gate
+  // above passed it, because the link really is a bookable Ticketmaster event
+  // page for something really called Roskilde in Roskilde. The question none of
+  // them asks is whether the THING has one way in and one admission price.
+  //
+  // utils/costLedger.js now asks it, so the costs list is fixed for every row
+  // already in the database. This line was changed to ask it too and then
+  // changed back, and the reason is worth keeping: `night` is on the wrong side
+  // of that list. entryPrice.js is right that a bar prices per pint, and a
+  // music venue published as `night` genuinely does sell dated tickets, so
+  // refusing the field here would have deleted a working affiliate link from
+  // rows nobody has looked at, on the next redraft, silently. Storing a link
+  // the renders refuse costs nothing and is recoverable; dropping one is not.
+  //
+  // The open question is therefore NOT about this line. It is whether a TOWN
+  // page should keep offering 🎫 Book tickets at all: DetailPage renders that
+  // button on every type by a decision recorded on 23 Aug, one that predates
+  // TYPES_WITH_A_DOOR moving into entryPrice.js on 6 Sep, and a town's own
+  // attraction pass is the case it was written for. That is Oliver's call, and
+  // it is in HANDOFF_19SEP.md rather than decided here.
   if (isBookableTicketUrl(t?.ticketUrl) && !ticketUrlSaysElsewhere(t?.ticketUrl, t?.town || t?.city || "") && !ticketUrlIsASubEvent(t?.ticketUrl, t?.name, `${t?.town || t?.city || ""} ${t?.location || ""} ${t?.mapHint || ""}`)) out = { ...out, ticketUrl: String(t.ticketUrl).trim() };
   // ── AND WHEN AN AGENT WAS LAST ASKED ABOUT THIS ROW ───────────────
   //

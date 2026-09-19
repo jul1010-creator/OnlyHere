@@ -17,6 +17,7 @@ import { useNavigate } from "react-router-dom";
 import { C } from "../utils/theme";
 import { GemlyxLogo } from "./GemlyxLogo";
 import { affiliateRoster, payingCount } from "../utils/affiliateRoster";
+import { LEGAL_PATH } from "../utils/tabUrl";
 
 const Card = ({ children }) => (
   <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "16px 17px", marginBottom: 12 }}>
@@ -57,10 +58,13 @@ export const AffiliatesPage = () => {
   return (
     <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif" }}>
       <div style={{ maxWidth: 620, margin: "0 auto", padding: "28px 20px 64px" }}>
-        <button onClick={() => navigate("/")}
+        {/* The Legal card is where this page is linked from, so it is where
+            back goes. "Back to Gemlyx" landing on Explore is a way out of the
+            document rather than a way back into it. */}
+        <button onClick={() => navigate(LEGAL_PATH)}
           style={{ background: "none", border: "none", padding: 0, cursor: "pointer", display: "flex", alignItems: "center", gap: 8, marginBottom: 26 }}>
           <GemlyxLogo size={18} color={C.text} />
-          <span style={{ fontSize: 13, color: C.muted }}>Back to Gemlyx</span>
+          <span style={{ fontSize: 13, color: C.muted }}>Back to Legal</span>
         </button>
 
         <h1 style={{ fontSize: 26, fontWeight: 800, margin: "0 0 10px" }}>How Gemlyx is paid</h1>

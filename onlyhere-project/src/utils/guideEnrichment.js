@@ -694,11 +694,42 @@ export const resolveLegMode = (how, primaryMode, originName, destName, onlyWalki
 // stops' towns (every stop carries a `town` field) — two stops in the SAME
 // town on a transit trip are a walk, coordinates or not, unless the leg text
 // explicitly says ferry/boat. Used by fetch AND render so cache keys agree.
-export const isSameTownWalk = (mode, originTown, destTown, how) =>
+// ── AND IT STANDS DOWN WHEN THE DISTANCE IS KNOWN AND LONG ──────────
+//
+// Oliver, 19 Sep 2026, of his live guide 9vkdc564l13: a day whose hotel is in
+// one town showed a 58 minute journey to a castle IN that town, routed through
+// a station on a different railway line. He found it by reading the page.
+//
+// This function is what produced it, and the reason is in its own header two
+// paragraphs up: "the distance-based short-leg rule in resolveLegMode needs
+// COORDINATES, and when neither stop resolves to a precise point the leg can
+// still end up queried as transit and dead-end." That is the whole scope of
+// this rule. It was never meant to answer a leg whose distance IS known.
+//
+// It did anyway, because it is applied AFTER resolveLegMode at both call sites
+// and overrides whatever that decided. resolveLegMode is distance aware and had
+// correctly said transit for 13 km; this said walking, so the leg went to Google
+// as a walk, Google answered in hours, the re-route stored the transit figure
+// under the WALKING key, and the render's 20 minute walking cap waved it through
+// because the stored modeUsed was transit. Every step after the override was
+// working as designed. Four modules, one wrong premise.
+//
+// So the guard is not a new rule, it is this rule's stated scope enforced:
+// where a real distance exists and it is further than this product will ask
+// anybody to walk, the coordinates have already answered the question and the
+// town labels do not get a vote. WALK_MAX_KM, so the ceiling stays in one place.
+//
+// `dist` is null when no distance could be read, which is the case this rule was
+// written for and is left exactly as it was. Both callers compute it with
+// legDistanceKm, the same reader resolveLegMode uses, because a fetch and a
+// render that measure distance differently would disagree about the mode, and
+// the header above this function is explicit that they must never do that.
+export const isSameTownWalk = (mode, originTown, destTown, how, dist = null) =>
   mode === "transit" &&
   !!originTown && !!destTown &&
   originTown.trim().toLowerCase() === destTown.trim().toLowerCase() &&
-  !isFerryText(how);
+  !isFerryText(how) &&
+  !(dist != null && Number.isFinite(dist) && dist > WALK_MAX_KM);
 
 // FALLBACK TIME ESTIMATE (Oliver's report: legs without a real Google Directions
 // result were showing a bare "~34 km by car" instead of any actual time, which

@@ -22,7 +22,7 @@ import { splitForCheck, CHECK_SCOPE_BLOCK, admissible, checkModeOf, fieldIn } fr
 // ── THE GUIDE BUILDER READS WHAT THE BRIEF READS ────────────────────
 // It carried its own copies of all three of these, English only, while the
 // brief has read six languages since 22 August. See the swap in generateGuide.
-import { tripWindow, dayCountIn, arrivalDateIn, monthOnlyIn, latestRelativeAnswer } from "./utils/tripEvents";
+import { tripWindow, tripDays, dayCountIn, arrivalDateIn, monthOnlyIn, latestRelativeAnswer } from "./utils/tripEvents";
 import { denmarkFacts } from "./data/denmarkFacts";
 import { orderFor, nextSeed, advancePos, factAt } from "./utils/factRotation";
 import { events, majorEvents, vikingEvents, undatedEvents } from "./data/events";
@@ -69,6 +69,8 @@ import { SupportPage } from "./components/SupportPage";
 // utils/affiliateRoster.js with the roster, not here, because AboutMePage links
 // to it too and App.jsx imports AboutMePage.
 import { AffiliatesPage } from "./components/AffiliatesPage";
+import { TripLibraryPage } from "./components/TripLibraryPage";
+import { LIBRARY_PATH } from "./utils/tripLibrary";
 import { TourLine } from "./components/TourLine";
 import { AFFILIATES_PATH } from "./utils/affiliateRoster";
 import { safetyClaimNote } from "./utils/safetyClaims";
@@ -164,9 +166,12 @@ import { listingMatchesSubject, describeListingRefusal } from "./utils/placeChoi
 import { hashForTab, tabForHash, ownsTheAddress } from "./utils/tabUrl";
 import { venueVerdict, venueVia, describeVenue, VENUE_MAX_KM } from "./utils/venueMatch";
 import { cityFromLocation } from "./utils/guideEnrichment";
-import { readBrief, briefBlock, nextAsks, asksThisTurn, buildBlockedNote, enoughToRecommend, unsureWhatTheyWant, namedStayIn, bookedDayNumbers } from "./utils/tripBrief";
+import { readBrief, briefBlock, nextAsks, asksThisTurn, sharperAsk, buildBlockedNote, enoughToRecommend, unsureWhatTheyWant, namedStayIn, bookedDayNumbers } from "./utils/tripBrief";
 import { askedBeforeTurns, lastAskedOnScreen } from "./utils/directAnswer";
 import { briefConflicts } from "./utils/briefConflicts";
+// The arithmetic behind the "can I also go to Jutland" conflict. Measured in
+// its own file, off the kommune table, and handed to briefConflicts as context.
+import { scopeConflict, scopeWarning, spokenPlaces, regionsSpokenOf, regionsAsked, regionPoint, agreedDrop, droppedPlaces, regionsAskedButAbsent } from "./utils/tripScope";
 import { townClashes, clashNote } from "./utils/chatGeography";
 // ── THREE OF THESE WERE IMPORTED AND CALLED NOWHERE, 13 SEP 2026 ─────
 //
@@ -275,7 +280,7 @@ import { newStreamState, readStreamEvent, visibleText, streamContent, streamCont
 import { heroNeedsReplacing, heroPatch, heroStatusLine, isAbsolutePhoto } from "./utils/heroPhoto";
 import { languageBlock, writeInLanguage, readerLanguage, keepLanguageOf } from "./utils/readerLanguage";
 import { guideLanguage, languageBarNote, languageOfProse } from "./utils/travellerLanguage";
-import { describeGuide, guideLanguageMix, stopKind } from "./utils/guideReading";
+import { describeGuide, guideLanguageMix, stopKind, proseAt, writeProseAt } from "./utils/guideReading";
 import { freeButPriced, moneyProblems } from "./utils/moneyClaims";
 import { tripChange, MATTERS, BETTER } from "./utils/tripChanges";
 import { echoInDraft, describeEcho, ECHO_RUN } from "./utils/echoCheck";
@@ -5780,14 +5785,44 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
               // Dropping the gate is the whole fix. The frozen facts are built
               // here too now, because on this path there are none to add to.
               if (exact) {
-                const st2 = await findRealNearestStation(exact.lat, exact.lon);
+                // ── AND THE ISLAND GATE BELONGS ON THIS ONE TOO ────
+                //
+                // Found reading the island runs of 17 Sep 2026. The gate five
+                // hundred lines up skips this lookup for an island, and its
+                // reason is about the COORDINATE rather than about which call
+                // makes it: "A radius search from a centroid answers what is
+                // nearest the middle of the island, and nobody travels to
+                // there." Google's own address for a business on Langeland is
+                // no better a place to search from, and the Langeland row came
+                // out of that run naming a residential street as the arrival
+                // point, which then went into the frozen facts as somewhere
+                // "verified to be walkable from here" and shaped the paragraph
+                // a reader plans around.
+                //
+                // One gate, asked twice, off the same sType. `islandArrival`
+                // five hundred lines up sits in a narrower block than this, so
+                // it is the VALUE that is shared and not the name: the suite's
+                // own identifier check refused the first version of this line,
+                // which read that binding from outside it.
+                //
+                // With st2 null, buildFrozenFacts already writes the
+                // leave-it-empty text and frozenGeo keeps the null the first
+                // gate left.
+                const islandHere = sType === "island";
+                const st2 = islandHere ? null : await findRealNearestStation(exact.lat, exact.lon);
                 note("Nearest arrival point", {
                   provider: "google",
-                  detail: `re-derived from Google's own address for this business, ${String(hoursData.address).slice(0, 80)}`,
-                  outcome: st2?.name ? "ok" : "empty",
-                  got: st2?.name ? `${st2.name} (${st2.kind})${st2.walk ? `, ${st2.walk} on foot` : ""}` : "nothing transit and walkable within the search radii",
-                  why: st2?.name ? "" : "This is not evidence that none exists.",
-                  used: !!st2?.name,
+                  detail: islandHere
+                    ? "not asked: an island's arrival point is read off the measured route's ferry leg"
+                    : `re-derived from Google's own address for this business, ${String(hoursData.address).slice(0, 80)}`,
+                  outcome: islandHere ? "ok" : st2?.name ? "ok" : "empty",
+                  got: islandHere
+                    ? "not asked: for an island this is read off the measured route's ferry leg instead, and a search from Google's address for the place is the same centroid problem one step over"
+                    : st2?.name ? `${st2.name} (${st2.kind})${st2.walk ? `, ${st2.walk} on foot` : ""}` : "nothing transit and walkable within the search radii",
+                  why: islandHere
+                    ? "A radius search near an island address answers what is nearest that address, and an arrival is where the boat lands."
+                    : st2?.name ? "" : "This is not evidence that none exists.",
+                  used: !islandHere && !!st2?.name,
                 });
                 // ── AND THE FACTS HAVE TO FOLLOW THE COORDINATE ────
                 //
@@ -7371,14 +7406,36 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
       // render it. Storing is the half that cannot wait. A row published
       // without its journey has lost it short of a full redraft, so this earns
       // its keep on every draft from tonight even before anything displays it.
-      if (transitParts) {
+      // ── AND A ROAD MEASUREMENT IS A MEASUREMENT ──────────────────
+      //
+      // Found reading the island runs of 17 Sep 2026. This read `if
+      // (transitParts)`, and journeyParts returns null when Google gave no
+      // transit itinerary, which on five of seven island runs is what happened.
+      // So on exactly the rows where the road is the only way there, a real
+      // Directions answer was written into travelTime as "3h 20min 🚗" and no
+      // record was written at all.
+      //
+      // Everything that defines "measured" by the record then treats the one
+      // measured number on the card as prose. provenance.js lists travel time
+      // under NO RECORDED SOURCE; correction.js maps travelTime to __journey, so
+      // keepMeasured will not restore it if the correction pass rewrites it; and
+      // factCheckCopy prints "NOTHING RECORDS THIS AS MEASURED, so it is a claim
+      // like the rest" over a figure Google gave us.
+      //
+      // The empty transit shape rather than a second record type: storedJourney
+      // and journeyFromStored both return null for a record with no legs, so no
+      // card and no arrival row renders from it, and shapeForLive already
+      // accepts a total of null. The record exists to say the figure was
+      // measured and where from, which is all it was ever needed for here.
+      const roadOnly = !transitParts && Number.isFinite(Number(drivingMins)) && Number(drivingMins) > 0;
+      if (transitParts || roadOnly) {
         t.__journey = {
-          ...transitParts,
+          ...(transitParts || { total: null, onBoard: 0, onFoot: 0, waiting: 0, changes: 0, interchanges: [], legs: [], lastWalk: null }),
           drivingMins,
           // Which figure the card is showing, from the one function that
           // decides it. A row carrying a cut figure and no word for why is a
           // number nobody downstream can check.
-          figure: journeyFigure(transitParts),
+          figure: transitParts ? journeyFigure(transitParts) : null,
           // Was the literal "Copenhagen" on every row, including the bar
           // streets that were never measured from there. journeyReach prints
           // this word to the reader, so a wrong one is not a provenance
@@ -7856,16 +7913,39 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         // 6 Sep 2026, and findTicketPrice now reads the pages one at a time so
         // there is usually nothing to hedge about.
         const priceFrom = (w) => whoSaid(w.from, w);
+        // ── AND A STEP THAT DID NOT RUN IS NOT A STEP THAT FOUND NOTHING ──
+        //
+        // Found reading the island runs of 17 Sep 2026. With hasADoor false,
+        // findTicketPrice is never called, so `wanted` is null and this printed
+        // "no page we read states a ticket price, which is a real answer and not
+        // a failure" over an island, a town, a restaurant and a bar. No page was
+        // asked. utils/runLog.js states the rule this breaks in its own words,
+        // and it was written about this very step: a step that did not run is
+        // not the same as a step that ran and found nothing, and "skipped" is a
+        // first-class outcome with a reason attached.
+        //
+        // It is the same class of lie as the "empty · discarded" the comment
+        // above this fixed, pointing the other way: that one understated a real
+        // finding, this one overstates work nobody did. Both teach him to stop
+        // believing the log, which is the only instrument he has.
+        //
+        // gateDraft runs twice, so the false line appeared twice per island run.
         note(`What the pages say a ticket costs${suffix}`, {
           provider: "fetch",
-          detail: "the operator's own page first, then a ticket shop or calendar, per the source order",
-          outcome: !wanted ? "empty" : misses.length ? "found" : "ok",
-          got: wanted
-            ? (wanted.free
-                ? `${priceFrom(wanted)} says entry is free`
-                : `${wanted.lo}${wanted.hi !== wanted.lo ? ` to ${wanted.hi}` : ""} ${String(wanted.currency).toUpperCase()}, from ${priceFrom(wanted)}`)
-            : "no page we read states a ticket price, which is a real answer and not a failure",
-          why: misses.length ? misses[0].detail : "",
+          detail: hasADoor
+            ? "the operator's own page first, then a ticket shop or calendar, per the source order"
+            : `not asked: a ${sType} has no single admission price`,
+          outcome: !hasADoor ? "skipped" : !wanted ? "empty" : misses.length ? "found" : "ok",
+          got: !hasADoor
+            ? "not asked, so no page was read for a ticket price"
+            : wanted
+              ? (wanted.free
+                  ? `${priceFrom(wanted)} says entry is free`
+                  : `${wanted.lo}${wanted.hi !== wanted.lo ? ` to ${wanted.hi}` : ""} ${String(wanted.currency).toUpperCase()}, from ${priceFrom(wanted)}`)
+              : "no page we read states a ticket price, which is a real answer and not a failure",
+          why: !hasADoor
+            ? `Prices on a ${sType} are per dish, per pint or per sailing rather than one figure at a gate, and the lowest number on such a page is a beer. See TYPES_WITH_A_DOOR in utils/entryPrice.js.`
+            : misses.length ? misses[0].detail : "",
           // A miss is not "used" in the draft, and it is emphatically not
           // nothing. The outcome above carries that; this stays honest about
           // whether the figure reached the entry.
@@ -7900,7 +7980,31 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
             mayDecide: priceDecider,
             isAbout: (pageText, url) => sourceIsAboutPlace(pageText, { name: t?.name, town: t?.town || t?.city || t?.location, url, theNameIsAStreet: NAME_IS_A_STREET.includes(sType) }),
           });
-          if (src && src.offSubject) {
+          // ── AND A REFUSAL IS NOT A SOURCE ────────
+          //
+          // Found 19 Sep 2026 by a review of the seven island runs. priceSource
+          // returns a NEAR MISS when the only page carrying the figure is one
+          // the class gate refused: "danceus.org states it and is not who
+          // charges it" is actionable and "no page states it" is not.
+          //
+          // Nothing read that field. This branch tested `src` for truthiness, so
+          // the refused page was written into `__priceSource` and logged as "the
+          // highest-ranked page read that states it", which is the exact
+          // sentence the gate exists to prevent. On the Fejo run that produced
+          // the right fare cited to the right page from two errors cancelling:
+          // the ferry operator was refused as a blog AND recorded anyway.
+          //
+          // FIRST, because `offSubject` and the found case both read like a hit
+          // and this one is not one.
+          if (src && src.mayNotDecide) {
+            note("Where the price came from", {
+              provider: "fetch",
+              detail: "the page whose own text carries the figure in this draft",
+              outcome: "empty", used: false,
+              got: `${src.host || domainOf(src.url)} states ${src.price} and may not decide a price: it is not the operator and not a ticket seller. Nothing recorded, because a citation to a page that is only repeating a figure is a citation that cannot be checked.`,
+              why: "Somebody sets a price and somebody takes the money; everybody else is repeating it. If this figure is right, the page that charges it is the one to read, and if that page cannot be read the figure has nothing behind it.",
+            });
+          } else if (src && src.offSubject) {
             note("Where the price came from", {
               provider: "fetch",
               detail: "the page whose own text carries the figure in this draft",
@@ -7935,7 +8039,13 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
           // draft nothing supported the price at all. Answering with the host,
           // or with null, is the difference between telling him to go and find
           // the page and telling him to cut the number.
-          const traced = priceSource(readerText(t), pagesByUrl, rankedSources.map(r => r.host), { mayDecide: priceDecider });
+          const tracedRaw = priceSource(readerText(t), pagesByUrl, rankedSources.map(r => r.host), { mayDecide: priceDecider });
+          // A near miss is not a trace, for the reason the branch above says at
+          // length: a page that may not decide a price is a page repeating one.
+          // Counting it here told the founder the figure was "stated on
+          // danceus.org" and, worse, made `anyPageStates` true, so the gate that
+          // asks the correction to cut an unsupported figure never fired.
+          const traced = tracedRaw && !tracedRaw.mayNotDecide ? tracedRaw : null;
           const line = describePriceTrace(pt, { statedOn: traced ? domainOf(traced.url) : null });
           noteToFounder(line);
           // FIRST PASS ONLY, exactly as the stated-absence gate does it: the
@@ -8959,6 +9069,39 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
             ];
           }
         }
+      }
+      // ── AND WHEN NEITHER MODE ANSWERED AT ALL ────────────────────
+      //
+      // Found reading the island runs of 17 Sep 2026. There is a branch inside
+      // the block above that records a travelTime as WRITTEN rather than
+      // measured, and its rule text reads "Neither mode returned a usable
+      // duration, so no measured figure existed." That is the case it was
+      // written for and it is not the case it can see: to reach it, transit
+      // must be falsy and driving truthy, and driving is only truthy when the
+      // Directions reply carried a duration, which is the same field the
+      // minutes come from. So the branch above fires on a rounding to zero, and
+      // the case its own sentence describes was skipped entirely.
+      //
+      // When Google returns nothing by either mode, the whole block is skipped,
+      // the model's own travelTime survives onto the row, and no decide and no
+      // note says so. On an island or a rural row that is the one number on the
+      // card, and it reaches a reader with the same authority as a measured one.
+      //
+      // The else of the OUTER condition, which is where the sentence belonged.
+      // It also covers the journey being dropped upstream, which nulls
+      // realTransport for a reason that is recorded elsewhere and left this
+      // figure equally unmarked.
+      else if (typeof t.travelTime !== "undefined" && t.travelTime) {
+        decide("travelTime", {
+          winner: `the model ("${t.travelTime}")`, loser: "nobody, there was nothing to measure against",
+          rule: "Neither mode returned a usable duration, so no measured figure existed. This number is WRITTEN, not measured.",
+          value: t.travelTime,
+        });
+        note("travelTime is unmeasured", {
+          provider: "claude", detail: "the model's own travelTime string",
+          outcome: "ok", used: true,
+          got: `${t.travelTime}, and no route was returned by either mode, so there was nothing to measure against`,
+        });
       }
 
       ui(setStudioDraft, t);
@@ -14846,7 +14989,12 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
       // (see isSameTownWalk in utils/guideEnrichment.js — the Ribe VikingeCenter
       // → Ribe Old Town report). GuidePage's legChip applies the identical rule
       // with the identical town source (stop.town), so the cache key still matches.
-      if (isSameTownWalk(legMode, townByName[origin], townByName[dest], how)) legMode = "walking";
+      // The distance, handed in rather than recomputed differently: where it is
+      // known and longer than this product will ask anybody to walk, the
+      // same-town labels do not get to override it. legDistanceKm is the reader
+      // resolveLegMode used one line up, so the two cannot disagree, which is
+      // the whole reason this rule is shared with the render in the first place.
+      if (isSameTownWalk(legMode, townByName[origin], townByName[dest], how, legDistanceKm(origin, dest, freshGeo))) legMode = "walking";
       const key = `${origin}|${dest}|${legMode}`;
       // Pass real coordinates when known instead of a bare name — a bare "Bones"
       // or "Rosenborg Castle" leaves Google's own geocoder (inside the Directions
@@ -15627,9 +15775,22 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
       // An override is a composed brief with no assistant turns in it, so there
       // is nothing for anything to be answering.
       const guideAnswering = overrideConvoText ? [] : askedBeforeTurns(aiMessages.slice(1));
+      // ── AND THE FORM IS HANDED OVER, NOT RE-READ AS PROSE ────
+      //
+      // 19 Sep 2026. This call had no `intake`, so the brief the GUIDE is built
+      // from re-read the form's own printed line ("Exact trip length: 7 days")
+      // as though a traveller had typed it, while the chat's brief and the
+      // preview read the real timestamps. Two briefs, one conversation, and a
+      // planner told "exactly 7 days" over a window eight days wide.
+      //
+      // The dates are the only fields that were being lost: everything else in
+      // the intake is already inside `saidByTravellerForGuide`, because the form
+      // composes them into the turn. The dates are in there as a FORMATTED
+      // SENTENCE, which is the one shape a reader cannot recover the hour from.
       const guideBrief = readBrief({
         travellerText: saidByTravellerForGuide,
         travellerTurns: String(saidByTravellerForGuide || "").split("\n").filter(x => x.trim()),
+        intake: { arrival: intakeArrival, departure: intakeDeparture },
         answering: guideAnswering,
         today: nowForDates,
       });
@@ -15762,12 +15923,45 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
       // comment worried about is real and it is already taken: whatever this
       // list holds has been printed to the traveller on the preview screen
       // before the build starts, so a name here is a name they have seen.
-      const ruledOut = ruledOutFor(saidByTravellerForGuide, turnedDown);
+      // ── AND THE REGION THEY AGREED TO GIVE UP ───────────────────
+      //
+      // Oliver, 19 Sep 2026: "if the user then agree, then the AI should remove
+      // Northern Zealand from its route."
+      //
+      // Through THIS list rather than by editing the finished plan, and that is
+      // the whole reason it is one line. ruledOut already feeds the plan prompt,
+      // the plan gate, the retry that rebuilds a day around the refusal, the
+      // audit on the finished guide and the swap gate on the page, all off one
+      // reading. A region removed here is a region the plan never contains, in
+      // place of one deleted afterwards leaving a hole in the middle of a day.
+      //
+      // agreedDrop reads the reply that made the offer and the turn that
+      // answered it, so what comes out is what the traveller agreed to and not
+      // a second calculation of what they should have agreed to. See
+      // utils/tripScope.js.
+      const agreedToDrop = agreedDrop(aiMessages, "region-does-not-fit");
+      const gaveUp = agreedToDrop ? droppedPlaces(convoText, agreedToDrop) : [];
+      // Through the `tapped` argument, which is where a refusal the traveller
+      // never typed already goes and where the deduping already happens. A
+      // second merge here would be a second answer to "what did they rule out",
+      // which is what the comment above this forbids.
+      const ruledOut = ruledOutFor(saidByTravellerForGuide, [...turnedDown, ...gaveUp]);
       const ruledOutBlock = excludedBlock(ruledOut);
       // Built once, here, and carried onto the finished guide as _constraints:
       // the audit after the writer and the swap gate on the guide page then
       // check the same guide against the same object.
       const guideConstraints = { excluded: ruledOut, transport: { ruledOut: [] } };
+      if (agreedToDrop) {
+        note("The region they agreed to give up", {
+          detail: `they were offered the trade and said yes, so ${agreedToDrop} comes out`,
+          outcome: gaveUp.length ? "ok" : "empty",
+          got: gaveUp.length
+            ? `${gaveUp.join(", ")} added to what is ruled out, so the plan is built without them`
+            : `nothing in the conversation names a place in ${agreedToDrop}, so there was nothing to take out`,
+          why: gaveUp.length ? "" : "The offer named a region and the places in it were never named, so this cannot be acted on by place. The plan is built unchanged and the traveller is told nothing changed.",
+          used: !!gaveUp.length,
+        });
+      }
       // ── AND THE BED THEY HAVE ALREADY PAID FOR ──────────────────
       //
       // Oliver, 12 Sep 2026: "It didn't ask what date I booked it for. It just
@@ -16573,6 +16767,46 @@ If the conversation only covers a single day or a few stops with no explicit day
         // warning and the plan are different fields and every gate until now
         // read one field at a time. See closedButPlanned in utils/journey.js
         // for why this runs on the clause rather than the sentence.
+        // ── "JUTLAND WASN'T EVEN INCLUDED IN THE GUIDE" ──────────
+        //
+        // Oliver, 19 Sep 2026, on the same guide as the line above. He had
+        // asked about a region in the chat and the finished guide contained
+        // nothing in it, and no step of a 22 step build log said so. The
+        // question was neither refused nor honoured, which is the one outcome
+        // a traveller cannot do anything with.
+        //
+        // It runs HERE, with the other checks that read the finished guide,
+        // because that is the only point where "the plan contains nothing in
+        // it" is a fact rather than a guess. The chat has its own job one
+        // screen earlier: raising the trade while there is still time to make
+        // it. This is the net under that.
+        //
+        // What they AGREED to give up is excluded, or honouring their own
+        // decision would file a complaint about it.
+        {
+          const asksUnanswered = regionsAskedButAbsent(convoText, (parsed.days || []).flatMap(d => d.stops || []), {
+            agreed: agreedToDrop,
+            // The build's own geo map first, then the stop's town. Both are
+            // what the rest of this file uses to place a stop.
+            pointFor: (st) => freshGeo?.[String(st?.name || "").trim()] || null,
+          });
+          note("Regions they asked about, against what the guide contains", {
+            detail: asksUnanswered.length
+              ? `asked about ${regionsAsked(convoText).join(", ")}`
+              : "every region they asked about is either in the guide or was agreed away",
+            outcome: asksUnanswered.length ? "empty" : "ok",
+            got: asksUnanswered.length
+              ? `${asksUnanswered.join(" and ")} ${asksUnanswered.length === 1 ? "was" : "were"} asked about in the chat and no stop in this guide is inside ${asksUnanswered.length === 1 ? "it" : "them"}`
+              : "no region they asked about is missing without a reason",
+            why: asksUnanswered.length
+              ? "A question about where the trip goes was neither refused nor honoured, which is the one answer a traveller can do nothing with. Either it belongs in the plan or they should have been told what it would cost."
+              : "",
+            used: !asksUnanswered.length,
+          });
+          for (const r of asksUnanswered) {
+            planProblems.push(`They asked about ${r} in the chat and no stop in this guide is in it, and nothing told them why.`);
+          }
+        }
         const stopNames = (parsed.days || []).flatMap(d => (d.stops || []).map(s => s.name)).filter(Boolean);
         const shut = closedButPlanned(collectGuideProseFields(parsed), stopNames);
         note("Stops the guide's own writing calls closed", {
@@ -16732,7 +16966,7 @@ If the conversation only covers a single day or a few stops with no explicit day
         });
         planProblems = [...planProblems, ...continuity];
       }
-      const finalEssentials = stripDashesDeep(weatherNote
+      let finalEssentials = stripDashesDeep(weatherNote
         ? { ...(parsed.essentials || {}), weatherNote }
         : (parsed.essentials || null));
       // ── AND WHAT IT ALL CAME OUT AS ──────────────────────────────
@@ -16766,6 +17000,92 @@ If the conversation only covers a single day or a few stops with no explicit day
             : "",
           used: !mix,
         });
+
+        // ── AND THEN IT IS REPAIRED, BECAUSE A LOG LINE IS NOT A FIX ──
+        //
+        // Oliver sent this run's own log on 19 Sep 2026 with one comment:
+        // "that is the guide.. just so you know." Step 22 of it reads
+        //
+        //   22. How the guide came out  [FOUND A GAP · discarded]
+        //       MIXED LANGUAGE: mostly en, but 1 field read as another: Hillerød
+        //
+        // and the guide is live at /guide/9vkdc564l13 with the Danish field
+        // still in it. The check worked. It ran, it was right, it named the
+        // field, and it was the ONLY step in this build whose finding went
+        // nowhere: every other note above hands its list to planProblems, and
+        // this one ended at `used: !mix`.
+        //
+        // utils/planProblems.js already wrote down what that costs, about a
+        // different gate on a different day: "a finding that is invisible has
+        // cost the same to produce and is worth nothing." Adding this one to
+        // planProblems would make it visible, and visible was never going to be
+        // enough here, because the panel only shows on an unsaved guide and he
+        // saved this one. So it is REPAIRED, on the titlePromises pattern from
+        // ninety lines below: rewrite it, and accept the rewrite only if the
+        // rewrite actually fixed the thing.
+        //
+        // WHY A TRANSLATION IS ALLOWED WHERE AN INVENTION IS NOT. Every other
+        // repair in this pipeline is forbidden from adding a fact. This one
+        // adds nothing: the field already exists, it already says something
+        // true, and it is being said again in the language the rest of the
+        // guide is written in. languageOfProse only ever answers "en" or "da",
+        // so there are exactly two directions and both are named below.
+        //
+        // AND WHAT SURVIVES IT IS STILL REPORTED. A field the rewrite could not
+        // move into the main language keeps its original text and goes to
+        // planProblems, which is the visible half, so the fallback is a finding
+        // he can act on rather than a silent half-repair.
+        if (mix && Array.isArray(mix.oddFields) && mix.oddFields.length) {
+          const NAMED = { en: "English", da: "Danish" };
+          const into = NAMED[mix.main] || mix.main;
+          // A cap, not a loop over whatever arrives. A guide written wholly in
+          // the wrong language is a different failure with a different fix, and
+          // twenty rewrite calls at the end of a five minute build is a hang.
+          const MOST = 6;
+          const tooMany = mix.oddFields.length > MOST;
+          let repaired = shaped;
+          const fixed = [];
+          const left = [];
+          for (const f of tooMany ? [] : mix.oddFields) {
+            const was = proseAt(repaired, f.path);
+            if (!was.trim()) continue;
+            const out = await askClaude(
+              `This field of a Denmark travel guide was written in the wrong language. The rest of the guide is in ${into} and this one field is not, so a reader who can follow the guide reaches this and cannot read it.\n\nWrite the same thing in ${into}. Keep every fact, name, price, time and date exactly as it stands: place names, town names, station names, museum and festival names stay in their real spelling, and prices stay in DKK with the figure unchanged. Do not add anything that is not already here and do not leave anything out. Do not translate it word for word, write it the way somebody writing ${into} would have written it in the first place. Never use an em dash or an en dash.\n\nReply with the rewritten text and nothing else, no quote marks around it.\n\nText: ${was}`,
+              700
+            );
+            const text = stripDashes(String(out?.text || "").trim());
+            // THE ACCEPT CONDITION IS THE SAME READER THAT FOUND THE PROBLEM.
+            // Not "the model replied", which is how a rewrite that changed
+            // nothing gets counted as a fix: the field has to now READ as the
+            // language the rest of the guide is in, measured by the function
+            // that measured it wrong a moment ago.
+            if (out?.error || !text || languageOfProse(text) !== mix.main) { left.push(f.where); continue; }
+            repaired = writeProseAt(repaired, f.path, text);
+            fixed.push(f.where);
+          }
+          if (fixed.length) {
+            parsed.title = repaired.title;
+            parsed.days = repaired.days;
+            finalEssentials = stripDashesDeep(repaired.essentials || finalEssentials);
+          }
+          const stillOdd = tooMany ? mix.odd : left;
+          note("The fields that came out in the wrong language", {
+            detail: `${mix.oddFields.length} field${mix.oddFields.length === 1 ? "" : "s"} reading as something other than ${mix.main}, in a guide that is otherwise ${mix.main}`,
+            outcome: fixed.length ? "ok" : "empty",
+            got: tooMany
+              ? `${mix.oddFields.length} fields is most of the guide rather than a slip, so none was touched: ${mix.odd.slice(0, 6).join(", ")}`
+              : `rewritten into ${into}: ${fixed.join(", ") || "none"}${left.length ? `. Left as written, because the rewrite did not come back in ${into} either: ${left.join(", ")}` : ""}`,
+            why: fixed.length
+              ? ""
+              : "The finding stands and goes to the problems panel instead, which is where it was already going to end up before this step existed.",
+            used: !!fixed.length,
+          });
+          // AND THE REMAINDER IS VISIBLE. This is the line whose absence is the
+          // whole reason the Danish field shipped.
+          for (const where of stillOdd) {
+            planProblems.push(`${where} is written in a different language from the rest of this guide, which is ${mix.main}, and a rewrite into ${into} could not be obtained.`);
+          }
+        }
       }
 
       // ── THE DASH BAN, ENFORCED ─────────────────────────────────
@@ -16806,6 +17126,25 @@ If the conversation only covers a single day or a few stops with no explicit day
       }
 
       const travelersMatch = convoText.match(/Who's traveling:\s*([^|]*)/i);
+      // ── AND WHO IS COMING, WHEN THE FORM WAS NOT USED ──────
+      //
+      // 19 Sep 2026. This read the FORM FIELD and nothing else, so a party
+      // given in the conversation reached the guide as an empty string. On his
+      // own export that meant a trip for five children searched Booking for two
+      // adults, and the per person figure in the costs block had nothing to
+      // multiply by.
+      //
+      // The brief already read it properly, from the same turns, so the fix is
+      // to hand over what it read rather than to parse the transcript a second
+      // time here.
+      //
+      // BOTH SHAPES, because they answer different questions. `_travelers` is
+      // the sentence, which is what the writer reads and what the old field
+      // held. `_party` is the counts, which is what a search and a multiplication
+      // need, and it carries `adults: null` HONESTLY: a figure for a party whose
+      // adult count nobody has given is a figure nobody should print.
+      const partyKnown = guideBrief.known.party || null;
+      const travellersSaid = travelersMatch ? travelersMatch[1].trim() : "";
       // Test-pipeline transparency: attach the fabricated profile + the
       // planner's raw skeleton ONLY when this conversation is genuinely the
       // test brief (see randomTestProfileRef's comment for the guard's why).
@@ -16888,7 +17227,7 @@ If the conversation only covers a single day or a few stops with no explicit day
         } catch { /* never at the cost of the guide */ }
       }
 
-      setGuideModal({ _gid: gid, _fx: fxLine, _constraints: guideConstraints, _mode: travelMode, _onlyWalking: onlyWalking, _lightMode: mode === "plain", _travelers: travelersMatch ? travelersMatch[1].trim() : "", _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: dayKey(arrivalDate), _arrivalPoint: arrivalPoint(saidByTravellerForGuide, { townPoint: townPointFor }), _geo: freshGeo, _weatherFetchedAt: new Date().toISOString(), _exactDurations: exactFound, _noRouteFound: routeFailed, _testProfile: testProfile, _testPlan: testProfile ? plannerSkeleton : null, _planProblems: planProblems.length ? planProblems : null, title: parsed.title || "Your Custom Route", essentials: finalEssentials, days: parsed.days });
+      setGuideModal({ _gid: gid, _fx: fxLine, _constraints: guideConstraints, _mode: travelMode, _onlyWalking: onlyWalking, _lightMode: mode === "plain", _travelers: travellersSaid || String(partyKnown?.value || ""), _party: partyKnown && (partyKnown.adults != null || partyKnown.kids != null || partyKnown.total != null) ? { adults: partyKnown.adults ?? null, kids: partyKnown.kids ?? null, total: partyKnown.total ?? null, hasKids: !!partyKnown.hasKids } : null, _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: dayKey(arrivalDate), _arrivalPoint: arrivalPoint(saidByTravellerForGuide, { townPoint: townPointFor }), _geo: freshGeo, _weatherFetchedAt: new Date().toISOString(), _exactDurations: exactFound, _noRouteFound: routeFailed, _testProfile: testProfile, _testPlan: testProfile ? plannerSkeleton : null, _planProblems: planProblems.length ? planProblems : null, title: parsed.title || "Your Custom Route", essentials: finalEssentials, days: parsed.days });
     } catch (err) {
       // A build that failed halfway still spent everything it spent up to that
       // point, and a meter that only counts successes reports a cost per guide
@@ -19172,7 +19511,34 @@ If the conversation only covers a single day or a few stops with no explicit day
       // Raised once and then recorded, exactly like a slot: a question that keeps
       // coming back is worse than one that was never asked. See
       // utils/briefConflicts.js.
-      const conflicts = briefConflicts(brief, briefSettled);
+      // ── AND THE ONE THAT NEEDS A MEASUREMENT ──────────────────────
+      //
+      // Oliver, 19 Sep 2026: "the moment I said 'can I also go to Jutland?', it
+      // should have recalculated the trip and realised that there probably
+      // wasn't time for Northern Zealand."
+      //
+      // The recalculation, done here because this is the turn he means: the one
+      // where the question was asked. Every figure comes out of
+      // utils/tripScope.js, off the kommune table and the app's one km-to-time
+      // reader, and this line only gathers the inputs.
+      //
+      // THE WHOLE CONVERSATION, both sides. A place Gemlyx put forward and the
+      // traveller did not object to is part of what the days are spoken for,
+      // and the question is what the trip currently IS rather than who said it
+      // first. regionsNamed makes the opposite choice for the opposite job, and
+      // tripScope's header says why the two readers are both right.
+      const scopeText = [...aiMessages.slice(1).map(m => m.text || ""), msg].join("\n");
+      const scopePlaces = spokenPlaces(scopeText);
+      const scopeFrom = scopePlaces.length ? regionPoint(scopePlaces[0].region) : null;
+      const scope = scopeConflict({
+        days: brief?.known?.days?.value ?? null,
+        mode: brief?.known?.transport?.value || "",
+        from: scopeFrom,
+        inPlan: regionsSpokenOf(scopeText),
+        asked: regionsAsked(scopeText),
+        stops: scopePlaces,
+      });
+      const conflicts = briefConflicts(brief, briefSettled, { scope, scopeSays: scopeWarning(scope) });
       // ── AND A CONFLICT TURN ASKS NOTHING ELSE ─────────────────────
       //
       // briefBlock suppresses the STILL MISSING list when a conflict fires, so
@@ -19188,7 +19554,11 @@ If the conversation only covers a single day or a few stops with no explicit day
       // asked about "public transpor" while this wrote the transport slot down
       // as asked and refused. asksThisTurn is now the single answer to "what is
       // this reply being told to ask", and both sides call it.
-      const askedThisTurn = asksThisTurn(brief, conflicts).map(s => s.key);
+      // A SHARPENING ASK IS RECORDED UNDER ITS OWN KEY, or it marks the slot's
+      // base question as asked and the brief stops asking either. See
+      // sharperAsk in utils/tripBrief.js and the five unaccompanied children it
+      // was written for.
+      const askedThisTurn = asksThisTurn(brief, conflicts).map(s => s.sharpen ? sharperAsk(s.key) : s.key);
       // ── SOMETHING TO GIVE BEFORE IT ASKS ──────────────────────────
       //
       // Oliver, 21 Aug 2026, on the first three turns of his own conversation:
@@ -19799,9 +20169,12 @@ ${languageBlock()}`;
         // a question and the turn after it, and a parallel array that outlives
         // the messages it points at is an off-by-one waiting to happen.
         if (msgId !== null) {
-          setAiMessages(prev => prev.map(m => m.id === msgId ? { ...m, text: replyText, streaming: false, asked: askedThisTurn } : m));
+          // `raised`, beside `asked`, and for the same reason one turn over: a
+          // conflict put to the traveller is a question, and the build has to be
+          // able to find what they said back to it. See agreedAfterRaising.
+          setAiMessages(prev => prev.map(m => m.id === msgId ? { ...m, text: replyText, streaming: false, asked: askedThisTurn, raised: conflicts.map(c => c.key), scopeOffer: scope ? { add: scope.add, drop: scope.drop } : null } : m));
         } else {
-          setAiMessages(prev => [...prev, { role: "assistant", text: replyText, asked: askedThisTurn }]);
+          setAiMessages(prev => [...prev, { role: "assistant", text: replyText, asked: askedThisTurn, raised: conflicts.map(c => c.key), scopeOffer: scope ? { add: scope.add, drop: scope.drop } : null }]);
         }
       } else {
         // ── AND "SOMETHING BROKE" IS NOT ALWAYS THE TRUTH ─────────
@@ -27408,15 +27781,20 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       const parts = [];
                       if (intakeArrival) parts.push(`Arriving: ${new Date(intakeArrival).toLocaleString("en-GB", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}`);
                       if (intakeDeparture) parts.push(`Departing: ${new Date(intakeDeparture).toLocaleString("en-GB", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}`);
+                      // ── THE LENGTH THE PLAN WILL HAVE ──────────
+                      //
+                      // This printed the elapsed time in 24 hour blocks, which
+                      // is a fourth answer to a question that now has one:
+                      // tripDays counts the dates the traveller can use. On a
+                      // noon departure the two agree, and on an evening one the
+                      // old arithmetic lost them a day they have.
+                      //
+                      // It matters that this line is what the traveller READS.
+                      // The number they were shown and the number their guide
+                      // is built to have to be the same number.
                       if (intakeArrival && intakeDeparture) {
-                        const ms = new Date(intakeDeparture) - new Date(intakeArrival);
-                        if (ms > 0) {
-                          const totalHours = ms / (1000 * 60 * 60);
-                          const days = Math.floor(totalHours / 24);
-                          const hours = Math.round(totalHours % 24);
-                          const lengthStr = [days ? `${days} day${days !== 1 ? "s" : ""}` : "", hours ? `${hours}h` : ""].filter(Boolean).join(" ");
-                          parts.push(`Exact trip length: ${lengthStr || "under 1 hour"}`);
-                        }
+                        const days = tripDays(intakeArrival, intakeDeparture);
+                        if (days) parts.push(`Exact trip length: ${days} day${days !== 1 ? "s" : ""}`);
                       }
                       parts.push(intakeStartPoint.trim() ? `Starting point: ${intakeStartPoint.trim()}` : `Starting point: not specified, assume Copenhagen Airport`);
                       if (intakeBudgetText.trim()) parts.push(`Budget: ${intakeBudgetText.trim()}`);
@@ -30494,6 +30872,13 @@ export default function Gemlyx() {
           already reads its own search params for the same reason. */}
       <Route path={SUPPORT_PATH} element={<SupportPage />} />
       <Route path={AFFILIATES_PATH} element={<AffiliatesPage />} />
+      {/* ── TRIPS OTHER PEOPLE KEPT ────────────────────────────
+          One component for both, because the list and a trip from it are the
+          same page at two depths, and the trip renders through GuidePage the
+          way /example does. See utils/tripLibrary.js for what is stripped
+          before anything reaches either of them. */}
+      <Route path={LIBRARY_PATH} element={<TripLibraryPage />} />
+      <Route path={`${LIBRARY_PATH}/:tripId`} element={<TripLibraryPage />} />
       <Route path="/guide/new" element={<GuidePage />} />
       <Route path="/guide/:guideId" element={<GuidePage />} />
     </Routes>

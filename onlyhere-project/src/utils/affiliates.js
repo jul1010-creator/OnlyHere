@@ -1,4 +1,4 @@
-import { BOOKING_AFFILIATE_ID, BOOKING_CJ_LINK, PARTNER_ADS_PARTNER_ID, PARTNER_ADS_STAY_BANNER, PARTNER_ADS_GEAR_BANNER, PARTNER_ADS_BANNERS, TICKETMASTER_AFFILIATE_TEMPLATE, TIQETS_BROWSE_LINK, TIQETS_AFFILIATE_TEMPLATE, CAR_RENTAL_LINK, WEGOTRIP_LINK, WEGOTRIP_AFFILIATE_TEMPLATE , TRIPCOM_ALLIANCE_ID, TRIPCOM_SID, GETYOURGUIDE_PARTNER_ID, GETYOURGUIDE_CAMPAIGN, BAJABIKES_REFERRAL_ID, BAJABIKES_BANNERS, BAJABIKES_RENTAL_SLUG } from "../config";
+import { BOOKING_AFFILIATE_ID, BOOKING_CJ_LINK, BOOKING_CJ_DEEP_LINKS_WORK, PARTNER_ADS_PARTNER_ID, PARTNER_ADS_STAY_BANNER, PARTNER_ADS_GEAR_BANNER, PARTNER_ADS_BANNERS, TICKETMASTER_AFFILIATE_TEMPLATE, TIQETS_BROWSE_LINK, TIQETS_AFFILIATE_TEMPLATE, CAR_RENTAL_LINK, WEGOTRIP_LINK, WEGOTRIP_AFFILIATE_TEMPLATE , TRIPCOM_ALLIANCE_ID, TRIPCOM_SID, GETYOURGUIDE_PARTNER_ID, GETYOURGUIDE_CAMPAIGN, BAJABIKES_REFERRAL_ID, BAJABIKES_BANNERS, BAJABIKES_RENTAL_SLUG } from "../config";
 // hostOf, not a fourth copy of it. See pageScan.js, and see the four other
 // functions this codebase has already found existing twice.
 import { hostOf } from "./pageScan";
@@ -148,7 +148,15 @@ export const bookingUrl = ({ area, near = "", country = "Denmark", checkin, chec
     (d.checkin ? `&checkin=${d.checkin}&checkout=${d.checkout}` : "") +
     `&group_adults=${adults}&no_rooms=1` +
     (STAY_ORDER[tier] ? `&order=${STAY_ORDER[tier]}` : "") +
-    (BOOKING_AFFILIATE_ID ? `&aid=${BOOKING_AFFILIATE_ID}` : "");
+    // ── ONE aid, AND NOT THIS ONE WHILE CJ IS IN FRONT ────────────
+    //
+    // 19 Sep 2026. His CJ link's destination is
+    // `booking.com/?aid=1522413&label=..._cjevent-{eventid}`, and {eventid} is
+    // substituted by CJ at its own redirect. An aid this app writes itself
+    // arrives with no cjevent behind it: the reader lands in the right place
+    // and the click pays nothing. Refused in code rather than in a comment,
+    // because the comment above used to say these two were compatible.
+    (BOOKING_AFFILIATE_ID && !BOOKING_CJ_LINK ? `&aid=${BOOKING_AFFILIATE_ID}` : "");
 };
 
 export const airbnbUrl = ({ area, country = "Denmark", checkin, checkout, adults = 2 } = {}) => {
@@ -165,7 +173,13 @@ export const airbnbUrl = ({ area, country = "Denmark", checkin, checkout, adults
 // arrived as a CJ click link rather than as an aid number, and every sentence
 // below that asked about the aid alone would have gone on telling a reader that
 // a link which now pays does not. Either one means Booking pays.
-export const bookingEarns = () => !!(BOOKING_AFFILIATE_ID || BOOKING_CJ_LINK);
+// ── AND A LINK THAT IS NOT WRAPPED DOES NOT EARN ────────────────
+// The CJ link alone is no longer the answer: with the deep-link switch off,
+// bookingCjUrl hands back the plain search URL and nothing in the chain carries
+// a marker. A disclosure saying that link may pay us would be a false statement
+// about money, on a sentence whose whole reason for existing is that this app
+// does not make those. So the switch is asked here as well as there.
+export const bookingEarns = () => !!(BOOKING_AFFILIATE_ID || (BOOKING_CJ_LINK && BOOKING_CJ_DEEP_LINKS_WORK));
 
 export const STAY_DISCLOSURE = bookingEarns()
   ? "Booking.com links may earn Gemlyx a small commission at no cost to you. The Airbnb link earns nothing."
@@ -216,13 +230,59 @@ export const affiliateActive = () => bookingEarns();
 // untouched, so calling this twice cannot nest one click link inside another.
 const BOOKING_HOSTS = ["booking.com"];
 
-export const bookingCjUrl = (url) => {
+// ── AND WHICH BUTTON THE CLICK CAME FROM ────────
+//
+// His CJ label carries `clkid-{url(query('sid'))}`, which means CJ lifts a
+// `sid` parameter off the click URL and hands it to Booking, where it lands in
+// the booking's own label. That is the one field in this whole chain that can
+// answer a question he will have the first time a commission arrives: which
+// button earned it.
+//
+// DERIVED FROM THE DESTINATION, NOT PASSED IN. Every call site already builds
+// the search URL, so reading the slot back off it means no new argument in
+// eleven places and no chance of a call site labelling itself wrongly. It also
+// cannot leak anything: the only thing it reports is the sort order, which is
+// already in the URL it is derived from.
+const cjSid = (raw) => {
+  try {
+    const order = new URL(raw).searchParams.get("order") || "";
+    for (const [tier, key] of Object.entries(STAY_ORDER)) if (key === order) return `stay-${tier}`;
+    return "stay";
+  } catch { return "stay"; }
+};
+
+// ── AND THE SWITCH, WHICH IS OFF ────────────────────────────────
+//
+// Oliver, 19 Sep 2026, having pressed one of these: "Doesn't work.. let's fix
+// it later." The 19 Sep handoff records the same thing a second time: the click
+// link does not honour `url=`, so every stay button earns and lands on
+// Booking's front page.
+//
+// That is the broken promise costLedger.js refuses in capitals about ticket
+// links, and it is the same rule: a link is a promise, and one that lands
+// somewhere unable to serve the reader is worse than no link. A button reading
+// "See Hotel Viking on Booking.com" or "Budget hotels in Indre By" that arrives
+// at a front page has not got anybody anywhere.
+//
+// So the wrapper is not applied and every stay link is the plain search URL: it
+// lands where its label says, and it earns nothing. Nothing else is lost.
+// bookingUrl already refuses to write an `aid` while a CJ link is set, for the
+// reason written beside it, so the click through kqzyfj.com was the only thing
+// in the chain that could pay, and that is the part that does not work.
+//
+// `on` IS INJECTED rather than read, and that is what keeps the logic below
+// tested: the sid derivation, the destination surviving on `url`, the host
+// guard and the refusal to nest are all still asserted with it forced true, so
+// the day the programme allows deep links the only change is one word in
+// config.js and none of that knowledge has to be rediscovered.
+export const bookingCjUrl = (url, { on = BOOKING_CJ_DEEP_LINKS_WORK } = {}) => {
   const raw = String(url || "").trim();
-  if (!BOOKING_CJ_LINK) return raw;
+  if (!BOOKING_CJ_LINK || !on) return raw;
   if (!/^https?:\/\//i.test(raw)) return raw;
   const h = hostOf(raw);
   if (!h || !BOOKING_HOSTS.some(d => h === d || h.endsWith(`.${d}`))) return raw;
-  return `${BOOKING_CJ_LINK}?url=${encodeURIComponent(raw)}`;
+  // sid before url, which is the order CJ's own examples use.
+  return `${BOOKING_CJ_LINK}?sid=${cjSid(raw)}&url=${encodeURIComponent(raw)}`;
 };
 
 // ─ PARTNER-ADS: THE LINK, AND THE NAME THAT MUST COME WITH IT ─────
@@ -231,10 +291,33 @@ export const bookingCjUrl = (url) => {
 // in ONE place. partnerAdsBanner reads the id back off a link, because that id
 // is the only thing a partner-ads URL knows about itself and the merchant table
 // is keyed on it.
-export const partnerAdsUrl = (banner) => {
+// ── AND IT DOES CARRY A DESTINATION AFTER ALL ─────────────────
+//
+// 19 Sep 2026. Every comment in this file said a klikbanner URL has no
+// destination in it, which was true of the link he pasted and not true of the
+// network: his own program page offers
+// `klikbanner.php?partnerid=..&bannerid=..&htmlurl=PRODUKTLINK`, which lands
+// the click on a page inside the advertiser's site.
+//
+// ONLY ON THE ADVERTISER'S OWN HOST. A deep link is a URL this app hands to a
+// network that will redirect somebody to it, so the one rule worth having is
+// that it cannot point anywhere except the site the banner is for. `site` in
+// PARTNER_ADS_BANNERS is that host, and a `to` that does not match it is
+// dropped rather than sent, which fails back to the front page.
+const sameHost = (a, b) => {
+  const x = hostOf(a), y = hostOf(b);
+  return !!x && !!y && (x === y || x.endsWith(`.${y}`) || y.endsWith(`.${x}`));
+};
+
+export const partnerAdsUrl = (banner, { to = "" } = {}) => {
   const b = String(banner || "").trim();
   if (!b || !PARTNER_ADS_PARTNER_ID) return null;
-  return `https://www.partner-ads.com/dk/klikbanner.php?partnerid=${PARTNER_ADS_PARTNER_ID}&bannerid=${b}`;
+  const base = `https://www.partner-ads.com/dk/klikbanner.php?partnerid=${PARTNER_ADS_PARTNER_ID}&bannerid=${b}`;
+  const want = String(to || "").trim();
+  if (!want) return base;
+  const site = String(((PARTNER_ADS_BANNERS || {})[b] || {}).site || "");
+  if (!sameHost(want, site)) return base;
+  return `${base}&htmlurl=${encodeURIComponent(want)}`;
 };
 
 export const partnerAdsBanner = (url) => {
@@ -275,9 +358,18 @@ export const partnerAdsMerchant = (url) => {
 // A town, not a region. "Aarhus C" and "Aarhus, Midtjylland" are the same town
 // as "Aarhus" and a reader in either should see it; "Aarhusvej" is not, so the
 // looser match needs the boundary after the name rather than a bare includes().
+// ── AND THROUGH fold, OR THE MATCH DIES ON ONE LETTER ────────
+//
+// 19 Sep 2026, with the first real town in here: S\u00e6by. A guide that spells it
+// "Saeby", which half of Danish web writing does and which this app's own
+// danishNames.js exists for, would never have matched "S\u00e6by" on a bare
+// lowercase compare, and the hotel would never have appeared at all. A silent
+// non-match is the worst failure shape available to this feature: nothing to
+// see, nothing in a log, and a paid placement that looks like it was never
+// configured.
 const sameTown = (a, b) => {
-  const x = String(a || "").trim().toLowerCase();
-  const y = String(b || "").trim().toLowerCase();
+  const x = foldName(String(a || "").trim());
+  const y = foldName(String(b || "").trim());
   if (!x || !y) return false;
   if (x === y) return true;
   const longer = x.length > y.length ? x : y;
@@ -296,14 +388,20 @@ const sameTown = (a, b) => {
 // remembers to edit. A banner with no name in config.js is placed nowhere,
 // earns nothing, and appears on no page; the day it is named, the page says so
 // with no edit.
+// One definition of which banner is which, because the slot decides the render
+// site, the roster wording AND the verb on the button. Three copies of this
+// ternary would be three places to forget a new banner.
+export const partnerAdsSlot = (banner) =>
+  String(banner) === String(PARTNER_ADS_STAY_BANNER) ? "stay"
+    : String(banner) === String(PARTNER_ADS_GEAR_BANNER) ? "gear"
+    : "other";
+
 export const partnerAdsPlacements = () =>
   Object.entries(PARTNER_ADS_BANNERS || {})
     .filter(([, row]) => row && String(row.merchant || "").trim())
     .map(([banner, row]) => ({
       banner: String(banner),
-      slot: String(banner) === String(PARTNER_ADS_STAY_BANNER) ? "stay"
-          : String(banner) === String(PARTNER_ADS_GEAR_BANNER) ? "gear"
-          : "other",
+      slot: partnerAdsSlot(banner),
       merchant: String(row.merchant).trim(),
       town: String(row.town || "").trim(),
       site: String(row.site || "").trim(),
@@ -346,7 +444,7 @@ export const partnerAdsPending = () =>
 // button work", which is the question four wiring failures shipped through.
 export const partnerAdsGear = (row = (PARTNER_ADS_BANNERS || {})[PARTNER_ADS_GEAR_BANNER]) => {
   if (!row || !String(row.merchant || "").trim()) return null;
-  const url = partnerAdsUrl(PARTNER_ADS_GEAR_BANNER);
+  const url = partnerAdsUrl(PARTNER_ADS_GEAR_BANNER, { to: row.deepLink || "" });
   if (!url) return null;
   return { merchant: String(row.merchant).trim(), site: String(row.site || "").trim(), url };
 };
@@ -355,7 +453,7 @@ export const featuredStayFor = (town) => {
   const row = PARTNER_ADS_BANNERS[PARTNER_ADS_STAY_BANNER];
   if (!row || !row.merchant || !row.town) return null;
   if (!sameTown(town, row.town)) return null;
-  const url = partnerAdsUrl(PARTNER_ADS_STAY_BANNER);
+  const url = partnerAdsUrl(PARTNER_ADS_STAY_BANNER, { to: row.deepLink || "" });
   if (!url) return null;
   return { merchant: String(row.merchant), town: String(row.town), site: String(row.site || ""), url };
 };
@@ -1082,10 +1180,20 @@ export const partnerMerchant = (url) => {
   return PARTNER_MERCHANTS[label] || "";
 };
 
+// ── AND THE VERB FOLLOWS WHAT IS BEING SOLD ──────
+//
+// 19 Sep 2026, when the second partner-ads banner turned out to be a shop.
+// "Book on Travelbetter.dk" is the wrong sentence about a rucksack: you book a
+// room and you buy a bag, and a label that gets that wrong reads as a template
+// somebody forgot to fill in. Only partner-ads links are slotted, because it is
+// the only programme here whose banners sell different KINDS of thing.
 export const linkLabel = (url) => {
   if (!isPartnerLink(url)) return "Official site";
   const who = partnerMerchant(url);
-  return who ? `Book on ${who}` : "Partner site";
+  if (!who) return "Partner site";
+  const banner = partnerAdsBanner(url);
+  if (banner && partnerAdsSlot(banner) === "gear") return `Shop at ${who}`;
+  return `Book on ${who}`;
 };
 
 // ── AND ONE DOOR THAT RENDERS A LINK, NOT JUST TRACKS ONE ───────────

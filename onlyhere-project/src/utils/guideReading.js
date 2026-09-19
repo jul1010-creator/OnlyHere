@@ -494,20 +494,68 @@ export const clampNote = (note) => {
 // Reported per field rather than as one verdict, because a guide that is Danish
 // with three English fields in it is the case he calls worse than either
 // language alone, and a single "reads as Danish" would hide precisely that.
+// ── AND EVERY FIELD CARRIES THE WAY BACK TO ITSELF ──────────────────
+//
+// `where` is a label for a person: "keepInMind", "day 3 title", "Hillerød". It
+// names a field well enough to hunt for and not well enough to WRITE to, and
+// for a month that was all anybody needed, because the mixed-language finding
+// was only ever printed.
+//
+// 19 Sep 2026 is when that stopped being enough. Oliver's guide 9vkdc564l13
+// shipped with one Danish field in an English guide; the check caught it, named
+// it, and the finding went into a log nobody opens before publishing. Repairing
+// it needs the field, not the label, so each row now carries `path` as well:
+// the same field, addressed the way code addresses it. Two stops can share a
+// name and a label cannot tell them apart; an index always can.
+const PROSE_AT = {
+  title: (g) => g?.title,
+  essential: (g, p) => (g?.essentials || {})[p.field],
+  dayTitle: (g, p) => (g?.days || [])[p.day]?.title,
+  stopNote: (g, p) => ((g?.days || [])[p.day]?.stops || [])[p.stop]?.note,
+};
+
+export const proseAt = (guide, path) => {
+  const read = PROSE_AT[path?.at];
+  return read ? String(read(guide, path) ?? "") : "";
+};
+
+// The same address, written to. Returns a NEW guide and never touches the one
+// handed in, because the caller compares the two to decide whether the rewrite
+// was worth accepting.
+export const writeProseAt = (guide, path, text) => {
+  const t = String(text ?? "");
+  if (!guide || !path?.at) return guide;
+  const days = Array.isArray(guide.days) ? guide.days : [];
+  if (path.at === "title") return { ...guide, title: t };
+  if (path.at === "essential") return { ...guide, essentials: { ...(guide.essentials || {}), [path.field]: t } };
+  if (path.at === "dayTitle") {
+    if (!days[path.day]) return guide;
+    return { ...guide, days: days.map((d, i) => (i === path.day ? { ...d, title: t } : d)) };
+  }
+  if (path.at === "stopNote") {
+    const day = days[path.day];
+    if (!day || !Array.isArray(day.stops) || !day.stops[path.stop]) return guide;
+    return { ...guide, days: days.map((d, i) => (i !== path.day ? d : {
+      ...d, stops: d.stops.map((st, j) => (j === path.stop ? { ...st, note: t } : st)),
+    })) };
+  }
+  return guide;
+};
+
 export const guideProseOf = (guide) => {
   const out = [];
-  const push = (where, text) => {
+  const push = (where, text, path) => {
     const t = String(text ?? "").trim();
-    if (t) out.push({ where, text: t });
+    if (t) out.push({ where, text: t, path });
   };
-  push("title", guide?.title);
+  push("title", guide?.title, { at: "title" });
   const e = guide?.essentials || {};
-  push("budgetReality", e.budgetReality);
-  push("transportTip", e.transportTip);
-  push("keepInMind", e.keepInMind);
+  push("budgetReality", e.budgetReality, { at: "essential", field: "budgetReality" });
+  push("transportTip", e.transportTip, { at: "essential", field: "transportTip" });
+  push("keepInMind", e.keepInMind, { at: "essential", field: "keepInMind" });
   (Array.isArray(guide?.days) ? guide.days : []).forEach((d, i) => {
-    push(`day ${d?.day ?? i + 1} title`, d?.title);
-    (Array.isArray(d?.stops) ? d.stops : []).forEach(s => push(`${s?.name || "a stop"}`, s?.note));
+    push(`day ${d?.day ?? i + 1} title`, d?.title, { at: "dayTitle", day: i });
+    (Array.isArray(d?.stops) ? d.stops : []).forEach((s, j) => push(`${s?.name || "a stop"}`, s?.note, { at: "stopNote", day: i, stop: j }));
   });
   return out;
 };
@@ -529,7 +577,12 @@ export const guideLanguageMix = (guide, languageOf) => {
   // depending on the order of its own days.
   const main = langs.sort((a, b) => counts[b] - counts[a] || a.localeCompare(b))[0];
   const odd = read.filter(f => f.lang !== main);
-  return { main, counts, odd: odd.map(f => f.where) };
+  // `odd` stays a list of labels, because describeGuide prints it into a
+  // sentence and every reader of that sentence expects names. `oddFields` is
+  // the same finding addressed the way a repair needs it: the field, its text
+  // and what language it actually read as. Added rather than swapped in, so
+  // nothing that already prints this has to change to keep working.
+  return { main, counts, odd: odd.map(f => f.where), oddFields: odd };
 };
 
 export const describeGuide = (guide, languageOf = null) => {
