@@ -9014,14 +9014,40 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
           // public transport does not exist.
           const modelSaid = t.travelTime;
           const dh = Math.floor(Number(drivingMins) / 60), dm = Number(drivingMins) % 60;
-          t.travelTime = `${dh ? `${dh}h ` : ""}${dm ? `${dm}min` : ""}`.trim() + " 🚗";
+          // ── AND A CAR CANNOT REACH AN ISLAND ───────────────────
+          //
+          // Oliver, 19 Sep 2026, on a run log of twelve Studio drafts: "why
+          // Google AI was changing so much." Five of those drafts were islands
+          // and every one of them shows this line:
+          //
+          //   travelTime measured by road: 2h 36min🚗, replacing the model's "2h 36m⛴"
+          //
+          // The DURATION was already right to within two minutes in four of the
+          // five, so nothing was being corrected. The only thing that changed
+          // was the marker, and it changed from the true one to a false one.
+          //
+          // AND THE SAME RUN HAD ALREADY MEASURED IT. Step 13 of every one of
+          // those drafts reads "required: banning ferries left no road route at
+          // all". Google's driving duration for an island INCLUDES the
+          // crossing, which is why the number agrees; what it does not include
+          // is a road, and 🚗 on an At a Glance row tells a reader to get in a
+          // car and drive to Askø.
+          //
+          // So the duration stays Google's, which is the rule this branch
+          // exists for, and the marker comes off the ferry verdict this build
+          // already paid a third Directions call for. See classifyFerry in
+          // utils/transport.js.
+          const needsABoat = realTransport.ferry?.status === FERRY.REQUIRED;
+          t.travelTime = `${dh ? `${dh}h ` : ""}${dm ? `${dm}min` : ""}`.trim() + (needsABoat ? " ⛴" : " 🚗");
           // Same rule as the transit branch above: an agreement is a note, not a
           // decision. See the comment there.
           if (modelSaid !== t.travelTime) {
             decide("travelTime", {
               winner: "Google Directions (measured, by road)",
               loser: modelSaid ? `the model ("${modelSaid}")` : "an empty field",
-              rule: "Google returned no transit itinerary but did return a road route. A measured duration always replaces a written one, and the marker says which mode was measured.",
+              rule: needsABoat
+                ? "Google returned no transit itinerary but did return a route, and banning ferries on that same route left no road at all. A measured duration always replaces a written one; the marker is the boat, because the duration includes a crossing and there is no way to drive here."
+                : "Google returned no transit itinerary but did return a road route. A measured duration always replaces a written one, and the marker says which mode was measured.",
               value: t.travelTime,
             });
           }
@@ -9029,7 +9055,8 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
             provider: "google", detail: `Directions, driving mode, from ${realTransport.from || "Copenhagen"}`,
             outcome: "ok", used: true,
             got: `${t.travelTime}${modelSaid ? `, replacing the model's "${modelSaid}"` : ""}`,
-            why: "no transit itinerary came back for this route. That is not evidence that no public transport exists, and nothing in the entry may say it is.",
+            why: (needsABoat ? "The crossing is required, so the figure is Google's and the marker is the boat: its driving duration includes the ferry and there is no road to this one. " : "")
+              + "no transit itinerary came back for this route. That is not evidence that no public transport exists, and nothing in the entry may say it is.",
           });
           t.uncertainties = [
             ...(t.uncertainties || []),
@@ -16387,7 +16414,22 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
               // nothing, and hand-rolled calendar arithmetic in this file is how
               // a day once drifted across a month boundary.
               planDays.forEach((d, i) => {
-                const rows = communityOnDay({ stops: d.stops || [], date: dayPlus(arrivalDate, i) });
+                // ── AND THE ISLAND A VILLAGE SITS ON ───────────
+                //
+                // Oliver, 19 Sep: "being on Sejerø I didn't get notification
+                // about Sejerø event." The row is filed under the island and
+                // the planner names the village, so the two strings never met.
+                // namedIslandOf reads the published entry's own island field,
+                // which is the one place in this app that knows Sejerby is on
+                // Sejerø. NAMED, not islandOf: that one falls back to the part
+                // of the country so nothing is unreachable on the attractions
+                // page, and a community row matched against "Zealand" would
+                // reach half the country. See communityOnDay.
+                const rows = communityOnDay({
+                  stops: d.stops || [],
+                  date: dayPlus(arrivalDate, i),
+                  islandOf: (where) => namedIslandOf(lookupRealPlace(where)),
+                });
                 if (rows.length) byDay[i + 1] = rows;
               });
               communityFound = communityBlock(byDay);

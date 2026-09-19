@@ -2803,8 +2803,16 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     // the field it sat in.
     ok("a road route is written as the measured travel time",
        /winner: "Google Directions \(measured, by road\)"/.test(appSrc3));
-    ok("marked as the car, since that is the mode that was measured",
-       /\.trim\(\) \+ " 🚗"/.test(appSrc3));
+    // ── AND THE MARKER IS THE MODE, WHICH IS NOT ALWAYS THE CAR ───
+    //
+    // This read `.trim() + " 🚗"` from 13 Aug until 19 Sep, and on an island it
+    // was writing a car onto a journey the same run had already measured as
+    // impossible by road. See the block further down for the five drafts of
+    // his that show it happening.
+    ok("marked as the car when a road is what was measured",
+       /needsABoat \? " ⛴" : " 🚗"/.test(appSrc3));
+    ok("and as the boat when the same run found no road at all",
+       /const needsABoat = realTransport\.ferry\?\.status === FERRY\.REQUIRED;/.test(appSrc3));
     // NO TRANSIT ITINERARY IS NOT NO TRANSIT, and the reader is told which is
     // which rather than being left to read a car time as a verdict.
     // The sentence moved into utils/journey.js on 18 Sep, beside the absence
@@ -56115,6 +56123,47 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
         is("and nor does the right place on the wrong day",
            communityOnDay({ stops: [{ town: "Sejerø" }], date: "2026-07-08", pool }), []);
         is("two is the most a day carries", MOST_IN_A_DAY, 2);
+
+        // ── "BEING ON SEJERØ I DIDN'T GET NOTIFICATION", 19 SEP 2026 ─
+        //
+        // Oliver, testing his first imported calendars. Traced through the real
+        // shapes: the row is filed under the ISLAND, because the calendar
+        // belongs to the island and because these addresses carry the postal
+        // town. The plan's stop carries the TOWN the planner named, and the
+        // planner is asked for "the real Danish town/city it's in", so a stop
+        // on Sejerø comes back as Sejerby. Two correct answers about one patch
+        // of ground, and a string comparison between them fails.
+        {
+          const pool2 = [{ name: "Halvvejs", town: "Sejerø", date: "2026-09-25" }];
+          const isle = (w) => ({ Sejerby: "Sejerø", Kongstrup: "Sejerø", Mastrup: "Fejø" }[String(w).trim()] || "");
+          const go = (stops, f) => communityOnDay({ stops, date: "2026-09-25", pool: pool2, islandOf: f }).map(r => r.name);
+          is("a village on the island found nothing, which is the report", go([{ town: "Sejerby" }]), []);
+          is("and now it finds the island's own evening", go([{ town: "Sejerby" }], isle), ["Halvvejs"]);
+          // A stop can name a venue whose town is the village, so both the name
+          // and the town are asked.
+          is("a venue in that village too", go([{ name: "Minigolfen", town: "Sejerby" }], isle), ["Halvvejs"]);
+          is("the island itself still works", go([{ town: "Sejerø" }], isle), ["Halvvejs"]);
+          // ── AND THIS IS NOT THE REACH BAND HE REFUSED ─────────────
+          // "Anything within reach is only for events that genuinely is major
+          // events." A reach band is a ferry ride away and a different place.
+          // Sejerby IS Sejerø. Another island is not.
+          is("a village on a different island is a different place", go([{ town: "Mastrup" }], isle), []);
+          is("and the mainland is still the mainland", go([{ town: "Kalundborg" }], isle), []);
+          // A caller that passes nothing behaves exactly as this did before.
+          is("no resolver, no change", go([{ town: "Sejerø" }]), ["Halvvejs"]);
+          is("and a resolver that answers nothing is the same",
+             go([{ town: "Sejerby" }], () => ""), []);
+          {
+            const appI = readFileSync(join(root, "src/App.jsx"), "utf8");
+            ok("the build asks the published entry which island a stop is on",
+               /islandOf: \(where\) => namedIslandOf\(lookupRealPlace\(where\)\)/.test(appI));
+            // NAMED, not islandOf: that one falls back to the part of the
+            // country so nothing is unreachable on the attractions page, and a
+            // community row matched against "Zealand" would reach half of it.
+            ok("and asks for a named island rather than the part of the country",
+               !/islandOf: \(where\) => islandOf\(/.test(appI));
+          }
+        }
         is("with no date at all, nothing", communityOnDay({ stops: [{ town: "Sejerø" }], pool }), []);
 
         // ── THE MATCH IS THE PLACE, NOT A SUBSTRING OF IT ───────────
@@ -56143,7 +56192,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
         {
           const appE = readFileSync(join(root, "src/App.jsx"), "utf8");
           ok("the guide writer is told about the day it stands in",
-             /const rows = communityOnDay\(\{ stops: d\.stops \|\| \[\], date: dayPlus\(arrivalDate, i\) \}\);/.test(appE));
+             /communityOnDay\(\{\s*\n\s*stops: d\.stops \|\| \[\],\s*\n\s*date: dayPlus\(arrivalDate, i\),/.test(appE));
           ok("and the block goes into its prompt", /\$\{communityFound \? `\\n\$\{communityFound\}` : ""\}/.test(appE));
           // No date, no day, so nothing can be said to be on.
           ok("nothing at all on a trip with no arrival date", /if \(arrivalDate\) \{\s*\n\s*const byDay = \{\};/.test(appE));
@@ -56523,6 +56572,53 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
          /BEGIN:VCALENDAR/.test(apiCal) && /not a calendar feed/.test(apiCal));
       ok("the text is returned unchanged rather than stripped to prose",
          !/readPage/.test(apiCal));
+    }
+  }
+
+  // ── "WHY GOOGLE AI WAS CHANGING SO MUCH", 19 SEP 2026 ─────────────
+  //
+  // Oliver, with a run log of twelve Studio drafts in front of him. Five of
+  // them were islands, and every one of those five carries this line:
+  //
+  //   travelTime measured by road: 2h 36min🚗, replacing the model's "2h 36m⛴"
+  //
+  // Nothing was being corrected. The durations agreed to within two minutes in
+  // four of the five, and in the fifth by two. The only thing that changed was
+  // the marker, and it changed from the true one to a false one.
+  //
+  // AND THE SAME RUN HAD ALREADY MEASURED IT. Step 13 of all seven island
+  // drafts in that log reads "required: banning ferries left no road route at
+  // all". Google's driving duration for an island includes the crossing, which
+  // is why the number agrees; what it does not include is a road.
+  {
+    const appF = readFileSync(join(root, "src/App.jsx"), "utf8");
+    // The verdict the build already paid a third Directions call for, read by
+    // the branch that was ignoring it.
+    ok("the marker comes off the ferry verdict rather than the mode that was asked for",
+       /const needsABoat = realTransport\.ferry\?\.status === FERRY\.REQUIRED;/.test(appF));
+    ok("a required crossing is a boat and everything else is a car",
+       /\.trim\(\) \+ \(needsABoat \? " ⛴" : " 🚗"\)/.test(appF));
+    // THE DURATION IS STILL GOOGLE'S. This branch exists because a measured
+    // figure beats a written one, and that rule is untouched: only the marker
+    // moved.
+    ok("and the duration is still the measured one",
+       /const dh = Math\.floor\(Number\(drivingMins\) \/ 60\), dm = Number\(drivingMins\) % 60;/.test(appF));
+    ok("the decision says which of the two it made",
+       /the marker is the boat, because the duration includes a crossing and there is no way to drive here/.test(appF));
+    // The run log is where he read this, so the run log is where the reason has
+    // to appear.
+    ok("and the run log says why the boat won",
+       /The crossing is required, so the figure is Google's and the marker is the boat/.test(appF));
+    // The sentence that must survive this: no transit itinerary is not no
+    // transit, and that rule is absolute in this branch.
+    ok("without losing the rule this branch already had",
+       /That is not evidence that no public transport exists/.test(appF));
+    const DASH12 = new RegExp("[" + String.fromCharCode(0x2013, 0x2014) + "]");
+    {
+      const block = appF.slice(appF.indexOf("AND A CAR CANNOT REACH AN ISLAND"), appF.indexOf("AND A CAR CANNOT REACH AN ISLAND") + 1800);
+      const comment = block.split("\n").filter(l => l.trim().startsWith("//")).join(" ");
+      ok("and nothing written here carries a dash or a banned word",
+         !DASH12.test(comment) && !/\b(?:actually|truly|genuinely|genuine|simply|really|quite)\b/i.test(comment));
     }
   }
         is("and nor does one with empty days", communityBlock({ 1: [], 2: [] }), "");

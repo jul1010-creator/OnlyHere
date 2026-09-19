@@ -90,10 +90,41 @@ export const runsOn = (row, date) => {
 //
 // The pool is injected so this can be run on a fixture, and defaults to the live
 // array, which is the same shape every other reader in this app uses.
-export const communityOnDay = ({ stops = [], date = null, pool = communityEvents } = {}) => {
-  const towns = (Array.isArray(stops) ? stops : [])
-    .map(s => String(s?.town || s?.name || "").trim())
-    .filter(Boolean);
+// ── AND A PLACE HAS MORE THAN ONE NAME AT MORE THAN ONE SCALE ──
+//
+// Oliver, 19 Sep 2026, testing his first imported calendars: "being on Sejerø I
+// didn't get notification about Sejerø event."
+//
+// Traced through the real shapes. The row is filed under the ISLAND, because
+// the calendar belongs to the island and because an address on one of these
+// names the postal town, which for Endelave is on the mainland. The plan's stop
+// carries the TOWN the planner named, and the planner is asked for "the real
+// Danish town/city it's in", so a stop on Sejerø comes back as Sejerby or
+// Kongstrup. Two correct answers about the same patch of ground, and a string
+// comparison between them fails.
+//
+// THIS IS NOT THE REACH BAND HE REFUSED. He was clear: "Anything within reach
+// is only for events that genuinely is major events." A reach band is a ferry
+// ride away and a different place. Sejerby IS Sejerø: standing in it you are on
+// the island, a few kilometres from the harbour, which is the whole of what he
+// asked this tier to catch. The day still has to STAND there.
+//
+// `islandOf` is injected rather than imported, for the reason everything in
+// this file is: it answers from the published entries, and this file is a leaf
+// that the suite runs with no content behind it. A caller that passes nothing
+// gets exactly the behaviour this had before.
+export const communityOnDay = ({ stops = [], date = null, pool = communityEvents, islandOf = null } = {}) => {
+  const ask = typeof islandOf === "function" ? islandOf : () => "";
+  const towns = [...new Set((Array.isArray(stops) ? stops : [])
+    .flatMap(s => {
+      const town = String(s?.town || "").trim();
+      const name = String(s?.name || "").trim();
+      // The island each of them sits on, when Gemlyx holds a page that says so.
+      // Both, because a stop can name a venue whose town is the village.
+      return [town, name, ask(town), ask(name)];
+    })
+    .map(v => String(v || "").trim())
+    .filter(Boolean))];
   if (!towns.length || !date) return [];
   return (Array.isArray(pool) ? pool : [])
     .filter(row => row && row.name && towns.some(t => samePlace(t, townOf(row))) && runsOn(row, date))
