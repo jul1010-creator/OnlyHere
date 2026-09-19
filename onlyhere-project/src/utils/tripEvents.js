@@ -133,12 +133,114 @@ export const tripDays = (arrival, departure) => {
 
 // The last date the plan may put a stop on, which is the same answer read the
 // other way round. Both are here so a caller cannot take one and derive the
-// other slightly differently.
-export const tripLastDay = (arrival, departure) => {
+// other slightly differently. `days` is the length once the traveller has had
+// their say (daysTheySaidFor below); left out, it is the dates' own count.
+export const tripLastDay = (arrival, departure, days = tripDays(arrival, departure)) => {
   const start = dayStart(arrival);
-  const days = tripDays(arrival, departure);
   if (!start || !days) return null;
   return new Date(start.getTime() + (days - 1) * MS_DAY);
+};
+
+// ── AND THE NUMBER THEY SAY BACK, WHICH MAY BE THE OTHER READING ──
+//
+// Oliver, 18 Sep 2026, on this same trip: "It knows from the start it has to
+// be 8 days, but yet it asks again and gets stuck on it. This is a reoccuring
+// problem." His form printed 7. To him the 23rd to the 30th is eight days, and
+// that is a fair way to count it. When he said so, nothing could move: the
+// brief read the length off the intake dates before it read a single turn, so
+// his correction was unreachable by construction. The prompt then told the
+// model "THE TRIP IS 7 DAYS" and "take their new number" in one block, and the
+// model was the only part of the system left to argue with him, every turn.
+//
+// TWO READINGS AND NO MORE. With real timestamps in hand, the only fair
+// argument about the length is whether the departure date counts: the dates
+// (daysBetween) or the nights (one fewer). tripDays picks one from the hour of
+// the flight, and the traveller may pick the other by saying so. A number
+// outside those two contradicts the dates themselves, and two stated endpoints
+// are the harder fact, so it is not taken here: readDays carries it as `said`
+// and briefConflicts turns it into one question rather than a silent 7.
+//
+// null means "nothing to change": the number is the dates' own count, or it
+// is one the dates cannot hold. The caller tells those apart with tripDays.
+export const daysTheySaidFor = (arrival, departure, n) => {
+  const usable = tripDays(arrival, departure);
+  const calendar = daysBetween(arrival, departure);
+  if (!usable || !calendar || !Number.isFinite(n) || n < 1 || n === usable) return null;
+  return n === calendar || n === calendar - 1 ? n : null;
+};
+
+// The form's own line, posted into the chat as the traveller's turn. It is
+// tripDays printed, so reading it back as a spoken length would make the form
+// agree with itself and call that a second opinion. Skipped wherever the real
+// timestamps are in hand; with no intake it is still the best line there is.
+const INTAKE_LENGTH_LINE = /\bExact trip length:\s*\d+\s*days?\b/i;
+export const isIntakeTurn = (turn) => INTAKE_LENGTH_LINE.test(String(turn || ""));
+
+// ── THE LENGTH THEY SPOKE, LAST WINS, PER TURN ──────────────
+//
+// Lifted out of readDays in tripBrief.js on 19 Sep 2026, unchanged, because
+// tripWindow needed the same answer: a length the traveller corrected has to
+// move the event window as well as the brief, or the preview offers an event
+// on a date the plan has no day for, which is the failure documented above
+// tripDays. One scan, two callers. Every rule in here was learned on a real
+// transcript and the dates are in tripBrief.js beside readDays:
+//
+//   LAST WINS ACROSS TURNS (10 Sep): he said nine, was corrected to six, and
+//   the brief kept nine, because dayCountIn returns on its first match.
+//   A STATED RANGE IS AN ANSWER TOO (12 Sep): "2 days" and then "the 14th
+//   till 17th" is four. Whichever came LAST by turn; within one turn the
+//   dates win, because two endpoints are a harder fact than a number.
+//   "IN 2 DAYS" IS WHEN THEY LAND (12 Sep): the words relativeAnswerIn
+//   matched are taken out before the count is looked for, so one number
+//   cannot answer both slots. Case-insensitively: `matched` comes back
+//   lowercase and a plain replace would miss "In 2 days" at a sentence start.
+//   A NUMBER OF NIGHTS IS NOT A LENGTH (13 Sep): a turn answering `stay` or
+//   `stayWhen` is about the booking, so its numbers belong to the booking.
+//
+// `skip` lets a caller leave a turn out of the scan without renumbering the
+// rest: `answering` lines up with `turns` index for index.
+//
+// ── AND A BARE "8", WHICH IS WHAT HE TYPED ──────────────────
+//
+// The model's own "seven or eight?" over a filled form is never recorded as a
+// `days` ask: the code records the questions IT put in the prompt, and over a
+// form the length is known, so it put none. His "8" then answers nothing on
+// record, has no day word for dayCountIn, and lands nowhere, and the next
+// reply asks again. `bare` reads a turn that is only a number as a length,
+// but only when no recorded question is on the table or the recorded one is
+// the length: a bare "8" under "who is coming?" is a headcount and stays one.
+// The intake callers set it, and daysTheySaidFor then keeps only the two
+// readings of the dates, so a stray number cannot become a trip length.
+const BARE_NUMBER = /^\s*(\d{1,2})\s*[.!]?\s*$/;
+export const latestSpokenLength = (turns, { today = new Date(), answering = null, skip = null, bare = false } = {}) => {
+  const said = Array.isArray(turns) ? turns : [];
+  const asks = Array.isArray(answering) ? answering : [];
+  const keysAt = (i) => (Array.isArray(asks[i]) ? asks[i] : []);
+  const aboutTheBooking = (i) => {
+    const keys = keysAt(i);
+    return keys.length > 0 && keys.every(k => k === "stayWhen" || k === "stay");
+  };
+  const mayBeBare = (i) => bare && (keysAt(i).length === 0 || keysAt(i).includes("days"));
+  let raw = null, rawAt = -1, span = null, spanAt = -1;
+  for (let i = 0; i < said.length; i += 1) {
+    if (aboutTheBooking(i)) continue;
+    if (typeof skip === "function" && skip(said[i], i)) continue;
+    const arrival = relativeAnswerIn(said[i], today);
+    const forCount = arrival && arrival.matched
+      ? String(said[i]).replace(new RegExp(arrival.matched.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"), " ")
+      : said[i];
+    const alone = mayBeBare(i) ? BARE_NUMBER.exec(String(said[i] || "")) : null;
+    const n = dayCountIn(forCount, { cap: Infinity }) || (alone ? Number(alone[1]) : null);
+    if (n) { raw = n; rawAt = i; }
+    const r = dateRangeIn(said[i], today);
+    if (r) {
+      const len = Math.round((r.end - r.start) / MS_DAY) + 1;
+      if (len > 0 && len <= MAX_TRIP_DAYS) { span = len; spanAt = i; }
+    }
+  }
+  if (span !== null && spanAt >= rawAt) return { value: span, at: spanAt, kind: "range" };
+  if (raw) return { value: raw, at: rawAt, kind: "count" };
+  return null;
 };
 
 // ── THE TWO PARSERS generateGuide ALREADY HAD ───────────────────────
@@ -847,7 +949,7 @@ export const latestRelativeAnswer = (turns, today = new Date()) => {
 // which is enough to set the limit and not enough to test an overlap. Saying
 // so is the point: `dated` false means we do not know when they are here, and
 // nothing downstream may pretend otherwise.
-export const tripWindow = ({ arrival, departure, convoText, convoTurns, today = new Date() } = {}) => {
+export const tripWindow = ({ arrival, departure, convoText, convoTurns, answering = null, today = new Date() } = {}) => {
   // ── THE DATES COME FROM THEIR TURNS, NOT FROM OURS ──────────
   //
   // Both callers hand this function `convoText`, which is BOTH halves of the
@@ -880,7 +982,18 @@ export const tripWindow = ({ arrival, departure, convoText, convoTurns, today = 
     // THE WINDOW ENDS WHERE THE PLAN ENDS. An event on the morning of a noon
     // departure is one the traveller cannot attend, and offering it produces a
     // ticked event the planner has no day to put it on. See tripDays.
-    return { start, end: tripLastDay(arrival, departure) || end, days: tripDays(arrival, departure), dated: true, source: "intake" };
+    // AND WHERE THE TRAVELLER SAID IT ENDS. The same correction readDays
+    // takes, through the same two functions, so the brief and this window
+    // cannot hold different lengths for one trip: an evening flight counted as
+    // seven by somebody counting nights is a seven day plan, and an event on
+    // the eighth date is one the plan has no day for. `answering` is optional
+    // here and the brief always has it, so a booking answer that happens to
+    // name the calendar span could move this window and not the brief; the
+    // callers that have the answers are the ones to pass them.
+    const spoken = latestSpokenLength(convoTurns, { today, answering, skip: isIntakeTurn, bare: true });
+    const theirs = spoken ? daysTheySaidFor(arrival, departure, spoken.value) : null;
+    const days = theirs || tripDays(arrival, departure);
+    return { start, end: tripLastDay(arrival, departure, days) || end, days, dated: true, source: "intake" };
   }
   // ── A STATED RANGE BEATS A COUNTED ONE ──────────────────
   // Both ends said out loud, so neither is derived from the other. Before

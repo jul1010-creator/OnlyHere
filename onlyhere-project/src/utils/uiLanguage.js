@@ -610,9 +610,14 @@ export const UI_STRINGS = {
   // time." The card is ChatPlaceCards and the rule for WHEN it asks lives in
   // App.jsx beside the map; these are only the words. A question and two
   // answers, nothing explaining what a tap does: the answer is the control.
-  "card.interesting": { en: "Is this interesting?", da: "Er det her interessant?", de: "Ist das interessant?" },
-  "card.yes":         { en: "Yes", da: "Ja", de: "Ja" },
-  "card.no":          { en: "No", da: "Nej", de: "Nein" },
+  // ── AND THEN THE TWO ANSWERS SAID WHAT THEY DO, 19 SEP 2026 ───────
+  // Oliver: "I'd actually like if you could just choose between 'add to trip'
+  // and 'not interested' when it zooms into dyrehaven." Which is his own rule
+  // about a label and a control being the whole of a form field, applied to a
+  // question: "Yes" and "No" need the line above them to mean anything, and
+  // these two do not. The question line goes with them.
+  "card.add":         { en: "Add to trip", da: "Tilføj til turen", de: "Zur Reise hinzufügen" },
+  "card.notFor":      { en: "Not interested", da: "Ikke interesseret", de: "Kein Interesse" },
   // The state a Yes leaves behind, and a button: pressing it takes the place
   // out again, which is what the chip beside the preview does with "Added".
   "card.added":       { en: "Added", da: "Tilføjet", de: "Hinzugefügt" },

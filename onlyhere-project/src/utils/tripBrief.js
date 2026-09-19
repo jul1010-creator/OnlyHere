@@ -44,7 +44,7 @@
 // repeating: the app suggests things, so one sentence back from it reading
 // "Copenhagen has excellent museums" would otherwise become evidence that the
 // traveller asked for museums.
-import { arrivalDateIn, dateRangeIn, departureDateIn, dayCountIn, monthOnlyIn, latestRelativeAnswer, relativeAnswerIn, daysBetween, tripDays, MAX_TRIP_DAYS } from "./tripEvents";
+import { arrivalDateIn, dateRangeIn, departureDateIn, monthOnlyIn, latestRelativeAnswer, daysBetween, tripDays, daysTheySaidFor, latestSpokenLength, isIntakeTurn, MAX_TRIP_DAYS } from "./tripEvents";
 import { PARTY_BARE, PARTY_POSSESSIVE, PARTY_POSSESSIVES, PARTY_COUNT, TRAVEL_VERBS, FROM_WORDS, TRANSPORT_PREPS, VEHICLE_WORDS, TRANSPORT_VERBS, PUBLIC_TRANSPORT, alt, LETTER, INTEREST_ALL_WORDS, INTEREST_WORD_TERM, NAMES_A_CHILD } from "./travellerWords";
 import { dayStart } from "./calendarDay";
 import { travelModeKey, withoutNonModes } from "./routeOrder";
@@ -263,8 +263,40 @@ const readDays = (text, intakeArrival, intakeDeparture, today = new Date(), turn
   // traveller filled in printed the elapsed figure and the guide builder read
   // that printed line back as prose. One question, four answers, and a guide
   // built for seven days over a brief that said eight. See tripDays.
+  // ── AND THE FORM IS NOT THE LAST WORD ──────────────────────
+  //
+  // Oliver, 18 Sep 2026: "It knows from the start it has to be 8 days, but
+  // yet it asks again and gets stuck on it. This is a reoccuring problem."
+  // The line above used to return here, before a single turn was read, so a
+  // traveller who counted the 23rd to the 30th as eight and said so could not
+  // move the brief. Every turn the model was handed "THE TRIP IS 7 DAYS" by
+  // code and "take their new number" in the same block, and it was left to
+  // argue, or to ask again, which is what he saw. The rule this file has
+  // written down three times now, "a correction is the one thing the
+  // traveller most needs to land", stopped at the form.
+  //
+  // So the turns are read, the form's own printed line excepted, and what
+  // they said is put to daysTheySaidFor: the other reading of the same dates
+  // lands as theirs, and the dates keep the slot otherwise.
+  //
+  // A NUMBER LARGER THAN THE DATES HOLD is carried as `said`, for
+  // briefConflicts to ask about once: "we have 10 days" over a week of
+  // timestamps means one of the two is wrong, and before 19 Sep the brief kept
+  // seven in silence while the prompt told the model to take the ten. A
+  // SMALLER number is left alone, as it always was over a form. "2 days in
+  // Copenhagen and 4 in Jutland" and "the festival runs 3 days" are parts of
+  // the trip and not its length, and a question about either would be the
+  // form arguing with a sentence that never contradicted it.
+  const said = Array.isArray(turns) && turns.length ? turns : [String(text || "")];
   const both = tripDays(intakeArrival, intakeDeparture);
-  if (both && both > 0) return { value: both, source: "intake" };
+  if (both && both > 0) {
+    const spoken = latestSpokenLength(said, { today, answering, skip: isIntakeTurn, bare: true });
+    if (!spoken || spoken.value === both) return { value: both, source: "intake" };
+    const theirs = daysTheySaidFor(intakeArrival, intakeDeparture, spoken.value);
+    if (theirs) return { value: theirs, source: "said" };
+    const calendar = daysBetween(intakeArrival, intakeDeparture);
+    return spoken.value > calendar ? { value: both, source: "intake", said: spoken.value } : { value: both, source: "intake" };
+  }
   // ── THE LAST NUMBER THEY SAID, NOT THE FIRST ──────────────────────
   //
   // Oliver, 10 Sep 2026, on a guide built for nine days: he said nine at turn
@@ -335,7 +367,6 @@ const readDays = (text, intakeArrival, intakeDeparture, today = new Date(), turn
   // And a sentence where "in 3 days" really is a length — "we want to see
   // Denmark in 3 days" — names no travelling, so relativeAnswerIn returns
   // nothing, nothing is removed, and the count stands.
-  const said = Array.isArray(turns) && turns.length ? turns : [String(text || "")];
   // ── AND A NUMBER OF NIGHTS IS NOT A NUMBER OF DAYS ───────────
   //
   // Oliver's own session, 13 Sep 2026 at 03:04. He said "I'm gonna be in
@@ -352,31 +383,15 @@ const readDays = (text, intakeArrival, intakeDeparture, today = new Date(), turn
   // booking, so its numbers belong to the booking. Every other turn is read as
   // it always was, including a turn that corrects the length while answering
   // nothing in particular.
-  const asks = Array.isArray(answering) ? answering : [];
-  const aboutTheBooking = (i) => {
-    const keys = Array.isArray(asks[i]) ? asks[i] : [];
-    return keys.length > 0 && keys.every(k => k === "stayWhen" || k === "stay");
-  };
-  let raw = null, rawAt = -1, span = null, spanAt = -1;
-  for (let i = 0; i < said.length; i += 1) {
-    if (aboutTheBooking(i)) continue;
-    const arrival = relativeAnswerIn(said[i], today);
-    // CASE-INSENSITIVELY. relativeDayIn matches on a lowercased copy, so
-    // `matched` comes back lowercase and a plain String.replace would miss
-    // "In 2 days" at the start of a sentence and silently do nothing.
-    const forCount = arrival && arrival.matched
-      ? String(said[i]).replace(new RegExp(arrival.matched.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"), " ")
-      : said[i];
-    const n = dayCountIn(forCount, { cap: Infinity });
-    if (n) { raw = n; rawAt = i; }
-    const r = dateRangeIn(said[i], today);
-    if (r) {
-      const len = Math.round((r.end - r.start) / 86400000) + 1;
-      if (len > 0 && len <= MAX_TRIP_DAYS) { span = len; spanAt = i; }
-    }
-  }
-  if (span !== null && spanAt >= rawAt) return { value: span, source: "said" };
-  if (raw) {
+  //
+  // THE SCAN ITSELF LIVES IN tripEvents.js NOW (latestSpokenLength), because
+  // the event window has to take the same correction the brief takes or the
+  // two disagree about how many days there are to put an event on. The rules
+  // above are the rules it applies; the code moved and the reasons stayed.
+  const spoken = latestSpokenLength(said, { today, answering });
+  if (spoken && spoken.kind === "range") return { value: spoken.value, source: "said" };
+  if (spoken) {
+    const raw = spoken.value;
     const value = Math.min(raw, MAX_TRIP_DAYS);
     return raw > value
       ? { value, source: "said", askedFor: raw }
@@ -393,12 +408,10 @@ const readDays = (text, intakeArrival, intakeDeparture, today = new Date(), turn
   // no hour, so tripDays counts it the same way for the intake pickers above
   // and the two paths cannot disagree. The pickers differ only when a departure
   // time is given and it is before the afternoon.
-  // A range that lost the last-wins comparison above still answers this slot
-  // when no count was ever spoken at all, which is the ordinary case: "I'm here
-  // the 14th till 17th" and nothing else. departureDateIn below cannot reach it,
-  // because that one needs a leaving word ("out of Aalborg on the 12th") and a
-  // range has none.
-  if (span !== null) return { value: span, source: "said" };
+  // A range with no spoken count anywhere is the ordinary case, "I'm here the
+  // 14th till 17th" and nothing else, and latestSpokenLength returns it above.
+  // departureDateIn below cannot reach it, because that one needs a leaving
+  // word ("out of Aalborg on the 12th") and a range has none.
   const start = arrivalDateIn(text, today);
   const end = start ? departureDateIn(text, start) : null;
   if (start && end) {
@@ -1229,6 +1242,19 @@ export const readBrief = ({ travellerText = "", travellerTurns = null, intake = 
   for (const [key, res] of Object.entries(direct)) {
     const held = known[key];
     if (!held || held.value === ACKNOWLEDGED_VALUE) known[key] = res;
+    // ── EXCEPT A BARE NUMBER AGAINST THE FORM'S LENGTH ─────────
+    //
+    // The "asks again" half of Oliver's 18 Sep report. When the model does
+    // ask about the length over a filled form ("seven or eight?") and he types
+    // "8", that turn has no day word for the sentence scan in readDays to find,
+    // and the rule above keeps the form's number. Asked, answered, and still
+    // seven: the loop he described. Same door as readDays, same two readings,
+    // so the two paths cannot land on different numbers for one answer.
+    else if (key === "days" && held.source === "intake" && typeof res.value === "number") {
+      const theirs = daysTheySaidFor(intake.arrival, intake.departure, res.value);
+      if (theirs) known.days = { value: theirs, source: "said" };
+      else if (res.value !== held.value) known.days = { ...held, said: res.value };
+    }
   }
 
   // ── AND THE BARE ANSWER TO THE NIGHTS QUESTION ────────────────────
@@ -1316,6 +1342,11 @@ export const readBrief = ({ travellerText = "", travellerTurns = null, intake = 
     if (at >= 0) unread[at] = row; else unread.push(row);
   });
 
+  // A sharpening question carries its own key, `when:sharper`, so that asking it
+  // once does not mark the base question asked. Everything that reasons about
+  // the SLOT has to fold it back, and doing that in one place is why this is a
+  // function rather than a regex written out three times.
+  const baseSlotOf = (key) => String(key || "").replace(/:sharper$/, "");
   const wasAsked = new Set((Array.isArray(asked) ? asked : []).map(clean).filter(Boolean));
   // A slot with a `needs` predicate only applies to some trips. Nobody is asked
   // which nights their booking covers when they have not booked anything, and
@@ -1324,8 +1355,64 @@ export const readBrief = ({ travellerText = "", travellerTurns = null, intake = 
     .filter(s => s.tier === "blocking" && !known[s.key])
     .filter(s => (typeof s.needs === "function" ? !!s.needs(known) : true))
     .map(s => s.key);
-  const declined = unfilled.filter(k => wasAsked.has(k));
-  const missing = unfilled.filter(k => !wasAsked.has(k));
+  // ── AND A REFUSAL HAS TO BE A REFUSAL, 19 SEP 2026 ────────────────
+  //
+  // This was `unfilled.filter(k => wasAsked.has(k))`: asked and still empty was
+  // enough to call a slot refused, and refused does not block a build and is
+  // never asked again. Oliver's own transcript of this morning shows what that
+  // costs. At turn 18 the brief said to ask whether a hotel was booked, the
+  // reply asked for the travel dates instead, App.jsx recorded `stay` as asked
+  // anyway, and he answered the question he had been put. The hotel question
+  // was then marked asked and refused, for a ten day trip with three children,
+  // and Gemlyx would never have put it again.
+  //
+  // The same thing happened to `when` at turn 7: asked for dates, answered with
+  // "10 days", marked refused. ANSWERING A DIFFERENT QUESTION IS NOT A REFUSAL.
+  // It is the most ordinary thing a person does in a conversation.
+  //
+  // So `declined` now needs the refusal itself, read off the turn that was put
+  // to that slot. Nothing else changes about what declined MEANS: it still does
+  // not block, it is still never asked twice, and it is still reported to the
+  // writer as an assumption rather than a fact.
+  //
+  // ── AND THE REASON IT WAS EVER THIS LOOSE IS GONE ─────────────────
+  //
+  // The comment above readBrief has said since 5 Sep: "Nothing reads a bare
+  // 'no' as an answer about a hotel booking, so a blocking slot with no answer
+  // would block forever." That was true when it was written and has not been
+  // true since the direct-answer readers landed the same week. Measured today:
+  // "no", "nope", "not yet", "no we haven't" and "nej" all fill the stay slot
+  // with "not booked". The case this looseness existed for is answered by the
+  // reader that should answer it, and what was left was a rule that called
+  // every unanswered question a no.
+  const saidTo = new Map();
+  turns.forEach((turn, i) => {
+    const said = String(turn || "").trim();
+    if (!said) return;
+    for (const k of (Array.isArray(answeringKeys[i]) ? answeringKeys[i] : [])) {
+      const base = baseSlotOf(k);
+      if (!base) continue;
+      if (!saidTo.has(base)) saidTo.set(base, []);
+      saidTo.get(base).push(said);
+    }
+  });
+  // ── AND A CALLER THAT DOES NOT TRACK IT KEEPS THE OLD RULE ────────
+  //
+  // `answering` says which turn was put to which slot, and App.jsx has passed
+  // it since 5 Sep. A caller without it cannot say what they replied to the
+  // question, so this falls back to what it has always done rather than
+  // silently calling every asked slot unanswered. Same shape as `travellerTurns`
+  // at the top of this function, and for the same reason: every existing caller
+  // and every existing assertion keeps working unchanged, and the rule that
+  // changed is the one the app runs.
+  const putToThem = (k) => (saidTo.get(k) || []).length > 0;
+  const turnedItDown = (k) => !putToThem(k) || (saidTo.get(k) || []).some(said => isRefusal(said));
+  const declined = unfilled.filter(k => wasAsked.has(k) && turnedItDown(k));
+  // Everything else that is empty is still MISSING, which is the state that
+  // gets it asked. A question they have not answered yet and a question that
+  // was never actually put look the same from here, and both want the same
+  // thing to happen next.
+  const missing = unfilled.filter(k => !declined.includes(k));
   // Known, and not precisely enough. Only `when` can be vague today, and it is
   // the one that costs a wrong event.
   // ── AND ASKING DOES NOT SHARPEN A MONTH ───────────────────────────
@@ -1422,7 +1509,6 @@ export const readBrief = ({ travellerText = "", travellerTurns = null, intake = 
   // sentence eight turns back that Gemlyx had already moved on from. An answer
   // nothing could read holds the build for one turn, which is the turn the
   // question gets asked again in.
-  const baseSlotOf = (key) => String(key || "").replace(/:sharper$/, "");
   const lastTurnAt = turns.reduce((last, t, i) => (String(t || "").trim() ? i : last), -1);
   const unreadOpen = [...new Set(unread.filter(u => u.turn === lastTurnAt).map(u => baseSlotOf(u.key)))]
     .filter(k => vague.includes(k));
@@ -1757,7 +1843,16 @@ export const briefBlock = (brief, conflicts = [], { picked = [], turnedDown = []
   // A NUMBER, not whatever is in the slot. A length handed over to Gemlyx sits
   // here as a sentence, and this line would have printed "THE TRIP IS open,
   // Gemlyx picks the length DAYS".
-  if (typeof brief.known?.days?.value === "number") {
+  // ── AND NOT "TAKE THEIR NEW NUMBER" WHEN THE CODE WILL NOT ──
+  //
+  // The sentence below promised the traveller's correction would be taken,
+  // and readDays could not take one over a filled form until 19 Sep. A
+  // number the dates cannot hold is still not taken (see daysTheySaidFor),
+  // and this line has to say so, or the model is told two things at once
+  // and argues the number every turn: Oliver's "gets stuck on it".
+  if (typeof brief.known?.days?.value === "number" && Number.isFinite(brief.known.days.said)) {
+    lines.push(`THE DATES THEY GAVE HOLD ${brief.known.days.value} DAYS AND THEY HAVE SAID ${brief.known.days.said}. The plan follows the dates. Say so once, plainly, and use ${brief.known.days.value}; a different length needs different dates in the form, so never plan ${brief.known.days.said} days and never argue the number a second time.`);
+  } else if (typeof brief.known?.days?.value === "number") {
     lines.push(`THE TRIP IS ${brief.known.days.value} DAYS AND THAT IS THE ONLY LENGTH. Use the number. Never restate it as "a week", "a fortnight", "about ten days" or any other span, and never add a travel day to it to reach a rounder one. If they say something later that changes the length, take their new number, not your arithmetic on the old one.`);
   }
   // Asked, and they did not answer. Named so it is not asked again, and named as

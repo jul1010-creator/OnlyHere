@@ -227,6 +227,9 @@ import { ChatPlaceCards } from "./components/ChatPlaceCards";
 // hundred characters of it, which on a town is always the founding date. See
 // utils/cardLine.js.
 import { cardLine } from "./utils/cardLine";
+import { seasonBlock } from "./utils/seasonFit";
+import { fixClock, clockNote, lateDays, lateDayNote } from "./utils/dayClock";
+import { communityOnDay, communityBlock } from "./utils/communityEvents";
 import { answerLengthBlock, depthBlock, answerTokens, readAnswerLength, storeAnswerLength, lengthLabel, SHORT as ANSWER_SHORT, LONG as ANSWER_LONG } from "./utils/answerLength";
 import { travelModeKey, withoutNonModes, overnightMove, dayStartsBeforeItCanArrive } from "./utils/routeOrder";
 import { buildChatReport, chatReportFilename } from "./utils/chatReport";
@@ -16011,6 +16014,9 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
       // directly from the conversation, exactly like this pipeline didn't exist.
       buildStage("Planning your itinerary structure", 25);
       let plannerSkeleton = "";
+      // The community block, when the plan stands somewhere with something on.
+      // Declared beside the skeleton it is built from. See utils/communityEvents.js.
+      let communityFound = "";
       let plannerStopNames = [];
       let planProblems = [];
       try {
@@ -16154,6 +16160,35 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
             });
             plannerSkeleton = JSON.stringify({ days: planDays });
             plannerStopNames = planDays.flatMap(d => (d.stops || []).map(s => s?.name)).filter(Boolean);
+            // ── AND WHAT IS ON IN THE PLACES THEMSELVES ───────────
+            //
+            // Oliver, 19 Sep 2026, on the island calendars: "if it puts you
+            // onto Sejerø, it will include a small local event happening at
+            // Sejerø, but not something published."
+            //
+            // Community rows are in no array any page, chip, line or chat
+            // prompt walks, so this is the only door they have, and it is a
+            // narrow one: the day has to STAND in that place. His reason for
+            // that: "Community events are more local people getting together,
+            // which is something you can find many places. But is an
+            // interesting thing to be part of if you're there."
+            //
+            // Off the skeleton, because by here the app knows which day is in
+            // which town, and off the arrival date, because a day is the date
+            // it falls on. Empty for every trip that does not stand in a
+            // village with something on, which is almost all of them.
+            if (arrivalDate) {
+              const byDay = {};
+              // dayPlus rather than setDate, which is the rule the suite holds
+              // every .jsx to: it normalises to local midnight and mutates
+              // nothing, and hand-rolled calendar arithmetic in this file is how
+              // a day once drifted across a month boundary.
+              planDays.forEach((d, i) => {
+                const rows = communityOnDay({ stops: d.stops || [], date: dayPlus(arrivalDate, i) });
+                if (rows.length) byDay[i + 1] = rows;
+              });
+              communityFound = communityBlock(byDay);
+            }
           }
         }
       } catch { /* non-fatal — planner is a hint, not a requirement; Claude structures directly below if this comes back empty */ }
@@ -16282,7 +16317,7 @@ CRITICAL — GEOGRAPHIC GROUPING AND SEQUENCING: within a single day, group stop
 CRITICAL — SEQUENCE THE DAYS THEMSELVES ALONG ONE ROUTE, NOT JUST EACH DAY INTERNALLY: this applies across the whole trip, not just within one day — Copenhagen/Zealand and Jutland are different regions connected only by a long bridge/ferry crossing or a flight, never a short hop. Don't send the trip deeper into one region for several days and then jump straight to the other with no bridging day (e.g. Day 1-2 further into Jutland, Day 3 suddenly Copenhagen). If a planning skeleton is provided below, its day-to-day order already accounts for this — follow it. If you're structuring the trip yourself (no skeleton, or it's missing this), order the days to move in one general direction across the country and minimize total region-crossings over the whole trip.
 CRITICAL — REALISTIC ARRIVAL-DAY TIMING: on the actual arrival day, never schedule the first real activity at or right after the exact landing time — leave a real buffer for immigration/baggage claim, then getting from the airport to accommodation and checking in, roughly 60-90 minutes depending on distance, before anything else starts. Someone landing at 12:00 realistically reaches their hotel/hostel around 13:00-13:30, not before — the first stop's arrivalTime should reflect that reality, not the literal landing timestamp.
 CRITICAL — REALISTIC DEPARTURE-DAY TIMING: on the actual departure day, never schedule an activity (a museum visit, a meal, anything) that runs right up against the flight's departure time — leave a real buffer BEFORE it for getting to the airport, checking in, and security, same logic as the arrival buffer but in reverse. People commonly arrive at the airport 2-3 hours before a flight, so if departure is at 14:00, the last real activity should wrap up by roughly 11:00-11:30 at the latest, not 13:30. If the departure time is early enough that there's no realistic room for any activity that day at all, say so plainly rather than forcing one in anyway — a half-day or single relaxed stop near the accommodation is the honest call, not a full itinerary crammed against the clock. If "Traveling with kids" is mentioned, adjust the plan for it — shorter, less-packed days (2-3 stops, not 4-5), avoid late-night-only venues and anything inappropriate for children, favor stops with real breaks (parks, casual food) between bigger activities, and mention if something specific is a poor fit for kids rather than including it anyway.
-If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day.${requestedDays ? ` CRITICAL — the traveler explicitly said they have ${requestedDays} day${requestedDays > 1 ? "s" : ""} for this trip: the "days" array MUST contain exactly ${requestedDays} entries, one per day, even if the conversation text itself didn't spell out "Day 1:", "Day 2:" etc. for each one — split ALL the places discussed across those ${requestedDays} days yourself, in a sensible geographic/logical order (don't cram everything into day 1 and leave later days empty). If too few distinct places were discussed to fill every day with something real, it's fine for a day to have fewer stops or repeat a base town for a slower day — but never invent a place that wasn't mentioned just to fill a day.` : ""} Use only real place names mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.${CURRENCY_RULE}${chosenEventsBlock}${chosenExtrasBlock}${ruledOutBlock}${bookedStayBlock}${beenBlock}${essentialsFacts}${plannerSkeleton ? `\nA planning pass already worked out a day-by-day structure (which places, which day, what order) — follow this exact breakdown unless it's missing something the conversation clearly mentioned; your job is to write the full essentials and every stop's note yourself, this only gives you the skeleton: ${plannerSkeleton}` : ""}${tavilyGrounding ? `\nWEB RESEARCH (Tavily, real current results — weigh alongside the conversation for prices, hours, and current details): ${tavilyGrounding}` : ""}${guideGrounding ? `\nGOOGLE AI CROSS-CHECK (weigh this alongside the conversation — if it reveals a mentioned place doesn't seem to exist, prefer the nearest real equivalent rather than inventing): ${guideGrounding}` : ""}${guideLangBlock}`;
+If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day.${requestedDays ? ` CRITICAL — the traveler explicitly said they have ${requestedDays} day${requestedDays > 1 ? "s" : ""} for this trip: the "days" array MUST contain exactly ${requestedDays} entries, one per day, even if the conversation text itself didn't spell out "Day 1:", "Day 2:" etc. for each one — split ALL the places discussed across those ${requestedDays} days yourself, in a sensible geographic/logical order (don't cram everything into day 1 and leave later days empty). If too few distinct places were discussed to fill every day with something real, it's fine for a day to have fewer stops or repeat a base town for a slower day — but never invent a place that wasn't mentioned just to fill a day.` : ""} Use only real place names mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.${CURRENCY_RULE}${chosenEventsBlock}${chosenExtrasBlock}${ruledOutBlock}${bookedStayBlock}${beenBlock}${essentialsFacts}${communityFound ? `\n${communityFound}` : ""}${plannerSkeleton ? `\nA planning pass already worked out a day-by-day structure (which places, which day, what order) — follow this exact breakdown unless it's missing something the conversation clearly mentioned; your job is to write the full essentials and every stop's note yourself, this only gives you the skeleton: ${plannerSkeleton}` : ""}${tavilyGrounding ? `\nWEB RESEARCH (Tavily, real current results — weigh alongside the conversation for prices, hours, and current details): ${tavilyGrounding}` : ""}${guideGrounding ? `\nGOOGLE AI CROSS-CHECK (weigh this alongside the conversation — if it reveals a mentioned place doesn't seem to exist, prefer the nearest real equivalent rather than inventing): ${guideGrounding}` : ""}${guideLangBlock}`;
       // Guide-building is genuine multi-step reasoning (timing, geography, avoiding
       // duplicates, family-mode adjustments) — this is the one call in Detour worth
       // Opus's extra reasoning depth, and it already has a loading screen the person
@@ -17226,6 +17261,31 @@ If the conversation only covers a single day or a few stops with no explicit day
           }
         } catch { /* never at the cost of the guide */ }
       }
+
+      // ── AND THE CLOCK IS CHECKED AGAINST THE LEGS ─────────────────
+      //
+      // Oliver's own guide, tbfeb7jemku, day 2: Møgeltønder at 10:30 for up to
+      // an hour and a half, eight minutes on foot, the inn at 12:00 for up to
+      // an hour and a half, then an hour and twenty by car, and Esbjerg Street
+      // Food at 14:00. It cannot be walked, and the guide names the leg that
+      // breaks it in its own header.
+      //
+      // The planner writes those times in one pass BEFORE any leg is measured,
+      // so it is guessing a timetable for a route whose distances it does not
+      // have. `exactFound` is those distances, fetched a few lines above, so by
+      // here the answer is arithmetic. See utils/dayClock.js: it moves a time
+      // the stop before cannot reach, and changes nothing else.
+      //
+      // Reported as well as fixed, because a silent correction is a correction
+      // nobody can check, and planProblems is where this run's measurements
+      // disagreeing with this run's prose already go.
+      const clockFix = fixClock(parsed.days, exactFound);
+      if (clockFix.moved.length) {
+        parsed = { ...parsed, days: clockFix.days };
+        planProblems = [...planProblems, clockNote(clockFix.moved)];
+      }
+      const runsLate = lateDays(parsed.days, exactFound);
+      if (runsLate.length) planProblems = [...planProblems, lateDayNote(runsLate)];
 
       setGuideModal({ _gid: gid, _fx: fxLine, _constraints: guideConstraints, _mode: travelMode, _onlyWalking: onlyWalking, _lightMode: mode === "plain", _travelers: travellersSaid || String(partyKnown?.value || ""), _party: partyKnown && (partyKnown.adults != null || partyKnown.kids != null || partyKnown.total != null) ? { adults: partyKnown.adults ?? null, kids: partyKnown.kids ?? null, total: partyKnown.total ?? null, hasKids: !!partyKnown.hasKids } : null, _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: dayKey(arrivalDate), _arrivalPoint: arrivalPoint(saidByTravellerForGuide, { townPoint: townPointFor }), _geo: freshGeo, _weatherFetchedAt: new Date().toISOString(), _exactDurations: exactFound, _noRouteFound: routeFailed, _testProfile: testProfile, _testPlan: testProfile ? plannerSkeleton : null, _planProblems: planProblems.length ? planProblems : null, title: parsed.title || "Your Custom Route", essentials: finalEssentials, days: parsed.days });
     } catch (err) {
@@ -19595,6 +19655,31 @@ If the conversation only covers a single day or a few stops with no explicit day
       // their own turns: a town GEMLYX named is not a town they asked about, and
       // building the give block from its own suggestion would have it telling
       // them about a place they never mentioned.
+      // ── AND WHAT THE SEASON DOES TO THEM, 19 SEP 2026 ─────────────
+      //
+      // Oliver, on a conversation where Gemlyx offered Gilleleje to a family
+      // arriving on 2 December and said nothing: "if the user says they want to
+      // go to some area, but it's usually only worth going in the summer, then
+      // it should point that out. As a warning. Like Gilleje is very
+      // summer-dependent. Many islands are as well tbh." And then the wider
+      // half: "So if someone says 'I want to go there in January', then make
+      // them aware of what they should and should not expect."
+      //
+      // BOTH SIDES OF THE CONVERSATION, which is the opposite of heldBlock
+      // below and deliberately so. heldBlock answers "what do we hold on the
+      // places THEY named", because a give-before-you-ask fact about a town
+      // they never mentioned is Gemlyx telling them about its own idea.
+      // Gilleleje was Gemlyx's own idea, and that is exactly the offer that
+      // needed the warning on it.
+      //
+      // Empty until a date exists, because there is no season without one, and
+      // empty in summer. See utils/seasonFit.js for what counts as evidence.
+      const SEASON_PLACES_IN_A_PROMPT = 6;
+      const inPlayNow = towns
+        .filter(t => t?.name && mentionsPlace(scopeText, t.name))
+        .slice(0, SEASON_PLACES_IN_A_PROMPT);
+      const seasonSays = seasonBlock(inPlayNow, brief?.known?.when?.value || null);
+
       const HELD_TOWNS_IN_A_PROMPT = 3;
       const namedByThem = towns
         .filter(t => t?.name && mentionsPlace(travellerTurns.join("\n"), t.name))
@@ -19718,7 +19803,7 @@ ONE QUESTION PER TURN. Not two, whatever else is missing. Somebody asked two thi
 DO NOT COMPLIMENT THEIR CHOICE. "Great pick", "excellent choice", "you'll love it", "way underrated" said about a place they just named is the banned filler in a different costume: it is a sentence with no information in it, spent on making them feel approved of.
 
 GIVE BEFORE YOU ASK. Every turn puts one real thing on the table before its question: a fact about the place they named, an opinion about it, or a warning worth having. One thing, not three, and off the block below when there is one. A conversation where one side only asks is an intake form, and it puts the whole weight of the trip on somebody who came here so they would not have to carry it. This is also what makes a short answer workable: a traveller who types four words at a time is normal, and a turn that gives something is still a real turn when their half is thin.
-${heldBlock}${nightBlock}
+${heldBlock}${nightBlock}${seasonSays ? `\n${seasonSays}\n` : ""}
 ── THE TRIP BRIEF, AS MEASURED RATHER THAN AS YOU FEEL IT ──
 This block is computed from what the traveller has typed and from the form they filled in. It is not your impression of the conversation and it overrides your impression of the conversation. Never say you have everything you need unless this block says so, and never say a traveller has already told you something that is not listed as known here.
 
@@ -20766,6 +20851,22 @@ ${languageBlock()}`;
                             C={C}
                             onOpen={(p) => openStopDetail(p, { windowed: true })}
                             lang={readerLanguage()}
+                            // ── AND ON A PHONE THE CHOICE IS HERE, 19 SEP ──
+                            //
+                            // Oliver: "Obviously on phone, it would have to pop
+                            // up in chat instead.. with the add or not."
+                            //
+                            // A phone has no side column, and the map it does
+                            // have is closed until somebody opens it, so the
+                            // card on a pin is a control that may not be on the
+                            // screen at all. The same two buttons ride on the
+                            // card under the reply, where the thumb already is.
+                            //
+                            // ONE CHOICE AT A TIME. `onlyOnPhone` hides them
+                            // above the breakpoint, where the map is always
+                            // there and asking twice would be asking twice.
+                            ask={askOnMap}
+                            onlyOnPhone
                           />
                         )}
                         </div>
@@ -20945,7 +21046,18 @@ ${languageBlock()}`;
                             // so a phone cannot have an open rail with no map
                             // in it or a map inside a closed one.
                             phoneOpen={phoneMapOn}
-                            ask={unsureWhatTheyWant(liveIntakeBrief) ? askOnMap : null}
+                            // ── THE HANDLER ALWAYS, THE GATE SEPARATELY ──
+                            // Oliver, 19 Sep 2026: a green dot becomes a pin
+                            // only when it is confirmed, and "just talking
+                            // about it, won't confirm it". So the Yes is the
+                            // only way an offer becomes a stop, and a map that
+                            // could not ask would be a map of offers nobody can
+                            // take. The handler is always here; which pins put
+                            // the question is ChatMiniMap's call, and the old
+                            // "only when they are in doubt" gate still governs
+                            // the pins they have already chosen.
+                            ask={askOnMap}
+                            unsure={unsureWhatTheyWant(liveIntakeBrief)}
                             turnedDown={turnedDown}
                             onRestore={(name) => setTurnedDown(prev => (prev || []).filter(n => n !== name))} />
                         </div>
@@ -29837,6 +29949,10 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           intakeDeparture={intakeDeparture}
           intakeInterest={intakeInterest}
           intakeTransport={intakeTransport}
+          // One question on that screen: whether to offer a night out to a
+          // party with children in it. See the nightlife door in
+          // GuidePreviewScreen.
+          intakeFamilyMode={intakeFamilyMode}
           intakeBudgetText={intakeBudgetText}
           pickedEvents={pickedEvents}
           setPickedEvents={setPickedEvents}

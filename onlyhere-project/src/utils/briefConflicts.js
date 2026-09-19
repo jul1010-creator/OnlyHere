@@ -149,6 +149,21 @@ export const CONFLICTS = [
     question: (b, ctx) => ctx?.scopeSays || "",
   },
   {
+    // ── "IT ASKS AGAIN AND GETS STUCK ON IT" ─────────────────────
+    //
+    // Oliver, 18 Sep 2026, on a form that printed 7 for the 23rd to the 30th
+    // and a traveller who counts that as eight. The other reading of the same
+    // dates now lands in readDays without a question. This rule is for the
+    // number that is NOT a reading of the dates: "10 days" over a week of
+    // timestamps is two facts that do not fit, and before 19 Sep the brief
+    // kept the dates' count in silence while the prompt told the model to
+    // take the new number. Asked once, through `settled`, like every other
+    // rule here; the dates hold the slot until the traveller changes them.
+    key: "days-and-dates",
+    when: (b) => b.known?.days?.source === "intake" && Number.isFinite(b.known?.days?.said),
+    question: (b) => `Their dates give ${b.known.days.value} days and they have said ${b.known.days.said}. Say both numbers plainly and ask which is right, once. The plan follows the dates until they say otherwise, and if the dates are wrong they are changed in the form rather than argued over.`,
+  },
+  {
     key: "budget-and-fine-dining",
     when: (b) => saysAny(b.known?.budget?.value, ["tight", "cheap", "budget"])
       && saysAny(b.known?.interests?.value, ["michelin", "fine dining", "tasting menu", "noma"]),
@@ -192,6 +207,7 @@ export const conflictLabel = (key) => ({
   "walking-a-region": "nature without a way to reach it",
   "budget-and-fine-dining": "a tight budget and a tasting menu",
   "region-does-not-fit": "a region the days will not hold",
+  "days-and-dates": "a length the dates do not hold",
 }[key] || key);
 
 // The slots a conflict is about, so the panel can point at them. Kept as a
@@ -211,4 +227,7 @@ export const conflictSlots = (key) => ({
   // trip, and the dates that length is measured from. The regions are not a
   // slot at all, which is the reason this one needed context.
   "region-does-not-fit": ["days", "when"],
+  // The same two, for the same reason: a spoken count against the dates it
+  // was measured from.
+  "days-and-dates": ["days", "when"],
 }[key] || []);

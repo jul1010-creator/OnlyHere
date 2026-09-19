@@ -8,6 +8,7 @@ import { distinctThemes, THEME_LABEL } from "../utils/placeThemes";
 import { entryWord } from "../utils/entryWords";
 import { makeCamera, unplayedBeat } from "../utils/mapDirections";
 import { partFrameFor } from "../utils/geography";
+import { cardLine } from "../utils/cardLine";
 import { t as uiT } from "../utils/uiLanguage";
 
 // ── THE MAP UNDER THE CHAT ──────────────────────────────────────────
@@ -217,7 +218,7 @@ export const isConsidered = (pin) => !pin?.confirmed;
 // 380px map is a wall. A card that opened itself on the newest pin was
 // considered and rejected for both reasons: it breaks the 12 Sep rule, and
 // choosing WHICH pin to open is the app choosing the trip.
-export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, height = 220, sayWhatFor = false, focus = null, ask = null, turnedDown = [], onRestore = null, phoneOpen = false }) => {
+export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, height = 220, sayWhatFor = false, focus = null, ask = null, turnedDown = [], onRestore = null, phoneOpen = false, unsure = false }) => {
   // ── THE READER'S LANGUAGE, ONCE ─────────────────────────────────
   //
   // `lang` is readerLanguage()'s OBJECT, not a two letter code. Handing the
@@ -368,7 +369,8 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
   // redraw. Left out, the marker would keep its old shape until some other
   // change happened to move the key, and the turn where they say yes is exactly
   // the turn somebody is watching.
-  const pinKey = list.map(p => `${p?.key}@${p?.lat},${p?.lon}${p?.latest ? "*" : ""}${p?.confirmed ? "!" : ""}`).join("|") + (asking ? "|ask" : "");
+  const pinKey = list.map(p => `${p?.key}@${p?.lat},${p?.lon}${p?.latest ? "*" : ""}${p?.confirmed ? "!" : ""}`).join("|")
+    + (asking ? "|ask" : "") + (unsure ? "|unsure" : "");
   // ── THE MAP IS THERE BEFORE THERE IS ANYTHING ON IT ───────────────
   // Oliver, 8 Sep 2026: "I think map should already be shown from start."
   // It was gated on having a pin, so the panel was empty until Gemlyx happened
@@ -401,8 +403,21 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
   // so the last dot is the newest suggestion still standing.
   const dots = list.filter(isConsidered);
   const newestDot = dots.filter(p => p.latest).slice(-1)[0] || dots.slice(-1)[0] || null;
+  // ── AND A SHORT WRITING OF IT, 19 SEP 2026 ──────────────────────
+  //
+  // Oliver: "You zoom in, and you have a short writing of it on the maps."
+  //
+  // cardLine is the reader the preview and the pin card already use, so the
+  // three places that describe one row describe it the same way. It picks the
+  // sentence that answers "is this for me" over the founding date the paragraph
+  // opens with, and it is empty for a row with no usable text, in which case the
+  // corner is the name alone rather than a sentence made up to fill it.
   const corner = newestDot
-    ? { name: newestDot.place?.name || "", more: Math.max(0, dots.length - 1) }
+    ? {
+        name: newestDot.place?.name || "",
+        line: cardLine(newestDot.place) || "",
+        more: Math.max(0, dots.length - 1),
+      }
     : null;
 
   // ── THE MOVES THEMSELVES ─────────────────────────────────────────
@@ -773,9 +788,27 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
       // it has a picture: the card is then the name, the description and the
       // question, and ChatPlaceCards says why that is not the "tooltip with a
       // close button" the rule below was written against. Read out of the
-      // closure like `code` above: `asking` is in pinKey, so this effect
-      // re-runs when it changes.
-      const asks = asking && isSpotPin(p);
+      // closure like `code` above: both `asking` and `unsure` are in pinKey, so
+      // this effect re-runs when either changes.
+      // ── AND A DOT HAS TO HAVE A WAY OF BECOMING A PIN ─────────
+      //
+      // Oliver, 19 Sep 2026: "the AI should set up a form of confirmation for
+      // it. Like 'is that interesting to you?'" And, deciding what counts:
+      // "in order to go from a green dot to a confirmed point, you need it
+      // confirmed. And just talking about it, won't confirm it."
+      //
+      // Those two together make the question load-bearing. A Yes is now the
+      // ONLY thing that turns an offer into a stop, so a considered place with
+      // no question on it is an offer nobody can take. It asks whether or not
+      // the uncertainty gate is open, and whether or not it is a place inside a
+      // town: a suggested TOWN could never be confirmed before this line,
+      // because the old rule only ever asked about spots.
+      //
+      // AND NEVER ON A CONFIRMED ONE. That is the 13 Sep complaint about the
+      // categories being "awkward to have on all the time": a question over
+      // somewhere they have already chosen is asking them to decide something
+      // they decided. The gate still governs those.
+      const asks = isConsidered(p) || (unsure && isSpotPin(p));
       if (!shot && !asks) {
         // ── AND IT MUST TAKE THE OTHER CARD DOWN ──────────────────
         // Found in the browser, not by reading: hovering this pin left the
@@ -944,6 +977,22 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
     // playing, so the picture read is one the traveller will see. makeCamera
     // works out which pins are new against what they were last time.
     camRef.current?.pins(list);
+    // ── AND THE ZOOM IS THE REPLY'S, NOT THE PINS' ──────────────
+    //
+    // For an hour on 19 Sep this flew the map down to any place inside a town
+    // that Gemlyx had just named, so that a suggestion could not be named in
+    // the corner while the map sat on the whole country with nothing to look
+    // at. Oliver stopped it: "You don't zoom in all the time. But you zoom in
+    // if you want to say 'Arh, if you go to Billund, I can recommend bla bla
+    // bla [zoom in]. [Add to trip / Not interested] [Zoom out]'."
+    //
+    // Which is the rule this file has carried since 12 Sep and I had started
+    // writing a second copy of: the pins do not choose a closeness, the REPLY
+    // does, with [[MAP_IN:...]] at the word it belongs to. A recommendation is
+    // a sentence Gemlyx is writing, and only Gemlyx knows whether it is making
+    // one. The prompt now says so in as many words, in MAP_DIRECTION_RULE, and
+    // the choice on the pin and the pull-back after it are the other two beats
+    // of the same move.
     // ── WHERE EACH LABEL GOES, MEASURED RATHER THAN GUESSED ──────
     //
     // The sizes are read off the rendered elements: a name wraps differently in
@@ -1163,9 +1212,12 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
             Nothing at all when nothing is being considered. */}
         {corner && (
           <div className={CORNER_CLASS}>
-            <span className="corner-dot" />
-            <span className="corner-name">{corner.name}</span>
-            {corner.more > 0 && <span className="corner-more">{`+${corner.more}`}</span>}
+            <div className="corner-head">
+              <span className="corner-dot" />
+              <span className="corner-name">{corner.name}</span>
+              {corner.more > 0 && <span className="corner-more">{`+${corner.more}`}</span>}
+            </div>
+            {corner.line && <div className="corner-line">{corner.line}</div>}
           </div>
         )}
       </div>
@@ -1184,8 +1236,34 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
           ask={ask && h.asks ? {
             picked: (Array.isArray(ask.picked) ? ask.picked : []).includes(h.place?.name),
             caution: typeof ask.cautionFor === "function" ? String(ask.cautionFor(h.place) || "") : "",
-            onYes: () => { if (typeof ask.onYes === "function") ask.onYes(h.place); },
-            onNo: () => { if (typeof ask.onNo === "function") ask.onNo(h.place); },
+            // ── AND THEN THE MAP COMES BACK OUT, 19 SEP 2026 ──
+            //
+            // Oliver, writing the whole move in one line: "you zoom in if you
+            // want to say 'Arh, if you go to Billund, I can recommend bla bla
+            // bla [zoom in]. [Add to trip / Not interested] [Zoom out]'."
+            //
+            // The zoom in is the reply's, with a marker, and so is the pull
+            // back when the reply knows it is finished with the place. This is
+            // the other way the move can end: they answered it. A card that has
+            // been answered has nothing left to show at street scale, and a map
+            // left standing on a place they just said no to is the camera
+            // sitting on nothing, which frameFor is already written about.
+            //
+            // Through the camera, so a reply's own move still outranks it: a
+            // press that lands while Gemlyx is flying somewhere queues behind
+            // it rather than fighting it.
+            //
+            // ONLY FROM CLOSE UP. A press on a country map is somebody ticking
+            // a place off a wide picture, and pulling back from a picture that
+            // is already wide is a move nobody asked for.
+            onYes: () => {
+              if (typeof ask.onYes === "function") ask.onYes(h.place);
+              if (spotsShowAt(mapRef.current?.getZoom())) camRef.current?.arrive({ kind: "out" });
+            },
+            onNo: () => {
+              if (typeof ask.onNo === "function") ask.onNo(h.place);
+              if (spotsShowAt(mapRef.current?.getZoom())) camRef.current?.arrive({ kind: "out" });
+            },
           } : null}
         />,
         h.host,

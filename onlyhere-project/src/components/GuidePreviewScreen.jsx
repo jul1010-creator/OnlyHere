@@ -8,6 +8,7 @@ import { C } from "../utils/theme";
 import { testTravelerLine, getEventDate } from "../utils/helpers";
 import { matchedPlaces, previewPools, mentionsPlace, wantedCategories, groupKeyOf, parentTownOf, tripAnchorFor, eventReachBand, tripPoints } from "../utils/previewMatch";
 import { ruledOutFor, excludedNote } from "../utils/exclusions";
+import { seasonWarnings } from "../utils/seasonFit";
 import { tripWindow, tripEvents, describePicks } from "../utils/tripEvents";
 import { briefThemes, rankOffers, offerReason, OFFER_LIMIT } from "../utils/interestFit";
 import { cardLine } from "../utils/cardLine";
@@ -305,6 +306,9 @@ export const GuidePreviewScreen = ({
   // this screen decides which towns get offered, and until tonight it decided
   // that without knowing whether the traveller had a car or a bicycle.
   intakeTransport = [],
+  // Whether the form's family switch is on. The preview asks it one question:
+  // whether to offer a night out. See the nightlife door below.
+  intakeFamilyMode = false,
   intakeBudgetText = "",
   pickedEvents = null,
   setPickedEvents = () => {},
@@ -442,10 +446,22 @@ export const GuidePreviewScreen = ({
   // driving trip — while the brief slot, which reads the mode off the SENTENCE that
   // stated it, correctly said car. Two parts of one screen disagreeing about the
   // same trip, which is the failure this file's own comments keep naming.
-  const mode = readBrief({
+  const ownBrief = readBrief({
     travellerText: saidByTraveller,
     intake: { transport: intakeTransport },
-  }).known.transport?.mode || null;
+  });
+  const mode = ownBrief.known.transport?.mode || null;
+  // ── AND WHETHER THERE ARE CHILDREN ALONG ──────────────────────────
+  //
+  // Read off the same brief rather than a second pass at the same sentences,
+  // for the reason the note above `mode` gives about travelModeKey: two readers
+  // of one conversation is how a screen comes to disagree with itself. The one
+  // thing it decides is whether this screen offers a family a night out, which
+  // is the 19 Sep finding and the 12 Sep one before it.
+  // The form's own family switch counts too, because somebody who ticked it has
+  // said so as plainly as a sentence would. Read straight rather than through
+  // the brief, since the brief here is built from their words alone.
+  const kidsAlong = !!ownBrief.known.party?.hasKids || !!intakeFamilyMode;
   // ── AND WHAT THEY SAID ABOUT MONEY ────────────────────────────────
   // Oliver, 17 Aug 2026: "geranium is NOT mid-range.. so remember to make food
   // places include in budget." Read from their own turns and the budget box, same
@@ -520,6 +536,29 @@ export const GuidePreviewScreen = ({
           .map(entry => ({ ...entry, reason: offerReason(entry) })),
       };
     })
+    .filter(cat => cat.items.length > 0 || cat.offered.length > 0 || cat.consider.length > 0)
+    // ── AND NOBODY OFFERS A FAMILY A NIGHT OUT, 19 SEP 2026 ───────
+    //
+    // Oliver, 19 Sep, reading his own preview for a trip with a wife and three
+    // children aged 8 to 14: "Wrong pick: Preview picks Nightlife and
+    // Gilleleje?"
+    //
+    // The nightlife section was empty and offering to fill itself, which is the
+    // `offered` door and is normally the right thing: a door says what Gemlyx
+    // holds without putting it in the plan. This is the one party where the
+    // door itself is the wrong question, and it is the same complaint he made
+    // on 12 Sep about the chat: "the AI seems to push a lot for nightlife",
+    // counted across four transcripts, one of them a trip with one adult and
+    // seven children.
+    //
+    // A ROW THEY ASKED FOR STILL SHOWS. This only closes the door, never the
+    // section: somebody travelling with children who names a bar has named a
+    // bar, and taking it off the screen would be deciding for them. `wanted`
+    // is read from their own turns, so asking for it at any point opens it
+    // again.
+    .map(cat => (cat.src === "nightlife" && kidsAlong && !wanted.has("nightlife")
+      ? { ...cat, offered: [], picks: [] }
+      : cat))
     .filter(cat => cat.items.length > 0 || cat.offered.length > 0 || cat.consider.length > 0);
   const toggleExtra = (name) =>
     setPickedExtras(prev => (prev || []).includes(name) ? (prev || []).filter(n => n !== name) : [...(prev || []), name]);
@@ -589,6 +628,24 @@ export const GuidePreviewScreen = ({
   // message for a traveller. Null whenever the preview found something.
   const coverage = testProfile ? previewCoverage({ matched, library, convoText, themes, days: win?.days ?? null, wanted }) : null;
 
+  // ── AND WHAT THE SEASON DOES TO ANY OF THIS ───────────────────────
+  //
+  // Oliver, 19 Sep 2026: "if the user says they want to go to some area, but
+  // it's usually only worth going in the summer, then it should point that out.
+  // As a warning." And: "So if someone says 'I want to go there in January',
+  // then make them aware of what they should and should not expect."
+  //
+  // Nothing on this screen read the date. A trip on 2 December was matched
+  // exactly like one in July, and a seaside town came back with a photograph of
+  // it in the sun and no word about the month.
+  //
+  // A LINE, NOT A FILTER. Every row stays exactly where it was: a quiet coast in
+  // winter is a real thing to want, and the failure is arriving to find out
+  // rather than being offered it. The month's half is said once at the top,
+  // because it is the same sentence for every row under it. See seasonFit.js for
+  // what counts as evidence that a place leans on the season.
+  const season = seasonWarnings(matched, win?.start || null);
+
   // ── AND CLOSING HAS TO BE IDEMPOTENT ──────────────────────────────
   // One click on ✕ runs this TWICE: the button is a DOM child of the backdrop
   // and both carry onClick={closePreview}, and the button did not stop the
@@ -621,9 +678,47 @@ export const GuidePreviewScreen = ({
                 ? "Places you named, and what Gemlyx holds in the part of Denmark you asked about. The route itself comes next."
                 : matched.some(p => p._viaReach)
                 ? "You said you wanted out of the city, so these are the places within reach of where you are. The route itself comes next."
-                : "Places you have already mentioned that Gemlyx has its own page for. The route itself comes next.")
+                // ── AND THE SENTENCE HAS TO BE TRUE, 19 SEP 2026 ──
+                //
+                // This read "Places you have already mentioned" whatever was
+                // under it, and Oliver read it over Gilleleje, a town he had
+                // never typed: Gemlyx had named it once, inside a question
+                // about his children's ages.
+                //
+                // Names are read from both sides of the conversation on
+                // purpose, and that is right, because a place Gemlyx named and
+                // they kept talking about belongs on this screen. Saying THEY
+                // mentioned it is the part that was not true. So the sentence
+                // says what is on the screen, and the rows that were Gemlyx's
+                // idea say so on themselves.
+                : matched.every(p => p._byThem)
+                ? "Places you have already mentioned that Gemlyx has its own page for. The route itself comes next."
+                : "Places from your conversation that Gemlyx has its own page for. The route itself comes next.")
             : "Gemlyx will pick the stops and build your full guide next."}
         </div>
+        {season.rows.length > 0 && (
+          <div style={{ background: `${C.gold}0D`, border: `1px solid ${C.gold}55`, borderRadius: 12, padding: "10px 12px", marginBottom: 14 }}>
+            <div style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 5 }}>
+              Worth knowing about the time of year
+            </div>
+            <div style={{ fontSize: 12, color: C.light, lineHeight: 1.55 }}>
+              {season.expect}
+            </div>
+            {/* Named rather than counted, because "3 places" is a number nobody
+                can act on and the names are what somebody looks down the list
+                for. A row whose own entry states its season is quoted; one that
+                is here on its theme alone says only that much, which is all the
+                evidence there is for it. */}
+            <div style={{ fontSize: 12, color: C.light, lineHeight: 1.55, marginTop: 5 }}>
+              {season.rows.map(r => (
+                <div key={`season-${r.name}`} style={{ marginTop: 3 }}>
+                  <b style={{ color: C.text }}>{r.name}</b>
+                  {r.level === "said" && r.quote ? `: its own page says "${r.quote}"` : " leans on the summer, the way a Danish coast town does."}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {/* TEST-PROFILE CARD (Oliver: "When I click the random guide, I have
             to know what was picked") — shows the fabricated traveler right
             HERE at the preview stage, not just on the finished guide. Only
@@ -803,6 +898,18 @@ export const GuidePreviewScreen = ({
                           reach of where you are" are different claims, and only
                           one of them was ever asked for. See the second door on
                           the region pass in previewMatch.js. */}
+                      {/* ── WHOSE IDEA IT WAS, 19 SEP 2026 ──────────────────
+                          The same answer the chat map draws as a green dot rather
+                          than a pin: a place they named is theirs, and a place
+                          Gemlyx put forward is an offer. Only the offers are
+                          marked, because marking both would be labelling every row
+                          on the screen. _byThem is set in previewMatch.js off the
+                          traveller's own turns, which is the evidence the map uses,
+                          so the two screens cannot describe one conversation two
+                          different ways. */}
+                      {!place._byThem && (
+                        <span style={{ fontSize: 9, fontWeight: 700, color: C.muted, letterSpacing: 0.8, textTransform: "uppercase", border: `1px solid ${C.border}`, borderRadius: 100, padding: "2px 7px" }}>Gemlyx suggested</span>
+                      )}
                       {place._viaReach && !place._viaRegion && (
                         <span style={{ fontSize: 9, fontWeight: 700, color: C.gold, letterSpacing: 0.8, textTransform: "uppercase", border: `1px solid ${C.gold}55`, borderRadius: 100, padding: "2px 7px" }}>Within reach</span>
                       )}

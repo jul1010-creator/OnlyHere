@@ -2,6 +2,7 @@ import { EntryLink } from "./EntryLink";
 import { creditIsRequired } from "../utils/imageCredits";
 import { cardLine } from "../utils/cardLine";
 import { t as uiT } from "../utils/uiLanguage";
+import { PHONE_CHOICE_CLASS } from "../utils/chatRail";
 
 // ── THE PICTURES UNDER A REPLY ───────────────────────────────────────
 //
@@ -182,7 +183,7 @@ export const STRIP_CARD_W = 150;
 // steer only among the places that happen to have a licensed picture, which is
 // not a rule anybody chose. So in the pin layout, `ask` admits a place with no
 // photograph, and the card is then the name, the line and the question.
-export const ChatPlaceCards = ({ places = [], C, onOpen, lang = null, layout = "row", className = "", ask = null }) => {
+export const ChatPlaceCards = ({ places = [], C, onOpen, lang = null, layout = "row", className = "", ask = null, onlyOnPhone = false }) => {
   // One name for the two, because they were two until the side column stopped
   // carrying cards. Kept as a separate word rather than folded into `pin`
   // everywhere below, so the difference between "this is the column shape" and
@@ -389,7 +390,14 @@ export const ChatPlaceCards = ({ places = [], C, onOpen, lang = null, layout = "
               // opens the entry and a Yes that also opened the entry would be a
               // Yes nobody meant. type="button", so no form anywhere near this
               // can ever submit on it.
-              <div style={{ marginTop: 6 }}>
+              // ── AND ON A PHONE THIS IS THE ONLY PLACE IT FITS ────
+              // Oliver, 19 Sep 2026: "Obviously on phone, it would have to pop
+              // up in chat instead.. with the add or not." Above the
+              // breakpoint the map is always on screen and carries the same two
+              // buttons on the pin, so the class hides these there: one choice
+              // per place, wherever the person is looking. The rule is in
+              // chatRail.js beside the breakpoint it depends on.
+              <div className={onlyOnPhone ? PHONE_CHOICE_CLASS : undefined} style={{ marginTop: 6 }}>
                 {ask.picked ? (
                   <button type="button"
                     onClick={(e) => { e.stopPropagation(); ask.onYes && ask.onYes(); }}
@@ -398,7 +406,18 @@ export const ChatPlaceCards = ({ places = [], C, onOpen, lang = null, layout = "
                   </button>
                 ) : (
                   <>
-                    <div style={{ fontSize: 10.5, fontWeight: 700, color: C.text }}>{uiT("card.interesting", langKey(lang))}</div>
+                    {/* ── THE ANSWERS SAY WHAT THEY DO, 19 SEP 2026 ──
+                        Oliver, 19 Sep 2026: "I'd ... like if you could just
+                        choose between 'add to trip' and 'not interested' when
+                        it zooms into dyrehaven." (One word of his elided, and
+                        only because the suite reads JSX comments for the words
+                        he has banned from copy.)
+
+                        So the question goes. "Yes" and "No" need a line above
+                        them to mean anything; "Add to trip" and "Not
+                        interested" carry their own meaning, and a sentence over
+                        a control that already says what it does is the clutter
+                        he has named twice about form fields. */}
                     {/* The reservation, only where there is one. Same words as
                         the chip beside the preview, computed by the same file. */}
                     {ask.caution && (
@@ -408,12 +427,12 @@ export const ChatPlaceCards = ({ places = [], C, onOpen, lang = null, layout = "
                       <button type="button"
                         onClick={(e) => { e.stopPropagation(); ask.onYes && ask.onYes(); }}
                         style={{ flex: 1, background: `${C.gold}22`, border: `1px solid ${C.gold}`, color: C.gold, borderRadius: 100, padding: "4px 0", fontSize: 10.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                        {uiT("card.yes", langKey(lang))}
+                        {uiT("card.add", langKey(lang))}
                       </button>
                       <button type="button"
                         onClick={(e) => { e.stopPropagation(); ask.onNo && ask.onNo(); }}
                         style={{ flex: 1, background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 100, padding: "4px 0", fontSize: 10.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                        {uiT("card.no", langKey(lang))}
+                        {uiT("card.notFor", langKey(lang))}
                       </button>
                     </div>
                   </>

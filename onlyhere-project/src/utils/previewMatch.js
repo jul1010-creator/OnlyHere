@@ -994,7 +994,25 @@ export const matchedPlaces = (convoText, pools, { days = null, wanted = null, th
   // through excludedNote, so the removal is never silent. (That sentence was
   // written on 26 Aug and was not true until 13 Sep: excludedNote had no caller
   // anywhere in the app. GuidePreviewScreen renders it now.)
-  const keep = (rows) => (ruledOut.length ? rows.filter(r => !isExcluded(r, ruledOut)) : rows);
+  // ── AND WHO PUT IT THERE, 19 SEP 2026 ────────────────────────────
+  //
+  // Oliver, on a preview headed "Places you have already mentioned" with
+  // Gilleleje in it, a town he had never typed: Gemlyx named it once, inside a
+  // question about the children's ages, as the gentle alternative to Legoland.
+  //
+  // Place NAMES are read from the whole conversation on purpose, and the
+  // comment above says why: a place Gemlyx named and they kept talking about is
+  // a place in this trip. What was missing is which of the two it was. The chat
+  // map answers it with a pin and a green dot; this is the same answer, on the
+  // same evidence, so the two screens cannot describe one conversation
+  // differently.
+  //
+  // Marked HERE because every return path goes through `keep`, which is the
+  // same argument the exclusion filter above it makes and the reason it lives
+  // here rather than at the three call sites.
+  const theirs = (row) => !!row?.name && mentionsPlace(ownWords, row.name);
+  const keep = (rows) => (ruledOut.length ? rows.filter(r => !isExcluded(r, ruledOut)) : rows)
+    .map(r => (r && r._byThem === undefined ? { ...r, _byThem: theirs(r) } : r));
   // ── AND THE ARRIVAL IS THEIRS TO STATE TOO ──────────────────────
   //
   // This read the whole transcript, and on his Aalborg brief that produced an

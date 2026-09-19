@@ -42,7 +42,7 @@
 // RULE FOR ANY FUTURE WORK HERE: never guard a mutation of a module-level
 // array with component-scoped state (useRef/useState). If the data outlives
 // the component, so must the guard.
-import { events, majorEvents, undatedEvents } from "../data/events";
+import { events, majorEvents, undatedEvents, communityEvents } from "../data/events";
 import { towns, TOWN_COORDS } from "../data/towns";
 import { islands } from "../data/islands";
 import { freeEntrance } from "../data/freeEntrance";
@@ -174,7 +174,15 @@ const doLoad = async () => {
       // pool that asks for towns, and each of those would have been found
       // separately and fixed separately.
       else if (row.type === "island") islands.push({ id, ...item });
-      else if (row.type === "festival") (item.__scale === "Major" ? majorEvents : events).push({ id, ...item });
+      // ── THREE SCALES, AND ONE OF THEM DOES NOT PUBLISH ────────
+      // Major and Local are the two that reach a reader through a page, a chip,
+      // the front page line and the chat. Community is Oliver's third, added
+      // 19 Sep 2026 for the island and village calendars: hidden everywhere, and
+      // read by a guide only for a stop that is in that place. The branch is the
+      // enforcement, the same way undatedEvents is enforced a few lines below:
+      // a row that is not in events or majorEvents cannot be reached by any of
+      // the readers that walk them. See data/events.js.
+      else if (row.type === "festival") homeFor(item).push({ id, ...item });
       else if (row.type === "free") freeEntrance.push({ id, ...item });
       else if (row.type === "food" || row.type === "foodStreet") foodSpots.push({ id, ...item });
       else if (row.type === "night") nightlifeSpots.push({ id, ...item });
@@ -320,6 +328,25 @@ const ARRAY_FOR = {
   [WAITING_TYPE]: undatedEvents,
 };
 
+// ── WHICH OF THE THREE A FESTIVAL LIVES IN ──────────────────────────
+//
+// One reader, called by the merge, the edit and the delete, because `__scale`
+// is an editable field and a festival can move between them. Three copies of
+// this ternary is how a row edited from Local to Community would be added to
+// one array and left behind in another.
+//
+// COMMUNITY IS THE DEFAULT FOR NOTHING. An unrecognised or missing scale falls
+// to `events`, which is where every festival published before 19 Sep 2026 sits
+// and what this branch has always done. Hiding a row takes saying so.
+export const FESTIVAL_SCALES = ["Major", "Local", "Community"];
+const FESTIVAL_HOMES = [events, majorEvents, communityEvents];
+export const homeFor = (item) => {
+  const scale = String(item?.__scale || "").trim();
+  if (scale === "Major") return majorEvents;
+  if (scale === "Community") return communityEvents;
+  return events;
+};
+
 export const LIVE_ID_OFFSET = 100000;
 
 export const applyEditedRow = (rowId, type, payload) => {
@@ -336,12 +363,12 @@ export const applyEditedRow = (rowId, type, payload) => {
   // Booking lives in two places by design (see the note in doLoad), and a
   // festival can change which of the two event arrays it belongs in, because
   // __scale is an editable field.
-  const homes = type === "festival" ? [events, majorEvents]
+  const homes = type === "festival" ? FESTIVAL_HOMES
     : type === "booking" ? [craftItemsFallback, bookingRowsCache]
     : ARRAY_FOR[type] ? [ARRAY_FOR[type]] : [];
   if (!homes.length) return false;
 
-  const wanted = type === "festival" ? (item.__scale === "Major" ? majorEvents : events) : null;
+  const wanted = type === "festival" ? homeFor(item) : null;
   let oldName = null;
   for (const list of homes) {
     const i = list.findIndex(x => x?.id === id);
@@ -439,7 +466,7 @@ export const removeLiveRow = (rowId, type) => {
   // reason to reload. Left as `false` when the verdicts went in, which would
   // have sent exactly this case back to the full reload it just escaped.
   if (!Number.isFinite(id)) return NOT_LIVE;
-  const homes = type === "festival" ? [events, majorEvents]
+  const homes = type === "festival" ? FESTIVAL_HOMES
     : type === "booking" ? [craftItemsFallback, bookingRowsCache]
     : ARRAY_FOR[type] ? [ARRAY_FOR[type]] : [];
   if (!homes.length) return UNKNOWN_TYPE;
