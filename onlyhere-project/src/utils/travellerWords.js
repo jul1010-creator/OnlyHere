@@ -259,7 +259,13 @@ export const SPELLED_NUMBERS = {
 const NUM_WORD = Object.keys(SPELLED_NUMBERS).join("|");
 export const NUMBER_TOKEN = `(?:\\d+|${NUM_WORD})`;
 export const PARTY_COUNT = [
-  `${NUMBER_TOKEN}\\s+(?:of us|people|adults?|grown[- ]?ups?|voksne|erwachsene|volwassenen|vuxna|personer|personen|persones)`,
+  // ── AND THE SINGULAR, IN EVERY LANGUAGE BUT ENGLISH ──────────
+  // 19 Sep 2026. English carried "adults?" and the other four were plural only,
+  // so "1 voksen" was not a headcount and "1 adult" was. A party of one is
+  // exactly what a singular is written for, and it is the party this list could
+  // not read in any language but its own. The same hole was in ADULT_WORD in
+  // directAnswer.js, which is the other reader of this same question.
+  `${NUMBER_TOKEN}\\s+(?:of us|people|adults?|grown[- ]?ups?|voksen|voksne|erwachsener?|erwachsenen|volwassene|volwassenen|vuxen|vuxna|personer|personen|persones)`,
   `(?:we are|we're|vi er|vi är|wir sind|we zijn(?:\\s+met)?|siamo)\\s+${NUMBER_TOKEN}`,
 ];
 

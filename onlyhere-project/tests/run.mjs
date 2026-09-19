@@ -237,6 +237,12 @@ writeFileSync(entry, `
   export { driedUpDays, weatherNoteNow } from ${JSON.stringify(join(root, "src/utils/weather.js"))};
   export { unplaceableStops, mapGapNote } from ${JSON.stringify(join(root, "src/utils/mapGaps.js"))};
   export { unbackedClaims, SUPERLATIVE, CROWD_CLAIM } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
+  export { CHIPS, SHARPER_CHIPS, chipsFor, MAX_CHIPS, CHIPPED_SLOTS, SLOT_KEYS, LOCATE } from ${JSON.stringify(join(root, "src/utils/replyChips.js"))};
+  export { townFromReverse, countryFromReverse, isDenmark, locateSentence, locateLabel, reverseUrl, TOWN_ZOOM, LOCATE_LABEL, LOCATE_STATE } from ${JSON.stringify(join(root, "src/utils/locateMe.js"))};
+  export { homeStartBlock } from ${JSON.stringify(join(root, "src/utils/tripBrief.js"))};
+  export { unfold, icsDate, icsTime, parseIcs, cleanTitle, communityRowsFrom, feedProblems, postalTownsIn, placeFor, icsUrlFor, calendarIdFromEid, ICS_FOR, MOST_PER_PLACE } from ${JSON.stringify(join(root, "src/utils/calendarFeed.js"))};
+  export { PAGE_ROWS_PROMPT, rowsFromExtract } from ${JSON.stringify(join(root, "src/utils/calendarFeed.js"))};
+  export { tribeApiFor, rowsFromTribe, rowsFromSimcal, readerFor } from ${JSON.stringify(join(root, "src/utils/calendarFeed.js"))};
   export { guideClaims, guideClaimNote } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { resolveStopCoords } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { festivalScale } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
@@ -11581,6 +11587,296 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     ok("so the ready the reply claimed is a ready the brief agrees with", briefReady(his));
     // The starting point he typed, not an assumption about it.
     ok("and origin came from what he said", his.known.origin?.source === "said");
+  }
+
+  // ── "SHALL WE MAKE PEOPLE ABLE TO CLICK RESPONSES", 19 SEP 2026 ──
+  //
+  // Oliver: "Some people use it as if it is ChatGPT. They don't let it fully
+  // plan anything for them. How can we avoid this? Shall we make people able to
+  // literally 'click responses' to Gemlyx?"
+  //
+  // The assertion this feature exists for is the first one below. A chip is
+  // posted as the traveller's own message and goes through the same readers a
+  // typed answer does, so the suite can ask something the typed path can never
+  // be asked: does every offered answer actually fill the slot it sits under.
+  {
+    const { CHIPS, SHARPER_CHIPS, chipsFor, MAX_CHIPS, CHIPPED_SLOTS, SLOT_KEYS, readBrief, homeStartBlock } = M;
+    const today = new Date("2026-09-19");
+    const fills = (slot, say) => {
+      const b = readBrief({ travellerText: say, travellerTurns: [say], intake: {}, today, asked: [slot], answering: [[slot]] });
+      return !!b.known[slot];
+    };
+    // ── EVERY CHIP, IN BOTH LANGUAGES, FILLS ITS OWN SLOT ───────────
+    //
+    // This is the whole safety of the feature. A chip whose sentence the
+    // readers cannot parse is a button that looks like an answer and leaves the
+    // brief exactly as it was, and the traveller has no way to tell. It caught
+    // three on the day it was written: two budget lines, and "1 voksen", which
+    // turned out to be a hole in the Danish reader rather than in the chip.
+    {
+      const all = { ...CHIPS, ...SHARPER_CHIPS };
+      const bad = [];
+      for (const [slot, list] of Object.entries(all)) {
+        for (const c of list) {
+          // An action chip has no sentence until it has run, so it is checked
+          // by its own block below rather than skipped quietly.
+          if (c.action) continue;
+          if (!fills(slot, c.say)) bad.push(`${slot} en: ${c.say}`);
+          if (!fills(slot, c.sayDa)) bad.push(`${slot} da: ${c.sayDa}`);
+        }
+      }
+      is("every chip fills the slot it sits under, in English and in Danish", bad, []);
+    }
+    // A chip set keyed to a slot this app no longer has is a row of buttons
+    // that can never appear, and nothing else would ever say so.
+    is("no chip set points at a slot that does not exist", CHIPPED_SLOTS.filter(k => !SLOT_KEYS.includes(k)), []);
+    // Four. A fifth is a menu, and a menu is the intake form he has objected to
+    // twice, with rounded corners.
+    is("nothing offers more than four", Object.values(CHIPS).filter(l => l.length > MAX_CHIPS), []);
+    is("and the cap is four", MAX_CHIPS, 4);
+    // Both languages on every chip, or a Danish reader gets an English button
+    // in the middle of a Danish row.
+    is("every chip carries its Danish", Object.values({ ...CHIPS, ...SHARPER_CHIPS }).flat()
+       .filter(c => !c.label || !c.labelDa || (!c.action && (!c.say || !c.sayDa))), []);
+    const DASH9 = new RegExp("[" + String.fromCharCode(0x2013, 0x2014) + "]");
+    is("no label or sentence carries a dash or a banned word",
+       Object.values({ ...CHIPS, ...SHARPER_CHIPS }).flat()
+         .flatMap(c => [c.label, c.labelDa, c.say, c.sayDa]).filter(Boolean)
+         .filter(v => DASH9.test(v) || /\b(?:actually|truly|genuinely|genuine|simply|really|quite)\b/i.test(v)), []);
+    // ── A DATE HAS NO CHIPS, ON PURPOSE ─────────────────────────────
+    // Every chip anybody could write for `when` is a month with no day in it,
+    // which is the exact vague state the brief spends a second question on.
+    ok("the dates slot offers none rather than a bad one", !CHIPS.when);
+
+    // ── "A STARTING POINT CHIP CALLED FROM MY LOCATION" ─────────────
+    //
+    // Oliver, 19 Sep 2026. The only chip here with no sentence in it: what it
+    // says is not known until the browser has answered, so it carries an action
+    // and the reading of the answer lives in utils/locateMe.js.
+    {
+      const { townFromReverse, countryFromReverse, isDenmark, locateSentence, locateLabel,
+              reverseUrl, TOWN_ZOOM, LOCATE, LOCATE_STATE } = M;
+      is("the origin question offers it, third of four",
+         CHIPS.origin.map(c => c.label),
+         ["Copenhagen Airport", "Billund Airport", "From my location", "I live in Denmark"]);
+      // THIRD, NOT FIRST. Most people answering this are flying in, and a fix
+      // taken at a kitchen table in Rotterdam answers a different question.
+      is("and it is the one with an action rather than a sentence",
+         CHIPS.origin.filter(c => c.action).map(c => c.action), [LOCATE]);
+      const open = readBrief({ travellerText: "A trip to Denmark", travellerTurns: ["A trip to Denmark"], intake: {}, today });
+      ok("which the render branches on", chipsFor({ asked: ["origin"], brief: open })[2].action === LOCATE);
+      is("its Danish is on it too", chipsFor({ asked: ["origin"], brief: open, lang: "da" })[2].label, "Fra min placering");
+
+      // ── THE COORDINATE NEVER REACHES THE CHAT ────────────────────
+      //
+      // The rule the whole file is arranged around. A fix is accurate to a few
+      // metres and this transcript is saved with the trip, sent to a model and
+      // exported to a file the traveller can hand to anybody.
+      //
+      // ASKED FOR LESS PRECISION, not given all of it and trimmed: a house
+      // number discarded after the request is a house number that was sent.
+      ok("the lookup asks for a town rather than an address", /zoom=10\b/.test(reverseUrl(55.6, 12.6)));
+      is("and the level is stated once", TOWN_ZOOM, 10);
+      // Nominatim returns a road and a house number whenever it has them,
+      // whatever zoom it was asked for. A reader that walked the object for
+      // "the most specific thing present" would put somebody's home address in
+      // the chat, which is why this is a list of what MAY be used.
+      const HOME = { address: { house_number: "14", road: "Nørregade", city: "Aarhus", municipality: "Aarhus Kommune", country: "Danmark", country_code: "dk" } };
+      is("a house number and a road are never the answer", townFromReverse(HOME), "Aarhus");
+      ok("nor do they reach the sentence", !/14|Nørregade/.test(locateSentence(townFromReverse(HOME))));
+      is("the sentence is what a person would have typed",
+         locateSentence(townFromReverse(HOME)), "I'm starting from Aarhus");
+      is("and in Danish", locateSentence(townFromReverse(HOME), "", "da"), "Jeg tager afsted fra Aarhus");
+      // A village of four hundred people is half of what this app is about.
+      is("a village is a place", townFromReverse({ address: { village: "Sejerby", country_code: "dk" } }), "Sejerby");
+      is("and a fix out in a field falls back to the kommune",
+         townFromReverse({ address: { municipality: "Odsherred", country_code: "dk" } }), "Odsherred");
+      // A lookup that came back with a road and nothing else is refused, which
+      // is the one path that could put an address on screen.
+      is("nothing usable is nothing said",
+         [townFromReverse({ address: { road: "Nørregade" } }), townFromReverse({}), townFromReverse(null)], ["", "", ""]);
+      is("and no town is no sentence", [locateSentence(""), locateSentence(null)], ["", ""]);
+
+      // ── AND THE SENTENCE FILLS THE SLOT ──────────────────────────
+      ok("what it types answers the question it was asked", fills("origin", locateSentence(townFromReverse(HOME))));
+      ok("in Danish too", fills("origin", locateSentence(townFromReverse(HOME), "", "da")));
+      // BEING HERE IS NOT LIVING HERE. A tourist tapping this on their second
+      // morning is standing in their hotel, and `fromHome` is what cancels the
+      // arrival advice for somebody who has lived here forty years.
+      {
+        const say = locateSentence(townFromReverse(HOME));
+        const b = readBrief({ travellerText: say, travellerTurns: [say], intake: {}, today });
+        ok("a fix in Denmark does not make them a Dane", b.known.origin && !b.known.origin.fromHome);
+      }
+      // AND A FIX ABROAD NAMES THE COUNTRY. "Hamburg" alone, in a Denmark app,
+      // reads as somewhere in Denmark.
+      const AWAY = { address: { city: "Hamburg", country: "Deutschland", country_code: "de" } };
+      const countryFor = (j) => (isDenmark(j) ? "" : countryFromReverse(j));
+      is("a town abroad carries its country", locateSentence(townFromReverse(AWAY), countryFor(AWAY)),
+         "I'm starting from Hamburg, Deutschland");
+      is("and one at home does not", locateSentence(townFromReverse(HOME), countryFor(HOME)), "I'm starting from Aarhus");
+      // THE CODE, NOT THE NAME. `country` comes back localised, so a reader
+      // matching on the word would have written "Aarhus, Dänemark" for a German
+      // phone reading a Danish fix.
+      ok("Denmark is read off the country code rather than its name", isDenmark(HOME) && !isDenmark(AWAY));
+      is("whatever the name is in", ["Danmark", "Denmark", "Dänemark"]
+         .map(n => locateSentence("Aarhus", countryFor({ address: { country: n, country_code: "dk" } }))),
+         ["I'm starting from Aarhus", "I'm starting from Aarhus", "I'm starting from Aarhus"]);
+      {
+        const appD = readFileSync(join(root, "src/App.jsx"), "utf8");
+        ok("and the call site is the one that decides",
+           /isDenmark\(data\) \? "" : countryFromReverse\(data\)/.test(appD));
+      }
+
+      // ── AND THE BUTTON SAYS WHAT HAPPENED TO IT ──────────────────
+      //
+      // All three failures are silent, and a chip that does nothing when
+      // tapped, twice, is how somebody decides the app is broken. A control
+      // reporting its own state is not a sentence explaining a control.
+      is("it wears its own state", ["asking", "refused", "failed"].map(k => locateLabel(k)),
+         ["Locating…", "No location access", "Could not place you"]);
+      is("in Danish as well", ["asking", "refused", "failed"].map(k => locateLabel(k, "da")),
+         ["Finder dig…", "Ingen adgang til placering", "Kunne ikke finde dig"]);
+      is("and an untouched chip is just the chip", locateLabel("", ""), "From my location");
+      is("every state carries both languages", Object.values(LOCATE_STATE).filter(v => !v.label || !v.labelDa), []);
+
+      // ── AND THE BROWSER HALF IS WHERE THE BROWSER IS ─────────────
+      {
+        const appL = readFileSync(join(root, "src/App.jsx"), "utf8");
+        ok("the chip runs the lookup instead of sending a sentence",
+           /onClick=\{\(\) => \(acting \? locateAndSend\(\) : sendAI\(c\.say\)\)\}/.test(appL));
+        ok("and wears the state while it runs", /\{acting \? locateLabel\(locating, readerLanguage\(\)\) : c\.label\}/.test(appL));
+        // The three failures, each set rather than swallowed.
+        ok("a browser that cannot do this says so", /!navigator\.geolocation\) \{ setLocating\("failed"\); return; \}/.test(appL));
+        ok("a refusal says so", /\(\) => setLocating\("refused"\)/.test(appL));
+        ok("and a lookup that throws says so", /catch \{ setLocating\("failed"\); \}/.test(appL));
+        // The numbers are never put in state and never sent anywhere but the
+        // one lookup that turns them into a name.
+        ok("the coordinate is read straight into the lookup and nowhere else",
+           /const \{ latitude, longitude \} = pos\.coords \|\| \{\};/.test(appL)
+           && /fetch\(reverseUrl\(latitude, longitude\)\)/.test(appL));
+        ok("and nothing stores it", !/setLocating\((?:latitude|longitude)/.test(appL) && !/useState\(.*latitude/.test(appL));
+        ok("a lookup with no town in it sends nothing", /if \(!say\) \{ setLocating\("failed"\); return; \}/.test(appL));
+      }
+    }
+
+    // ── AND THEY ONLY APPEAR UNDER THE QUESTION THAT WAS ASKED ──────
+    const brief = (turns, asked, answering) => readBrief({
+      travellerText: turns.join("\n"), travellerTurns: turns, intake: {}, today, asked, answering,
+    });
+    const fresh = brief(["A trip to Denmark"], [], [[]]);
+    is("the party question gets the party chips",
+       chipsFor({ asked: ["party"], brief: fresh }).map(c => c.label),
+       ["Just me", "Me and my partner", "Family with kids", "Friends"]);
+    is("and Danish gets Danish", chipsFor({ asked: ["party"], brief: fresh, lang: "da" }).map(c => c.label),
+       ["Kun mig", "Mig og min partner", "Familie med børn", "Venner"]);
+    is("a reply that asked nothing offers nothing", chipsFor({ asked: [], brief: fresh }), []);
+    // THE LIVE BRIEF DECIDES, not the message. A question answered by typing
+    // while the chips sat on screen takes its own chips away, or the traveller
+    // fills a slot that is already full and the brief holds two answers to one
+    // question with the wrong one last.
+    const answered = brief(["A trip to Denmark", "Just me"], ["party"], [[], ["party"]]);
+    is("a slot that has since been answered has no chips left",
+       chipsFor({ asked: ["party"], brief: answered }), []);
+    // ── AND A SHARPENING QUESTION IS A DIFFERENT QUESTION ───────────
+    // "Who's coming along?" and "how many adults are with them?" share a slot.
+    // Chips keyed only by the slot would put "Just me" under the second one.
+    const vagueParty = brief(["4 days in July, my wife and 3 kids"], ["party"], [["party"]]);
+    ok("the party is vague rather than missing", vagueParty.vague.includes("party"));
+    is("so the sharpening question gets the headcounts",
+       chipsFor({ asked: ["party:sharper"], brief: vagueParty }).map(c => c.label),
+       ["One adult", "Two adults", "Three adults"]);
+    // And it is never the base set, which would offer "Family with kids" to
+    // somebody who has just said they are a family with kids.
+    ok("and never the question it already answered",
+       !chipsFor({ asked: ["party:sharper"], brief: vagueParty }).some(c => c.label === "Family with kids"));
+
+    // ── AND THERE IS NO BUILD CHIP ──────────────────────────────────
+    // A ready brief raises its own build card in App.jsx, argued over since
+    // 10 August. Two controls in one column offering the same thing is the
+    // mistake the phone choice class exists to prevent.
+    const ready = brief([
+      "Arriving: 19 September 2026 at 12:00 | Departing: 22 September 2026 at 12:00 | Exact trip length: 3 days | Starting point: Copenhagen",
+      "Just me", "I'm into history and design", "Public transport", "No, I haven't booked anywhere to stay",
+    ], ["party", "interests", "transport", "stay"], [[], ["party"], ["interests"], ["transport"], ["stay"]]);
+    ok("the brief that is ready is ready", ready.ready);
+    is("and raises no chip of its own", chipsFor({ asked: [], brief: ready }), []);
+
+    // ── AND THE RENDER PUTS THEM UNDER THE NEWEST REPLY ONLY ────────
+    {
+      const appCh = readFileSync(join(root, "src/App.jsx"), "utf8");
+      ok("the chips are drawn under the latest assistant reply and no other",
+         /m\.role === "assistant" && !streaming && isLatestAssistant && !aiLoading && \(\(\) => \{/.test(appCh));
+      ok("read off the message's own asks and the live brief",
+         /chipsFor\(\{ asked: m\.asked, brief: liveIntakeBrief, lang: readerLanguage\(\) \}\)/.test(appCh));
+      // A chip is a typed message. Nothing here has a private channel into the
+      // brief, which is the rule that keeps one way to fill a slot.
+      ok("and a tap sends the sentence as if they had typed it",
+         /onClick=\{\(\) => \(acting \? locateAndSend\(\) : sendAI\(c\.say\)\)\}/.test(appCh));
+    }
+
+    // ── "SOME PEOPLE MIGHT BE DANES" ────────────────────────────────
+    //
+    // Oliver, same message: "They would not begin at the airport." The third
+    // origin chip is that traveller, and it is the only chip here that does
+    // more than save typing.
+    {
+      const home = brief(["I live in Denmark, I'm starting from home"], [], [[]]);
+      ok("the chip that says they live here says so to the brief", home.known.origin?.fromHome);
+      ok("and the Danish one does too",
+         brief(["Jeg bor i Danmark, jeg tager hjemmefra"], [], [[]]).known.origin?.fromHome);
+      const arriving = brief(["I'm flying into Copenhagen Airport"], [], [[]]);
+      ok("while the airport chips are arrivals", arriving.known.origin && !arriving.known.origin.fromHome);
+      // SILENCE IS NOT A DANE. "Driving from Aarhus" is a Dane and also a
+      // German who parked at the airport, and guessing wrong leaves a stranger
+      // in a country with no arrival advice at all.
+      ok("a Danish town is not a Dane", !brief(["driving from Aarhus"], [], [[]]).known.origin?.fromHome);
+      ok("and neither is saying nothing", !brief(["4 days in July"], [], [[]]).known.origin?.fromHome);
+      // `origin` is BLOCKING, so a sentence that is not about living somewhere
+      // must not fill it. This one did, on the first draft.
+      is("a sentence about what somebody loves is not where they live",
+         [brief(["I live for a good museum"], [], [[]]).known.origin,
+          brief(["I live and breathe design"], [], [[]]).known.origin], [undefined, undefined]);
+      // The words a person uses, rather than a town list.
+      ok("the ordinary ways of saying it are read",
+         ["I live in Aarhus", "we're based in Odense", "I'm Danish", "jeg bor i Aarhus", "vi bor her", "Vi er danskere"]
+           .every(t => brief([t], [], [[]]).known.origin?.fromHome));
+
+      // ── AND WHAT THE MODEL IS TOLD ABOUT IT ───────────────────────
+      const block = homeStartBlock(home);
+      ok("it says they are not arriving", /starting from home in Denmark/.test(block) && /no airport, no transfer/.test(block));
+      ok("and names the habits it is cancelling",
+         /No Copenhagen Card pitch/.test(block) && /no how to buy a ticket/.test(block)
+         && /no warning about checking out of the bus/.test(block));
+      ok("and asks for a higher bar than a visitor gets", /the obvious sights of their own country are not a recommendation/.test(block));
+      // EMPTY FOR EVERYBODY ELSE, so the arrival advice is unchanged for the
+      // travellers it was written for.
+      is("a visitor changes nothing", homeStartBlock(arriving), "");
+      is("and neither does a brief with no origin at all", [homeStartBlock(fresh), homeStartBlock(null)], ["", ""]);
+      is("nothing in it carries a dash or a banned word",
+         [block].filter(b => DASH9.test(b) || /\b(?:actually|truly|genuinely|genuine|simply|really|quite)\b/i.test(b)), []);
+      {
+        const appH = readFileSync(join(root, "src/App.jsx"), "utf8");
+        ok("the chat prompt carries it", /const homeSays = homeStartBlock\(brief\);/.test(appH)
+           && /\$\{homeSays \? `\\n\$\{homeSays\}\\n` : ""\}/.test(appH));
+        ok("and so does the guide writer, where Getting Around starts at Kastrup by default",
+           /const homeStartsHere = homeStartBlock\(guideBrief\)/.test(appH) && /\$\{bookedStayBlock\}\$\{homeStartsHere\}/.test(appH));
+      }
+    }
+
+    // ── AND THE SINGULAR THE CHIP FOUND ─────────────────────────────
+    //
+    // "1 voksen" was the one chip the check above rejected, and it was not the
+    // chip's fault: English carried "adults?" and the other four languages were
+    // plural only, so a party of one was unreadable in every language but the
+    // one this app is written in.
+    {
+      const { partyAnswer, partyLine } = M;
+      is("one adult, in four languages",
+         ["1 adult", "1 voksen", "1 Erwachsener", "1 vuxen"].map(s => partyAnswer(s)?.adults), [1, 1, 1, 1]);
+      is("and the plurals still read", ["2 adults", "2 voksne", "2 Erwachsene"].map(s => partyAnswer(s)?.adults), [2, 2, 2]);
+      is("a Danish family of three reads as three", partyLine(partyAnswer("1 voksen og 2 børn")), "1 adult and 2 children");
+    }
   }
     // AND THE OTHER WAY ROUND. An evening flight keeps the 30th (eight dates);
     // somebody counting nights says seven, and seven is what they get.
@@ -55853,6 +56149,382 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
           ok("nothing at all on a trip with no arrival date", /if \(arrivalDate\) \{\s*\n\s*const byDay = \{\};/.test(appE));
         }
         is("a trip with nothing on gets no block", communityBlock({}), "");
+
+  // ── "I NEED TO PUT THEM INTO THE COMMUNITY LINK, BUT I CAN'T" ────
+  //
+  // Oliver, 19 Sep 2026, with two island calendars open:
+  //
+  //   oenendelave.dk/arrangementer   an embedded public Google Calendar, no
+  //                                  page per entry, every link goes to google
+  //   sejero.dk/arrangementer        a WordPress list plugin, and the title of
+  //                                  each entry is the whole sentence
+  //
+  //   "it's not events, but just a calender." ... "Primitive calenders"
+  //
+  // Studio drafts ONE subject from a name. A village calendar is thirty things
+  // with four fields each, so there is nothing to type in that box. And a
+  // calendar row is exactly what the community tier is allowed to use: that
+  // tier already forbids pricing it, promising it or building a day around it.
+  {
+    const { unfold, icsDate, icsTime, parseIcs, cleanTitle, communityRowsFrom, feedProblems,
+            postalTownsIn, icsUrlFor, calendarIdFromEid, ICS_FOR, MOST_PER_PLACE, communityOnDay } = M;
+    const today = new Date("2026-09-19");
+
+    // ── UNFOLDING COMES FIRST OR NOTHING AFTER IT READS A WHOLE VALUE ─
+    // RFC 5545 wraps any line past 75 octets onto a next line beginning with a
+    // space. Google wraps almost every real description.
+    is("a wrapped line is put back together", unfold("SUMMARY:Havne\r\n fest\r\nEND"), "SUMMARY:Havnefest\nEND");
+
+    // ── A DATE, IN THE THREE SHAPES IT COMES IN ──────────────────────
+    is("all day, timed with a zone, and timed in UTC",
+       ["20260905", "20260905T190000", "20260905T170000Z"].map(icsDate),
+       ["2026-09-05", "2026-09-05", "2026-09-05"]);
+    is("and the clock only when there is one", ["20260905", "20260905T190000"].map(icsTime), ["", "19:00"]);
+    is("nothing readable is nothing claimed", [icsDate(""), icsDate("not a date"), icsDate("20261345")], ["", "", ""]);
+
+    // ── THE FEED, WITH EVERY SHAPE THESE VILLAGES WRITE ──────────────
+    const ICS = [
+      "BEGIN:VCALENDAR", "VERSION:2.0",
+      // Endelave's, verbatim from the page, with the address it really carries.
+      "BEGIN:VEVENT", "UID:a@x", "SUMMARY:Nat i naturen\\, med kommunens naturvejleder",
+      "DTSTART;TZID=Europe/Copenhagen:20261005T190000", "DTEND;TZID=Europe/Copenhagen:20261005T235500",
+      "LOCATION:Endelave Museum\\, Vesterby 1\\, 8789 Horsens\\, Danmark",
+      "DESCRIPTION:En aften med naturvejlederen.", "END:VEVENT",
+      // Sejerø's shape: the title is the whole sentence.
+      "BEGIN:VEVENT", "UID:b@x", "SUMMARY:Fredag 25. oktober kl. 19.30\\, Halvvejs",
+      "DTSTART;VALUE=DATE:20261025", "DTEND;VALUE=DATE:20261026", "END:VEVENT",
+      "BEGIN:VEVENT", "UID:c@x", "SUMMARY:Aflyst ting", "DTSTART;VALUE=DATE:20261101", "STATUS:CANCELLED", "END:VEVENT",
+      "BEGIN:VEVENT", "UID:d@x", "SUMMARY:Ugentlig gudstjeneste", "DTSTART;VALUE=DATE:20261011", "RRULE:FREQ=WEEKLY;BYDAY=SU", "END:VEVENT",
+      "BEGIN:VEVENT", "UID:e@x", "SUMMARY:Noget i fortiden", "DTSTART;VALUE=DATE:20260101", "END:VEVENT",
+      "BEGIN:VEVENT", "UID:f@x", "SUMMARY:En lang fest", "DTSTART;VALUE=DATE:20261120", "DTEND;VALUE=DATE:20261123", "END:VEVENT",
+      "END:VCALENDAR",
+    ].join("\r\n");
+    const { events, skipped } = parseIcs(ICS);
+
+    // ── AND DTEND IS EXCLUSIVE ON AN ALL DAY EVENT ───────────────────
+    // The mistake that would put every village fête on one extra day: a one day
+    // event on the 25th is written DTSTART 20261025 with DTEND 20261026, and
+    // read as written a guide would tell somebody to turn up the morning after.
+    is("a one day event ends on its own day", events.find(e => e.uid === "b@x").dateEnd, "");
+    is("and a three day one ends on the third", 
+       [events.find(e => e.uid === "f@x").date, events.find(e => e.uid === "f@x").dateEnd],
+       ["2026-11-20", "2026-11-22"]);
+
+    // ── THREE KINDS ARE REFUSED, AND THE REASON MATTERS ──────────────
+    is("cancelled, repeating and undated are counted rather than guessed at",
+       [skipped.cancelled, skipped.recurring, skipped.undated], [1, 1, 0]);
+    // CANCELLED is the one this tier cannot afford to get wrong, because
+    // somebody would go. A repeat rule is a rule and not a date: expanding one
+    // takes BYDAY, UNTIL, COUNT, EXDATE and a timezone, and an expansion that
+    // is slightly wrong claims something is on when it is not.
+    is("nothing cancelled survives", events.filter(e => /Aflyst/.test(e.name)), []);
+    is("and nothing repeating does", events.filter(e => /Ugentlig/.test(e.name)), []);
+
+    // ── THE PLACE IS GIVEN ONCE, NEVER READ OFF THE ROW ──────────────
+    //
+    // Endelave's address is "8789 Horsens". That is correct post and wrong
+    // geography: Horsens is on the mainland, across a ferry. communityOnDay
+    // matches a row against the towns a day stands in, so a row filed from its
+    // own address would reach somebody in Horsens and never anybody on
+    // Endelave.
+    const rows = communityRowsFrom({ events, place: "Endelave", source: "https://oenendelave.dk/arrangementer/", today });
+    is("every row takes the place it was given", [...new Set(rows.map(r => r.town))], ["Endelave"]);
+    ok("and the address is kept as the venue instead", /8789 Horsens/.test(rows[0].venue));
+    ok("the postal town is named once, not once per row", postalTownsIn(events, "Endelave").includes("Horsens"));
+    // "4592 Danmark" is as common an ending as "8789 Horsens", and a country is
+    // not a town somebody can be standing in.
+    is("the country is not read as a town",
+       postalTownsIn([{ venue: "Halvvejs, Vestervej 15 Sejerø, 4592 Danmark" }], "Sejerø"), []);
+    is("and with no place there are no rows at all", communityRowsFrom({ events, place: "", today }), []);
+
+    // ── AND A ROW THAT ALREADY HAPPENED IS DEAD WEIGHT ───────────────
+    // These are the only rows in Gemlyx that go stale: every other row is a
+    // PLACE, and a place is there next year. A harbour night is true for one
+    // evening.
+    is("nothing behind today comes through", rows.filter(r => /fortiden/.test(r.name)), []);
+    ok("and a run that is still going does", rows.some(r => r.name === "En lang fest"));
+    is("they come back in date order", rows.map(r => r.date), [...rows.map(r => r.date)].sort());
+    is("and there is a ceiling", MOST_PER_PLACE, 40);
+
+    // ── THE TITLE IS THE WHOLE SENTENCE, AND IT REPEATS THE FIELDS ───
+    //
+    // "Fredag 25. september kl. 19.30, Halvvejs" with the date and the time
+    // also in the date and time fields. Used as a name the guide would write
+    // "Halvvejs on Friday 25 September at 19:30 on 2026-09-25".
+    is("the date and the clock come off the front",
+       cleanTitle("Fredag 25. september kl. 19.30, Halvvejs"), "Halvvejs");
+    is("in English too", cleanTitle("Friday 25 September at 19:30, Halvvejs"), "Halvvejs");
+    // The preposition belonged to the time rather than to the name.
+    is("and the preposition the clock was attached to", cleanTitle("kl. 20 på Minigolfen"), "Minigolfen");
+    // A name that STARTS with a preposition keeps it, and the difference is
+    // whether a date came off at all.
+    is("a name that begins with one keeps it", cleanTitle("I Kroens have"), "I Kroens have");
+    is("an ordinary name is untouched", cleanTitle("Havnefest"), "Havnefest");
+    // A title that is only a date is a poor name and an empty one is not a name.
+    is("a title that was only a date stands", cleanTitle("25. september"), "25. september");
+    is("and the rows carry the cleaned one", rows.find(r => r.date === "2026-10-25").name, "Halvvejs");
+
+    // ── AND WHAT COMES OUT IS WHAT communityOnDay ALREADY READS ──────
+    //
+    // The whole argument of this feature: nothing downstream changes. The rows
+    // are the shape data/events.js holds, so the tier reads them without
+    // knowing a calendar exists.
+    is("a day standing on the island on that day finds it",
+       communityOnDay({ stops: [{ town: "Endelave" }], date: "2026-10-05", pool: rows }).map(r => r.name),
+       ["Nat i naturen, med kommunens naturvejleder"]);
+    is("the mainland postal town finds nothing",
+       communityOnDay({ stops: [{ town: "Horsens" }], date: "2026-10-05", pool: rows }), []);
+    is("and nor does the right island on the wrong day",
+       communityOnDay({ stops: [{ town: "Endelave" }], date: "2026-10-06", pool: rows }), []);
+    is("every row is marked as the tier that does not publish",
+       [...new Set(rows.map(r => r.__scale))], ["Community"]);
+    ok("and each carries where it came from and when it was read",
+       rows.every(r => r.source && r.fetchedAt));
+
+    // ── FINDING THE FEED FROM WHAT IS ON THE PAGE ────────────────────
+    //
+    // Endelave shows no feed URL anywhere: the page is an embed and every entry
+    // links to google.com/calendar/event?eid=... A Google eid is base64 of
+    // "<event id> <calendar address>", so the one thing he can copy off that
+    // page carries the whole calendar's address.
+    const eid = Buffer.from("68rjee1kccrjeb9mc4qj6b9k6gs32b9pc4p3abb475gjec9n6di38d9nck oenendelave@gmail.com", "binary").toString("base64");
+    is("an event link reaches the calendar behind it",
+       icsUrlFor(`https://www.google.com/calendar/event?eid=${eid}&ctz=Europe/Copenhagen`),
+       ICS_FOR("oenendelave@gmail.com"));
+    is("so does the address on its own", icsUrlFor("oenendelave@gmail.com"), ICS_FOR("oenendelave@gmail.com"));
+    is("and an ics link is already one", icsUrlFor("https://calendar.google.com/calendar/ical/x%40gmail.com/public/basic.ics"),
+       "https://calendar.google.com/calendar/ical/x%40gmail.com/public/basic.ics");
+    // NOTHING IS GUESSED. A wrong calendar address fetches somebody else's
+    // calendar, so anything this cannot read comes back empty and the panel
+    // asks for the feed instead.
+    is("a page that is not a feed is not turned into one",
+       ["https://oenendelave.dk/arrangementer/", "", "nonsense", "http://x.ics"].map(icsUrlFor), ["", "", "", ""]);
+    is("and an eid that decodes to nothing usable is refused",
+       [calendarIdFromEid("notbase64!!"), calendarIdFromEid(Buffer.from("noSpaceHere", "binary").toString("base64"))], ["", ""]);
+
+    // ── AND HE IS TOLD WHAT HAPPENED BEFORE HE PRESSES ADD ───────────
+    const notes = feedProblems({ place: "Endelave", rows, skipped, events });
+    ok("the repeats are explained rather than dropped silently",
+       notes.some(n => /repeating/.test(n) && /rule rather than a date/.test(n)));
+    ok("the cancellations are counted", notes.some(n => /cancelled/.test(n)));
+    ok("and the postal town is said once", notes.some(n => /Horsens/.test(n) && /postal town/.test(n)));
+    ok("no place means nothing can be filed", /No place given/.test(feedProblems({ place: "", rows: [], events: [] })[0]));
+    ok("an empty feed says so", feedProblems({ place: "Endelave", rows: [], skipped: {}, events: [] }).some(n => /nothing to add/.test(n)));
+    const DASH10 = new RegExp("[" + String.fromCharCode(0x2013, 0x2014) + "]");
+    is("nothing it writes carries a dash or a banned word",
+       notes.filter(n => DASH10.test(n) || /\b(?:actually|truly|genuinely|genuine|simply|really|quite)\b/i.test(n)), []);
+
+    // ── AND THE DOOR IT GOES THROUGH IS THE ONE EVERY ROW USES ───────
+    {
+      const appCal = readFileSync(join(root, "src/App.jsx"), "utf8");
+      ok("the panel forces the place rather than reading the address",
+         /communityRowsFrom\(\{ events, place: calPlace, source, today: new Date\(\) \}\)/.test(appCal));
+      ok("and shapes the row the way the publish button does",
+         /shapeForLive\("festival", \{/.test(appCal) && /scale: "Community",/.test(appCal));
+      ok("through the same insert", /body: JSON\.stringify\(\{ type: "festival", payload: shaped, published: true \}\)/.test(appCal));
+      // The venue is an address and the name is what the guide says out loud.
+      ok("the address goes in the description rather than the name",
+         /r\.venue \? `Where: \$\{r\.venue\}` : ""/.test(appCal));
+      // A partial failure says how far it got, because "it did not work" over a
+      // loop that added nine of thirty is the one report he cannot act on.
+      ok("a run that stops half way says where it stopped",
+         /Added \$\{done\} of \$\{picked\.length\}, then stopped/.test(appCal));
+    }
+
+    // ── AND THE CALENDARS WITH NO FEED BEHIND THEM ──────────────────
+    //
+    // Oliver: "you can perhaps attempt using firecrawl API." Endelave is a real
+    // Google Calendar and has an .ics. Sejerø is a WordPress list plugin with
+    // no feed at all, and api/scan-source already reads a page with a plain
+    // fetch and then Firecrawl when the plain fetch came back unreadable.
+    {
+      const { PAGE_ROWS_PROMPT, rowsFromExtract } = M;
+      const prompt = PAGE_ROWS_PROMPT("Sejerø", "page text here");
+      // A GUESSED YEAR IS THE ONE THING THIS CANNOT DO. "Fredag 25. september"
+      // with no year on the page, read as next September, is a guide telling
+      // somebody to turn up twelve months late.
+      ok("it refuses to invent a year", /NEVER INVENT A DATE AND NEVER INVENT A YEAR/.test(prompt)
+         && /leave that entry OUT entirely/.test(prompt));
+      // The place is given once for the whole feed, for the Horsens reason.
+      ok("and it may not name a town at all", /NEVER RETURN A TOWN OR A POSTCODE/.test(prompt));
+      ok("the name stays as the village wrote it", /Do not improve it, do not translate it/.test(prompt));
+      is("the place it was given is in it", /Sejerø/.test(prompt), true);
+      const DASH11 = new RegExp("[" + String.fromCharCode(0x2013, 0x2014) + "]");
+      ok("and it carries no dash or banned word",
+         !DASH11.test(prompt) && !/\b(?:actually|truly|genuinely|genuine|simply|really|quite)\b/i.test(prompt));
+
+      // ── AND WHAT COMES BACK IS CHECKED, NOT TRUSTED ───────────────
+      // This is the half that came out of a model, so a date that is not a date
+      // is dropped here rather than carried into a row somebody would act on.
+      const got = rowsFromExtract({ events: [
+        { name: "Havnefest", date: "2026-07-04", dateEnd: "2026-07-06", time: "19:30", venue: "Havnen" },
+        { name: "Halvvejs", date: "25. september", time: "19.30" },
+        { name: "", date: "2026-08-01" },
+        { name: "Loppemarked", date: "2026-08-02", dateEnd: "2026-07-01", time: "nope" },
+      ] });
+      is("only real dates come through", got.events.map(e => e.name), ["Havnefest", "Loppemarked"]);
+      is("and the rest are counted rather than dropped silently", got.skipped.undated, 2);
+      is("a range that ends before it starts is not a range", got.events[1].dateEnd, "");
+      is("and a clock that is not a clock is no clock", got.events[1].time, "");
+      is("a good row keeps everything it had",
+         [got.events[0].date, got.events[0].dateEnd, got.events[0].time, got.events[0].venue],
+         ["2026-07-04", "2026-07-06", "19:30", "Havnen"]);
+      // The same shape parseIcs produces, so communityRowsFrom is one path.
+      is("it lands in the same shape the feed path produces",
+         Object.keys(got.events[0]).sort(), ["date", "dateEnd", "desc", "name", "time", "uid", "venue"]);
+      is("nothing at all is nothing", [rowsFromExtract(null).events, rowsFromExtract({}).events], [[], []]);
+
+      // ── AND THE PANEL TAKES THE PAGE ONLY WHEN THERE IS NO FEED ───
+      {
+        const appPage = readFileSync(join(root, "src/App.jsx"), "utf8");
+        ok("the feed is tried first", /const feed = icsUrlFor\(calUrl\);/.test(appPage));
+        ok("and the page is the fallback, through the route that has Firecrawl behind it",
+           /\/api\/scan-source\?fresh=1&url=\$\{encodeURIComponent\(source\)\}/.test(appPage));
+        ok("a page that came back empty says so rather than showing no rows",
+           /Nothing readable came back from that page/.test(appPage));
+        ok("and so does one whose entries could not be read as dates",
+           /the entries could not be pulled out of it as dates/.test(appPage));
+      }
+    }
+
+
+    // ── "IT'S FROM THEIR OWN WEBSITES", 19 SEP 2026 ──────────────────
+    //
+    // Oliver: "But you can't click the events. It is just on the calender. Try
+    // use my Chrome to check them." Read in his own browser, and he was right
+    // in the one way that mattered.
+    //
+    //   oenendelave.dk   Simple Calendar (google-calendar-events), a table with
+    //                    class simcal-calendar-grid. No iframe, no embed.
+    //   sejero.dk        The Events Calendar (tribe_events) through Elementor.
+    //
+    // AND THE eid PATH CANNOT WORK ON ENDELAVE. Its google.com links carry a
+    // TRUNCATED calendar address: decoded it reads "oenendelave@m" and stops.
+    // That is what the page holds, not a truncation by whatever read it.
+    {
+      const { tribeApiFor, rowsFromTribe, rowsFromSimcal, readerFor, calendarIdFromEid } = M;
+      // The real eid off his page, kept so this cannot be quietly "fixed" by
+      // somebody who assumes the reader is at fault.
+      is("a truncated calendar address is refused rather than fetched",
+         calendarIdFromEid(Buffer.from("68rjee1kccrjeb9mc4qj6b9k6gs32b9pc4p3abb475gjec9n6di38d9nck oenendelave@m", "binary").toString("base64")), "");
+
+      // ── WHICH READER A PAGE EARNS, FROM ITS OWN MARKUP ────────────
+      // Asked of the markup, never of the domain: these plugins are on
+      // thousands of sites and none of them is this one.
+      is("the two plugins are told apart by what they emit",
+         [readerFor('<li class="simcal-event simcal-tooltip">'), readerFor('<body class="post-type-archive-tribe_events">'), readerFor("<p>a page</p>")],
+         ["simcal", "tribe", ""]);
+
+      // ── THE EVENTS CALENDAR, WHOSE API IS OPEN ────────────────────
+      // The best read of the four paths, so it is tried before the HTML.
+      is("the api is built off the page's own origin, from today",
+         tribeApiFor("https://sejero.dk/arrangementer/", new Date("2026-09-19")),
+         "https://sejero.dk/wp-json/tribe/events/v1/events?per_page=50&start_date=2026-09-19");
+      is("and nothing is built off something that is not an https page",
+         ["http://sejero.dk/x", "not a url", ""].map(u => tribeApiFor(u)), ["", "", ""]);
+      // His own rows, as the API returned them in Chrome.
+      const TRIBE = { events: [
+        { id: 11, title: "Fredag 25. september kl. 19.30, Halvvejs", start_date: "2026-09-25 19:30:00", end_date: "2026-09-25 21:30:00",
+          all_day: false, venue: { venue: "Halvvejs", city: "Sejerø" }, description: "<p>Vi varmer op til vandrenes dag&#8230;</p>" },
+        { id: 12, title: "Lørdag 26. september kl. 20 på Minigolfen", start_date: "2026-09-26 22:00:00", end_date: "2026-09-26 22:00:00",
+          all_day: false, venue: { venue: "Mini Golf", city: "Sejerby" }, description: "" },
+        { id: 13, title: "En weekend", start_date: "2026-10-02 10:00:00", end_date: "2026-10-04 16:00:00", all_day: true, venue: {}, description: "" },
+        { id: 14, title: "", start_date: "2026-10-09 10:00:00" },
+      ] };
+      const t = rowsFromTribe(TRIBE);
+      is("the title, the date and the clock come back whole",
+         t.events.map(e => `${e.date} ${e.time} ${e.name}`),
+         ["2026-09-25 19:30 Fredag 25. september kl. 19.30, Halvvejs",
+          "2026-09-26 22:00 Lørdag 26. september kl. 20 på Minigolfen",
+          "2026-10-02  En weekend"]);
+      is("an all day event keeps no clock", t.events[2].time, "");
+      is("and a run of days keeps both ends", t.events[2].dateEnd, "2026-10-04");
+      is("an event that ends when it starts is not a range", t.events[1].dateEnd, "");
+      is("one with no title is counted rather than published", t.skipped.undated, 1);
+      // THE VENUE'S NAME, NEVER ITS CITY. The city is right there on the object
+      // and it is the one field that must not be read: the place is given once
+      // for the whole feed. See placeFor.
+      is("the venue is the venue", t.events.map(e => e.venue), ["Halvvejs", "Mini Golf", ""]);
+      ok("and the city on the row never reaches it", !t.events.some(e => /Sejerby|Sejerø/.test(e.venue)));
+      ok("html and entities come out of the description", /Vi varmer op til vandrenes dag…/.test(t.events[0].desc) && !/<p>/.test(t.events[0].desc));
+
+      // ── SIMPLE CALENDAR, WHICH PUTS IT IN THE PAGE ────────────────
+      // Endelave's own markup, in the shape his page carries it.
+      const SIMCAL = `
+        <td class="simcal-day simcal-day-has-events" data-events-count="1"><ul class="simcal-events">
+        <li class="simcal-event simcal-event-has-location simcal-tooltip">
+          <span class="simcal-event-title">Nat i naturen, med kommunens naturvejleder</span>
+          <div class="simcal-event-details simcal-tooltip-content">
+            <p><strong><span class="simcal-event-title" itemprop="name">Nat i naturen, med kommunens naturvejleder</span></strong></p>
+            <p><span class="simcal-event-start simcal-event-start-date" data-event-start="1788627600" itemprop="startDate" content="2026-09-05T19:00:00+02:00">5. september 2026</span>
+               <span class="simcal-event-end" itemprop="endDate" content="2026-09-05T23:55:00+02:00">23:55</span></p>
+            <div itemprop="location"><span itemprop="name">Endelave Museum</span><div itemprop="address">Vesterby 1, 8789 Horsens</div></div>
+          </div>
+        </li>
+        <li class="simcal-event simcal-tooltip">
+          <span class="simcal-event-title">Løv- og vildtaften</span>
+          <div class="simcal-event-details"><p><span itemprop="name">Løv- og vildtaften</span></p>
+          <p><span itemprop="startDate" content="2026-09-19T00:00:00+02:00">19. september 2026</span></p></div>
+        </li>
+        <li class="simcal-event"><span class="simcal-event-title">Noget uden dato</span></li>
+        </ul></td>`;
+      const sc = rowsFromSimcal(SIMCAL);
+      is("the page's own markup gives the name and the date",
+         sc.events.map(e => `${e.date} ${e.name}`),
+         ["2026-09-05 Nat i naturen, med kommunens naturvejleder", "2026-09-19 Løv- og vildtaften"]);
+      is("with the clock when the markup carries one", sc.events[0].time, "19:00");
+      is("the venue comes off the location block", sc.events[0].venue, "Endelave Museum");
+      is("and an entry with no date is counted", sc.skipped.undated, 1);
+      // The same event is drawn twice on this grid, once as the day's entry and
+      // once inside its own tooltip, so a plain read gives every event doubled.
+      is("an event drawn twice is one event", rowsFromSimcal(SIMCAL + SIMCAL).events.length, 2);
+      is("nothing at all is nothing", [rowsFromSimcal("").events, rowsFromSimcal(null).events], [[], []]);
+
+      // ── AND THEY FEED THE SAME ROW BUILDER AS THE .ics ────────────
+      const scRows = communityRowsFrom({ events: sc.events, place: "Endelave", source: "https://oenendelave.dk/arrangementer/", today: new Date("2026-09-01") });
+      is("the place is still forced", [...new Set(scRows.map(r => r.town))], ["Endelave"]);
+      is("and the postal town is still only a venue", scRows.map(r => r.town).filter(t => /Horsens/.test(t)), []);
+
+      // ── STRUCTURED FIRST, THE MODEL LAST ──────────────────────────
+      {
+        const appP = readFileSync(join(root, "src/App.jsx"), "utf8");
+        ok("the page is read for its markup before anything else", /const kind = readerFor\(html\);/.test(appP));
+        ok("the events API is tried when the page says that plugin", /if \(kind === "tribe"\)/.test(appP) && /rowsFromTribe\(j\)/.test(appP));
+        ok("the page's own markup when it says the other", /kind === "simcal"\) \(\{ events, skipped \} = rowsFromSimcal\(html\)\)/.test(appP));
+        // The model is the only one of these paths that can be wrong about a
+        // date, so it runs only when nothing structured came back.
+        ok("and the model only when neither found anything",
+           /if \(events\.length\) \{[\s\S]{0,600}?return;\s*\}[\s\S]{0,400}?scan-source/.test(appP));
+        // scan-source strips a page to prose, and the markup IS the thing being
+        // read, so the raw path goes through the route that returns it unchanged.
+        ok("the markup is fetched through the route that does not strip it",
+           /const raw = await studioFetch\(`\/api\/calendar\?url=\$\{encodeURIComponent\(source\)\}`\)/.test(appP));
+        // One month is what a Simple Calendar page draws, and a calendar with
+        // four months in it that imported one looks like a calendar with one.
+        ok("and he is told the page showed one month", /that page shows one month/.test(appP));
+      }
+    }
+
+    // ── AND THE ROUTE THAT FETCHES IT ────────────────────────────────
+    {
+      const apiCal = readFileSync(join(root, "api/calendar.js"), "utf8");
+      // An endpoint that fetches a URL a caller names is a proxy for whoever
+      // can reach it. Same two gates scan-source has had since 17 August.
+      ok("it is founder only", /requestIsFromSite/.test(apiCal) && /isFounder\(who\.userId/.test(apiCal));
+      // A serverless function sits inside a private network and can reach
+      // addresses a browser cannot.
+      ok("and it only ever leaves the building",
+         /url\.protocol !== "https:"/.test(apiCal) && /PRIVATE_HOST\.test\(url\.hostname\)/.test(apiCal));
+      ok("no credentials in the URL", /url\.username \|\| url\.password/.test(apiCal));
+      ok("with a size cap and a timeout", /MAX_BYTES/.test(apiCal) && /TIMEOUT_MS/.test(apiCal));
+      // A Google calendar that has been made private answers with a sign-in
+      // page and a 200, so "it came back" is not "it is a feed".
+      ok("and it says when what came back is not a calendar",
+         /BEGIN:VCALENDAR/.test(apiCal) && /not a calendar feed/.test(apiCal));
+      ok("the text is returned unchanged rather than stripped to prose",
+         !/readPage/.test(apiCal));
+    }
+  }
         is("and nor does one with empty days", communityBlock({ 1: [], 2: [] }), "");
         const DASH4 = new RegExp("[" + String.fromCharCode(0x2013, 0x2014) + "]");
         ok("nothing it writes carries a dash or a banned word",

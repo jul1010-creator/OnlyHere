@@ -495,9 +495,55 @@ const ORIGIN_RE = new RegExp([
   // that line have to move together.
   `(?:^|[^${LETTER}])starting point:\\s*(?!not specified)\\S`,
 ].join("|"), "i");
+// ── AND SOME OF THEM ARE NOT ARRIVING AT ALL ──────────────────
+//
+// Oliver, 19 Sep 2026: "Some people might be Danes. They would not begin at the
+// airport."
+//
+// Every branch of ORIGIN_RE above is a shape about ARRIVING IN the country, and
+// the whole app downstream assumes it. The intake form writes "Starting point:
+// not specified, assume Copenhagen Airport" when the field is blank; the chat
+// prompt says that whenever the start is Copenhagen Airport it must weave in a
+// Copenhagen Card or a ticket-app tip; the guide's Getting Around section opens
+// with the Metro from the airport. All of that is written for somebody who has
+// just landed, and it is read by somebody who has lived here their whole life.
+//
+// EXPLICIT WORDS ONLY, and this is the line that matters. "Driving from Aarhus"
+// is a Dane and also a German who parked at the airport, and guessing which
+// would put a stranger in a country with no arrival advice at all. So it is
+// read off a person saying they live here, are from here, or are leaving from
+// home, and off the one chip under the question that says exactly that. Silence
+// is not a Dane.
+const LIVES_HERE = new RegExp([
+  // English, including the way somebody who lives here answers "where are you
+  // starting from": "I live in Aarhus", "we're based in Odense".
+  // ── AND A LOCATIVE AFTER IT, OR IT IS NOT ABOUT LIVING SOMEWHERE ──
+  // "I live for a good museum" filled this on the first draft, and `origin` is
+  // a BLOCKING slot: a sentence about museums would have answered the question
+  // about where the trip starts and stopped it being asked. The word that
+  // follows is what makes it a place.
+  /\b(?:i|we)\s*(?:'m|'re|\s+am|\s+are)?\s*(?:live|living|based|lives)\s+(?:in|here|at|near|just outside|outside|on)\b/.source,
+  /\b(?:i|we)\s*(?:'m|'re|\s+am|\s+are)\s+(?:danish|a dane|danes|local|locals|from denmark|from here)\b/.source,
+  /\b(?:live|living)\s+(?:in denmark|here)\b/.source,
+  /\b(?:from|starting from|leaving from|driving from)\s+home\b/.source,
+  /\bmy own home\b|\bat home in\b/.source,
+  // Danish. "jeg bor i Aarhus", "vi bor her", "hjemmefra", "jeg er dansker".
+  `(?:^|[^${LETTER}])(?:jeg|vi)\\s+bor\\s+(?:i|her|p\\u00e5|paa|ved|lige|t\\u00e6t|taet|uden)(?![${LETTER}])`,
+  `(?:^|[^${LETTER}])(?:bor\\s+i\\s+danmark|bor\\s+her|hjemmefra|hjemme\\s+fra|fra\\s+mit\\s+hjem)(?![${LETTER}])`,
+  `(?:^|[^${LETTER}])(?:jeg|vi)\\s+er\\s+(?:dansker|danskere|danske|lokale?)(?![${LETTER}])`,
+].join("|"), "i");
+
 const readOrigin = (text, intakeStartPoint) => {
-  if (has(intakeStartPoint)) return { value: clean(intakeStartPoint), source: "intake" };
-  return ORIGIN_RE.test(String(text || "")) ? { value: ACKNOWLEDGED_VALUE, source: "said" } : null;
+  // ── THE SAME TEXT EITHER WAY ─────────────────────────
+  // `fromHome` is read off what they TYPED even when the form answered the slot,
+  // because a Dane fills in "Aarhus" on the form and then says "I live here" in
+  // the chat, and the form has no box for it. The form filling the slot must not
+  // stop the conversation being read.
+  const fromHome = LIVES_HERE.test(String(text || ""));
+  if (has(intakeStartPoint)) return { value: clean(intakeStartPoint), source: "intake", fromHome };
+  return ORIGIN_RE.test(String(text || "")) || fromHome
+    ? { value: ACKNOWLEDGED_VALUE, source: "said", fromHome }
+    : null;
 };
 
 // Who is coming. A count, a family word, or the intake field. "2 kids and my
@@ -1556,6 +1602,39 @@ export const readBrief = ({ travellerText = "", travellerTurns = null, intake = 
 // key is either asked forever or never asked at all, and this file has shipped
 // both.
 export const sharperAsk = (key) => `${key}:sharper`;
+
+// ── AND NOBODY EXPLAINS DENMARK TO A DANE ──────────────────
+//
+// Oliver, 19 Sep 2026: "Some people might be Danes. They would not begin at the
+// airport."
+//
+// The arrival advice in this app is not one sentence, it is a habit. The chat
+// prompt says that whenever the start is Copenhagen Airport it must weave in a
+// Copenhagen Card or a ticket-app tip. The intake form writes "assume Copenhagen
+// Airport" over a blank field. The guide's Getting Around section opens with the
+// Metro in from the terminal. Every one of those is right for somebody who has
+// just landed and faintly insulting to somebody who has lived here for forty
+// years, and the difference is one fact nothing downstream was ever told.
+//
+// EMPTY UNLESS THEY SAID SO. `fromHome` is read off explicit words and off the
+// chip under the origin question, never inferred from a Danish town: "driving
+// from Aarhus" is a Dane and also a German who parked at the airport, and
+// guessing wrong leaves a stranger in a country with no arrival advice at all.
+// So an empty string here means the app behaves exactly as it did before, which
+// is the right default for everybody it cannot place.
+export const homeStartBlock = (brief) => {
+  if (!brief?.known?.origin?.fromHome) return "";
+  return `── THEY LIVE HERE ──
+`
+    + `This traveller is starting from home in Denmark. They are not arriving, so there is no airport, no transfer and no first day spent getting into the country.
+`
+    + `DO NOT EXPLAIN DENMARK TO THEM. No Copenhagen Card pitch, no how to buy a ticket, no warning about checking out of the bus, no note that Danish towns are small or that the trains are easy. They have lived with all of it. A sentence teaching a local their own country is the fastest way to lose them, and it is the exact sentence this app has been writing by default.
+`
+    + `WHAT THEY CAME FOR INSTEAD is the thing they have not already seen, which is a higher bar than it is for a visitor: the obvious sights of their own country are not a recommendation. Go further down the list than you otherwise would, and say plainly when something is well known.
+`
+    + `AND THE TRAVEL IS DOMESTIC. Distances are from where they live rather than from Kastrup, they may well drive, and a day that starts at home starts whenever they want it to.`;
+};
+
 
 // ── READY, AND THE DATE HAS TO BE A DATE ────────────────────────────
 //

@@ -529,7 +529,13 @@ export const stayAnswer = (turn) => {
 // children is not zero children, and a party of "2 adults" with kids: null is a
 // different fact from a party of "2 adults" with kids: 0.
 const KID_WORD = "kids?|children|child|toddlers?|bab(?:y|ies)|teens?|teenagers?|grandkids?|grandchildren|b(?:ø|o)rn|kinder|barn";
-const ADULT_WORD = "adults?|grown[- ]?ups?|voksne|erwachsene|volwassenen|vuxna";
+// ── AND EVERY ONE OF THESE WAS PLURAL ───────────────────
+// Found 19 Sep 2026 by the chip that posts "1 voksen". English had the "s?"
+// and not one of the other four did, so "1 voksen og 2 børn" read two children
+// and no adult in Danish while "1 adult and 2 kids" read correctly. A party of
+// one is exactly the case a singular is written for, and it is the case this
+// list could not see in any language but its own.
+const ADULT_WORD = "adults?|grown[- ]?ups?|voksen|voksne|erwachsener?|erwachsenen|volwassene|volwassenen|vuxen|vuxna";
 const N = NUMBER_TOKEN;
 const numOf = (raw) => {
   const s = lower(raw);
