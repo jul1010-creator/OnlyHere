@@ -166,6 +166,7 @@ import { listingMatchesSubject, describeListingRefusal } from "./utils/placeChoi
 import { hashForTab, tabForHash, ownsTheAddress } from "./utils/tabUrl";
 import { venueVerdict, venueVia, describeVenue, VENUE_MAX_KM } from "./utils/venueMatch";
 import { cityFromLocation } from "./utils/guideEnrichment";
+import { unplaceableStops, mapGapNote } from "./utils/mapGaps";
 import { readBrief, briefBlock, nextAsks, asksThisTurn, sharperAsk, buildBlockedNote, enoughToRecommend, unsureWhatTheyWant, namedStayIn, bookedDayNumbers } from "./utils/tripBrief";
 import { askedBeforeTurns, lastAskedOnScreen } from "./utils/directAnswer";
 import { briefConflicts } from "./utils/briefConflicts";
@@ -283,7 +284,7 @@ import { newStreamState, readStreamEvent, visibleText, streamContent, streamCont
 import { heroNeedsReplacing, heroPatch, heroStatusLine, isAbsolutePhoto } from "./utils/heroPhoto";
 import { languageBlock, writeInLanguage, readerLanguage, keepLanguageOf } from "./utils/readerLanguage";
 import { guideLanguage, languageBarNote, languageOfProse } from "./utils/travellerLanguage";
-import { describeGuide, guideLanguageMix, stopKind, proseAt, writeProseAt } from "./utils/guideReading";
+import { describeGuide, guideLanguageMix, stopKind, proseAt, writeProseAt, guideClaims, guideClaimNote } from "./utils/guideReading";
 import { freeButPriced, moneyProblems } from "./utils/moneyClaims";
 import { tripChange, MATTERS, BETTER } from "./utils/tripChanges";
 import { echoInDraft, describeEcho, ECHO_RUN } from "./utils/echoCheck";
@@ -13712,7 +13713,7 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
           // the guide writer's. It produces the "Where to stay" sentence and
           // every leg description, which are two of the most-read lines on the
           // page, so leaving it out means a Danish guide with English legs.
-          `${enrichPrompt}${(bookedNights || []).includes(idx + 1) ? `\n\nTHIS NIGHT IS ALREADY BOOKED. They are sleeping at ${bookedName || 'a place they have already booked'} on day ${idx + 1} and it is not in question. Return 'accommodation' as one sentence about getting back to it from this day's last stop, and return 'stayArea' and 'recommendedStay' as EMPTY STRINGS. Do not name anywhere else, do not compare it to anywhere else, and do not suggest they move.` : ''}\nEVERY PRICE YOU WRITE IS IN DKK. Never dollars, euros or pounds, and never a conversion in brackets: a traveller in Denmark is charged kroner and a converted figure matches nothing they will see. A price you can only give by converting is a price you do not have, so describe the place without one.${langBlock}\n\nRespond with ONLY the raw JSON object, no markdown code fences.\n\n${context || "No live search context available — use only safe general knowledge and 'Check Rejseplanen' fallbacks."}`,
+          `${enrichPrompt}${idx + 1 >= days.length ? `\n\nTHIS DAY HAS NO NIGHT AFTER IT. It is the last day of the trip and they go home at the end of it, so there is no bed to recommend: return 'accommodation' as one sentence about the end of the day and the journey out, and return 'stayArea' and 'recommendedStay' as EMPTY STRINGS. A three day trip that offered a hotel on day 3 is the guide booking a room for a night the traveller is not in the country.` : ''}${(bookedNights || []).includes(idx + 1) ? `\n\nTHIS NIGHT IS ALREADY BOOKED. They are sleeping at ${bookedName || 'a place they have already booked'} on day ${idx + 1} and it is not in question. Return 'accommodation' as one sentence about getting back to it from this day's last stop, and return 'stayArea' and 'recommendedStay' as EMPTY STRINGS. Do not name anywhere else, do not compare it to anywhere else, and do not suggest they move.` : ''}\nEVERY PRICE YOU WRITE IS IN DKK. Never dollars, euros or pounds, and never a conversion in brackets: a traveller in Denmark is charged kroner and a converted figure matches nothing they will see. A price you can only give by converting is a price you do not have, so describe the place without one.${langBlock}\n\nRespond with ONLY the raw JSON object, no markdown code fences.\n\n${context || "No live search context available — use only safe general knowledge and 'Check Rejseplanen' fallbacks."}`,
           // TOKEN BUMP 350 → 900 (Oliver: "why does the accommodation/booking
           // affiliation keep getting removed"): 350 max_tokens was genuinely too
           // tight for this response — a 5-stop day needs 4 leg objects PLUS the
@@ -15154,6 +15155,14 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
     if (geocodedCoords[name] && coordFitsTown(geocodedCoords[name], town).ok) return { ...geocodedCoords[name], precise: true };
     const key = townKeyFor(town) || townKeyFor(name);
     if (key) return { lat: TOWN_COORDS[key][0], lon: TOWN_COORDS[key][1], precise: false };
+    // A town Gemlyx holds no page for, geocoded by this build under its own
+    // name. Same tier as the curated table above it and never above it: a town
+    // centre standing in for a venue, so `precise` stays false and every guard
+    // that exists for the fallback still applies. See geocodeStopsForGuide.
+    const geoTown = extraGeo && String(town || "").trim() ? extraGeo[String(town).trim()] : null;
+    if (geoTown && Number.isFinite(geoTown.lat) && Number.isFinite(geoTown.lon)) {
+      return { lat: geoTown.lat, lon: geoTown.lon, precise: false };
+    }
     return null;
   };
   const resolveStopCoords = (name, extraGeo = null, town = "") => resolveStopCoordsPrecise(name, extraGeo, town);
@@ -15264,6 +15273,41 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
         }
       } catch { /* leave this one unresolved — map/leg for it just won't show, no crash */ }
       await new Promise(r => setTimeout(r, 250)); // be a polite, low-volume client to a free public service
+    }
+    // ── AND THE TOWN ITSELF, WHEN GEMLYX HOLDS NO PAGE FOR IT ────
+    //
+    // Oliver's own guide, tbfeb7jemku, read on 19 Sep 2026: "Haderslev
+    // Cathedral" and "Haderslev Old Town" drew no pin at all. Neither name is
+    // something a geocoder finds. One is the English for Haderslev Domkirke and
+    // the other is a description rather than an address, so the venue pass
+    // above came back empty for both, and the fallback that exists for exactly
+    // this case had nothing to fall back ON: townKeyFor("Haderslev") is null,
+    // because Haderslev is a town Gemlyx has no page for.
+    //
+    // So the TOWN is geocoded, once, and stands in for the venue the same way a
+    // TOWN_COORDS point does: never precise, and only ever reached after the
+    // curated table has been asked. One request per unknown town per build, and
+    // only for a town that still has a stop nothing could place.
+    //
+    // NOT THE KOMMUNE CENTROID, which this app already holds for all 98 and
+    // which is the wrong answer here: the centre of Haderslev kommune is about
+    // twelve kilometres west of Haderslev, so it would put a pin in a field and
+    // label it with the town's name.
+    const openTowns = [...new Set(
+      days.flatMap(d => (d.stops || [])
+        .filter(s => s?.name && !found[s.name] && !hasPreciseCoords(s.name, townByName[s.name]))
+        .map(s => String(s.town || "").trim()))
+    )].filter(t => t && !townKeyFor(t) && !found[t]);
+    for (const town of openTowns) {
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(`${town}, Denmark`)}&format=json&limit=1&countrycodes=dk`);
+        const data = await res.json();
+        const hit = data?.[0] ? { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) } : null;
+        // No coordFitsTown, because this IS the town and there is nothing above
+        // it to check against. A pair that will not parse is refused instead.
+        if (hit && Number.isFinite(hit.lat) && Number.isFinite(hit.lon)) found[town] = hit;
+      } catch { /* leave it unplaced: the stop keeps no pin, which is honest */ }
+      await new Promise(r => setTimeout(r, 250));
     }
     if (Object.keys(found).length > 0) setGeocodedCoords(prev => ({ ...prev, ...found }));
     return found; // returned directly too — setGeocodedCoords won't be visible in this same closure until
@@ -16728,6 +16772,18 @@ If the conversation only covers a single day or a few stops with no explicit day
 
       buildStage("Verifying exact locations and routes", 95);
       const freshGeo = await geocodeStopsForGuide(parsed.days);
+      // ── AND WHAT THE MAP STILL CANNOT PLACE ─────────────────────
+      //
+      // Asked with the resolver the page is about to draw with, so the report
+      // and the pin cannot disagree. A stop with no coordinate draws nothing
+      // and quietly takes every leg that touches it with it, which is what two
+      // Haderslev stops did on guide tbfeb7jemku without a word anywhere.
+      // Reported rather than repaired: the fix is a page for that town.
+      // See utils/mapGaps.js.
+      {
+        const unplaced = unplaceableStops(parsed.days, (name, town) => !!resolveStopCoords(name, freshGeo, town));
+        if (unplaced.length) planProblems = [...planProblems, mapGapNote(unplaced)];
+      }
       const gid = Date.now();
       // Oliver's map-vs-plain choice (see modeOverride above): the expensive
       // Google Directions calls only run at all if "map" was actually picked —
@@ -17286,8 +17342,21 @@ If the conversation only covers a single day or a few stops with no explicit day
       }
       const runsLate = lateDays(parsed.days, exactFound);
       if (runsLate.length) planProblems = [...planProblems, lateDayNote(runsLate)];
+      // ── AND THE CLAIMS THE FINISHED PROSE MAKES ─────────────────
+      //
+      // Last, because it reads the text as it will ship, after every rewrite.
+      // A published entry has been read for an unbacked superlative since
+      // August and a guide, which is the thing a traveller opens, was read for
+      // none of it: "one of the most decorated interiors in Denmark for its
+      // size" and "the crowd here is local rather than tourist-facing" both
+      // shipped in guide tbfeb7jemku. The same reader the entry audit uses.
+      // See guideClaims in utils/guideReading.js.
+      {
+        const claims = guideClaims({ ...parsed, essentials: finalEssentials });
+        if (claims.length) planProblems = [...planProblems, guideClaimNote(claims)];
+      }
 
-      setGuideModal({ _gid: gid, _fx: fxLine, _constraints: guideConstraints, _mode: travelMode, _onlyWalking: onlyWalking, _lightMode: mode === "plain", _travelers: travellersSaid || String(partyKnown?.value || ""), _party: partyKnown && (partyKnown.adults != null || partyKnown.kids != null || partyKnown.total != null) ? { adults: partyKnown.adults ?? null, kids: partyKnown.kids ?? null, total: partyKnown.total ?? null, hasKids: !!partyKnown.hasKids } : null, _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: dayKey(arrivalDate), _arrivalPoint: arrivalPoint(saidByTravellerForGuide, { townPoint: townPointFor }), _geo: freshGeo, _weatherFetchedAt: new Date().toISOString(), _exactDurations: exactFound, _noRouteFound: routeFailed, _testProfile: testProfile, _testPlan: testProfile ? plannerSkeleton : null, _planProblems: planProblems.length ? planProblems : null, title: parsed.title || "Your Custom Route", essentials: finalEssentials, days: parsed.days });
+      setGuideModal({ _gid: gid, _fx: fxLine, _constraints: guideConstraints, _mode: travelMode, _onlyWalking: onlyWalking, _lightMode: mode === "plain", _travelers: travellersSaid || String(partyKnown?.value || ""), _party: partyKnown && (partyKnown.adults != null || partyKnown.kids != null || partyKnown.total != null) ? { adults: partyKnown.adults ?? null, kids: partyKnown.kids ?? null, total: partyKnown.total ?? null, hasKids: !!partyKnown.hasKids } : null, _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: dayKey(arrivalDate), _arrivalPoint: arrivalPoint(saidByTravellerForGuide, { townPoint: townPointFor }), _geo: freshGeo, _weatherFetchedAt: new Date().toISOString(), _exactDurations: exactFound, _noRouteFound: routeFailed, _testProfile: testProfile, _testPlan: testProfile ? plannerSkeleton : null, _planProblems: planProblems.length ? planProblems : null, _stay: { booked: stayKnown.stay?.value === "booked" || !!bookedName, nights: bookedNights, name: bookedName || "" }, title: parsed.title || "Your Custom Route", essentials: finalEssentials, days: parsed.days });
     } catch (err) {
       // A build that failed halfway still spent everything it spent up to that
       // point, and a meter that only counts successes reports a cost per guide

@@ -233,6 +233,12 @@ writeFileSync(entry, `
   export { seasonOf, summerLeaning, monthNote, seasonWarning, seasonWarnings, seasonBlock, SUMMER_MONTHS, SHOULDER_MONTHS } from ${JSON.stringify(join(root, "src/utils/seasonFit.js"))};
   export { readClock, showClock, readStay, legMinutes, walkDay, fixDay, fixClock, clockNote, lateDays, lateDayNote, LATE_DAY_HOUR } from ${JSON.stringify(join(root, "src/utils/dayClock.js"))};
   export { samePlace, runsOn, communityOnDay, communityBlock, MOST_IN_A_DAY } from ${JSON.stringify(join(root, "src/utils/communityEvents.js"))};
+  export { nightsIn, bedState, needsABed, openNightsLine, bedStateOf } from ${JSON.stringify(join(root, "src/utils/nightsOpen.js"))};
+  export { driedUpDays, weatherNoteNow } from ${JSON.stringify(join(root, "src/utils/weather.js"))};
+  export { unplaceableStops, mapGapNote } from ${JSON.stringify(join(root, "src/utils/mapGaps.js"))};
+  export { unbackedClaims, SUPERLATIVE, CROWD_CLAIM } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
+  export { guideClaims, guideClaimNote } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
+  export { resolveStopCoords } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { festivalScale } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
   export { matchedPlaces, previewPools, mentionsPlace, parentTownOf, isDeparturePlace, isRejectedPlace, onlyAskedAbout, isPassedThrough, regionsNamed, placeIsInRegion, REGION_TOWN_CAP, regionPickLimit } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
   export { wantedCategories, groupKeyOf, foodIsPlanned } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
@@ -3873,9 +3879,14 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // Only things the guide can stand up. A list that pads itself out is one a
   // traveler learns to skip.
   const lookup = (n) => n === "Roskilde Festival" ? { _src: "event", date: "2026-06-27", ticketStatus: "limited" } : null;
-  const withEvent = { days: [{ day: 1, stops: [{ name: "Roskilde Festival" }, { name: "Some field" }], glance: { stayArea: "central Roskilde" } }] };
+  // TWO DAYS, because a bed is a NIGHT and the last day of a trip has none.
+  // This fixture was one day long and scored a bed on it until 19 Sep 2026.
+  // See utils/nightsOpen.js.
+  const withEvent = { days: [{ day: 1, stops: [{ name: "Roskilde Festival" }, { name: "Some field" }], glance: { stayArea: "central Roskilde" } }, { day: 2, stops: [], glance: { legs: [] } }] };
   const acts = M.bookingActions(withEvent, lookup);
   is("a dated event and a bed, nothing invented", acts.length, 2);
+  is("and a day trip is told to book no bed at all",
+     M.bookingActions({ days: [withEvent.days[0]] }, lookup).filter(a => a.what === "Somewhere to sleep"), []);
   // Still says limited, because the status is real information. What it no
   // longer does is turn an unchecked one into an instruction. See the
   // provenance block further down.
@@ -11457,6 +11468,120 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     is("and so is one answering the length", read([FORM, "8"], [[], ["days"]]).known.days?.value, 8);
     // BUT NOT A HEADCOUNT. Under "who is coming?" the same digit is people.
     is("a bare number under the party question is not a length", read([FORM, "8"], [[], ["party"]]).known.days?.value, 7);
+
+  // ── "MY WIFE AND 3 KIDS", 19 SEP 2026 ───────────────────────────
+  //
+  // The last of the party-reading failures, and the narrowest. COUPLE only
+  // fires when the WRITER is signalled somewhere in the sentence ("me and my
+  // wife", "with my wife", "my wife and I"), and a bare possessive partner
+  // signals nothing about who is typing. So "my wife and 3 kids" came back
+  // adults: null, kids: 3, the line read "3 children", and the brief told the
+  // model the party "reads as children travelling on their own" about a
+  // sentence that names an adult in it.
+  {
+    const { partyAnswer, partyLine, readBrief, briefBlock } = M;
+    // ── NAMED IS NOT COUNTED, AND THE LINE SAYS WHICH ───────────────
+    const wife = partyAnswer("my wife and 3 kids");
+    is("an adult is named and none is counted", [wife.adults, wife.kids, wife.adultsNamed], [null, 3, true]);
+    is("and the line the guide builder reads says so", partyLine(wife), "at least one adult and 3 children");
+    // IT DOES NOT GUESS TWO. "My wife and 3 kids" is also how somebody
+    // describes a trip they are not on, and a wrong headcount reaches the cost
+    // estimate, which is per head, and the number of beds.
+    is("no headcount is invented", [wife.adults, wife.total], [null, null]);
+
+    // ── AND THE COMMA THAT WAS FIXED ON ONE SIDE ONLY ───────────────
+    // "me, my boyfriend, and our 7 kids" was fixed on 13 September. Its mirror
+    // was not, and needed "and" directly after the partner.
+    const mirror = partyAnswer("It's my wife, me and 3 kids");
+    is("a person written in after their partner is counted", [mirror.adults, mirror.kids, mirror.total], [2, 3, 5]);
+    is("and reads as a party of five", partyLine(mirror), "2 adults and 3 children");
+    // The shapes that already worked keep working.
+    is("the shapes that already counted still count",
+       ["me, my wife and 3 kids", "I'm with my wife and 3 kids", "my wife and I, plus 3 kids"]
+         .map(s => partyAnswer(s)?.adults), [2, 2, 2]);
+
+    // ── AND THE ONE WHERE NOBODY IS NAMED STAYS AS IT WAS ───────────
+    // His other traveller, who wrote "5 kids around 5-10 years old". Nothing in
+    // that sentence says an adult is coming, so nothing may be inferred.
+    const alone = partyAnswer("5 kids around 5-10 years old");
+    is("children with nobody named are still children with nobody named",
+       [alone.adults, alone.kids, alone.adultsNamed], [null, 5, false]);
+    is("and the line does not invent an adult either", partyLine(alone), "5 children (aged 5 to 10)");
+    // An adult WORD counts as naming one, the same as a partner does.
+    ok("an adult word names an adult", partyAnswer("adults and kids, no numbers yet")?.adultsNamed);
+    // And a possessive partner outside a party sentence is not a party answer
+    // at all: partyAnswer returns null when nothing numeric and no group word
+    // is present, which is the guard that keeps this narrow.
+    is("a sentence about nothing is not a party", partyAnswer("the weather is nice"), null);
+
+    // ── THE TWO STATES GET TWO SENTENCES AND ONE QUESTION ───────────
+    const FORM2 = "Arriving: 1 July 2027 at 12:00 | Departing: 5 July 2027 at 12:00 | Exact trip length: 4 days | Starting point: Copenhagen";
+    const brief = (t) => readBrief({ travellerText: [FORM2, t].join("\n"), travellerTurns: [FORM2, t],
+                                     answering: [[], ["party"]], asked: ["party"], today: new Date("2027-06-01"),
+                                     intake: { arrival: "2027-07-01T12:00", departure: "2027-07-05T12:00" } });
+    const named = brief("my wife and 3 kids");
+    const nobody = brief("5 kids around 5-10 years old");
+    ok("both still earn the one question about the headcount",
+       named.vague.includes("party") && nobody.vague.includes("party"));
+    ok("only one of them is children on their own", nobody.childrenAlone && !named.childrenAlone);
+    ok("and the model is not told he failed to mention his wife",
+       /named an adult and given no headcount/.test(briefBlock(named))
+       && !/travelling on their own/.test(briefBlock(named)));
+    ok("while the party with nobody in it is still called what it is",
+       /travelling on their own/.test(briefBlock(nobody)));
+    const DASH8 = new RegExp("[" + String.fromCharCode(0x2013, 0x2014) + "]");
+    is("neither sentence carries a dash or a banned word",
+       [briefBlock(named), briefBlock(nobody)]
+         .map(b => (b.split("\n").find(l => /adults are coming/.test(l)) || ""))
+         .filter(l => DASH8.test(l) || /\b(?:actually|truly|genuinely|genuine|simply|really|quite)\b/i.test(l)), []);
+  }
+
+  // ── "STARTING POINT: COPENHAGEN", AND THE SLOT STAYED EMPTY ──────
+  //
+  // Oliver's export of 19 Sep 2026. The intake form sends a hidden first
+  // message that App.jsx builds itself, and its starting-point field is a
+  // LABEL with a colon after it. Every branch of the origin reader was a shape
+  // a person types, so the brief reported `origin` missing on a trip whose
+  // starting point was the first thing the traveller filled in, and the guide
+  // told him "Built assuming a Copenhagen/Kastrup start, say if that's wrong"
+  // about a fact he had stated.
+  //
+  // AND IT WAS EXACTLY BACKWARDS. Left blank, the same builder writes
+  // "Starting point: not specified, assume Copenhagen Airport", and the airport
+  // branch matched the word "Airport". Saying nothing answered the question and
+  // answering it did not.
+  {
+    const { readBrief, briefReady } = M;
+    const one = (t, intake = {}) => readBrief({ travellerText: t, travellerTurns: [t], intake, today: new Date("2026-09-19") });
+    ok("the form's own line fills the slot it was written for",
+       !!one("Exact trip length: 3 days | Starting point: Copenhagen").known.origin);
+    ok("and the blank it writes instead still does",
+       !!one("Exact trip length: 3 days | Starting point: not specified, assume Copenhagen Airport").known.origin);
+    // A label with nothing after it is not an answer, or the slot fills itself
+    // off the form's own punctuation.
+    ok("a label with nothing behind it answers nothing",
+       !one("Exact trip length: 3 days | Starting point: ").known.origin);
+    ok("and the words in a sentence are not the label", !one("I want a starting point that is easy").known.origin);
+    // A bare place name is still not an origin. That is the rule the reader was
+    // built around and this branch does not widen it.
+    ok("a bare place name is still not an origin", !one("Copenhagen").known.origin);
+
+    // ── HIS WHOLE CHAT, REPLAYED ────────────────────────────────────
+    // Five turns, exactly as exported. The report said stillMissing: ["origin"]
+    // and readyClaimsWhileIncomplete: 1, on a conversation that had answered
+    // every question it was asked.
+    const turns = [
+      "Arriving: 19 September 2026 at 12:00 | Departing: 22 September 2026 at 12:00 | Exact trip length: 3 days | Starting point: Copenhagen",
+      "Just me", "I'm into history and design", "I'm getting around with public transport", "Nope, havn't booked anything",
+    ];
+    const his = readBrief({ travellerText: turns.join("\n"), travellerTurns: turns, intake: {},
+                            today: new Date("2026-09-19"), asked: ["party", "interests", "transport", "stay"],
+                            answering: [[], ["party"], ["interests"], ["transport"], ["stay"]] });
+    is("nothing is missing from a chat that answered everything", his.missing, []);
+    ok("so the ready the reply claimed is a ready the brief agrees with", briefReady(his));
+    // The starting point he typed, not an assumption about it.
+    ok("and origin came from what he said", his.known.origin?.source === "said");
+  }
     // AND THE OTHER WAY ROUND. An evening flight keeps the 30th (eight dates);
     // somebody counting nights says seven, and seven is what they get.
     const nights = readBrief({ travellerText: "", travellerTurns: [FORM, "we count it as 7 days"], today, intake: { arrival, departure: "2026-09-30T22:00" } });
@@ -54097,7 +54222,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   {
     const bare = {
       _arrivalDate: "2027-02-12", _mode: "public transport",
-      days: [{ day: 1, stops: [{ name: "Nyhavn" }], glance: { stayArea: "Indre By", legs: [] } }],
+      // Two days, so there is a night in it. A bed is a night. See nightsOpen.
+      days: [{ day: 1, stops: [{ name: "Nyhavn" }], glance: { stayArea: "Indre By", legs: [] } }, { day: 2, stops: [], glance: { legs: [] } }],
     };
     const r = await draw({ guide: bare, rowFor: () => ({ _src: "town" }) });
     ok("the block still lists what has to be arranged", r.says("Find a room"));
@@ -55834,6 +55960,324 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
              /planProblems = \[\.\.\.planProblems, clockNote\(clockFix\.moved\)\]/.test(appD));
           ok("and reports a day that ends late", /planProblems = \[\.\.\.planProblems, lateDayNote\(runsLate\)\]/.test(appD));
         }
+      }
+
+      // ── ONE VOICE FOR THE BEDS, 19 SEP 2026 ───────────────────────
+      //
+      // The same guide, tbfeb7jemku, three days long. Two blocks on one screen:
+      //
+      //   TO ARRANGE     Somewhere to sleep
+      //                  3 nights in the plan with no bed booked yet.
+      //   KEEP IN MIND   This plan does not know which of the three nights your
+      //                  booking covers.
+      //
+      // Each half is doing what it was told. costLedger counted days carrying a
+      // where-to-stay sentence; the writer was told, correctly, that a booking
+      // existed and nobody had asked for the dates. Two readers of one slot,
+      // contradicting each other in front of the traveller.
+      //
+      // And on the same guide, a hotel in Esbjerg on day 3 of three. There is
+      // no night 3: every reader counted DAYS, and a bed is a NIGHT.
+      {
+        const { nightsIn, bedState, needsABed, openNightsLine, bedStateOf } = M;
+        // ── THE NIGHT AFTER THEY DRIVE HOME DOES NOT EXIST ──────────
+        is("a three day trip holds two nights", nightsIn(3), [1, 2]);
+        is("a day trip holds none", nightsIn(1), []);
+        is("and nor does nothing at all", [nightsIn(0), nightsIn(null), nightsIn("x")], [[], [], []]);
+
+        // ── NO BOOKING: EVERY NIGHT IS OPEN, AND THE COUNT IS HONEST ─
+        const none = bedState({ dayCount: 3 });
+        is("with nothing booked, both nights are open", none.open, [1, 2]);
+        ok("and nothing is uncertain", !none.unknown);
+        is("which is what the row says", openNightsLine(none), "2 nights in the plan with no bed booked yet.");
+        ok("with the area the plan chose", /The plan puts you in Esbjerg\./.test(openNightsLine(none, "Esbjerg")));
+        is("one night is one night", openNightsLine(bedState({ dayCount: 2 })), "1 night in the plan with no bed booked yet.");
+        // A trip with no night in it has nothing to arrange, and a labelled row
+        // saying zero is the padding the costs list was cleaned of.
+        is("a day trip gets no row at all", openNightsLine(bedState({ dayCount: 1 })), "");
+
+        // ── A DATED BOOKING TAKES ITS OWN NIGHTS OUT ────────────────
+        const dated = bedState({ dayCount: 4, booked: [1, 2], hasBooking: true });
+        is("the nights they have paid for are not open", dated.open, [3]);
+        is("and the row counts what is left", openNightsLine(dated), "1 night in the plan with no bed booked yet.");
+        ok("a booked night needs no card", !needsABed(1, dated));
+        ok("an open one does", needsABed(3, dated));
+        // Day 4 is the last day. Whatever the writer put on it, there is no
+        // night after it, which is the Esbjerg hotel.
+        ok("and the last day of the trip never does", !needsABed(4, dated));
+        // A booking naming a night outside the plan is not a night in the plan.
+        is("a night past the end of the trip is ignored",
+           bedState({ dayCount: 3, booked: [1, 3, 9], hasBooking: true }).booked, [1]);
+
+        // ── AND THE ONE THE COST ROW WAS GETTING WRONG ──────────────
+        // A booking exists and nobody knows which nights. Nothing can be
+        // counted, and a number printed here is a guess dressed as a count.
+        const vague = bedState({ dayCount: 4, booked: [], hasBooking: true });
+        ok("an undated booking leaves the count unknown", vague.unknown);
+        is("so no night is claimed to be open", vague.open, []);
+        ok("and the row never states a number",
+           !/\d/.test(openNightsLine(vague)) && /does not know which nights/.test(openNightsLine(vague)));
+        // The cards stay, because the keep-in-mind line the writer is told to
+        // put on the page points AT them. Hiding them would leave that sentence
+        // describing something the reader cannot see.
+        is("every night can still need a bed", [1, 2, 3].filter(n => needsABed(n, vague)), [1, 2, 3]);
+        ok("and the last day still does not", !needsABed(4, vague));
+        // An undated booking on a trip with no nights is not an uncertainty.
+        ok("a day trip with a booking is not uncertain", !bedState({ dayCount: 1, hasBooking: true }).unknown);
+
+        // ── READ OFF THE GUIDE, BECAUSE THE PAGE HAS NO CHAT ────────
+        const guide = { days: [{}, {}, {}], _stay: { booked: true, nights: [1], name: "25hours Hotel Paper Island" } };
+        is("the guide carries the booking the conversation found", bedStateOf(guide).open, [2]);
+        // Every guide built before _stay existed, which is all of them.
+        is("and a guide without one simply has no booking", bedStateOf({ days: [{}, {}, {}] }).open, [1, 2]);
+        is("nothing at all is a trip of no days", bedStateOf(null).nights, []);
+
+        // ── AND THE THREE READERS ALL ASK THIS ONE ──────────────────
+        {
+          const ledger = readFileSync(join(root, "src/utils/costLedger.js"), "utf8");
+          ok("the cost row counts nights rather than days",
+             /const beds = bedStateOf\(guide\);/.test(ledger) && /forWhat: bedLine,/.test(ledger));
+          ok("and no longer writes its own sentence about them",
+             !/night\$\{openNights === 1/.test(ledger));
+          const reading = readFileSync(join(root, "src/utils/guideReading.js"), "utf8");
+          ok("the book-ahead list asks the same reader",
+             /beds\.nights\.some\(n => needsABed\(n, beds\)\)/.test(reading));
+          const page = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+          ok("and the day card will not offer a room for a night that is not there",
+             /needsABed\(day\.day \|\| dayIdx \+ 1, bedStateOf\(guide\)\)/.test(page));
+          const appB = readFileSync(join(root, "src/App.jsx"), "utf8");
+          // Upstream of all three: the day that has no night is told so, rather
+          // than writing a stay area nobody downstream is allowed to draw.
+          ok("the writer is told the last day has no night after it",
+             /THIS DAY HAS NO NIGHT AFTER IT/.test(appB) && /idx \+ 1 >= days\.length/.test(appB));
+          ok("and the finished guide carries what the conversation knew",
+             /_stay: \{ booked: stayKnown\.stay\?\.value === "booked" \|\| !!bookedName, nights: bookedNights/.test(appB));
+        }
+        const DASH5 = new RegExp("[" + String.fromCharCode(0x2013, 0x2014) + "]");
+        is("no line it writes carries a dash or a banned word",
+           [openNightsLine(none), openNightsLine(none, "Esbjerg"), openNightsLine(vague), openNightsLine(dated)]
+             .filter(l => DASH5.test(l) || /\b(?:actually|truly|genuinely|genuine|simply|really|quite)\b/i.test(l)), []);
+      }
+
+      // ── AND ONE VOICE FOR THE WEATHER, THE SAME DAY ───────────────
+      //
+      // The same guide again, two sentences, both on screen:
+      //
+      //   "Real forecast currently shows rain likely on Day 3, worth packing a
+      //    light rain layer."
+      //   "The forecast moved since you saved this. Day 3 has dried up."
+      //
+      // The first is saved into the guide at build time. The second is computed
+      // when the page opens. Neither knew the other existed. A ChatGPT critique
+      // of this guide praised the second line and did not notice the first.
+      {
+        const { driedUpDays, weatherNoteNow } = M;
+        const ONE = "Real forecast currently shows rain likely on Day 3, worth packing a light rain layer. Bring a windproof layer for the coast.";
+        is("the live changes say which day dried out",
+           driedUpDays(["Day 3 has dried up", "Day 1 now looks wet", "Day 2 is now 14°, was 9°"]), [3]);
+        is("and nothing else counts as one", driedUpDays([]), []);
+        // The only day it named has dried out, so the sentence is about nothing
+        // and goes. The rest of the note is about wind and is not touched.
+        const fixed = weatherNoteNow(ONE, ["Day 3 has dried up"]);
+        ok("a claim about a day that dried out comes out", !/rain likely/.test(fixed));
+        ok("and the warnings beside it stay", /windproof layer for the coast/.test(fixed));
+        ok("with no gap where it was", !/ {2}/.test(fixed) && !/^\s/.test(fixed));
+
+        // ── AND THE SHAPE THAT CAUGHT THE FIRST TWO ATTEMPTS OUT ────
+        // "Days 1, 2 and 3" has commas inside the day list, so a capture that
+        // stops at the first comma reads one day and leaves the other two
+        // claimed. The tail that ends the list is fixed: ", worth packing".
+        const THREE = "Real forecast currently shows rain likely on Days 1, 2 and 3, worth packing a light rain layer.";
+        is("three days named, one dried out, two left",
+           weatherNoteNow(THREE, ["Day 2 has dried up"]),
+           "Real forecast currently shows rain likely on Days 1 and 3, worth packing a light rain layer.");
+        is("and two left of three reads as a pair, not a list of one",
+           weatherNoteNow(THREE, ["Day 1 has dried up", "Day 2 has dried up"]),
+           "Real forecast currently shows rain likely on Day 3, worth packing a light rain layer.");
+        is("every day it named, so the sentence goes", weatherNoteNow(THREE, ["Day 1 has dried up", "Day 2 has dried up", "Day 3 has dried up"]), "");
+
+        // ── AND IT CHANGES NOTHING IT WAS NOT ASKED TO ──────────────
+        is("a forecast that moved the other way is left alone", weatherNoteNow(ONE, ["Day 1 now looks wet"]), ONE);
+        is("so is a note with nothing to correct", weatherNoteNow(ONE, []), ONE);
+        is("and a note naming a different day", weatherNoteNow(ONE, ["Day 2 has dried up"]), ONE);
+        is("nothing saved is nothing shown", [weatherNoteNow("", ["Day 3 has dried up"]), weatherNoteNow(null, [])], ["", ""]);
+        // A note that says something else entirely is somebody else's sentence.
+        const OTHER = "Pack for wind. The coast is exposed in every month of the year.";
+        is("a note with no rain claim in it is untouched", weatherNoteNow(OTHER, ["Day 3 has dried up"]), OTHER);
+
+        // ── AND THE PAGE ASKS IT RATHER THAN DRAWING THE SAVED LINE ─
+        {
+          const pageW = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+          ok("the essentials row reads the saved note against the live change",
+             /weatherNoteNow\(guide\.essentials\.weatherNote, weatherMoved\)/.test(pageW));
+        }
+      }
+
+      // ── A STOP THE MAP CANNOT PLACE, 19 SEP 2026 ──────────────────
+      //
+      // The same guide, tbfeb7jemku. "Haderslev Cathedral" and "Haderslev Old
+      // Town" drew no pin at all, and nothing anywhere said so. Neither name is
+      // something a geocoder finds, and townKeyFor("Haderslev") is null because
+      // Gemlyx holds no page for the town, so the fallback that exists for an
+      // unplaceable venue had no town to fall back on.
+      {
+        const { unplaceableStops, mapGapNote, resolveStopCoords, townKeyFor } = M;
+        const HIS_DAY = [{
+          day: 1,
+          stops: [
+            { name: "Haderslev Cathedral", town: "Haderslev" },
+            { name: "Haderslev Old Town", town: "Haderslev" },
+            { name: "Ribe Cathedral", town: "Ribe" },
+          ],
+        }];
+        // The gap that made it possible, stated rather than assumed: this is
+        // the reason the two stops had nothing to fall back on.
+        is("Gemlyx holds no town point for Haderslev", townKeyFor("Haderslev"), null);
+
+        // ── THE TOWN, GEOCODED ONCE, STANDS IN FOR THE VENUE ────────
+        // `geo` carries venue points under stop names and, for a town the
+        // curated table does not hold, that town's point under its own name.
+        const HADERSLEV = { lat: 55.2497, lon: 9.4886 };
+        const placed = resolveStopCoords("Haderslev Cathedral", { Haderslev: HADERSLEV }, "Haderslev");
+        is("a stop in a town Gemlyx has no page for still lands in the town", placed, HADERSLEV);
+        is("and with nothing geocoded it stays unplaced",
+           resolveStopCoords("Haderslev Cathedral", {}, "Haderslev"), null);
+        // BELOW the curated table, never above it: TOWN_COORDS is checked and a
+        // top geocoder hit is not.
+        {
+          const wrong = { Ribe: { lat: 55.0, lon: 12.0 } };
+          const curated = resolveStopCoords("Ribe Cathedral", wrong, "Ribe");
+          ok("a town the app does hold keeps its own point", curated && Math.abs(curated.lon - 12.0) > 1);
+        }
+        // A venue point still wins over its town's, or the pin is the middle of
+        // the town on every stop in it.
+        {
+          const venue = { "Haderslev Cathedral": { lat: 55.2504, lon: 9.4894 }, Haderslev: HADERSLEV };
+          is("a geocoded venue beats the town standing in for it",
+             resolveStopCoords("Haderslev Cathedral", venue, "Haderslev"), venue["Haderslev Cathedral"]);
+        }
+
+        // ── AND WHAT IS STILL UNPLACEABLE IS SAID ───────────────────
+        const gone = unplaceableStops(HIS_DAY, (name) => name === "Ribe Cathedral");
+        is("the two that draw no pin are named", gone.map(r => r.name), ["Haderslev Cathedral", "Haderslev Old Town"]);
+        is("and the one that does is not", gone.filter(r => r.name === "Ribe Cathedral"), []);
+        ok("the note says which day, which stop and which town",
+           /day 1, Haderslev Cathedral \(Haderslev\)/.test(mapGapNote(gone))
+           && /day 1, Haderslev Old Town \(Haderslev\)/.test(mapGapNote(gone)));
+        ok("and that the legs touching it are unmeasured too", /every leg touching them is unmeasured/.test(mapGapNote(gone)));
+        // The answer is a page for that town, which is why the note says what
+        // is missing rather than counting it.
+        ok("it names both gaps that have to close", /could not be geocoded and the town has no page in Gemlyx/.test(mapGapNote(gone)));
+        is("a guide the map can draw earns no note", mapGapNote(unplaceableStops(HIS_DAY, () => true)), "");
+        is("and an empty one does not throw", [mapGapNote([]), mapGapNote(null)], ["", ""]);
+        // One row per name: a stop on three days is one missing place.
+        is("a stop repeated across days is reported once",
+           unplaceableStops([{ day: 1, stops: [{ name: "X", town: "Y" }] }, { day: 2, stops: [{ name: "X", town: "Y" }] }], () => false).length, 1);
+        is("a day with no stops is no stops", unplaceableStops([{ day: 1 }], () => false), []);
+
+        // ── AND THE BUILD ASKS ITS OWN RESOLVER ─────────────────────
+        {
+          const appG = readFileSync(join(root, "src/App.jsx"), "utf8");
+          ok("the report is taken with the resolver the page draws with",
+             /unplaceableStops\(parsed\.days, \(name, town\) => !!resolveStopCoords\(name, freshGeo, town\)\)/.test(appG));
+          ok("and goes where this run's other disagreements go",
+             /planProblems = \[\.\.\.planProblems, mapGapNote\(unplaced\)\]/.test(appG));
+          // The town pass itself: only a town with a stop nothing could place,
+          // and only one the curated table does not already hold.
+          ok("an unknown town is geocoded once", /\.filter\(t => t && !townKeyFor\(t\) && !found\[t\]\)/.test(appG));
+          ok("and only for a stop that is still unplaced",
+             /!found\[s\.name\] && !hasPreciseCoords\(s\.name, townByName\[s\.name\]\)/.test(appG));
+          // The kommune centroid is the wrong answer and the reason is written
+          // down, because the table is right there and looks like a fit.
+          ok("the kommune centre is refused, with its distance",
+             /NOT THE KOMMUNE CENTROID/.test(appG) && /twelve kilometres west of Haderslev/.test(appG));
+          ok("and the town point never claims to be precise",
+             /return \{ lat: geoTown\.lat, lon: geoTown\.lon, precise: false \};/.test(appG));
+        }
+        const DASH6 = new RegExp("[" + String.fromCharCode(0x2013, 0x2014) + "]");
+        ok("the note carries no dash or banned word",
+           !DASH6.test(mapGapNote(gone)) && !/\b(?:actually|truly|genuinely|genuine|simply|really|quite)\b/i.test(mapGapNote(gone)));
+      }
+
+      // ── THE CLAIMS A GUIDE MAKES, 19 SEP 2026 ─────────────────────
+      //
+      // Two sentences out of the finished text of guide tbfeb7jemku:
+      //
+      //   "one of the most decorated interiors in Denmark for its size"
+      //   "the crowd here is local rather than tourist-facing"
+      //
+      // Neither can be checked and both are doing the persuading. A published
+      // entry has been read for a ranking with no measure since August; a
+      // guide, which is the thing his travellers open, was read for none of it.
+      {
+        const { unbackedClaims, guideClaims, guideClaimNote } = M;
+        const HIS = "St Catherine's has one of the most decorated interiors in Denmark for its size.";
+        const CROWD = "The crowd here is local rather than tourist-facing, and the beer list is short.";
+        is("the superlative is found and quoted",
+           unbackedClaims(HIS).map(c => `${c.kind}:${c.found}`), ["superlative:one of the most decorated"]);
+        is("and so is the claim about who is in the room",
+           unbackedClaims(CROWD).map(c => c.kind), ["crowd"]);
+        // RANK holds eight specific superlatives and "most decorated" is not one
+        // of them, which is why this was written: a hand-written list catches
+        // the cases somebody thought of.
+        ok("the reason it cannot be checked is stated, not the instruction to cut it",
+           /by what, against which other interiors, counted by whom/.test(unbackedClaims(HIS)[0].why));
+        ok("and the crowd finding says why nobody can check it",
+           /changes by the hour/.test(unbackedClaims(CROWD)[0].why));
+
+        // ── AND WHAT IT LEAVES ALONE ────────────────────────────────
+        // A superlative with a measure under it is a checkable claim, which is
+        // the same rule the ranking reader beside it has always used.
+        is("a ranking that names its measure passes",
+           unbackedClaims("The most visited museum in Denmark by number of visitors."), []);
+        // "Popular with locals" is supportable off a place's own page and its
+        // reviews. The COMPARISON is the unverifiable half.
+        is("popular with locals is not the claim this catches",
+           unbackedClaims("A place popular with locals, open since 1974."), []);
+        is("and nor is most of the year", unbackedClaims("Closed for the most of the year is not a ranking."), []);
+        is("nothing at all says nothing", [unbackedClaims(""), unbackedClaims(null)], [[], []]);
+        // Measured across every file in src/data before it was written: one hit.
+        {
+          const dataDir = join(root, "src/data");
+          const hits = readdirSync(dataDir)
+            .filter(f => f.endsWith(".js"))
+            .flatMap(f => unbackedClaims(readFileSync(join(dataDir, f), "utf8")).map(c => c.found));
+          ok("it is not a net that catches the whole corpus", hits.length <= 2);
+        }
+
+        // ── AND THE GUIDE GOES THROUGH THE ENTRY AUDIT'S OWN READER ─
+        const guide = {
+          title: "South Jutland by car",
+          essentials: { keepInMind: CROWD },
+          days: [{ day: 1, stops: [{ name: "St Catherine's", note: HIS }] }],
+        };
+        is("both surfaces of a guide are read",
+           guideClaims(guide).map(c => `${c.where}|${c.kind}`),
+           ["keepInMind|crowd", "St Catherine's|superlative"]);
+        ok("the note names the field rather than the guide",
+           /St Catherine's/.test(guideClaimNote(guideClaims(guide)))
+           && /keepInMind/.test(guideClaimNote(guideClaims(guide))));
+        is("a guide that claims nothing earns no note", guideClaimNote(guideClaims({ days: [] })), "");
+        is("and an empty list is not a note", guideClaimNote([]), "");
+
+        // ── ONE STANDARD, TWO SURFACES ──────────────────────────────
+        {
+          const audit = readFileSync(join(root, "src/utils/entryAudit.js"), "utf8");
+          ok("the entry audit asks the same reader",
+             /unbackedClaims\(all\)\.forEach\(c => add\("low", c\.kind === "crowd" \? "voice" : "ranking", c\.why\)\);/.test(audit));
+          const reading = readFileSync(join(root, "src/utils/guideReading.js"), "utf8");
+          ok("and the guide reads it rather than a second copy",
+             /import \{ unbackedClaims \} from "\.\/entryAudit";/.test(reading));
+          const appC = readFileSync(join(root, "src/App.jsx"), "utf8");
+          ok("the build reads the prose as it will ship",
+             /guideClaims\(\{ \.\.\.parsed, essentials: finalEssentials \}\)/.test(appC));
+          ok("and reports it where this run's other findings go",
+             /planProblems = \[\.\.\.planProblems, guideClaimNote\(claims\)\]/.test(appC));
+        }
+        const DASH7 = new RegExp("[" + String.fromCharCode(0x2013, 0x2014) + "]");
+        is("no finding it writes carries a dash or a banned word",
+           [...unbackedClaims(HIS), ...unbackedClaims(CROWD)].map(c => c.why)
+             .filter(w => DASH7.test(w) || /\b(?:actually|truly|genuinely|genuine|simply|really|quite)\b/i.test(w)), []);
       }
 
       // ── AND WHAT THE SEASON DOES TO WHAT IS BEING OFFERED ─────────

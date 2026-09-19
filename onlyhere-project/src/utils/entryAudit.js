@@ -57,6 +57,71 @@ const RANK = /\b(largest|biggest|smallest|longest|oldest|newest|tallest|highest|
 const MEASURE = /\bby (municipality|urban|population|area|visitors?|floor|length|height|volume)|\b(municipality|urban area|by number of)\b/i;
 const ORDINAL_RANK = /\b(second|third|fourth|fifth|[0-9]+(st|nd|rd|th))[- ](largest|biggest|smallest|oldest|longest|busiest)\b/i;
 
+// ── AND THE SUPERLATIVE NOBODY PUT ON THE LIST ──────────────────────
+//
+// Oliver's own guide, tbfeb7jemku, on a church: "one of the most decorated
+// interiors in Denmark for its size". RANK above holds eight specific
+// superlatives and "most decorated" is not one of them, which is the shape of
+// every hand-written list in this repository: it catches the cases somebody
+// thought of, and an entry only has to reach for a ninth adjective to walk
+// past it.
+//
+// "the most X" and "one of the most X" are the same claim whatever X is, so the
+// adjective is captured rather than enumerated. "the most of" is the one common
+// phrase in this shape that is not a superlative.
+//
+// MEASURED BEFORE IT WAS WRITTEN: across every file in src/data this matches
+// once, on "one of the most overlooked", which is the claim it exists for. It
+// is not a net that catches everything and it was not meant to be one.
+export const SUPERLATIVE = /\b(?:one of )?the most\s+(?!of\b)([a-zæøåA-ZÆØÅ]+)\b/;
+
+// ── AND WHO IS STANDING IN THE ROOM ─────────────────────────────────
+//
+// The same guide, on a bar: "the crowd here is local rather than tourist-facing".
+//
+// Nobody can check that, including the person who wrote it. Who is in a room
+// changes by the hour and by the month, and the claim is doing real work on the
+// reader: it is the reason they are being sent there. "Popular with locals" is
+// a different thing and stays, because a place's own page and its reviews can
+// support it. What this catches is the COMPARISON, which is a claim about the
+// tourists who are supposedly not there.
+export const CROWD_CLAIM = /\b(?:locals?(?:\s+\w+){0,2}\s+(?:rather than|not|instead of)\s+tourist|more locals than tourists|not (?:a )?tourist[-]?(?:y|facing|trap)|few(?:er)? tourists|no tourists|tourist[- ]free|untouched by tourism|off the tourist (?:trail|track|radar))/i;
+
+// ── ONE READER, TWO SURFACES ────────────────────────────────────────
+//
+// A published entry and a guide's prose are written by the same model under the
+// same voice rules, and until now only one of them was ever checked. The entry
+// audit has had a ranking reader since August; a guide has had nothing, and a
+// guide is the thing Oliver's travellers actually read.
+//
+// So the readers live here, beside the audit that already used them, and both
+// surfaces ask this one function. Each finding carries the words it found, so a
+// report can quote rather than paraphrase, and `why` is the reason it cannot be
+// checked rather than an instruction to delete it: some of these claims are
+// true and the answer is a source, not a cut.
+export const unbackedClaims = (text) => {
+  const t = String(text || "");
+  const out = [];
+  if (!t.trim()) return out;
+  const sup = SUPERLATIVE.exec(t);
+  if (sup && !MEASURE.test(t)) {
+    out.push({
+      kind: "superlative",
+      found: sup[0],
+      why: `"${sup[0]}" is a ranking with no measure under it. Most decorated by what, against which other interiors, counted by whom. Either name what makes it the most, or say what is there and let the reader decide.`,
+    });
+  }
+  const crowd = CROWD_CLAIM.exec(t);
+  if (crowd) {
+    out.push({
+      kind: "crowd",
+      found: crowd[0],
+      why: `"${crowd[0]}" is a claim about who is in a room, which changes by the hour and which nobody can check, including whoever wrote it. Say what the place is and what it serves; who turns up is not a fact about it.`,
+    });
+  }
+  return out;
+};
+
 // A year attached to a place with no event named. "Founded in 988" and "first
 // mentioned in 988" are different claims; a bare year is neither.
 const BARE_YEAR_CLAIM = /\b(dates back to|dating back to|founded in|established in|from|since)\s+(the\s+)?\d{3,4}\b/i;
@@ -538,6 +603,9 @@ export const auditEntry = (row) => {
     const m = all.match(RANK);
     add("low", "ranking", `Makes a "${m[0]}" claim about Denmark with no measure or scope stated. Worth checking it is the claim the source supports.`);
   }
+  // The same two readers a guide's prose goes through, so an entry and a guide
+  // cannot hold one standard each. See unbackedClaims above.
+  unbackedClaims(all).forEach(c => add("low", c.kind === "crowd" ? "voice" : "ranking", c.why));
   if (BARE_YEAR_CLAIM.test(all) && !NAMED_EVENT.test(all)) {
     const m = all.match(BARE_YEAR_CLAIM);
     add("high", "history", `Attaches a year ("${m[0].trim()}") without naming which event it belongs to. First written mention, founding, and a grant of town rights are three different dates, and welding them together is how the Odense 988 error happened.`);

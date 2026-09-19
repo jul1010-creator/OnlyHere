@@ -76,6 +76,7 @@ import { PRICE_FIELDS } from "./entryPrice";
 // already lives, so this file and the town page cannot disagree about it.
 import { showsTicketForKind } from "./journeyScope";
 import { stampDay } from "./provenance";
+import { bedStateOf, openNightsLine } from "./nightsOpen";
 
 export const COST_KIND = {
   ENTRY: "entry",
@@ -494,11 +495,22 @@ export const costLines = ({
     }
   }
 
-  // The nights that are not already booked. One line, not one per night: the
-  // search is the same search.
-  const openNights = days.filter(d => d?.glance?.stayArea || d?.glance?.recommendedStay).length;
-  if (openNights) {
-    const area = days.find(d => d?.glance?.stayArea)?.glance?.stayArea || "";
+  // ── THE NIGHTS THAT ARE NOT ALREADY BOOKED ────────────────────────
+  //
+  // One line, not one per night: the search is the same search.
+  //
+  // AND NOT COUNTED HERE ANY MORE. This counted DAYS carrying a where-to-stay
+  // sentence, which got two things wrong at once on Oliver's own guide: it
+  // counted the last day, which has no night after it, and it said "3 nights
+  // with no bed booked yet" on a trip whose KEEP IN MIND block, four inches
+  // lower, said his booking covered nights nobody had identified. Two readers
+  // of one slot. utils/nightsOpen.js is the only one now, and it writes the
+  // sentence too, so this file cannot drift away from the writer's again.
+  const beds = bedStateOf(guide);
+  const stayArea = days.find(d => d?.glance?.stayArea)?.glance?.stayArea || "";
+  const bedLine = openNightsLine(beds, stayArea);
+  if (bedLine) {
+    const area = stayArea;
     // ── THROUGH THE ONE STAY DOOR ──────────────────────────────────
     //
     // Oliver, 19 Sep 2026: "stick to the area and then just put Booking.com
@@ -515,12 +527,8 @@ export const costLines = ({
       kind: COST_KIND.STAY,
       name: "Somewhere to sleep",
       day: 1,
-      // The area, because the plan chose it and a reader budgeting for a bed
-      // wants to know where. NOT a sentence about what the link does: his
-      // standing rule is that nothing explains a control to a reader, and the
-      // button's own label already says where it goes.
-      forWhat: `${openNights} night${openNights === 1 ? "" : "s"} in the plan with no bed booked yet.`
-        + (area ? ` The plan puts you in ${area}.` : ""),
+      // Written by nightsOpen, not here. See the block above.
+      forWhat: bedLine,
       price: "",
       priceFrom: null,
       href,

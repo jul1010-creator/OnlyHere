@@ -338,13 +338,32 @@ export const coordFitsTown = (coord, town) => {
 // labelled only "(approximate)" with no town named.
 export const townFallbackFor = (town, name) => townPointFor(town) || townPointFor(name);
 
+// ── AND A TOWN GEMLYX HOLDS NO PAGE FOR ─────────────────────────────
+//
+// Oliver's own guide, tbfeb7jemku: two stops in Haderslev drew no pin, because
+// neither venue name is something a geocoder finds AND townKeyFor("Haderslev")
+// is null. The fallback that exists for an unplaceable venue had nothing to
+// fall back on.
+//
+// The guide build geocodes such a town once and stores the point in `geo` under
+// the TOWN'S OWN NAME, beside the venue points it stores under stop names (see
+// geocodeStopsForGuide in App.jsx). This is the reader for it, and it sits
+// BELOW the curated table on purpose: TOWN_COORDS is checked and this is a top
+// geocoder hit, so the curated answer wins whenever there is one. Either way it
+// is a town centre standing in for a venue and never precise.
+const geoTownPoint = (geo, town) => {
+  const key = String(town || "").trim();
+  const hit = key && geo && typeof geo === "object" ? geo[key] : null;
+  return hit && Number.isFinite(hit.lat) && Number.isFinite(hit.lon) ? { lat: hit.lat, lon: hit.lon } : null;
+};
+
 export const resolveStopCoords = (name, geo = {}, town = "") => {
   const real = placeCoords(lookupRealPlace(name));
   if (real && coordFitsTown(real, town).ok) return { lat: real.lat, lon: real.lon };
   if (geo[name] && coordFitsTown(geo[name], town).ok) return geo[name];
   const t = townFallbackFor(town, name);
   if (t) return { lat: t.lat, lon: t.lon };
-  return null;
+  return geoTownPoint(geo, town);
 };
 
 export const kmBetween = (a, b) => {
@@ -378,7 +397,8 @@ export const resolveStopCoordsDetailed = (name, geo = {}, town = "") => {
   if (geo[name] && coordFitsTown(geo[name], town).ok) return { ...geo[name], precise: true };
   const t = townFallbackFor(town, name);
   if (t) return { lat: t.lat, lon: t.lon, precise: false };
-  return null;
+  const g = geoTownPoint(geo, town);
+  return g ? { ...g, precise: false } : null;
 };
 
 // ── HOW CLOSE IS TOO CLOSE TO BELIEVE ───────────────────────────────

@@ -367,6 +367,58 @@ export const weatherChanges = (before, after) => {
   return out;
 };
 
+// ── AND THE SAVED NOTE HAS TO AGREE WITH THEM ───────────────────────
+//
+// Oliver's own guide, tbfeb7jemku, read on 19 Sep 2026. Two sentences, both on
+// screen, about the same day:
+//
+//   "Real forecast currently shows rain likely on Day 3, worth packing a light
+//    rain layer."
+//   "The forecast moved since you saved this. Day 3 has dried up."
+//
+// Both are true of what they were reading, which is this project's signature
+// failure: the first is `weatherNote`, written into the guide at build time in
+// App.jsx and saved with it, and the second is weatherChanges above, computed
+// live when the page opens. Neither knew the other existed. A ChatGPT critique
+// of the same guide praised the second line and did not notice the first.
+//
+// So the saved sentence is read against the live one before it is shown. A day
+// the forecast has since dried out comes out of it, and a note left naming no
+// days at all goes entirely. Nothing is rewritten beyond that: the warnings
+// half of the note is about wind, frost and the rest, which this says nothing
+// about and must not silently edit.
+// The sentence as App.jsx writes it, which is ONE sentence with a comma in the
+// middle: "rain likely on Day 3, worth packing a light rain layer." The first
+// version of this looked for a full stop after the day list and matched
+// nothing, which failed silently in the safest possible direction and would
+// have left the contradiction on screen. The day list is what sits between
+// "on" and that comma.
+// AND THE DAY LIST ITSELF HAS COMMAS IN IT. "Days 1, 2 and 3" is the shape
+// App.jsx writes for three of them, so a capture that stops at the first comma
+// reads one day and leaves the other two claimed. The tail is what ends the
+// list, and the tail is fixed: ", worth packing".
+const RAIN_SENTENCE = /Real forecast currently shows rain likely on (.*?), worth packing[^.]*\./i;
+const DAY_NUMBERS = /\d+/g;
+
+export const driedUpDays = (changes) => (Array.isArray(changes) ? changes : [])
+  .map(line => (/has dried up/i.test(String(line)) ? Number((String(line).match(/\d+/) || [])[0]) : null))
+  .filter(n => Number.isFinite(n));
+
+export const weatherNoteNow = (saved, changes) => {
+  const note = String(saved || "").trim();
+  const dried = driedUpDays(changes);
+  if (!note || !dried.length) return note;
+  const m = RAIN_SENTENCE.exec(note);
+  if (!m) return note;
+  const named = (m[1].match(DAY_NUMBERS) || []).map(Number);
+  const left = named.filter(n => !dried.includes(n));
+  // Every day it named has since dried out, so the sentence is about nothing.
+  if (!left.length) return note.replace(m[0], "").replace(/\s+/g, " ").trim();
+  if (left.length === named.length) return note;
+  const list = left.length === 1 ? `Day ${left[0]}` : `Days ${left.slice(0, -1).join(", ")} and ${left[left.length - 1]}`;
+  return note.replace(m[1], list);
+};
+
 // ── ONE IMPLEMENTATION, TWO CALL SITES ──────────────────────────────
 // The build path (App.jsx) and the refresh-on-open path (GuidePage) both need
 // "what is the weather for this day at this point". Writing that twice is how

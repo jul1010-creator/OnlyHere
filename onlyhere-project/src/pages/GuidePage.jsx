@@ -49,12 +49,13 @@ import { lookupRealPlace, placeCoords, resolveStopCoords, resolveStopCoordsDetai
 import { operatorsForLeg, operatorNote, OPERATORS } from "../utils/operators";
 import { partOfCountry } from "../utils/geography";
 import { journeyFromStored, legSteps, worthShowingLegs, journeyAgencies, JOURNEY_SOURCE } from "../utils/journey";
-import { dayWeather, weatherIsStale, weatherChanges } from "../utils/weather";
+import { dayWeather, weatherIsStale, weatherChanges, weatherNoteNow } from "../utils/weather";
 import { dayWarnings, dayCrossings, tripWeatherWarning } from "../utils/weatherWarn";
 import { askClaude } from "../utils/aiClient";
 import { testTravelerLine, isFerryText, daysUntil, readerView } from "../utils/helpers";
 import { aiDisclosureFor } from "../utils/aiDisclosure";
 import { stopKind, tripScaleLine, tripCharacter, bookingActions, tripDayDate, stopEventWhen, clampNote } from "../utils/guideReading";
+import { bedStateOf, needsABed } from "../utils/nightsOpen";
 import { BOOKING_AFFILIATE_ID } from "../config";
 import { tiqetsBrowseUrl, partnerDisclosure, supportNote, partnerLinkCount, isPartnerLink, carRentalFits, stayDoorUrl, tripcomStayUrl, stayDisclosure, STAY_DISCLOSURE, outboundLink, featuredStayFor } from "../utils/affiliates";
 import { CostsBlock } from "../components/CostsBlock";
@@ -1346,7 +1347,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                   </span>
                 </div>
               )}
-              {[["guide.money", guide.essentials.budgetReality], ["guide.gettingAround", guide.essentials.transportTip], ["guide.keepInMind", guide.essentials.keepInMind], ["guide.weather", guide.essentials.weatherNote]].filter(([, v]) => v).map(([label, v]) => (
+              {[["guide.money", guide.essentials.budgetReality], ["guide.gettingAround", guide.essentials.transportTip], ["guide.keepInMind", guide.essentials.keepInMind], ["guide.weather", weatherNoteNow(guide.essentials.weatherNote, weatherMoved)]].filter(([, v]) => v).map(([label, v]) => (
                 <div key={label} style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
                   <span style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, letterSpacing: 0.8, textTransform: "uppercase", flexShrink: 0, width: 92 }}>{uiT(label, uiLang)}</span>
                   <span style={{ fontSize: 13, color: C.light, lineHeight: 1.6 }}>{v}</span>
@@ -1430,7 +1431,15 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
 
         {/* Only what is worth interrupting somebody for. A degree of drift is
             not news; a dry day turning wet is, because it decides whether they
-            take the walking day or the museum day. */}
+            take the walking day or the museum day.
+
+            ── AND THE SAVED NOTE AGREES WITH THIS ONE, 19 SEP 2026 ──
+            Oliver's own guide had both on screen about the same day: "rain
+            likely on Day 3, worth packing a light rain layer" in the saved
+            essentials, and "Day 3 has dried up" here. Both were true of what
+            they were reading, and neither knew the other existed. The saved
+            sentence is now read against this one before it renders, in
+            weatherNoteNow. */}
         {weatherMoved.length > 0 && (
           <div style={{ background: C.surface, border: "1px solid #FFB34766", borderRadius: 12, padding: "10px 14px", marginBottom: 20, fontSize: 12, color: C.text, lineHeight: 1.6 }}>
             <b style={{ color: "#FFB347" }}>{uiT("guide.forecastMoved", uiLang)}</b> {weatherMoved.join(". ")}.
@@ -2143,7 +2152,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                 );
               })}
             </div>
-            {day.glance?.accommodation && (() => {
+            {day.glance?.accommodation && needsABed(day.day || dayIdx + 1, bedStateOf(guide)) && (() => {
               // ── "IT'S NOT EXACTLY A 'DAY-TRIP' FROM COPENHAGEN" ───
               // Oliver, 17 Aug 2026. The arithmetic for this was written that
               // night and wired to nothing, which the next morning's grep found:

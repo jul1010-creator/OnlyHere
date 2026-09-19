@@ -3,7 +3,9 @@ import { ticketBookingWhy } from "./tickets";
 import { dayStart, dayPlus, dayWithin } from "./calendarDay";
 import { fold, PLACE_NAMES } from "./danishNames";
 import { entryPrice } from "./entryPrice";
+import { unbackedClaims } from "./entryAudit";
 import { KOMMUNER, K } from "../data/kommuner";
+import { bedStateOf, needsABed } from "./nightsOpen";
 // ── READING A GUIDE WHEN YOU HAVE NEVER BEEN TO DENMARK ─────────────
 // Oliver, 7 Aug 2026, asking whether the guide would still be overwhelming to
 // someone who has never been. It would, and not for the reason I had been
@@ -370,7 +372,16 @@ export const bookingActions = (guide, lookupRealPlace) => {
     }
   });
 
-  if (days.some(d => d.glance?.stayArea || d.glance?.recommendedStay)) {
+  // ── AND A BED, FOR THE NIGHTS THAT STILL NEED ONE ───────────
+  //
+  // The same reader the cost row uses, for the same reason it was moved there:
+  // this asked whether any DAY carried a where-to-stay sentence, so a three day
+  // trip whose last day named a hotel in Esbjerg answered yes on a night that
+  // does not exist, and a traveller who had already booked was told to go and
+  // book. A night, not a day, and not one somebody has already paid for.
+  // See utils/nightsOpen.js.
+  const beds = bedStateOf(guide);
+  if (beds.nights.some(n => needsABed(n, beds))) {
     out.push({ what: "Somewhere to sleep", why: "Small Danish towns have very few rooms, and the good ones go first in summer." });
   }
 
@@ -558,6 +569,32 @@ export const guideProseOf = (guide) => {
     (Array.isArray(d?.stops) ? d.stops : []).forEach((s, j) => push(`${s?.name || "a stop"}`, s?.note, { at: "stopNote", day: i, stop: j }));
   });
   return out;
+};
+
+// ── AND THE CLAIMS THE PROSE MAKES ──────────────────────────────────
+//
+// Oliver's guide tbfeb7jemku, 19 Sep 2026, two sentences in the finished text:
+//
+//   "one of the most decorated interiors in Denmark for its size"
+//   "the crowd here is local rather than tourist-facing"
+//
+// Neither is checkable and both are doing the persuading. A published entry has
+// been read for exactly this since August and a GUIDE, which is the thing his
+// travellers open, has been read for none of it. So the guide goes through the
+// entry audit's own readers rather than through a second set written here: one
+// standard, one place to change it. See unbackedClaims in utils/entryAudit.js.
+//
+// The field is named with the finding, because "a claim somewhere in the guide"
+// is not something anybody can act on and "the note under Haderslev Cathedral"
+// is.
+export const guideClaims = (guide) => guideProseOf(guide)
+  .flatMap(f => unbackedClaims(f.text).map(c => ({ ...c, where: f.where, path: f.path })));
+
+export const guideClaimNote = (rows) => {
+  const list = Array.isArray(rows) ? rows.filter(r => r && r.why) : [];
+  if (!list.length) return "";
+  return `${list.length === 1 ? "A sentence makes a claim" : "Some sentences make claims"} nothing in this build can check: `
+    + list.map(r => `${r.where}, ${r.why}`).join(" ");
 };
 
 // The mixed-language finding. `languageOf` is passed in rather than imported so

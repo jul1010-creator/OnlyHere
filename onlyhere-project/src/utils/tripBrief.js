@@ -472,6 +472,28 @@ const ORIGIN_RE = new RegExp([
   `(?:^|[^${LETTER}])(?:flyver|flyve|lander|lande|ankommer|ankomme|sejler|sejle|fliege|fliegen|fliegt|vlieg|vliegen)\\s+(?:til|i|fra|in|naar|naar|nach|aus)(?![${LETTER}])`,
   /\b(?:ferry|ferries|sail(?:ing)?|cruis(?:e|ing)|train|bus|coach)\s+into\b/.source,
   /\b(?:airport|lufthavn|kastrup|billund airport)\b/.source,
+  // ── AND THE LINE THE APP WRITES ITSELF ──────────────────────────
+  //
+  // Oliver's own export, 19 Sep 2026. The intake form sends a hidden first
+  // message, built in App.jsx, and it reads:
+  //
+  //   "... | Exact trip length: 3 days | Starting point: Copenhagen"
+  //
+  // Every branch above is a shape a PERSON types, and none of them is a label
+  // with a colon after it, so the brief reported `origin` missing on a trip
+  // whose starting point was the first thing the traveller filled in. His
+  // guide then told him "Built assuming a Copenhagen/Kastrup start, say if
+  // that's wrong" about a fact he had stated.
+  //
+  // AND IT WAS EXACTLY BACKWARDS. When the field is left blank the same builder
+  // writes "Starting point: not specified, assume Copenhagen Airport", and the
+  // airport branch above matches the word "Airport", so the slot filled. Saying
+  // nothing answered the question and answering it did not.
+  //
+  // English only, because the label is a hardcoded English string in App.jsx
+  // rather than a translated one. If it is ever translated, this branch and
+  // that line have to move together.
+  `(?:^|[^${LETTER}])starting point:\\s*(?!not specified)\\S`,
 ].join("|"), "i");
 const readOrigin = (text, intakeStartPoint) => {
   if (has(intakeStartPoint)) return { value: clean(intakeStartPoint), source: "intake" };
@@ -1460,10 +1482,23 @@ export const readBrief = ({ travellerText = "", travellerTurns = null, intake = 
   //
   // `adults` is present on the counted reading and absent on the other, which is
   // the difference itself rather than a flag describing it.
-  const childrenAlone = !!party && party.hasKids && "adults" in party && party.adults == null;
+  const uncountedAdults = !!party && party.hasKids && "adults" in party && party.adults == null;
+  // ── AND "NOT COUNTED" IS NOT "NOT THERE" ──────────────────────────
+  //
+  // Oliver, 19 Sep 2026: "my wife and 3 kids" landed here as children with no
+  // adults, and the block below told the model the party reads as children
+  // travelling on their own. He had named an adult in the sentence.
+  //
+  // Both states are worth the same ONE question, because the headcount reaches
+  // the cost estimate and the number of beds either way. They are not worth the
+  // same sentence: one is a party nobody has counted and the other is a party
+  // with no grown-up in it, and saying the second about the first is the app
+  // telling a traveller it did not read what he wrote. `adultsNamed` is the
+  // difference, and it is asked of the reading rather than guessed at here.
+  const childrenAlone = uncountedAdults && !party.adultsNamed;
   const vague = [
     ...(known.when?.precision === "month" ? ["when"] : []),
-    ...(childrenAlone ? ["party"] : []),
+    ...(uncountedAdults ? ["party"] : []),
   ];
 // ── AND THE SHARPENING QUESTION COULD NEVER BE ASKED ────
   //
@@ -1512,7 +1547,7 @@ export const readBrief = ({ travellerText = "", travellerTurns = null, intake = 
   const lastTurnAt = turns.reduce((last, t, i) => (String(t || "").trim() ? i : last), -1);
   const unreadOpen = [...new Set(unread.filter(u => u.turn === lastTurnAt).map(u => baseSlotOf(u.key)))]
     .filter(k => vague.includes(k));
-  const brief = { known, missing, declined, vague, vagueToAsk, unanswered, unread, unreadOpen, cappedDays };
+  const brief = { known, missing, declined, vague, vagueToAsk, unanswered, unread, unreadOpen, cappedDays, childrenAlone };
   return { ...brief, ready: briefReady(brief) };
 };
 
@@ -2008,7 +2043,12 @@ export const briefBlock = (brief, conflicts = [], { picked = [], turnedDown = []
     lines.push("They named a month but not a date. That is enough to rule out an event in another month and not enough to place a day, so ask for the dates once and never again.");
   }
   if ((brief.vagueToAsk || []).includes("party")) {
-    lines.push("They have told you about children and not about the adults, so the party currently reads as children travelling on their own. Ask how many adults are coming, once, and never again. Do not guess a number and do not plan a single day until you have it or they have declined to say.");
+    // Two sentences for two states, because "children travelling on their own"
+    // said to somebody who wrote "my wife and 3 kids" is the app telling him it
+    // did not read his message. The question is the same either way.
+    lines.push(brief.childrenAlone
+      ? "They have told you about children and not about the adults, so the party currently reads as children travelling on their own. Ask how many adults are coming, once, and never again. Do not guess a number and do not plan a single day until you have it or they have declined to say."
+      : "They have named an adult and given no headcount, so nobody knows how many adults are coming. Ask that, once, and never again, and never suggest the children are travelling alone: they told you somebody is with them. Do not guess a number, and do not put a figure on costs or beds until you have it or they have declined to say.");
   }
   // ── AND ASKING IS NOT THE WHOLE TURN ──────────────────────────────
   // The old line ended "One short paragraph, then the question or questions",

@@ -576,7 +576,15 @@ const COUPLE = new RegExp(
   // A party of seven unaccompanied children is not an underspecified party, it
   // is an impossible one, and it is what the guide would have been built for.
   + `me(?:\\s+and|\\s*,)\\s+(?:${alt(PARTY_POSSESSIVES)}|the)\\s+(?:${alt(PARTNER_WORDS)})`
-  + `|(?:${alt(PARTY_POSSESSIVES)}|the)\\s+(?:${alt(PARTNER_WORDS)})\\s+(?:and|og|und|en|och)\\s+(?:${alt(ME_WORDS)})`
+  // ── AND THE COMMA ON THIS SIDE TOO ──────────────────────
+  //
+  // 19 Sep 2026. The comma went into the branch above on 13 September and this
+  // one, its mirror, was left exactly as it was: "It's my wife, me and 3 kids"
+  // needed "and" directly after the partner, found a comma, and came back as
+  // three children with no adult. One set of separators for both orders now,
+  // because a person writes themselves in on either side of whoever they are
+  // travelling with.
+  + `|(?:${alt(PARTY_POSSESSIVES)}|the)\\s+(?:${alt(PARTNER_WORDS)})\\s*(?:,\\s*|\\s+(?:and|og|und|en|och)\\s+)(?:${alt(ME_WORDS)})`
   // The preposition shape. The possessive is required, so bare "man" and
   // "mand" cannot match the impersonal pronoun they also are.
   //
@@ -646,6 +654,31 @@ export const partyAnswer = (turn) => {
   // of a child changes what may be planned. A count is better than a flag and a
   // flag is very much better than silence.
   const hasKids = kids !== null || NAMES_A_CHILD.test(t);
+  // ── AND AN ADULT NAMED IS NOT AN ADULT COUNTED ────────────────
+  //
+  // Oliver, 19 Sep 2026: "my wife and 3 kids" came back adults: null, kids: 3,
+  // partyLine printed "3 children", and the brief told the model the party
+  // "reads as children travelling on their own". An adult is named in that
+  // sentence. COUPLE above only fires when the WRITER is signalled somewhere
+  // ("me and my wife", "with my wife", "my wife and I"), and a bare possessive
+  // partner signals nothing about who is typing.
+  //
+  // So the two questions are separated: is there an adult in this party at all,
+  // and how many are there. The first is answerable off "my wife" and the
+  // second is not, and merging them is what put five year olds on a plane
+  // alone.
+  //
+  // IT DOES NOT GUESS TWO. "My wife and 3 kids" is also how somebody describes
+  // a trip they are not going on, and a wrong headcount reaches the cost
+  // estimate, which is per head, and the number of beds. A named adult with no
+  // count is a party worth ONE question, not a party worth a number.
+  const NAMED_PARTNER = new RegExp(
+    `(?:^|[^${LETTER}])(?:${alt(PARTY_POSSESSIVES)})\\s+`
+    + `(?:(?!(?:and|og|und|och|en|plus)(?:[^${LETTER}]|$))[${LETTER}'’-]+\\s+){0,2}`
+    + `(?:${alt(PARTNER_WORDS)})(?![${LETTER}])`, "i");
+  const adultsNamed = adultCount !== null
+    || new RegExp(`(?:^|[^${LETTER}])(?:${ADULT_WORD})(?![${LETTER}])`, "i").test(t)
+    || NAMED_PARTNER.test(t);
   // ── AND A HEADCOUNT MAY NOT CONTRADICT THE PARTS ──────────────────
   //
   // Same review: "We are 2 adults and 2 kids" came back with total 2, because
@@ -672,6 +705,9 @@ export const partyAnswer = (turn) => {
     // Whether those two numbers are the ends of a range rather than two ages.
     kidAgesSpan: spanned,
     total: total || null,
+    // Whether any adult is in this party at all, which is a different question
+    // from how many. See the block above.
+    adultsNamed,
     said: t,
   };
 };
@@ -696,6 +732,13 @@ export const partyLine = (p) => {
     // than nothing, which is what it used to say.
     bits.push(p.kidAges?.length ? `children (aged ${p.kidAges.join(", ")})` : "children");
   }
+  // ── AND AN ADULT IS IN THE LINE EVEN WHEN NOBODY COUNTED ──────────
+  //
+  // This line is what briefBlock prints at the model and what the guide builder
+  // reads, so "3 children" on its own IS a plan for unaccompanied children.
+  // "My wife and 3 kids" names an adult and counts none, and the honest line
+  // says that rather than inventing a two.
+  if (p.adults == null && p.hasKids && p.adultsNamed) bits.unshift("at least one adult");
   if (!bits.length && p.total != null) return plural(p.total, "person", "people");
   const head = bits.join(" and ");
   // The total is only worth saying when it is not simply the sum of the parts.
