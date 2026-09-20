@@ -250,6 +250,10 @@ writeFileSync(entry, `
   export { PAGE_ROWS_PROMPT, rowsFromExtract } from ${JSON.stringify(join(root, "src/utils/calendarFeed.js"))};
   export { tribeApiFor, rowsFromTribe, rowsFromSimcal, readerFor } from ${JSON.stringify(join(root, "src/utils/calendarFeed.js"))};
   export { shortBy, better, dayRetryBlock, stillShortNote } from ${JSON.stringify(join(root, "src/utils/dayCount.js"))};
+  export { isOperatorSite, ferryProblems, hasFerryDoor, ferryLine, crossingBlock, FERRY_DOOR_LABEL } from ${JSON.stringify(join(root, "src/utils/ferryDoor.js"))};
+  export { journeyUrl, journeyLabel, rpDate, rpTime, RP_BASE } from ${JSON.stringify(join(root, "src/utils/rejseplanen.js"))};
+  export { FERRY_ROUTES, crossings, crossingsTo, timetableFerryUrl, RP_CREDIT, GTFS_READ_ON } from ${JSON.stringify(join(root, "src/data/ferryRoutes.js"))};
+  export { ferryUrlOf } from ${JSON.stringify(join(root, "src/utils/ferryDoor.js"))};
   export { FROZEN_TRANSPORT, frozenFrom, frozenIn, factsLost, frozenBlock, lostNote } from ${JSON.stringify(join(root, "src/utils/frozenFacts.js"))};
   export { baseKey, staysIn as stayRunsIn, doorsFor, doorOn, sameBaseLine } from ${JSON.stringify(join(root, "src/utils/stayDoors.js"))};
   export { SECTIONS as DIR_SECTIONS, ROW_KINDS, kindOf as dirKindOf, directoryLinks, DIRECTORY_PROMPT, rowsFromDirectory, directoryProblems, staysIn, eatsIn, islandSaysBlock, ISLAND_SAYS } from ${JSON.stringify(join(root, "src/utils/islandDirectory.js"))};
@@ -52324,8 +52328,14 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       const all = byUrgency(run({ mode: "public transport" }));
       ok("no line on a list of what you pay is headed by a free journey planner",
         all.every(l => !planners.some(n => l.name.trim().toLowerCase() === n.toLowerCase())));
+      // ── AND IT ARRIVES WITH THE CROSSING ON IT ──────────
+      // 20 Sep 2026. This pinned the bare front page, which was the only link
+      // there was. Rejseplanen's own deep link format prefills both ends, the
+      // day and the hour, so the crossing still sends them to the planner and
+      // now to the page with this crossing on it. The front page stays as the
+      // fallback for a day that named only one end.
       ok("and the planner is still where the crossing sends them",
-        all.some(l => l.kind === COST_KIND.FERRY && l.href === OPERATORS.rejseplanen.url));
+        all.some(l => l.kind === COST_KIND.FERRY && String(l.href || "").startsWith("https://www.rejseplanen.dk/")));
       ok("and still named in the words, so they know where they are going",
         all.some(l => l.kind === COST_KIND.FERRY && /Rejseplanen/.test(l.forWhat)));
     }
@@ -70484,8 +70494,14 @@ SOURCE: https://www.tripadvisor.com/whatever`;
      /EMPTY if unconfirmed/.test(prompt));
   // The page prints a row only when the field is filled, so an island drafted
   // without the operator's page shows no crossing at all.
+  // ── THE OPERATOR ROW BECAME A DOOR, 20 SEP 2026 ─────────────────
+  // It printed the operator's name and no way to reach it. It now resolves a
+  // link through ferryUrlOf, which prefers the row's own page and falls back
+  // to Rejseplanen's timetable data for the four islands that feed carries.
+  // The row still renders only when there is an operator, which is what this
+  // assertion is for.
   ok("the page draws each crossing row only when it has one",
-     /item\.crossingGlance \? \{ icon:/.test(detail) && /item\.ferryOperator \? \{ icon:/.test(detail));
+     /item\.crossingGlance \? \{ icon:/.test(detail) && /if \(!item\.ferryOperator\) return null;/.test(detail));
   ok("and the ports render only when both are known, and only when unsaid",
      /\(!item\.crossingGlance && item\.ferryFrom && item\.ferryTo\) \? \{ icon:/.test(detail));
   // The labels a reader meets on that card are in the catalogue like every
@@ -71306,6 +71322,284 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   // Matched on one line: the comment wraps, and a phrase that spans a line
   // break matches nothing however true it is.
   ok("and the reason this one is in is written down", /Oscar has not answered since 14 September/.test(cfg));
+}
+
+
+// ── THE BOAT IS THE PART OF AN ISLAND TRIP THAT BREAKS ─────────────
+//
+// Oliver, 20 Sep 2026: "Do you think it would be an idea to have all the
+// 'private ferrys' put as links that the guide has to go through. Like sejerø
+// færgen has to be gone through when sejerø is put on the guide?" And on what
+// the link should be: "Like its website".
+//
+// MEASURED OVER THE 15 PUBLISHED ISLANDS before a line of it was written:
+// 15 of 15 name their operator, 12 of 15 carry a crossing glance, and 0 of 15
+// link to the operator. The drafting prompt has always made the operator's own
+// page mandatory for the crossing facts. It read the page, took the duration,
+// and threw the address away.
+{
+  const { isOperatorSite, ferryProblems, hasFerryDoor, ferryLine, crossingBlock, FERRY_DOOR_LABEL } = M;
+
+  // ── THE OPERATOR'S OWN SITE, AND NOTHING WEARING ITS COAT ───────
+  //
+  // This is the one link in the app where the wrong page costs a day rather
+  // than a click: a tourist board carries last season's timetable and no
+  // booking flow, and it is what a search returns first.
+  ok("the operator's own page counts", isOperatorSite("https://sejeroefaergen.dk/fartplan"));
+  ok("and a tourist board does not", !isOperatorSite("https://www.visitdenmark.dk/danmark/explore/sejeroe"));
+  ok("nor an aggregator", !isOperatorSite("https://www.directferries.com/sejero.htm"));
+  // A Facebook page can be all a village has. It is never a timetable.
+  ok("nor a social account standing in for a website", !isOperatorSite("https://facebook.com/sejeroefaergen"));
+  // Not pedantry: half of these run a payment flow on the other end.
+  ok("http is refused", !isOperatorSite("http://sejeroefaergen.dk/"));
+  ok("and so is nothing", !isOperatorSite("") && !isOperatorSite(null));
+
+  // ── WHAT AN ISLAND OWES ─────────────────────────────────────────
+  const SEJERO = { name: "Sejerø", ferryOperator: "Sejerøbugtens Færger", ferryFrom: "Havnsø", ferryTo: "Sejerø", crossingGlance: "About an hour." };
+  is("an island with no link owes one, and it is critical",
+     ferryProblems(SEJERO).map(f => `${f.severity}:${f.field}`), ["critical:ferryUrl"]);
+  ok("and it has no door", !hasFerryDoor(SEJERO));
+  const WITH = { ...SEJERO, ferryUrl: "https://sejeroefaergen.dk/fartplan" };
+  is("with the operator's own page it owes nothing", ferryProblems(WITH), []);
+  ok("and it has one", hasFerryDoor(WITH));
+  // A link to the wrong kind of page is worse than no link, so it is the same
+  // severity rather than a lesser one.
+  is("a tourist board in the field is still critical",
+     ferryProblems({ ...SEJERO, ferryUrl: "https://www.visitdenmark.dk/x" }).map(f => f.severity), ["critical"]);
+  is("no operator at all is two gaps",
+     ferryProblems({ name: "Sejerø", ferryFrom: "Havnsø", ferryTo: "Sejerø" }).map(f => f.field), ["ferryOperator", "ferryUrl"]);
+  // One island often has routes from two parts of the country, and naming the
+  // wrong one costs a drive across Denmark.
+  is("one port named is a gap of its own",
+     ferryProblems({ ...WITH, ferryTo: "" }).map(f => f.field), ["ferryFrom"]);
+  // ── AND A BRIDGED ISLAND OWES NOTHING ───────────────────────────
+  // Falster is an island and nobody books a boat to it. Without this the audit
+  // would demand a ferry for every one of them and the normal case would read
+  // as a defect.
+  is("a bridged island owes no crossing", ferryProblems({ name: "Falster", fixedLink: "Farøbroerne" }), []);
+  ok("and it counts as reachable", hasFerryDoor({ name: "Falster", fixedLink: "Farøbroerne" }));
+
+  // ── WHAT THE READER IS TOLD ─────────────────────────────────────
+  ok("the line names the operator and both ports",
+     /Havnsø to Sejerø, run by Sejerøbugtens Færger/.test(ferryLine(WITH)));
+  ok("and says to book ahead with a car", /book ahead if you are bringing a car/.test(ferryLine(WITH)));
+  ok("in Danish for a Danish reader", /nås kun med færge/.test(ferryLine(WITH, "da")));
+  is("no operator, no line", ferryLine({ name: "Sejerø" }), "");
+
+  // ── AND WHAT THE WRITER IS FORBIDDEN ────────────────────────────
+  //
+  // The two a model reaches for first: inventing a departure, and promising
+  // there is room on it. Both come off the operator's page, both change by
+  // season, and the reader is being sent to that page.
+  const BLOCK = crossingBlock([WITH, { name: "Samsø", ferryOperator: "Molslinjen", ferryFrom: "Kalundborg", ferryTo: "Ballen" }]);
+  ok("the crossing is said on the day it happens", /SAY THE CROSSING ON THE DAY IT HAPPENS/.test(BLOCK));
+  ok("no sailing time may be written", /NEVER WRITE A SAILING TIME/.test(BLOCK));
+  ok("and no promise of room", /Never say there is room, never say it runs daily/.test(BLOCK));
+  ok("both islands are in it", /Sejerø: Sejerøbugtens Færger/.test(BLOCK) && /Samsø: Molslinjen/.test(BLOCK));
+  is("no island, no block", crossingBlock([]), "");
+  is("and an island with no operator is not listed", crossingBlock([{ name: "Fejø" }]), "");
+  ok("the entry label names whose site it is", /Sejerøbugtens Færger's own site/.test(FERRY_DOOR_LABEL("Sejerøbugtens Færger")));
+
+  // ── AND ALL FOUR PLACES IT HAD TO BE WIRED ──────────────────────
+  //
+  // The rule this repository keeps relearning: a field the pipeline computes
+  // and the allow-list does not name works until the row is redrafted, and
+  // then goes without a word. Declared in the same commit that starts writing
+  // it, in every one of the four.
+  const sc = stripComments(readFileSync(join(root, "src/utils/studioContent.js"), "utf8"));
+  ok("shapeForLive carries it, validated on the way in",
+     /if \(isOperatorSite\(t\?\.ferryUrl\)\) out = \{ \.\.\.out, ferryUrl: String\(t\.ferryUrl\)\.trim\(\) \};/.test(sc));
+  // Matched without the apostrophe: STUDIO_VOICE is a single-quoted string, so
+  // the raw file carries a backslash before it and a plain OPERATOR'S matches
+  // nothing however true it is.
+  const rawSc = readFileSync(join(root, "src/utils/studioContent.js"), "utf8");
+  ok("the drafting prompt is told to return it", /RETURN THE OPERATOR[^ ]{0,3}S OWN ADDRESS IN .?ferryUrl/.test(rawSc));
+  ok("and told never to put a tourist board in it",
+     /NEVER a tourist board, a destination company, Wikipedia or a ferry aggregator/.test(rawSc));
+  const ea = stripComments(readFileSync(join(root, "src/utils/entryAudit.js"), "utf8"));
+  ok("the audit asks it of every island", /if \(type === "island"\) findings\.push\(\.\.\.ferryProblems\(p\)\);/.test(ea));
+  const appF = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+  ok("the codegen writes the field", /ferryUrl: \$\{J\(t\.ferryUrl \|\| ""\)\}/.test(appF));
+  ok("and the guide writer is handed the crossings", /crossingsForGuide = crossingBlock\(/.test(appF));
+  ok("beside the rest of the grounding", /\$\{crossingsForGuide \? `\\n\$\{crossingsForGuide\}` : ""\}/.test(appF));
+  // ── AND THE READER GETS A DOOR RATHER THAN A NAME ───────────────
+  // The island page carried the operator's name and no way to reach it, which
+  // is the whole finding restated on the surface a traveller sees.
+  const dp = stripComments(readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8"));
+  ok("the island page links the operator when a link can be resolved",
+     /const door = ferryUrlOf\(item\);/.test(dp) && /if \(!door\.url\) return \{ icon:/.test(dp));
+  ok("and names whose site it is on the link", /FERRY_DOOR_LABEL\(item\.ferryOperator\)/.test(dp));
+  // A reader who cannot see the gap assumes there is nothing to book.
+  ok("an island with no way through says so", /!hasFerryDoor\(item\)/.test(dp));
+}
+
+
+// ── THE JOURNEY PLANNER, PREFILLED ─────────────────────────────────
+//
+// Oliver, 20 Sep 2026, after reading what the API costs: "that is going to be
+// a crazy price we're not going to be able to manage. However, I want you to
+// integrate this into the system." And: "So the alternative is deep link."
+//
+// CHECKED AGAINST THE LIVE SITE, not only against the documentation: the link
+// these assertions pin, Havnsø to Sejerø arriving by 16:15 on 6 October 2026,
+// was opened and came back with both fields filled, "Ankomst 06.10 16:15" on
+// it, and three real connections arriving before the boat.
+{
+  const { journeyUrl, journeyLabel, rpDate, rpTime, RP_BASE } = M;
+
+  // ── THE DATE, FROM LOCAL GETTERS ────────────────────────────────
+  //
+  // Rejseplanen wants the Danish order. Built from getDate and getMonth rather
+  // than from toISOString, which is the mistake this repository has made four
+  // times: in Denmark toISOString turns local midnight into the previous
+  // evening, so the link would open the planner on the wrong day and every
+  // departure on it would be wrong.
+  is("the date is Danish order", rpDate(new Date(2026, 8, 6)), "06.09.2026");
+  is("and padded", rpDate(new Date(2026, 0, 2)), "02.01.2026");
+  is("an unreadable date is no date", rpDate("nonsense"), "");
+
+  // ── THE TIME, OUT OF WHAT A GUIDE WRITES ────────────────────────
+  // "~9:00" is this app's own convention for an approximate arrival and is on
+  // nearly every stop.
+  is("a tilde is not part of the time", rpTime("~9:00"), "09:00");
+  is("and a full stop is a colon", rpTime("9.30"), "09:30");
+  is("a real time survives", rpTime("14:05"), "14:05");
+  // A wrong departure is worse than none: the reader gets a connection that
+  // does not exist rather than a field they can fill in themselves.
+  is("an impossible clock is refused", [rpTime("25:00"), rpTime("9:75")], ["", ""]);
+  is("and so is prose", rpTime("about midday"), "");
+
+  // ── THE LINK ────────────────────────────────────────────────────
+  const REAL = journeyUrl({ from: "Havnsø", to: "Sejerø", date: new Date(2026, 9, 6), time: "16:15", timeSel: "arrive" });
+  ok("it is the planner's own address", REAL.startsWith(`${RP_BASE}?`));
+  ok("both ends are on it", /S=Havns%C3%B8/.test(REAL) && /Z=Sejer%C3%B8/.test(REAL));
+  ok("with the day", /date=06\.10\.2026/.test(REAL));
+  // ARRIVE, not depart: a stop has a time on it because that is when the day
+  // wants them there, and a boat has to be caught rather than left after.
+  ok("and the hour, as an arrival", /time=16%3A15/.test(REAL) && /timeSel=arrive/.test(REAL));
+  // start=1 is the whole convenience. Without it the reader lands on a filled
+  // form and still has to press Find, which is the step this removes.
+  ok("the search runs itself", /start=1/.test(REAL));
+  // Encoded even though the documentation's own example carries a bare space.
+  // Danish stop names have spaces and letters outside ASCII in them.
+  ok("a stop name with a space is encoded",
+     /S=Kongens%20Nytorv/.test(journeyUrl({ from: "Kongens Nytorv", to: "Helsingør St." })));
+
+  // The in-trip case, which is the one a guide written last week cannot answer:
+  // the planner fills the from-field off the reader's own GPS.
+  const HERE = journeyUrl({ to: "Læsø Færgehavn", fromHere: true });
+  ok("from where they are standing", /actualPosition=1/.test(HERE) && !/S=/.test(HERE));
+
+  // ── AND WHAT IT REFUSES ─────────────────────────────────────────
+  is("no destination, no link", journeyUrl({ from: "Aarhus H" }), "");
+  is("and no origin either, unless it is coming from the phone", journeyUrl({ to: "Aarhus H" }), "");
+  ok("an unreadable time is dropped rather than guessed",
+     !/time=/.test(journeyUrl({ from: "A", to: "B", time: "about midday" })));
+  ok("and the link still works without it", /S=A&Z=B/.test(journeyUrl({ from: "A", to: "B", time: "about midday" })));
+
+  ok("the button names both ends", /Havnsø to Sejerø/.test(journeyLabel({ from: "Havnsø", to: "Sejerø" })));
+  ok("in Danish for a Danish reader", /Havnsø til Sejerø/.test(journeyLabel({ from: "Havnsø", to: "Sejerø", lang: "da" })));
+
+  // ── WHAT THIS REPLACES, WHICH WAS HOMEWORK ──────────────────────
+  //
+  // "Check Rejseplanen for this leg" sent somebody to a front page to type in
+  // two stop names they would have to go and find. entryAudit and journey.js
+  // both already call that phrasing a defect in a draft; the guide printed it
+  // because there was nothing better to print.
+  // The matcher for that sentence stays in journey.js, which had it first. A
+  // second copy in this file was written and taken out again, for the reason
+  // the suite caught over hostOf in this same batch: two readers of one rule
+  // drift the first time either is touched.
+  ok("the rule for that sentence is not duplicated here",
+     !/HEDGE|isHedge/.test(readFileSync(join(root, "src/utils/rejseplanen.js"), "utf8").split("// ── AND THE SENTENCE")[0]));
+
+  const gp = stripComments(readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8"));
+  ok("the leg chip arrives with the leg in it", /const rpHref = journeyUrl\(\{/.test(gp));
+  ok("built as an arrival", /timeSel: "arrive",/.test(gp));
+  // Nothing is lost when a leg cannot be named: the chip keeps its old link
+  // rather than disappearing.
+  ok("and it falls back rather than vanishing", /rpHref \|\| OPERATORS\.rejseplanen\.url/.test(gp));
+  const cl = stripComments(readFileSync(join(root, "src/utils/costLedger.js"), "utf8"));
+  ok("the ferry line carries the crossing", /journeyUrl\(\{ from: ferryLeg\?\.from, to: ferryLeg\?\.to/.test(cl));
+  ok("with the same fallback", /\|\| OPERATORS\.rejseplanen\.url/.test(cl));
+}
+
+
+// ── EVERY CROSSING THE NATIONAL TIMETABLE CARRIES ──────────────────
+//
+// Oliver, 20 Sep 2026: "Do it." Then, having pulled the file himself: "I
+// unziped it myself into the public folder."
+//
+// Read out of Rejseplanen's open GTFS on 20 September 2026, off the build
+// valid 7 Sep to 2 Dec 2026: 1,608 routes, of which 1,387 buses, 31 rail, and
+// THIRTEEN BOATS.
+{
+  const { FERRY_ROUTES, crossings, crossingsTo, timetableFerryUrl, RP_CREDIT, GTFS_READ_ON,
+          ferryProblems, ferryUrlOf, hasFerryDoor, isOperatorSite } = M;
+
+  is("thirteen boat routes came out of the feed", FERRY_ROUTES.length, 13);
+  // ── AND THREE OF THEM ARE NOT CROSSINGS ─────────────────────────
+  // Movia 991, 992 and 993 run Nyhavn to Teglholmen and Refshaleøen. A guide
+  // reading those as island ferries would offer somebody a boat to a dock.
+  is("three are Copenhagen harbour buses", FERRY_ROUTES.length - crossings().length, 3);
+  ok("and they are Movia's", FERRY_ROUTES.filter(r => r.harbourBus).every(r => r.operator === "Movia"));
+  ok("no harbour bus claims an island", FERRY_ROUTES.filter(r => r.harbourBus).every(r => !r.island));
+
+  // ── FOUR OF THE FIFTEEN ISLANDS, AND WHICH FOUR ─────────────────
+  const covered = [...new Set(crossings().map(r => r.island).filter(Boolean))].sort();
+  is("the feed reaches four published islands", covered, ["Bornholm", "Læsø", "Samsø", "Ærø"]);
+  is("Ærø has four crossings in it", crossingsTo("Ærø").length, 4);
+  is("and Samsø two", crossingsTo("Samsø").length, 2);
+  // THE ELEVEN IT DOES NOT REACH, which are the small municipal ones and the
+  // reason ferryDoor still asks for the field by hand.
+  is("and the small islands are absent",
+     ["Sejerø", "Askø", "Fejø", "Endelave", "Lyø", "Avernakø", "Bjørnø", "Christiansø", "Agersø", "Orø"]
+       .filter(n => crossingsTo(n).length), []);
+  // A guess that Movia might be carrying the Zealand island ferries under its
+  // own agency id was checked against the feed and is wrong.
+  ok("Movia is not hiding the Zealand island ferries",
+     !crossings().some(r => r.operator === "Movia"));
+
+  // Every port is a harbour name rather than a town, because that is what the
+  // operator puts on the sign. Guessing an island from a port is how a reader
+  // ends up on the wrong boat, which is why `island` is set by hand.
+  ok("every crossing names its operator and its ports",
+     crossings().every(r => r.operator && r.ports.length >= 1));
+  ok("and every one carries the operator's own address",
+     crossings().every(r => isOperatorSite(r.url) || /^http:/.test(r.url)));
+
+  // ── THE LICENCE, WHICH IS A TERM AND NOT MANNERS ────────────────
+  // CC BY 4.0 wants the creator credited and the changes indicated. Both.
+  ok("the credit names Rejseplanen and the licence", /Rejseplanen/.test(RP_CREDIT) && /CC BY 4\.0/.test(RP_CREDIT));
+  ok("and says this is an extract rather than the dataset", /extracted by Gemlyx/.test(RP_CREDIT));
+  ok("the read is dated, because a feed rebuilds every fortnight", /^\d{4}-\d{2}-\d{2}$/.test(GTFS_READ_ON));
+
+  // ── WHAT IT DOES FOR AN ISLAND THAT HAD NO LINK ─────────────────
+  const LAESO = { name: "Læsø", ferryOperator: "Læsøfærgen", ferryFrom: "Frederikshavn", ferryTo: "Vesterø Havn" };
+  ok("Læsø gets a door off the timetable", ferryUrlOf(LAESO).fromTimetable && !!ferryUrlOf(LAESO).url);
+  ok("with the credit attached", /CC BY 4\.0/.test(ferryUrlOf(LAESO).credit));
+  ok("so it counts as reachable", hasFerryDoor(LAESO));
+  // Named rather than passed in silence: a founder should know which link a
+  // reader is getting, and a real booking page would be better.
+  is("and the audit says so quietly rather than shouting",
+     ferryProblems(LAESO).map(f => f.severity), ["low"]);
+
+  // THE ROW'S OWN LINK ALWAYS WINS. A founder who put the operator's booking
+  // page on the island chose a better page than a national front door.
+  const OWN = { ...LAESO, ferryUrl: "https://www.laesoe-line.dk/fartplan" };
+  is("a link on the row beats the timetable", ferryUrlOf(OWN).url, "https://www.laesoe-line.dk/fartplan");
+  ok("and carries no credit, because it is not their data", !ferryUrlOf(OWN).credit);
+  is("and owes nothing", ferryProblems(OWN), []);
+
+  // And an island the feed cannot help is still a critical gap.
+  is("Sejerø still owes a link, at critical",
+     ferryProblems({ name: "Sejerø", ferryOperator: "Sejerøbugtens Færger", ferryFrom: "Havnsø", ferryTo: "Sejerø" })
+       .map(f => f.severity), ["critical"]);
+  is("because the timetable has nothing for it", timetableFerryUrl("Sejerø"), "");
+
+  const dp2 = stripComments(readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8"));
+  ok("the island page asks the same resolver", /const door = ferryUrlOf\(item\);/.test(dp2));
+  ok("and prints the credit under the link", /note: door\.credit/.test(dp2));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

@@ -114,6 +114,10 @@ const GLANCE = {
   "Operator":         { da: "Rederi",               de: "Reederei" },
   "Ports":            { da: "Havne",                de: "Häfen" },
   "Off season":       { da: "Uden for sæsonen",     de: "Außerhalb der Saison" },
+  // The row an island gets when nothing on file can say how you reach it.
+  // "Sådan kommer du dertil" is the heading these island sites use themselves,
+  // which is the phrase a Dane is looking for. 20 Sep 2026.
+  "Getting there":    { da: "Sådan kommer du dertil", de: "Anreise" },
   // A restaurant row. "Serverer" is the verb and reads oddly as a label; the
   // word both languages put on a menu is the cuisine.
   "Serves":           { da: "Køkken",               de: "Küche" },

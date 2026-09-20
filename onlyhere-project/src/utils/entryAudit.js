@@ -37,6 +37,7 @@ import { tierOf, TIERS } from "./placeThemes";
 import { QUERY_WORDS } from "./sourcePolicy";
 import { stayContradiction, restatementFindings } from "./draftShape";
 import { dateClaimProblems } from "./dateClaims";
+import { ferryProblems } from "./ferryDoor";
 
 // Claims that a place has no public transport. Same pattern as the live
 // pipeline guard, kept in sync deliberately: an entry published before that
@@ -703,6 +704,18 @@ export const auditEntry = (row) => {
     add("medium", "distance and time",
       `Calls ${Math.round(w.minutes)} minutes a walk: "${w.sentence.slice(0, 120)}". Past about twenty minutes people name a bus instead, so this is worth checking against a map.`);
   });
+
+  // ── AND AN ISLAND HAS TO SAY HOW YOU GET TO IT ────────────────
+  //
+  // Oliver, 20 Sep 2026: "sejerø færgen has to be gone through when sejerø is
+  // put on the guide", and on what the link should be, "like its website".
+  //
+  // Measured across the 15 published islands before this was written: every
+  // one names its operator and not one links to it. The crossing is the part
+  // of an island trip that strands somebody, and the operator's own page is
+  // the only place the timetable is right today. A bridged island owes nothing
+  // here and is skipped. See utils/ferryDoor.js.
+  if (type === "island") findings.push(...ferryProblems(p));
 
   if (body.length === 0) add("medium", "body", "No long-form body at all, so the page is just a card with no article behind it.");
   else if (words < 180) add("medium", "body", `Only about ${words} words in total, which is thin for a full entry.`);
@@ -1635,7 +1648,7 @@ export const LIKELY_GLANCE = {
   // omission worth naming. fixedLink is deliberately absent: an island with no
   // bridge correctly has nothing there, and listing it would make the normal
   // case look like a gap.
-  island: ["crossingGlance", "ferryOperator", "travelTime", "recommendedStayGlance", "accommodationGlance"],
+  island: ["crossingGlance", "ferryOperator", "ferryUrl", "travelTime", "recommendedStayGlance", "accommodationGlance"],
   booking: ["nearestStation", "price", "priceNote", "travelTime"],
   food: ["price", "location"],
   night: ["crowd", "priceNote", "location"],

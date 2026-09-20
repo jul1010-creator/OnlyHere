@@ -8,3 +8,21 @@ tools/image-finder/config.json
 tools/image-finder/state.json
 
 node_modules/.gx-render/
+
+# ── THE RAW GTFS FEED, 20 SEP 2026 ──────────────────────────────────
+# Rejseplanen's open timetable is 331 MB unzipped. It landed in public/ first,
+# which would have shipped a third of a gigabyte to Vercel on every deploy,
+# because Vite copies that folder verbatim into dist/. Oliver moved it to the
+# project root the same evening, which fixes the deploy and leaves the other
+# half: it is still inside the repository and would still be committed.
+#
+# NO LEADING SLASH, so this matches a folder called GTFS at any depth. That
+# covers where it was, where it is, and wherever the next copy is unzipped,
+# which is the point: this is a working file that gets re-downloaded rather
+# than a location anybody maintains.
+#
+# NOTHING READS IT AT RUNTIME AND NOTHING SHOULD. What the app needs was
+# extracted into src/data/ferryRoutes.js, which is a few kilobytes and is
+# committed. Re-download from rejseplanen.info/labs/GTFS.zip when that extract
+# needs refreshing, which is about once a year for the question it answers.
+GTFS/

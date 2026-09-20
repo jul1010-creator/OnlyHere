@@ -55,6 +55,7 @@ import { haversineKm } from "../utils/helpers";
 import { placeCoords, townPointFor } from "../utils/guideEnrichment";
 import { placedLibrary, nearbyPublished, SAME_VISIT_KM, SAME_VISIT_LIMIT } from "../utils/nearbyPlaces";
 import { layoutBody, trimCaption } from "../utils/articleLayout";
+import { isOperatorSite, hasFerryDoor, ferryUrlOf, FERRY_DOOR_LABEL } from "../utils/ferryDoor";
 
 // layoutBody moved to utils/articleLayout.js on 21 Aug 2026 so the suite can
 // actually run it. See the comment there: living in this .jsx file is the
@@ -1052,7 +1053,45 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
               // the sailing time is not the answer to "how do I get there".
               item.fixedLink ? { icon: "\u2500", label: "Fixed link", value: item.fixedLink } : null,
               item.crossingGlance ? { icon: "\u26f4", label: "Crossing", value: item.crossingGlance } : null,
-              item.ferryOperator ? { icon: "\ud83c\udfe2", label: "Operator", value: item.ferryOperator } : null,
+              // ── AND THE OPERATOR IS A DOOR, NOT A NAME ────────────
+              //
+              // Oliver, 20 Sep 2026: "sejerø færgen has to be gone through when
+              // sejerø is put on the guide", and on what it should be, "like
+              // its website".
+              //
+              // Counted over the 15 published islands before this was written:
+              // every one named its operator and not one could send you to it.
+              // The timetable and the booking are both behind that link and
+              // both change by season, so the operator's own page is the only
+              // one that is right today. Validated on the way in, because a
+              // tourist board's copy of last season's timetable is what a
+              // search returns first. See utils/ferryDoor.js.
+              // ── AND FOUR OF THEM COME FROM THE TIMETABLE ──────────
+              //
+              // 20 Sep 2026. Rejseplanen's open feed carries Samsø, Bornholm,
+              // Ærø and Læsø with the operator's own address attached, so
+              // those four get a door without anybody researching one. The
+              // row's own link still wins where there is one.
+              //
+              // THE CREDIT RIDES WITH IT, and it is a licence term rather than
+              // manners: the data is CC BY 4.0 and the licence asks for the
+              // source named wherever it reaches a reader. See
+              // data/ferryRoutes.js.
+              (() => {
+                if (!item.ferryOperator) return null;
+                const door = ferryUrlOf(item);
+                if (!door.url) return { icon: "\ud83c\udfe2", label: "Operator", value: item.ferryOperator };
+                return { icon: "\ud83c\udfe2", label: "Operator", value: item.ferryOperator,
+                         link: { href: door.url, label: FERRY_DOOR_LABEL(item.ferryOperator), note: door.credit } };
+              })(),
+              // ── AND WHEN THERE IS NO WAY THROUGH AT ALL ───────────
+              // An island with no bridge and no operator link cannot answer the
+              // first question anybody asks about it. Said plainly rather than
+              // left as a gap, because a reader who cannot see the gap assumes
+              // there is nothing to book.
+              !hasFerryDoor(item)
+                ? { icon: "\u26f5", label: "Getting there", value: "The operator's own page is not on file yet, so check the crossing before you plan a day around it." }
+                : null,
               // Both ends, never one: a single port name is not usable, because
               // Danish islands are commonly served from two or three mainland
               // harbours and which one you want depends on where you started.

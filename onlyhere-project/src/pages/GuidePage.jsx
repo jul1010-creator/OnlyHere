@@ -57,6 +57,7 @@ import { aiDisclosureFor } from "../utils/aiDisclosure";
 import { stopKind, tripScaleLine, tripCharacter, bookingActions, tripDayDate, stopEventWhen, clampNote } from "../utils/guideReading";
 import { bedStateOf, needsABed } from "../utils/nightsOpen";
 import { doorsFor, doorOn, sameBaseLine } from "../utils/stayDoors";
+import { journeyUrl, journeyLabel } from "../utils/rejseplanen";
 import { moreOnLine } from "../utils/communityEvents";
 import { accessOf, accessNote } from "../utils/eventAccess";
 import { newFinds, findsLine, findDetail, withFind, withoutFind, wasTurnedDown } from "../utils/guideFinds";
@@ -1736,8 +1737,38 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
               //
               // So it says what is true — that this leg needs looking up — and
               // sends them to the authority for it.
+              // ── AND IT ARRIVES WITH THE LEG ALREADY IN IT ─────────
+              //
+              // Oliver, 20 Sep 2026, after reading what the API costs: "So the
+              // alternative is deep link."
+              //
+              // It is, and it is the better half for this. Rejseplanen's own
+              // link format prefills both ends, the date and the hour and runs
+              // the search, with no key, no approval and no quota. Checked
+              // against the live site rather than only against the
+              // documentation: Havnsø to Sejerø arriving by 16:15 on 6 October
+              // opened with both fields filled and three real connections on it.
+              //
+              // WHICH TURNS THIS CHIP FROM HOMEWORK INTO AN ANSWER. It said
+              // "check the times" and sent somebody to a front page to type in
+              // two stop names they would have to go and find. Same sentence,
+              // and now the page it opens is the one with this leg on it.
+              //
+              // ARRIVE, not depart: the stop has a time on it because that is
+              // when the day wants them there. See utils/rejseplanen.js.
+              const rpHref = journeyUrl({
+                from: originName,
+                to: destName,
+                date: dayDate,
+                // The DESTINATION stop's own arrival time, read the way every
+                // other line in this function reads it. `nextStop` is not a
+                // name in this scope and never was.
+                time: (day.stops || []).find(x => x.name === destName)?.arrivalTime,
+                timeSel: "arrive",
+              });
               return (
-                <a href={OPERATORS.rejseplanen.url} target="_blank" rel="noreferrer"
+                <a href={rpHref || OPERATORS.rejseplanen.url} target="_blank" rel="noreferrer"
+                  title={rpHref ? journeyLabel({ from: originName, to: destName, lang: uiLang }) : ""}
                   style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", background: C.bg, border: `1px solid ${C.gold}44`, borderRadius: 100, padding: "6px 12px" }}>
                   <span style={{ fontSize: 12 }}>🚆</span>
                   <span style={{ fontSize: 11, color: C.gold, fontWeight: 600 }}>{uiT("guide.checkTimes", uiLang)}</span>

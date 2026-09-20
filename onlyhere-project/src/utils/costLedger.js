@@ -66,6 +66,7 @@ import { isBookableTicketUrl } from "./ticketLink";
 import { stopEventWhen } from "./guideReading";
 import { affiliateHref, isPartnerLink, carRentalFits, carRentalUrl, stayDoorUrl, isWegotripUrl } from "./affiliates";
 import { OPERATORS } from "./operators";
+import { journeyUrl } from "./rejseplanen";
 import { isFerryText } from "./helpers";
 // One definition of each, read twice. priceLabel and pricesIn are how the price
 // was written down in the first place, and stampDay is how the provenance panel
@@ -298,7 +299,11 @@ const entryLine = ({ row, name, day, when, shutToday }) => {
 // an oversight: Samsø alone is served by two companies from opposite sides of
 // the country, so naming one can send somebody across the Great Belt in the
 // wrong direction. A crossing gets the national planner.
-const transportLines = ({ mode = "", ferryDays = [], travelDays = [] } = {}) => {
+// ferryLeg and dayDateFor are passed in rather than recomputed: the day walk
+// in costLines is the only place that knows which stops the crossing sits
+// between, and a second reader of the same legs array is how two parts of one
+// file come to disagree. See utils/rejseplanen.js.
+const transportLines = ({ mode = "", ferryDays = [], travelDays = [], ferryLeg = null, dayDateFor = () => null } = {}) => {
   const m = String(mode || "").toLowerCase();
   const out = [];
   const publicTransport = /public transport|train|bus|tog|offentlig/.test(m);
@@ -351,7 +356,10 @@ const transportLines = ({ mode = "", ferryDays = [], travelDays = [] } = {}) => 
       forWhat: "Book the boat, not just the bed: Danish crossings run a handful of times a day, some islands are served from more than one port, and summer sailings sell out. Rejseplanen covers every operator including the boats.",
       price: "",
       priceFrom: null,
-      href: OPERATORS.rejseplanen.url,
+      // Prefilled with the crossing when the day named both ends, and the front
+      // page when it did not. Nothing is lost in the second case, which is why
+      // the fallback stays rather than the row being dropped.
+      href: journeyUrl({ from: ferryLeg?.from, to: ferryLeg?.to, date: dayDateFor(ferryLeg?.day) }) || OPERATORS.rejseplanen.url,
       partner: false,
       refused: "",
       bookAhead: true,
@@ -394,6 +402,8 @@ export const costLines = ({
   const out = [];
   const seen = new Set();
   const ferryDays = [];
+  // The first crossing's two ends, for the journey planner link below.
+  const ferryLeg = { from: "", to: "", day: null };
   const travelDays = [];
 
   days.forEach((d, i) => {
@@ -415,7 +425,23 @@ export const costLines = ({
     // A leg's own words are the only thing needed to know a boat is involved,
     // and isFerryText is the same reader the leg chip uses.
     const legs = (d?.glance?.legs || []).map(l => String(l?.how || ""));
-    if (legs.some(isFerryText)) ferryDays.push(dayNo);
+    if (legs.some(isFerryText)) {
+      ferryDays.push(dayNo);
+      // ── AND WHICH CROSSING IT IS ──────────────────────────────
+      //
+      // 20 Sep 2026, wiring Rejseplanen's own deep link format. The legs array
+      // is parallel to the gaps BETWEEN stops, so leg i is the hop from stop i
+      // to stop i+1: the first ferry leg names both ends of the crossing, and
+      // those are the two fields the journey planner wants. Recorded the first
+      // time a day has one, because a link to one real crossing beats a link
+      // to a front page, and a second crossing on the same day would have to
+      // overwrite the first. See utils/rejseplanen.js.
+      const at = legs.findIndex(isFerryText);
+      const stops = d?.stops || [];
+      const from = String(stops[at]?.name || "").trim();
+      const to = String(stops[at + 1]?.name || "").trim();
+      if (from && to && !ferryLeg.from) { ferryLeg.from = from; ferryLeg.to = to; ferryLeg.day = dayNo; }
+    }
     if ((d?.stops || []).length && i > 0) travelDays.push(dayNo);
   });
 
@@ -472,7 +498,7 @@ export const costLines = ({
     });
   }
 
-  out.push(...transportLines({ mode, ferryDays, travelDays: travelDays.slice(0, 4) }));
+  out.push(...transportLines({ mode, ferryDays, travelDays: travelDays.slice(0, 4), ferryLeg, dayDateFor }));
 
   // The car, when they said they are driving. carRentalFits is the same reader
   // the rental button uses, so the list and the button cannot disagree about
