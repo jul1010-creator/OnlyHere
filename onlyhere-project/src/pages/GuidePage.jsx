@@ -56,6 +56,7 @@ import { testTravelerLine, isFerryText, daysUntil, readerView } from "../utils/h
 import { aiDisclosureFor } from "../utils/aiDisclosure";
 import { stopKind, tripScaleLine, tripCharacter, bookingActions, tripDayDate, stopEventWhen, clampNote } from "../utils/guideReading";
 import { bedStateOf, needsABed } from "../utils/nightsOpen";
+import { doorsFor, doorOn, sameBaseLine } from "../utils/stayDoors";
 import { moreOnLine } from "../utils/communityEvents";
 import { accessOf, accessNote } from "../utils/eventAccess";
 import { newFinds, findsLine, findDetail, withFind, withoutFind, wasTurnedDown } from "../utils/guideFinds";
@@ -760,6 +761,24 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
   }
 
   const days = guide.days || [];
+  // ── ONE BOOKING BUTTON PER BED, NOT PER NIGHT ────────────────────
+  //
+  // Oliver, 19 Sep 2026, relaying an outside read and agreeing with it: "the
+  // guide has begun to look like a massive advertisement page."
+  //
+  // Counted before it was changed: the stay card renders once per night and
+  // carries up to three outbound buttons, so a seven night trip put up to
+  // twenty-one hotel links on one page. Nineteen of them were the same search
+  // repeated, because a trip sleeping three nights in Odense is one booking.
+  //
+  // Computed once here rather than inside the loop, because which night gets
+  // the door is a fact about the WHOLE run of nights and a day cannot answer
+  // it alone. The card and the sentence still render every night; only the
+  // buttons move. See utils/stayDoors.js.
+  const stayNights = days
+    .map((d, i) => Number(d?.day || i + 1))
+    .filter(n => needsABed(n, bedStateOf(guide)));
+  const stayDoors = doorsFor(days, stayNights);
   // Oliver's map-vs-plain choice, made before this page ever sees the guide
   // (App.jsx's generateGuide, search "chosenMode") — _lightMode true means
   // the plain day-by-day pick, so no route map and no leg time chips here,
@@ -2410,6 +2429,20 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
               // right answer rather than a fallback that lands somebody 300 km
               // from where the sentence above promised. See data/tripcom.js.
               const stayTripUrl = tripcomStayUrl(day.glance.stayArea || stayTown || searchTerm);
+              // ── WHICH OF THESE THIS NIGHT ACTUALLY GETS ──────────
+              //
+              // Oliver, 19 Sep 2026: "the guide has begun to look like a
+              // massive advertisement page." The card and the sentence are on
+              // every night, under the standing rule above that they survive
+              // every rebuild. The BUTTONS are on the first night of each stay,
+              // because three nights in Odense is one booking and the second
+              // and third buttons were the same search again.
+              //
+              // Decided for the whole page above the day loop, since which
+              // night opens a stay is a fact about the run of nights. See
+              // utils/stayDoors.js.
+              const doors = doorOn(stayDoors, day.day || dayIdx + 1);
+              const sameBed = doors.door ? "" : sameBaseLine(stayDoors, day.day || dayIdx + 1, days);
               return (
                 <div style={{ display: "flex", gap: 8, alignItems: "flex-start", background: C.surface, border: `1px solid ${C.gold}33`, borderRadius: 12, padding: "12px 14px", marginTop: 16 }}>
                   <span style={{ fontSize: 14, flexShrink: 0 }}>🏡</span>
@@ -2453,7 +2486,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                         cannot name its partner has no honest wording available
                         to it. */}
                     {(() => {
-                      const featured = featuredStay;
+                      const featured = doors.featured ? featuredStay : null;
                       if (!featured) return null;
                       const out = outboundLink(featured.url);
                       if (!out.href) return null;
@@ -2497,7 +2530,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                         The area is not lost by that. It is in the sentence
                         above this, which is where the guide has always said
                         where to sleep, and where a named property is named. */}
-                    {stayDoor && (
+                    {stayDoor && doors.door && (
                       <a href={outboundLink(stayDoor.href).href || stayDoor.href} target="_blank" rel={outboundLink(stayDoor.href).rel}
                         style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 8, marginRight: 8, background: `${C.gold}1a`, border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "8px 14px", fontSize: 13, fontWeight: 700, textDecoration: "none" }}>
                         {stayDoor.area ? `🏨 Hotels in ${stayAreaTerm} ↗` : "🏨 Find a room on Booking.com ↗"}
@@ -2513,14 +2546,27 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                         in one sentence. First day only: the sentence is the same
                         on all seven and a reader learns to scroll past a
                         repeat. */}
-                    {stayTripUrl && (
+                    {stayTripUrl && doors.compare && (
                       <a href={stayTripUrl} target="_blank" rel="noreferrer sponsored nofollow"
                         style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 8, background: `${C.gold}1a`, border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "8px 14px", fontSize: 13, fontWeight: 700, textDecoration: "none" }}>
                         🏨 Compare hotels on Trip.com ↗
                       </a>
                     )}
-                    {(stayDoor || stayTripUrl) && dayIdx === 0 && (
-                      <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 4 }}>{stayDisclosure({ tripcom: !!stayTripUrl })}</div>
+                    {/* The disclosure rides with the FIRST buttons rather
+                        than with day one, because day one may now be a night
+                        with no buttons on it and the sentence would then be
+                        printed over nothing while the real door two days later
+                        had none. */}
+                    {stayDoor && doors.door && doors.compare && (
+                      <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 4 }}>{stayDisclosure({ tripcom: !!(stayTripUrl && doors.compare) })}</div>
+                    )}
+                    {/* ── AND A NIGHT WITH NO BUTTON SAYS WHY ────────
+                        Without it a reader on night four sees a stay card with
+                        no way to book and reads the page as broken. With it
+                        they read the true thing, which is that it is the same
+                        room as the night before. */}
+                    {sameBed && (
+                      <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.5, marginTop: 6 }}>{sameBed}</div>
                     )}
                   </div>
                 </div>

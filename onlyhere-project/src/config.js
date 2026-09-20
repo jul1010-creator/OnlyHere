@@ -576,7 +576,31 @@ export const TIQETS_AFFILIATE_TEMPLATE = "https://tp.media/r?campaign_id=89&mark
 // labels itself "Book on Oscar Biludlejning" and carries its disclosure the
 // moment the link exists. Without that half it would have rendered as an
 // ordinary unpaid link, silently.
-export const CAR_RENTAL_LINK = "";
+// ── AND THE LINK, 20 SEP 2026 ───────────────────────────────────────
+//
+// Oliver: "https://www.discovercars.com/?a_aid=gemlyx this is the affiliate
+// link." Six days with no car button anywhere on a site whose guides routinely
+// involve driving, which is what an empty string here means.
+//
+// DISCOVERCARS RATHER THAN OSCAR, and the paragraphs above are the argument
+// for Oscar rather than against this: Oscar wins outright on inventory the day
+// it answers, and nothing here is exclusive, so the swap is one paste. What
+// settled it is that Oscar has not answered since 14 September and an empty
+// link earns nothing while it does not.
+//
+// The inventory check this block is built on was re-run on discovercars.com on
+// 14 Sep 2026 and is recorded above: Copenhagen, Billund, Aalborg, Aarhus and
+// Esbjerg, the airports at CPH, BLL, AAL and AAR, and 1,686 Danish deals
+// brokered from the same companies AutoEurope was chosen for.
+//
+// NOT A NETWORK LINK. This one tracks on DiscoverCars' own domain, through
+// `a_aid`, which is the first programme here to do that with a www on it.
+// utils/affiliates.js learned both facts in the same commit as this line: the
+// a_aid parameter, so the button carries its disclosure and its sponsored rel,
+// and that a host's first label is not the merchant when the label is "www".
+// Without either half the link would have rendered as an ordinary unpaid link,
+// silently, which is the failure this file has now written down three times.
+export const CAR_RENTAL_LINK = "https://www.discovercars.com/?a_aid=gemlyx";
 
 // ── WEGOTRIP, THE HIGHEST RATE ON THE PAGE AND A REAL ONE ───────────
 //

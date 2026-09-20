@@ -172,6 +172,8 @@ import { icsUrlFor, parseIcs, communityRowsFrom, feedProblems, PAGE_ROWS_PROMPT,
 import { locateLabel, locateSentence, townFromReverse, countryFromReverse, isDenmark, reverseUrl } from "./utils/locateMe";
 import { directoryLinks, DIRECTORY_PROMPT, rowsFromDirectory, directoryProblems, islandSaysBlock, ISLAND_SAYS } from "./utils/islandDirectory";
 import { readerBody, noticeAsk, sentencesIn, TRANSLATE_NOTICE, translatedNotice, noticeText } from "./utils/noticeVoice";
+import { frozenFrom, factsLost, frozenBlock, lostNote } from "./utils/frozenFacts";
+import { shortBy, better, dayRetryBlock, stillShortNote } from "./utils/dayCount";
 import { homeStartBlock, readBrief, briefBlock, nextAsks, asksThisTurn, sharperAsk, buildBlockedNote, enoughToRecommend, unsureWhatTheyWant, namedStayIn, bookedDayNumbers } from "./utils/tripBrief";
 import { askedBeforeTurns, lastAskedOnScreen } from "./utils/directAnswer";
 import { briefConflicts } from "./utils/briefConflicts";
@@ -10022,7 +10024,13 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
   // Capped at three pages, which is a real limit rather than a tidy number: a
   // model call and a Firecrawl fetch each, on a source he will re-read every
   // time the island changes its opening hours.
-  const DIR_PAGES = 3;
+  // Four: the address he pasted, the visitor page it points at, and the beds
+  // and the dining behind that. Measured against the two real sites rather
+  // than chosen: Avernakø needs one, because avernak.dk/visit IS the whole
+  // directory, and Sejerø needs all four, because sejero.dk is a front page
+  // that links to Turist på Sejerø, which is where the links to Overnatning
+  // and Handels- & spisesteder live.
+  const DIR_PAGES = 4;
   const readIslandDirectory = async (feed) => {
     // THE FIRST OF THEM, because a directory belongs to the island whose site
     // this is. The Askø group covers Lilleø too and Lilleø has no site of its
@@ -10033,25 +10041,65 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
     if (!source) return { rows: [], notes: [], error: "That source has no address." };
     const pages = [source];
     const notes = [];
-    try {
-      // The raw bytes, for the same reason the calendar reader takes them: the
-      // markup is the thing being read, and scan-source strips a page to prose.
-      const raw = await studioFetch(`/api/calendar?url=${encodeURIComponent(source)}`);
-      const rawData = await raw.json().catch(() => null);
-      const html = String(rawData?.text || "");
-      if (!html.trim() && rawData?.error) notes.push(`The page itself could not be read for its links: ${rawData.error}`);
-      // Beds first, then somewhere to eat. Both are worth a page of the budget
-      // and neither the shop nor the ferry timetable is.
-      const links = directoryLinks(html, source).filter(l => l.kind === "stay" || l.kind === "eat");
-      const order = [...links.filter(l => l.kind === "stay"), ...links.filter(l => l.kind === "eat")];
-      for (const l of order) {
-        if (pages.length >= DIR_PAGES) break;
-        if (pages.some(u => u === l.url)) continue;
-        pages.push(l.url);
+    // The raw bytes, for the same reason the calendar reader takes them: the
+    // markup is the thing being read, and scan-source strips a page to prose.
+    const linksOn = async (url) => {
+      try {
+        const raw = await studioFetch(`/api/calendar?url=${encodeURIComponent(url)}`);
+        const rawData = await raw.json().catch(() => null);
+        const html = String(rawData?.text || "");
+        if (!html.trim()) {
+          if (rawData?.error) notes.push(`Could not read ${url} for its links: ${rawData.error}`);
+          return [];
+        }
+        return directoryLinks(html, url).filter(l => ["visit", "stay", "eat"].includes(l.kind));
+      } catch (err) {
+        notes.push(`Could not read ${url} for its links: ${String(err?.message || err).slice(0, 120)}`);
+        return [];
       }
-    } catch (err) {
-      notes.push(`The page's own links could not be read: ${String(err?.message || err).slice(0, 120)}`);
+    };
+    // ── ONE HOP, AND THE REASON FOR IT ──────────────────────────
+    //
+    // Both of these were found by running this against the two real sites
+    // rather than against a fixture of my own.
+    //
+    // AVERNAKØ. Its whole directory is one page, and the only link to it
+    // anywhere says "Besøg Avernakø". With stay and eat alone, pasting the
+    // island's domain came back with nothing, because the front page lists no
+    // businesses and the one page that lists all of them was not followed.
+    // That is what the `visit` kind is for.
+    //
+    // SEJERØ. Its front page links to Turist på Sejerø and to nothing else
+    // useful. The links to Overnatning and Handels- & spisesteder are ON the
+    // Turist page. So a reader that only looks at the source page stops one
+    // click short of every bed on the island.
+    //
+    // ONE HOP AND NO MORE. Two would be a crawler, and this is a reader that
+    // follows a visitor page to the two sections it names. Neither the shop
+    // nor the ferry timetable earns a page of the budget.
+    const first = await linksOn(source);
+    const deeper = [];
+    for (const l of first.filter(x => x.kind === "visit").slice(0, 1)) {
+      deeper.push(...(await linksOn(l.url)));
     }
+    const seenPage = new Set([source]);
+    for (const l of [...first, ...deeper]) {
+      if (pages.length >= DIR_PAGES) break;
+      if (seenPage.has(l.url)) continue;
+      // Visit first, then the beds, then dinner, which is the order the budget
+      // should be spent in when a site has more of these than there is room for.
+      seenPage.add(l.url);
+      pages.push(l.url);
+    }
+    // Sorted after collecting rather than during, so a stay link found on the
+    // second page still outranks an eat link found on the first.
+    const rank = { visit: 0, stay: 1, eat: 2 };
+    const ordered = [source, ...[...first, ...deeper]
+      .filter(l => pages.includes(l.url) && l.url !== source)
+      .sort((a, b) => rank[a.kind] - rank[b.kind])
+      .map(l => l.url)];
+    pages.length = 0;
+    pages.push(...[...new Set(ordered)].slice(0, DIR_PAGES));
     const all = [];
     let dropped = 0;
     const failed = [];
@@ -16902,12 +16950,25 @@ THE LIST ABOVE COUNTS AS CONTEXT FOR recommendedStay, and it is the only list th
                 const town = String(st?.town || st?.name || "").trim();
                 return [town, namedIslandOf(lookupRealPlace(town))];
               })).filter(Boolean);
+              // ── COUNTED FOR THE PERSON READING IT ──────────────
+              //
+              // Oliver, 19 Sep 2026: "these islands are going to depend on alot
+              // on your language. Læsø's calender doesn't seem very foreigner
+              // friendly."
+              //
+              // The same answer the community block two lines up already uses,
+              // handed to the count as well. Without it an island with eleven
+              // things on, nine of them spoken Danish, ranks above one with
+              // three a visitor can walk into, and the guide sends a German
+              // family to the first. See utils/placeActivity.js.
+              const speaksDanish = guideBrief.known.danish?.speaks === true;
               activitySaysForGuide = activityBlock(
                 activityAcross(communityEvents, planPlaces, {
                   from: arrivalDate,
                   days: requestedDays || planDays.length || ACTIVITY_DAYS,
+                  danishSpeaker: speaksDanish,
                 }),
-                { days: requestedDays || planDays.length || ACTIVITY_DAYS },
+                { days: requestedDays || planDays.length || ACTIVITY_DAYS, danishSpeaker: speaksDanish },
               );
             }
           }
@@ -16968,6 +17029,18 @@ THE LIST ABOVE COUNTS AS CONTEXT FOR recommendedStay, and it is the only list th
       // which is what the match reads. See essentialsForTrip in utils/interestFit.js.
       const essentialsPicked = essentialsForTrip(essentials, { convoText, interests: intakeInterest });
       const essentialsFacts = essentialsBlock(essentialsPicked);
+      // ── WHAT THE LAST THREE STAGES MAY NOT REWRITE ────────────────
+      //
+      // Declared HERE, beside the block that puts these facts into the prompt,
+      // because the list is the same list: whatever was quoted in is what may
+      // not be paraphrased out. Stages 5 and 6 read it eight hundred lines
+      // below, which is why it is a const at the top of the build rather than
+      // rebuilt twice from two different sources that could drift apart.
+      // See utils/frozenFacts.js.
+      const frozen = frozenFrom(essentialsPicked);
+      // Every rewrite those stages threw away, for the run log. A guard that
+      // works in silence is one nobody can tell is working.
+      const frozenRefusals = [];
       // ── EVERY FIGURE IN A DANISH GUIDE IS IN KRONER ─────────────────
       //
       // Oliver, 21 Aug 2026, on a line in his own built guide: "Stay near
@@ -17060,18 +17133,47 @@ If the conversation only covers a single day or a few stops with no explicit day
       // can still occasionally under-comply — that's what was causing "only day 1 shows,
       // click again and it's fine": pure model variance, not a rendering bug. Retry once
       // automatically instead of making the person notice and click a second time.
-      if (requestedDays && (!parsed.days || parsed.days.length < requestedDays)) {
+      if (shortBy(parsed, requestedDays)) {
         buildStage("Finishing the remaining days", 70);
+        // ── THE WHOLE PROMPT, THE SAME AS THE OTHER TWO RETRIES ───
+        //
+        // This call used to carry a shortened prompt written out here by hand,
+        // so the one path where a guide was already going wrong was also the
+        // one path that threw away the frozen facts, the currency rule, the
+        // booked bed, the chosen events and the planner's skeleton. The
+        // ruled-out places and the language survived because those two were
+        // the only blocks anybody remembered to paste. See utils/dayCount.js.
         const retryResult = await askClaude(
-          `Turn the trip plan discussed in this conversation into strict JSON. The "days" array MUST contain EXACTLY ${requestedDays} entries — your last attempt returned only ${parsed.days?.length || 0}, which is wrong. Same shape as before: {"title": "...", "essentials": {"budgetReality": "...", "transportTip": "...", "keepInMind": "..."}, "days": [{"day": 1, "title": "...", "stops": [{"name": "...", "town": "...", "arrivalTime": "...", "suggestedStay": "...", "note": "..."}]}]}. Split every place discussed across all ${requestedDays} days in a sensible order — repeat a base town for a slower day if too few places were discussed, but never invent one that wasn't mentioned. Use only real place names mentioned in the conversation. Respond with ONLY the raw JSON object, no markdown code fences, nothing else.${ruledOutBlock}${guideLangBlock}\n\nConversation:\n${convoText}`,
+          `${guideSystemPrompt}\n\n${dayRetryBlock(parsed.days?.length || 0, requestedDays)}\n\nRespond with ONLY the raw JSON object described above, no markdown code fences, nothing else.\n\nConversation:\n${convoText}`,
           6000,
           "claude-opus-4-8",
           true // expectJson — same prose-reply protection as the main build call
         );
         try {
           const retryParsed = JSON.parse(retryResult.text?.replace(/^```json\s*|\s*```$/g, "").trim() || "{}");
-          if (retryParsed.days && retryParsed.days.length >= (parsed.days?.length || 0)) parsed = retryParsed;
+          // `better`, not "at least as many days": a retry that reaches the
+          // count by returning empty days has answered the instruction and
+          // made the guide worse. See utils/dayCount.js.
+          if (better(parsed, retryParsed)) parsed = retryParsed;
         } catch { /* keep the first attempt if the retry itself fails to parse */ }
+        // ── AND IF IT IS STILL SHORT, THE TRAVELLER IS TOLD ───────
+        //
+        // The old test compared the retry against the previous attempt, so a
+        // seven day request that came back three and retried to four was
+        // recorded as fixed and the build carried on with a four day guide.
+        // More days is the right reason to keep the retry; it is not an answer
+        // to whether they got the days they asked for.
+        const missing = shortBy(parsed, requestedDays);
+        note("The days asked for, against the days built", {
+          detail: `asked for ${requestedDays}, built ${parsed.days?.length || 0}`,
+          outcome: missing ? "empty" : "ok",
+          got: missing ? `still ${missing} short after one more attempt` : "every day asked for is in the guide",
+          why: missing
+            ? "The writer was given the whole prompt again with the count named and still came back short, which usually means the conversation named enough places for the days it built and not for the days asked. Said above the guide rather than shipped in silence."
+            : "",
+          used: !missing,
+        });
+        if (missing) planProblems = [...planProblems, stillShortNote(parsed, requestedDays)];
       }
       if (!parsed.days || parsed.days.length === 0) throw new Error("empty");
       // ── THE AUDIT RUNS ON WHAT CAME BACK ─────────────────────────
@@ -17262,7 +17364,17 @@ If the conversation only covers a single day or a few stops with no explicit day
               );
               if (!rewriteRes.error && rewriteRes.text) {
                 const cleaned = rewriteRes.text.trim().replace(/^["']|["']$/g, "");
-                if (cleaned) writeGuideProseField(parsed, flag.id, cleaned);
+                // ── AND IT MAY NOT REWORD A FACT OUT OF EXISTENCE ──
+                //
+                // This pass is told to "change wording only, never content or
+                // meaning", and nothing checked. It rewrites the same
+                // essentials fields Stage 6 does, so it is the same hole one
+                // stage earlier and gets the same guard: a rewrite that drops
+                // a frozen name kept the tone and lost the fact. See
+                // utils/frozenFacts.js.
+                const lost = factsLost(original, cleaned, frozen);
+                if (lost.length) frozenRefusals.push(lostNote(flag.id, lost, flag.reason));
+                else if (cleaned) writeGuideProseField(parsed, flag.id, cleaned);
               }
             }
           }
@@ -17284,7 +17396,7 @@ If the conversation only covers a single day or a few stops with no explicit day
         const proseFields2 = collectGuideProseFields(parsed); // re-collect — the polish pass above may have rewritten some
         const stopNames = (parsed.days || []).flatMap(d => (d.stops || []).map(s => `${s.name}${s.town ? ` (${s.town})` : ""}`));
         const factCheckRes = await askPerplexity(
-          `Using real, current web search, fact-check this finished Denmark travel guide for real factual errors — wrong opening hours, wrong prices, a place that doesn't exist, or any claim that's incorrect. Don't flag stylistic choices, vague-but-true statements, or anything that's already appropriately hedged (e.g. "check current prices online") — only real factual problems.\n${researchRules()}\n\nPlaces in this guide: ${stopNames.join(", ")}\n\nText fields to check (each with an id):\n${JSON.stringify(proseFields2.map(f => ({ id: f.id, text: f.text })))}\n\nRespond with ONLY a JSON array, no other text, no markdown: [{"id": "the exact id given", "issue": "what's factually wrong and the correct fact, if you know it"}] — return [] if nothing is wrong.`
+          `Using real, current web search, fact-check this finished Denmark travel guide for real factual errors — wrong opening hours, wrong prices, a place that doesn't exist, or any claim that's incorrect. Don't flag stylistic choices, vague-but-true statements, or anything that's already appropriately hedged (e.g. "check current prices online") — only real factual problems.\n${researchRules()}\n\nPlaces in this guide: ${stopNames.join(", ")}\n\nText fields to check (each with an id):\n${JSON.stringify(proseFields2.map(f => ({ id: f.id, text: f.text })))}\n\nRespond with ONLY a JSON array, no other text, no markdown: [{"id": "the exact id given", "issue": "what's factually wrong and the correct fact, if you know it"}] — return [] if nothing is wrong.${frozenBlock(frozen)}`
         );
         if (!factCheckRes.error && factCheckRes.text) {
           let issues = [];
@@ -17302,11 +17414,36 @@ If the conversation only covers a single day or a few stops with no explicit day
             );
             if (!fixRes.error && fixRes.text) {
               const cleaned = fixRes.text.trim().replace(/^["']|["']$/g, "");
-              if (cleaned) writeGuideProseField(parsed, issue.id, cleaned);
+              // ── THE HALF THAT MAKES IT A RULE ───────────────────
+              //
+              // The block above tells the checker what was verified by hand.
+              // This is what holds when it flags one anyway, which it will:
+              // "the Rejsekort app requires MitID" is wrong and is what a
+              // search returns, and that fact is in the prompt to correct it.
+              // A rewrite that drops the name is not a correction, it is the
+              // verified fact being deleted on the last pass of the build.
+              const lost = factsLost(original, cleaned, frozen);
+              if (lost.length) frozenRefusals.push(lostNote(issue.id, lost, issue.issue));
+              else if (cleaned) writeGuideProseField(parsed, issue.id, cleaned);
             }
           }
         }
       } catch { /* non-fatal — the guide ships with its already-written text if this pass fails */ }
+      // ── AND WHAT THOSE TWO PASSES WERE REFUSED ──────────────────
+      //
+      // One line in the run log whether or not anything was refused, so the
+      // guard is visible working rather than inferred from a fact that did not
+      // go missing. `used` is true when nothing was thrown away, which is the
+      // ordinary run.
+      note("What the last two passes were not allowed to rewrite", {
+        detail: frozen.length ? `frozen on this trip: ${frozen.map(f => f.what).join(", ")}` : "nothing was quoted into this guide as frozen",
+        outcome: frozenRefusals.length ? "empty" : "ok",
+        got: frozenRefusals.length ? frozenRefusals.join(" ") : "no rewrite dropped one",
+        why: frozenRefusals.length
+          ? "A checked fact was flagged and the rewrite that answered it deleted the fact rather than correcting it, so the original stands. Worth reading: a repeat on the same fact means the web has moved and somebody should look."
+          : "",
+        used: !frozenRefusals.length,
+      });
       // ── WHERE TO STAY AND HOW TO GET AROUND, BEFORE THE ROUTES ──
       // This has to come first, and not only so it survives. The duration
       // fetch below reads day.glance.legs[i].how to decide whether a leg is a
@@ -20496,14 +20633,18 @@ If the conversation only covers a single day or a few stops with no explicit day
       // it, and it forbids the inference it invites. See utils/placeActivity.js
       // for why a low count may never be read as a quiet island.
       const activityDays = Number.isFinite(Number(brief?.known?.days?.value)) ? Number(brief.known.days.value) : ACTIVITY_DAYS;
+      // The same reading as the guide build's, and for the same reason: the
+      // chat is where this decides WHERE to go, so counting events the person
+      // cannot get into is worse here than anywhere. See utils/placeActivity.js.
+      const chatSpeaksDanish = brief?.known?.danish?.speaks === true;
       const activitySays = brief?.known?.when?.value
         ? activityBlock(
             activityAcross(
               communityEvents,
               inPlayNow.flatMap(t => [t.name, namedIslandOf(t)]).filter(Boolean),
-              { from: new Date(brief.known.when.value), days: activityDays },
+              { from: new Date(brief.known.when.value), days: activityDays, danishSpeaker: chatSpeaksDanish },
             ),
-            { days: activityDays },
+            { days: activityDays, danishSpeaker: chatSpeaksDanish },
           )
         : "";
 

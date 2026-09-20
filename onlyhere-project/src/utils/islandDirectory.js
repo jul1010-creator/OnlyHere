@@ -54,6 +54,23 @@ import { fold } from "./danishNames";
 // eat and shop. Eat is first, so that heading reads as dining, which is what
 // the page is mostly listing.
 export const SECTIONS = [
+  // ── THE PAGE ITSELF, WHICH IS NOT A SECTION OF ONE ──────────────
+  //
+  // Added 19 Sep 2026 after running this reader against avernak.dk's real
+  // markup rather than against a fixture of my own. Its whole directory is one
+  // page, /visit, and the only link to it anywhere on the site says "Besøg
+  // Avernakø". That matched `see`, on "besog", and the wiring follows only
+  // stay and eat links, so pasting avernak.dk came back with nothing at all:
+  // the front page has no businesses on it and the one page that does was
+  // classified as a thing to look at.
+  //
+  // FIRST, because it outranks every other word on a link. A page called Besøg
+  // is the visitor page, and the sections are inside it.
+  //
+  // IT IS NOT A ROW KIND. DIRECTORY_PROMPT lists stay|eat|shop|ferry|see and
+  // never offers this one, because nothing IS a visit: it is where the other
+  // five are written down.
+  { kind: "visit", words: ["besog", "visit", "turist", "for gaester", "plan your"] },
   { kind: "stay", words: ["overnatning", "overnatte", "sovested", "accommodation", "where to stay", "bed & breakfast", "bed and breakfast"] },
   { kind: "eat", words: ["spisning", "spise", "restaurant", "cafe", "kro", "mad og drikke", "eating", "where to eat", "food"] },
   { kind: "shop", words: ["butik", "kobmand", "handel", "shopping"] },
@@ -83,6 +100,14 @@ export const kindOf = (text) => {
 const ANCHOR = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
 const TAGS = /<[^>]+>/g;
 
+// Read off raw markup, so the entities are still entities. Sejerø's own menu
+// says "Handels- &amp; spisesteder", and a link text carrying that would be
+// shown to him with the markup still in it. Only the five that matter: this is
+// a label, not a document, and a full decoder here would be a parser nobody
+// asked for.
+const ENTITIES = { amp: "&", lt: "<", gt: ">", quot: '"', "#39": "'", nbsp: " " };
+const decode = (v) => String(v || "").replace(/&(amp|lt|gt|quot|#39|nbsp);/g, (_, k) => ENTITIES[k]);
+
 export const directoryLinks = (html, baseUrl = "") => {
   const out = [];
   const seen = new Set();
@@ -90,7 +115,7 @@ export const directoryLinks = (html, baseUrl = "") => {
   ANCHOR.lastIndex = 0;
   while ((m = ANCHOR.exec(String(html || ""))) !== null) {
     const href = String(m[1] || "").trim();
-    const text = String(m[2] || "").replace(TAGS, " ").replace(/\s+/g, " ").trim();
+    const text = decode(String(m[2] || "").replace(TAGS, " ")).replace(/\s+/g, " ").trim();
     if (!href || /^(?:#|mailto:|tel:|javascript:)/i.test(href)) continue;
     const kind = kindOf(text) || kindOf(href);
     if (!kind) continue;
@@ -128,7 +153,10 @@ export const DIRECTORY_PROMPT = (place, text) =>
   + `Leave out the island's own institutions: the council, the church, the school, the residents' association, the ferry company's timetable page. A business somebody can walk into is what this is for.\n\n${text}`;
 
 const clean = (v) => String(v || "").replace(/\s+/g, " ").trim();
-const KINDS = new Set(SECTIONS.map(s => s.kind));
+// The kinds a ROW may carry, which is every section except the one that only
+// finds a page. See the note on "visit" in SECTIONS.
+export const ROW_KINDS = SECTIONS.map(s => s.kind).filter(k => k !== "visit");
+const KINDS = new Set(ROW_KINDS);
 
 export const rowsFromDirectory = (json, { place = "", source = "" } = {}) => {
   const list = Array.isArray(json?.rows) ? json.rows : [];

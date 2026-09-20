@@ -63,7 +63,7 @@ writeFileSync(entry, `
   export { KOMMUNER, K } from ${JSON.stringify(join(root, "src/data/kommuner.js"))};
   export { TICKET_HUNT_PROMPT, ticketHuntUrls } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
   export { bookingUrl, airbnbUrl, STAY_DISCLOSURE, affiliateActive, ticketmasterUrl, isTicketmasterUrl, ticketmasterActive, ticketDisclosure } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
-  export { isTiqetsUrl, tiqetsUrl, tiqetsBrowseUrl, tiqetsActive, tiqetsDisclosure, carRentalUrl, carRentalActive, carRentalFits, CAR_RENTAL_DISCLOSURE, supportNote, partnerLinkCount, isPartnerLink, partnerDisclosure, partnerMerchant, destinationIn, linkLabel, outboundLink, affiliateHref, affiliateNote, isAffiliateHref, isGetyourguideUrl, isGetyourguideProductUrl, getyourguideUrl, getyourguideActive, getyourguideDisclosure, bikeRentalFits, tourMerchant, isBajabikesUrl, isBajabikesProductUrl, isBajabikesRental, bajabikesSlug, bajabikesUrl, bajabikesActive, bajabikesDisclosure } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
+  export { isTiqetsUrl, tiqetsUrl, tiqetsBrowseUrl, tiqetsActive, tiqetsDisclosure, carRentalUrl, carRentalActive, carRentalFits, CAR_RENTAL_DISCLOSURE, supportNote, partnerLinkCount, isPartnerLink, partnerDisclosure, partnerMerchant, destinationIn, linkLabel, outboundLink, affiliateHref, affiliateNote, isAffiliateHref, isGetyourguideUrl, isGetyourguideProductUrl, getyourguideUrl, getyourguideActive, getyourguideDisclosure, bikeRentalFits, tourMerchant, isBajabikesUrl, isBajabikesProductUrl, isBajabikesRental, bajabikesSlug, bajabikesUrl, bajabikesActive, bajabikesDisclosure, isDiscovercarsUrl } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
   export { isWegotripUrl, wegotripUrl, wegotripBrowseUrl, wegotripActive, wegotripDisclosure, tripcomActive } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
   export { bookingEarns, bookingCjUrl, stayDoorUrl, partnerAdsUrl, partnerAdsBanner, partnerAdsMerchant, partnerAdsPlacements, partnerAdsPending, partnerAdsGear, partnerAdsSlot, featuredStayFor, stayDisclosure } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
   export { TOWN_TYPES, townNameOf, audioFor, audioLine, ticketFor, unmatchedProducts, wegotripProposals, describeWegotrip, wegotripWriteFor, AUDIO as WEGO_AUDIO, TICKET as WEGO_TICKET } from ${JSON.stringify(join(root, "src/utils/wegotripMatch.js"))};
@@ -235,7 +235,7 @@ writeFileSync(entry, `
   export { samePlace, runsOn, communityOnDay, communityBlock, MOST_IN_A_DAY } from ${JSON.stringify(join(root, "src/utils/communityEvents.js"))};
   export { placesIn, townsOf, MOST_PLACES } from ${JSON.stringify(join(root, "src/utils/communityEvents.js"))};
   export { communityDay, moreOnLine, noticeGroups, rolledHeadline, rolledBody } from ${JSON.stringify(join(root, "src/utils/communityEvents.js"))};
-  export { activityIn, activityAcross, activityBlock, isLively, LIVELY, DEFAULT_DAYS as ACTIVITY_DAYS } from ${JSON.stringify(join(root, "src/utils/placeActivity.js"))};
+  export { activityIn, activityAcross, activityBlock, isLively, LIVELY, behindLanguage, mostlyDanish, MOSTLY_DANISH, DEFAULT_DAYS as ACTIVITY_DAYS } from ${JSON.stringify(join(root, "src/utils/placeActivity.js"))};
   export { newFinds, findsLine, findDetail, withFind, withoutFind, wasTurnedDown, builtAt, alreadyOn } from ${JSON.stringify(join(root, "src/utils/guideFinds.js"))};
   export { accessOf, accessNote, accessLines, accessBlock, KEEP_THE_NAME } from ${JSON.stringify(join(root, "src/utils/eventAccess.js"))};
   export { readDanish } from ${JSON.stringify(join(root, "src/utils/tripBrief.js"))};
@@ -249,7 +249,10 @@ writeFileSync(entry, `
   export { unfold, icsDate, icsTime, parseIcs, cleanTitle, communityRowsFrom, feedProblems, postalTownsIn, placeFor, icsUrlFor, calendarIdFromEid, ICS_FOR, MOST_PER_PLACE } from ${JSON.stringify(join(root, "src/utils/calendarFeed.js"))};
   export { PAGE_ROWS_PROMPT, rowsFromExtract } from ${JSON.stringify(join(root, "src/utils/calendarFeed.js"))};
   export { tribeApiFor, rowsFromTribe, rowsFromSimcal, readerFor } from ${JSON.stringify(join(root, "src/utils/calendarFeed.js"))};
-  export { SECTIONS as DIR_SECTIONS, kindOf as dirKindOf, directoryLinks, DIRECTORY_PROMPT, rowsFromDirectory, directoryProblems, staysIn, eatsIn, islandSaysBlock, ISLAND_SAYS } from ${JSON.stringify(join(root, "src/utils/islandDirectory.js"))};
+  export { shortBy, better, dayRetryBlock, stillShortNote } from ${JSON.stringify(join(root, "src/utils/dayCount.js"))};
+  export { FROZEN_TRANSPORT, frozenFrom, frozenIn, factsLost, frozenBlock, lostNote } from ${JSON.stringify(join(root, "src/utils/frozenFacts.js"))};
+  export { baseKey, staysIn as stayRunsIn, doorsFor, doorOn, sameBaseLine } from ${JSON.stringify(join(root, "src/utils/stayDoors.js"))};
+  export { SECTIONS as DIR_SECTIONS, ROW_KINDS, kindOf as dirKindOf, directoryLinks, DIRECTORY_PROMPT, rowsFromDirectory, directoryProblems, staysIn, eatsIn, islandSaysBlock, ISLAND_SAYS } from ${JSON.stringify(join(root, "src/utils/islandDirectory.js"))};
   export { sentencesIn, readerBody, noticeAsk, noticeText, TRANSLATE_NOTICE, translatedNotice, DEAD_ENDS } from ${JSON.stringify(join(root, "src/utils/noticeVoice.js"))};
   export { guideClaims, guideClaimNote } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { resolveStopCoords } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
@@ -8243,8 +8246,28 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     const src = stripComments(guide);
     const aff2 = readFileSync(join(root, "src/utils/affiliates.js"), "utf8");
     // ONE DOOR, through the one function that decides what it may promise.
-    ok("there is one Booking door on the stay card", /\{stayDoor && \(/.test(src));
-    is("and only one", (src.match(/\{stayDoor && \(/g) || []).length, 1);
+    // ── AND ONE PER BED RATHER THAN ONE PER NIGHT ────────────────
+    //
+    // Oliver, 19 Sep 2026, agreeing with an outside read: "the guide has begun
+    // to look like a massive advertisement page." The card renders per night,
+    // so one door in the source was still seven doors on a week. The door is
+    // now gated on the night that OPENS a stay, which is once per booking the
+    // reader makes. See utils/stayDoors.js.
+    ok("there is one Booking door on the stay card", /\{stayDoor && doors\.door && \(/.test(src));
+    is("and only one", (src.match(/\{stayDoor && doors\.door && \(/g) || []).length, 1);
+    // THE STANDING RULE SURVIVES THE CUT, and it is the half that must not
+    // break while fixing the other half. Oliver, 7 Aug 2026: "why does the
+    // accommodation/booking affiliation keep getting removed". The card and
+    // the sentence are still on every night, and a guide with a night in it
+    // still shows a way to book it.
+    ok("the card itself is still on every night that needs a bed",
+       /\{day\.glance\?\.accommodation && needsABed\(day\.day \|\| dayIdx \+ 1, bedStateOf\(guide\)\) && \(\(\) => \{/.test(src));
+    ok("and which night opens a stay is decided once for the page",
+       /const stayDoors = doorsFor\(days, stayNights\);/.test(src));
+    ok("the second booking site is offered once on the whole guide rather than beside the first every night",
+       /\{stayTripUrl && doors\.compare && \(/.test(src));
+    // A night with no button has to say why, or the page reads as broken.
+    ok("and a night under an earlier booking says so", /\{sameBed && \(/.test(src));
     ok("built by the shared decider rather than by a search here",
        /const stayDoor = stayDoorUrl\(\{/.test(src));
     ok("and the three that used to stand here are gone",
@@ -8262,8 +8285,14 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     ok("the guide's door names itself in the click", /slot: "guide-stay",/.test(src));
     ok("and the costs list names its own",
        /slot: "costs-stay"/.test(readFileSync(join(root, "src/utils/costLedger.js"), "utf8")));
-    // The disclosure follows the door that is always there.
-    ok("the disclosure follows the door", /\(stayDoor \|\| stayTripUrl\) && dayIdx === 0/.test(src));
+    // ── AND THE DISCLOSURE FOLLOWS THE BUTTONS, NOT DAY ONE ──────
+    //
+    // It read `dayIdx === 0`, which was right while every night carried a
+    // door. Now day one can be a night with no buttons on it, and that test
+    // would print the paid-link sentence over nothing while the real door two
+    // days later carried none. It rides with the first buttons instead.
+    ok("the disclosure follows the door", /\{stayDoor && doors\.door && doors\.compare && \(/.test(src));
+    ok("and never prints over a night with no button", !/\(stayDoor \|\| stayTripUrl\) && dayIdx === 0/.test(src));
 
     // ── AND THE DOOR ITSELF, ON BOTH SETTINGS ───────────────────────
     //
@@ -34039,7 +34068,15 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   is("nor does an unrecognised tag", writeInLanguage({ tag: "qq", name: "" }), "");
 
   // ── AND IT HAS TO REACH ALL FOUR PLACES THAT WRITE READER PROSE ──
-  is("the guide build and its retry both get it", (appL.match(/\$\{guideLangBlock\}/g) || []).length, 2);
+  // ── ONE BLOCK NOW, AND THE RETRY INHERITS IT ────────────────────
+  //
+  // 19 Sep 2026. The day-count retry used to paste ${guideLangBlock} itself,
+  // which is why this counted two. It sends the whole writer prompt now, so
+  // the language reaches it the way every other rule does, and a second paste
+  // would be a second place for the two to drift apart.
+  is("the guide build carries the language block", (appL.match(/\$\{guideLangBlock\}/g) || []).length, 1);
+  ok("and the retry inherits it by sending the whole writer prompt",
+     /\$\{guideSystemPrompt\}\\n\\n\$\{dayRetryBlock\(/.test(appL));
   ok("and it is computed once, from the traveller's own words", /const guideLang = guideLanguage\(\{[\s\S]{0,80}said: saidByTravellerForGuide/.test(appL));
   ok("with the ruled-out-language note appended", /writeInLanguage\(guideLang\) \+ languageBarNote\(saidByTravellerForGuide\)/.test(appL));
 
@@ -52379,10 +52416,27 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("and the sentence says why they are out", /nothing to buy/.test(describeEstimate(est)));
     // An unpriced refusal is not counted twice, in two buckets, as though two
     // different things were missing.
-    is("a refused line is not also counted as unpriced", est.unpriced, 2);
-    is("and the two unpriced ones are the searches", est.missing.length, 2);
+    // ── STATED AS A RULE, NOT AS A NUMBER ───────────
+    //
+    // 20 Sep 2026. These two read `2` and went red the moment Oliver pasted the
+    // DiscoverCars link, because a car hire line is unpriced by nature: the
+    // link is a browse link and the price depends on dates nobody has entered.
+    // A third unpriced line is the correct answer on a driving trip with a car
+    // programme configured.
+    //
+    // It is the same lesson the conditional forty lines up already records
+    // about the car line itself, arriving a second time: a count pinned here is
+    // a count that goes red when he does the thing the code tells him to do.
+    // What these assertions are FOR is that a refusal is not reported twice, in
+    // two buckets, as though two different things were missing.
+    is("a refused line is not also counted as unpriced", est.unpriced, est.missing.length);
+    ok("and no refusal is among the unpriced", !est.missing.some(m => /Distortion|Louisiana/i.test(m)));
     ok("the ferry among them", est.missing.some(m => /ferry/i.test(m)));
     ok("and the bed", est.missing.some(m => /sleep/i.test(m)));
+    // And the car exactly when there is a car programme, which is the same
+    // conditional the line that produces it is held to.
+    is("the car hire among them exactly when a programme is configured",
+       est.missing.some(m => /car/i.test(m)), M.carRentalActive());
 
     // ── FREE IS A FIGURE, NOT A GAP ──────────────
     // Leaving a free stop out would make the most certain line on the list look
@@ -57617,7 +57671,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // up. It also answers his own worry from the other side: counted rather than
   // listed, fifty stops being noise and becomes the signal.
   {
-    const { activityIn, activityAcross, activityBlock, isLively, LIVELY, ACTIVITY_DAYS } = M;
+    const { activityIn, activityAcross, activityBlock, isLively, LIVELY, ACTIVITY_DAYS, behindLanguage, mostlyDanish, MOSTLY_DANISH } = M;
     const pool = [
       ...["Kulturarvsdage", "ULTRA sej dag", "Safaritur", "10 ting", "Jagt i fortiden"]
         .map(n => ({ name: n, town: "Læsø", date: "2026-09-19" })),
@@ -57651,7 +57705,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // those apart. Same shape as the transit rule in App.jsx, which has had to
     // be restated three times: no transit itinerary is not no transit.
     const block = activityBlock(activityAcross(pool, ["Læsø", "Sejerø", "Orø", "Lilleø"], when), { days: 7 });
-    ok("the busy island is named with its number", /Læsø: 6 things on, 5 of them on 2026-09-19/.test(block));
+    ok("the busy island is named with its number", /Læsø: 6 things they can walk into, 5 of them on 2026-09-19/.test(block));
     // AND THE QUIET ONES ARE NOT NAMED AT ALL. The first draft listed them, and
     // naming them is what makes a model rank whatever the rule underneath says.
     ok("and the quiet ones are not named", !/Sejerø/.test(block));
@@ -57660,6 +57714,90 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("nor is a place holding one thing called empty", !/Orø/.test(block) && !/Lilleø/.test(block));
     ok("the rule is in capitals and it is the asymmetry",
        /A HIGH COUNT IS EVIDENCE AND A LOW ONE IS NOT/.test(block));
+
+    // ══ AND WHO IS COUNTING ════════════════════════════════════════
+    //
+    // Oliver, 19 Sep 2026, reading Læsø's own calendar: "these islands are
+    // going to depend on alot on your language. Læsø's calender doesn't seem
+    // very foreigner friendly." And: "Anything about 'theater' should be a
+    // clear nono as a foreigner."
+    //
+    // An island with six things on, four of them an hour of spoken Danish and
+    // a members' dinner, is a BUSY ISLAND FOR A DANE AND A QUIET ONE FOR
+    // EVERYBODY ELSE. Counting all six and calling it lively sends a German
+    // family across for a week they cannot get into.
+    {
+      const ev = (name, town, date, desc) => ({ name, town, towns: [town], date, desc });
+      const LANG = [
+        ev("Dilettantforestilling", "Læsø", "2026-09-21", "Læsø Dilettanterne spiller komedie."),
+        ev("Børneteater på havnen", "Læsø", "2026-09-22", "Teater for de mindste."),
+        ev("Revyaften", "Læsø", "2026-09-23", "Årets revy i forsamlingshuset."),
+        ev("Fællesspisning", "Læsø", "2026-09-23", "Kun for medlemmer af foreningen."),
+        ev("Loppemarked ved havnen", "Læsø", "2026-09-24", "Stande på havnen hele dagen."),
+        ev("Koncert med Hjalmer", "Læsø", "2026-09-25", "Livemusik på kroen."),
+        ev("Æblefestival", "Sejerø", "2026-09-21", "Æbler, boder og musik i havnen."),
+        ev("Havnemarked", "Sejerø", "2026-09-22", "Boder langs kajen."),
+        ev("Solnedgangstur", "Sejerø", "2026-09-24", "Gåtur til fyret."),
+      ];
+      const w = { from: new Date(2026, 8, 20), days: 7 };
+      const daneL = activityIn(LANG, { ...w, place: "Læsø", danishSpeaker: true });
+      const foreignL = activityIn(LANG, { ...w, place: "Læsø", danishSpeaker: false });
+      is("what is on is the same number either way", [daneL.count, foreignL.count], [6, 6]);
+      // A members' dinner is closed to everybody, in any language. That is a
+      // different fact from a concert being in Danish.
+      is("a members' evening is shut to a Dane too", daneL.usable, 5);
+      is("and four more are shut to somebody who does not read Danish", foreignL.usable, 2);
+      is("the gap is counted", [behindLanguage(daneL), behindLanguage(foreignL)], [1, 4]);
+      ok("and reads as an island that is busy in Danish", mostlyDanish(foreignL) && !mostlyDanish(daneL));
+      ok("one event behind a language barrier is a Tuesday, not a pattern",
+         !mostlyDanish({ count: 4, usable: 3 }) && MOSTLY_DANISH === 2);
+
+      // ── WHICH CHANGES THE RANKING, WHICH IS THE POINT ────────────
+      // Læsø first for a Dane and below Sejerø for everybody else, off the same
+      // nine rows.
+      is("a Dane is sent to the busy island",
+         activityAcross(LANG, ["Læsø", "Sejerø"], { ...w, danishSpeaker: true }).map(r => r.place), ["Læsø", "Sejerø"]);
+      is("and a visitor who reads no Danish is not",
+         activityAcross(LANG, ["Læsø", "Sejerø"], { ...w, danishSpeaker: false }).map(r => r.place), ["Sejerø", "Læsø"]);
+      is("lively is judged on what they can get into",
+         [isLively(daneL), isLively(foreignL)], [true, false]);
+
+      // ── AND THE GAP IS SAID, NOT SWALLOWED ──────────────────────
+      //
+      // Busy in Danish and quiet in English is a REAL fact about an island in a
+      // way a low count never is: both numbers came off the same calendar, so
+      // nothing about Gemlyx's own coverage can explain the difference. It is
+      // the one thing a non-speaker most needs before booking a ferry.
+      const foreignBlock = activityBlock(
+        activityAcross(LANG, ["Læsø", "Sejerø"], { ...w, danishSpeaker: false }),
+        { days: 7, danishSpeaker: false },
+      );
+      ok("the block says who it counted for",
+         /counted for somebody who does NOT read Danish/.test(foreignBlock));
+      ok("the island that is busy in Danish is still named", /BUSY, BUT NOT IN A LANGUAGE THEY READ/.test(foreignBlock));
+      ok("with both numbers", /Læsø: 6 things on and only 2 open to somebody who does not read Danish/.test(foreignBlock));
+      // NEVER "QUIET". The standing asymmetry survives the new half: this is a
+      // language fact, not a verdict on the island.
+      ok("and it is told to say the gap rather than call the island quiet",
+         /there is plenty on and most of it runs in Danish\. Never say the island is quiet/.test(foreignBlock));
+      const daneBlock = activityBlock(
+        activityAcross(LANG, ["Læsø", "Sejerø"], { ...w, danishSpeaker: true }),
+        { days: 7, danishSpeaker: true },
+      );
+      ok("a Dane is told none of that", !/BUSY, BUT NOT IN A LANGUAGE/.test(daneBlock) && !/does NOT read Danish/.test(daneBlock));
+      ok("the asymmetry is still in both", /A HIGH COUNT IS EVIDENCE AND A LOW ONE IS NOT/.test(foreignBlock)
+         && /A HIGH COUNT IS EVIDENCE AND A LOW ONE IS NOT/.test(daneBlock));
+
+      // ── AND BOTH READERS ARE HANDED THE ANSWER ──────────────────
+      // The chat decides WHERE to go and the build decides which day carries
+      // what. Counting events the person cannot get into is worse in the first.
+      const appAct = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+      is("the guide build and the chat both count for the right reader",
+         (appAct.match(/danishSpeaker: (?:speaksDanish|chatSpeaksDanish)/g) || []).length, 4);
+      ok("off the same answer the community block already uses",
+         /const speaksDanish = guideBrief\.known\.danish\?\.speaks === true;/.test(appAct)
+         && /const chatSpeaksDanish = brief\?\.known\?\.danish\?\.speaks === true;/.test(appAct));
+    }
     ok("and it names every word it refuses",
        /may NEVER be called quiet, dead, empty, closed, not worth it, or out of season/.test(block));
     ok("it says why, in terms of Gemlyx's own coverage",
@@ -68619,7 +68757,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
 // audit's own walker; and the audit running on the finished guide, with one
 // more call when it fires and the survivors written above the guide.
 {
-  const { ruledOutFor, readExclusions, excludedBlock, ruledOutStops, constraintViolations, constraintNote, checkPlan, askOpenAI, askClaude } = M;
+  const { ruledOutFor, readExclusions, excludedBlock, ruledOutStops, constraintViolations, constraintNote, checkPlan, askOpenAI, askClaude, dayRetryBlock } = M;
   const DASH = /[–—]/;
   const BANNED = /\b(?:actually|truly|genuinely|genuine|simply)\b/i;
 
@@ -68673,7 +68811,16 @@ SOURCE: https://www.tripadvisor.com/whatever`;
       const planner = evaluate(blockStatements, plannerTemplate, values);
       const guideSystemPrompt = evaluate(blockStatements, writerTemplate, values);
       const writer = evaluate("", writerCall, { ...values, guideSystemPrompt });
-      const retry = evaluate(blockStatements, retryTemplate, values);
+      // ── THE RETRY IS THE WRITER PROMPT NOW ──────────────────────
+      //
+      // 19 Sep 2026. This used to carry a shortened prompt written out at the
+      // call site, which is how it came to carry the ruled-out block and the
+      // language and nothing else: the frozen facts, the currency rule and the
+      // booked bed were all dropped on the one path where a guide was already
+      // going wrong. It sends the whole system prompt now, the same as the
+      // other two retries in that function, so the harness has to hand it the
+      // same two names the call site has in scope.
+      const retry = evaluate(blockStatements, retryTemplate, { ...values, guideSystemPrompt, dayRetryBlock });
       return { planner, writer, retry };
     };
     // What may not appear, read off a prompt: the heading line and the "- "
@@ -70715,7 +70862,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
 // should be taken into consideration when booking hotels on other islands?
 // Recommending the places that the islands themselves recommend?"
 {
-  const { DIR_SECTIONS, dirKindOf, directoryLinks, DIRECTORY_PROMPT, rowsFromDirectory,
+  const { DIR_SECTIONS, ROW_KINDS, dirKindOf, directoryLinks, DIRECTORY_PROMPT, rowsFromDirectory,
           directoryProblems, staysIn, eatsIn, islandSaysBlock, ISLAND_SAYS } = M;
 
   // ── THE HEADINGS, FOLDED THE WAY fold ACTUALLY FOLDS ────────────
@@ -70735,8 +70882,54 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   // "mad" was left off the eat list for exactly this: substring matching has to
   // be safe against a Danish word living inside an English one.
   is("and Made in Denmark is not somewhere to eat", dirKindOf("Made in Denmark"), "");
-  ok("every section is one of the five the app thinks in",
-     DIR_SECTIONS.every(x => ["stay", "eat", "shop", "ferry", "see"].includes(x.kind)));
+  ok("every section is one the app thinks in",
+     DIR_SECTIONS.every(x => ["visit", "stay", "eat", "shop", "ferry", "see"].includes(x.kind)));
+
+  // ══ AND THE TWO THINGS ONLY THE REAL SITES COULD TEACH ═════════
+  //
+  // 19 Sep 2026. Oliver: "You have access to my PC. You can test things
+  // yourself." Run against avernak.dk and sejero.dk rather than against my own
+  // fixtures, this reader failed on BOTH islands it was written for, and
+  // neither failure was visible from a fixture I had written.
+  //
+  // AVERNAKØ. Its whole directory is one page and the only link to it anywhere
+  // says "Besøg Avernakø", which matched `see`. The wiring followed stay and
+  // eat links only, so pasting the island's own domain came back with nothing.
+  is("the visitor page is its own kind, and it is the first one", DIR_SECTIONS[0].kind, "visit");
+  is("Besøg Avernakø is the way in", dirKindOf("Besøg Avernakø"), "visit");
+  is("and so is Turist på Sejerø", dirKindOf("Turist på Sejerø"), "visit");
+  // It finds a page. Nothing IS a visit, so a row may never carry the kind.
+  ok("but nothing can be filed under it", !ROW_KINDS.includes("visit"));
+  ok("and the model is never offered it", !/visit\|/.test(DIRECTORY_PROMPT("Avernakø", "x")));
+  is("a row that comes back as one is dropped",
+     rowsFromDirectory({ rows: [{ name: "Avernakø Landhotel", kind: "visit", said: "x" }] }, { place: "Avernakø" }).rows, []);
+
+  // SEJERØ. Its front page links to Turist på Sejerø and to nothing else
+  // useful; the links to Overnatning and Handels- & spisesteder are ON that
+  // page. A reader that only looks at the source stops one click short of
+  // every bed on the island. Both hrefs below are http on an https page, which
+  // is how that site really serves them.
+  const FRONT = `<a href="http://sejero.dk/om-sejeroe/">OM SEJERØ</a>
+    <a href="http://sejero.dk/turist-paa-sejeroe/">Turist på Sejerø</a>
+    <a href="https://sejeroe-ferry.teambooking.dk/new-booking">Book færgeonline</a>`;
+  const TURIST = `<a href="http://sejero.dk/oplev-sejeroe/handels-spisesteder/">Handels- &amp; spisesteder</a>
+    <a href="http://sejero.dk/oplev-sejeroe/overnatning/">Overnatning</a>
+    <a href="http://sejero.dk/om-sejeroe/transport/">Transport</a>`;
+  const onFront = directoryLinks(FRONT, "https://sejero.dk/").filter(l => ["visit", "stay", "eat"].includes(l.kind));
+  is("the front page offers exactly one way in", onFront.map(l => `${l.kind}:${l.url}`),
+     ["visit:http://sejero.dk/turist-paa-sejeroe/"]);
+  ok("and the ferry booking on another host is not followed", !FRONT.includes("teambooking") || !onFront.some(l => /teambooking/.test(l.url)));
+  const onTurist = directoryLinks(TURIST, "http://sejero.dk/turist-paa-sejeroe/").filter(l => ["visit", "stay", "eat"].includes(l.kind));
+  is("and one hop reaches the beds and the dining", onTurist.map(l => l.kind).sort(), ["eat", "stay"]);
+  // Read off raw markup, so an entity is still an entity until something
+  // decodes it. Sejerø's own menu says "Handels- &amp; spisesteder".
+  ok("the link text is readable rather than markup",
+     onTurist.some(l => l.text === "Handels- & spisesteder"));
+  const appDir = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+  ok("the reader follows the visitor page", /\["visit", "stay", "eat"\]\.includes\(l\.kind\)/.test(appDir));
+  ok("and one hop past it, never two", /first\.filter\(x => x\.kind === "visit"\)\.slice\(0, 1\)/.test(appDir));
+  // Avernakø needs one page and Sejerø needs all four. Measured, not chosen.
+  ok("with room for the four a real island takes", /const DIR_PAGES = 4;/.test(appDir));
 
   // ── THE LINK TO THE PAGE, FROM EITHER SIDE ──────────────────────
   // Avernakø's link says Besøg Avernakø and points at /visit, so the word is in
@@ -70753,7 +70946,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   `, "https://avernak.dk/");
   is("it finds the page behind the link's own words and behind its path",
      LINKS.map(l => `${l.kind}:${new URL(l.url).pathname}`),
-     ["see:/visit", "stay:/oplev-sejeroe/overnatning/"]);
+     ["visit:/visit", "stay:/oplev-sejeroe/overnatning/"]);
   // The whole authority of this source is that it IS the island's own site, so
   // a tourist board's page about the island is not one.
   ok("another site is never read as the island's own", !LINKS.some(l => l.url.includes("visitdenmark")));
@@ -70895,6 +71088,224 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   is("it reads the raw spelling and the clean one alike",
      noticeText({ headlineDa: "Åben ø-dag" }, "da").headline, "Åben ø-dag");
   is("and cleanNotice carries the Danish through", cleanNotice({ ...ROW, day: "2026-09-19" }).bodyDa, "For børnefamilier d. 19. september.");
+}
+
+
+// ── THE FACTS THE LAST STAGES MAY NOT REWRITE ──────────────────────
+//
+// Oliver, 19 Sep 2026: "since you're going to fix the pipeline". The hole is
+// written across the top of utils/frozenFacts.js: Stage 6 fact-checks the
+// finished guide against the web, and the fields it checks carry facts that
+// were verified by hand against the operator's own pages. The likeliest thing
+// for a search to flag is the one thing that was checked hardest.
+{
+  const { FROZEN_TRANSPORT, frozenFrom, frozenIn, factsLost, frozenBlock, lostNote } = M;
+  const picked = [{ row: { name: "Copenhagen Card" } }, { row: { name: "Rejsebillet" } }, { row: {} }];
+  const F = frozenFrom(picked);
+  is("the hand-written facts are frozen", FROZEN_TRANSPORT.map(f => f.id), ["rejsekort", "kombardo", "flixbus", "orange"]);
+  // A published row quoted into the prompt is frozen by the same argument: it
+  // has been through the Studio audit, and a search result does not outrank it
+  // on the last pass of a guide build.
+  ok("and so is every published entry quoted into the guide",
+     F.some(f => f.what === "Copenhagen Card") && F.some(f => f.what === "Rejsebillet"));
+  is("a row with no name adds nothing", frozenFrom([{ row: {} }]).length, FROZEN_TRANSPORT.length);
+
+  // THE REAL FAILURE, written out. "The Rejsekort app requires MitID" is wrong
+  // and is what a search returns, and the frozen fact exists to correct it.
+  const before = "The physical Rejsekort card is discontinued, so buy in the Rejsebillet app or use a Copenhagen Card, which has nothing to check out of.";
+  const rewritten = "Travel cards here need a Danish MitID to set up, so buy a single ticket in an app instead.";
+  is("the field is seen to carry them", frozenIn(before, F).map(f => f.what), ["Rejsekort", "Copenhagen Card", "Rejsebillet"]);
+  is("and a rewrite that drops them is caught", factsLost(before, rewritten, F).map(f => f.what),
+     ["Rejsekort", "Copenhagen Card", "Rejsebillet"]);
+  // ── AND A REWRITE IS STILL ALLOWED TO BE A REWRITE ──────────────
+  // What is compared is the NAME, never the wording. Demanding the sentence
+  // survive intact would refuse every honest improvement and make the pass
+  // pointless.
+  is("a reworded field that keeps the facts goes through",
+     factsLost(before, "Skip the Rejsekort card, it is discontinued. Buy in the Rejsebillet app or use a Copenhagen Card so there is nothing to check out of.", F), []);
+  is("a coach line turned into a generic bus is caught",
+     factsLost("Kombardo Expressen runs Copenhagen to Aarhus cheaply.", "A coach runs Copenhagen to Aarhus cheaply.", F).map(f => f.what),
+     ["Kombardo Expressen"]);
+  is("and a field carrying none of them is free",
+     factsLost("Kronborg costs 155 DKK.", "Entry to Kronborg is 155 DKK.", F), []);
+
+  // The prompt half. It does not say "skip these": a checker told to skip a
+  // field stops reading it.
+  const B = frozenBlock(F);
+  ok("the checker is told what was verified by hand", /CHECKED BY HAND ALREADY, AGAINST THE OPERATOR'S OWN PAGES/.test(B));
+  ok("and why a search flagging one is expected rather than a finding",
+     /exists precisely to correct a wrong claim that is all over the web/.test(B));
+  ok("everything else stays open to it", /Everything else in these fields is open and is what this check is for/.test(B));
+  is("nothing frozen, no block", frozenBlock([]), "");
+
+  // The refusal is said out loud, with what was flagged, or he cannot act on it.
+  const NOTE = lostNote("essentials.transportTip", factsLost(before, rewritten, F), "the Rejsekort app requires MitID");
+  ok("a refusal names the field and what it dropped", /^essentials\.transportTip: the rewrite was thrown away/.test(NOTE));
+  ok("and carries the complaint so it can be settled by hand", /What was flagged: the Rejsekort app requires MitID/.test(NOTE));
+  ok("with the reason the fact is frozen", /rejsekort\.dk/.test(NOTE));
+  is("nothing lost, nothing said", lostNote("x", []), "");
+
+  // ── AND BOTH PASSES ARE GUARDED, NOT ONE ────────────────────────
+  // Stage 5 rewrites the same fields and is told to change wording only, and
+  // nothing checked. It is the same hole one stage earlier.
+  const appF = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+  is("the polish pass and the fact-check pass both check what they dropped",
+     (appF.match(/const lost = factsLost\(original, cleaned, frozen\);/g) || []).length, 2);
+  is("and both keep the original when a fact went missing",
+     (appF.match(/if \(lost\.length\) frozenRefusals\.push\(lostNote\(/g) || []).length, 2);
+  ok("the frozen list is built once, beside the block that quotes them in",
+     /const frozen = frozenFrom\(essentialsPicked\);/.test(appF));
+  ok("and the fact-checker is told before it looks", /\$\{frozenBlock\(frozen\)\}/.test(appF));
+  // A guard that works in silence is one nobody can tell is working.
+  ok("every refusal reaches the run log", /What the last two passes were not allowed to rewrite/.test(appF));
+}
+
+// ── THE RETRY THAT FORGOT EVERYTHING THE BUILD KNEW ────────────────
+{
+  const { shortBy, better, dayRetryBlock, stillShortNote } = M;
+  const day = (n) => ({ stops: Array.from({ length: n }, (_, i) => ({ name: `s${i}` })) });
+  const g = (...counts) => ({ days: counts.map(day) });
+  is("three days against seven asked is four short", shortBy(g(2, 2, 2), 7), 4);
+  is("a full guide is not short", shortBy(g(2, 2, 2), 3), 0);
+  is("and nothing asked is never short", shortBy(g(2, 2, 2), 0), 0);
+
+  // ── WHICH ATTEMPT TO KEEP, AND THE TRAP IN IT ───────────────────
+  // An empty day is not a day. A retry that reaches the count by returning
+  // three days with nothing in them has answered the letter of the instruction
+  // and made the guide worse.
+  ok("four days beats three", better(g(2, 2, 2), g(2, 2, 2, 2)));
+  ok("and the same three do not beat themselves", !better(g(2, 2, 2), g(2, 2, 2)));
+  ok("four days with two empty ones does not beat three real ones", !better(g(2, 2, 2), g(2, 2, 0, 0)));
+  ok("nothing back keeps the first attempt", !better(g(2, 2, 2), {}));
+  ok("and filling an empty day counts even at the same count", better(g(2, 0, 0), g(1, 1, 1)));
+
+  const R = dayRetryBlock(3, 7);
+  ok("the retry names the failure", /RETURNED 3 DAYS AND THE TRAVELLER ASKED FOR 7/.test(R));
+  // THE WHOLE FIX. It sits UNDER the system prompt rather than replacing it.
+  ok("and says the rules above it still hold",
+     /Keep every rule above, including the essentials, the currency and anything already settled about where they sleep/.test(R));
+  is("nothing asked, no block", dayRetryBlock(3, 0), "");
+
+  // ── AND A GUIDE STILL SHORT IS SAID, NOT SWALLOWED ──────────────
+  // The old test compared the retry against the previous attempt, so seven
+  // asked, three back and four on the retry was recorded as fixed.
+  const S = stillShortNote(g(2, 2, 2, 2, 2), 7);
+  ok("the traveller is told the count they got", /You asked for 7 days and this plan covers 5/.test(S));
+  ok("and offered the two real ways out", /Tell me somewhere else you would like to go, or say the word/.test(S));
+  is("a guide that is not short says nothing", stillShortNote(g(2, 2, 2), 3), "");
+
+  const appD = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+  ok("the retry sends the whole writer prompt", /`\$\{guideSystemPrompt\}\\n\\n\$\{dayRetryBlock\(/.test(appD));
+  ok("and the hand-written short prompt is gone",
+     !/Turn the trip plan discussed in this conversation into strict JSON\. The "days" array MUST contain EXACTLY/.test(appD));
+  ok("the retry is kept on better rather than on a count", /if \(better\(parsed, retryParsed\)\) parsed = retryParsed;/.test(appD));
+  ok("and a guide still short reaches the traveller",
+     /planProblems = \[\.\.\.planProblems, stillShortNote\(parsed, requestedDays\)\]/.test(appD));
+}
+
+// ── "THE GUIDE HAS BEGUN TO LOOK LIKE A MASSIVE ADVERTISEMENT PAGE" ─
+//
+// Oliver, 19 Sep 2026, relaying an outside read and agreeing with it. Measured
+// before anything was changed: the stay card renders once per night and
+// carries up to three outbound buttons, so a seven night trip put up to
+// twenty-one hotel links on one page, nineteen of them the same search again.
+{
+  const { baseKey, stayRunsIn, doorsFor, doorOn, sameBaseLine } = M;
+  const d = (day, area, town) => ({ day, glance: { stayArea: area }, stops: [{ town }] });
+  const WEEK = [d(1, "Indre By", "Copenhagen"), d(2, "Indre By", "Copenhagen"),
+                d(3, "central Odense", "Odense"), d(4, "central Odense", "Odense"), d(5, "central Odense", "Odense"),
+                d(6, "central Aarhus", "Aarhus"), d(7, "", "Aarhus")];
+  const NIGHTS = [1, 2, 3, 4, 5, 6];   // night 7 is the flight home
+  is("nights in one place are one stay", stayRunsIn(WEEK, NIGHTS).map(x => x.nights), [[1, 2], [3, 4, 5], [6]]);
+  const MAP = doorsFor(WEEK, NIGHTS);
+  is("and the door is on the night the stay opens", Object.keys(MAP).map(Number), [1, 3, 6]);
+  // THE MEASUREMENT, as the assertion. Six nights, two buttons each before.
+  is("a week goes from twelve buttons to four",
+     NIGHTS.reduce((n, x) => n + (doorOn(MAP, x).door ? 1 : 0) + (doorOn(MAP, x).compare ? 1 : 0), 0), 4);
+  // The second booking site is what reads as advertising when it sits beside
+  // the first every night. Offered once it reads as a second price to check.
+  is("the comparison is offered once on the whole guide", NIGHTS.filter(x => doorOn(MAP, x).compare).length, 1);
+  ok("on the first stay", doorOn(MAP, 1).compare);
+  // ── AND THE STANDING RULE HOLDS ─────────────────────────────────
+  // Oliver, 7 Aug 2026: "why does the accommodation/booking affiliation keep
+  // getting removed". A guide with a night in it shows a way to book it.
+  ok("a guide with nights in it always has a door", NIGHTS.some(x => doorOn(MAP, x).door));
+  is("one night is one door", Object.keys(doorsFor([d(1, "Indre By", "Copenhagen")], [1])).length, 1);
+  // CONSECUTIVE, and the word is doing work: Aarhus, Skagen, Aarhus is two
+  // bookings in Aarhus and merging them on the name would hide the second.
+  is("coming back to a base already used is a second booking",
+     Object.keys(doorsFor([d(1, "central Aarhus", "Aarhus"), d(2, "Skagen", "Skagen"), d(3, "central Aarhus", "Aarhus")], [1, 2, 3])).length, 3);
+  // A night that cannot say where it is cannot be merged with the one before.
+  is("a night with no base still gets its own door",
+     Object.keys(doorsFor([d(1, "", ""), d(2, "", "")], [1, 2])).length, 2);
+  is("no nights, no doors", doorsFor(WEEK, []), {});
+  is("the Danish letters do not split a stay", baseKey(d(1, "Sejerø", "")), baseKey(d(1, "SEJERØ", "")));
+
+  // A night with no button has to say why, or a reader reads the page as broken.
+  ok("a night under an earlier booking says which night it belongs to",
+     /Same bed as night 3/.test(sameBaseLine(MAP, 4, WEEK)));
+  is("the night that opens a stay says nothing", sameBaseLine(MAP, 1, WEEK), "");
+  is("and a night in a different place says nothing either", sameBaseLine(MAP, 6, WEEK), "");
+}
+
+
+// ── THE CAR HIRE LINK, AND THE TWO HALVES THAT MAKE IT HONEST ──────
+//
+// Oliver, 20 Sep 2026: "https://www.discovercars.com/?a_aid=gemlyx this is the
+// affiliate link." Six days with no car button anywhere on a site whose guides
+// routinely involve driving.
+//
+// PASTED WITH BOTH HALVES IN THE SAME COMMIT, because the failure otherwise is
+// the silent one utils/affiliates.js has now written down three times: the
+// button renders, the reader presses it, and nothing under it says who is
+// being paid.
+{
+  const { isPartnerLink, isDiscovercarsUrl, partnerDisclosure, partnerMerchant, linkLabel, outboundLink, carRentalUrl, carRentalActive } = M;
+  const LINK = carRentalUrl();
+  ok("there is a car programme configured again", carRentalActive());
+  ok("and it is the DiscoverCars link", /^https:\/\/www\.discovercars\.com\/\?a_aid=/.test(LINK));
+
+  // ── PAID BY ITS PARAMETER, NOT BY ITS HOST ──────────────────────
+  //
+  // DiscoverCars tracks on its own domain, so the host says nothing. Putting
+  // discovercars.com on PARTNER_HOSTS would print "this may earn us a
+  // commission" over any plain mention of the site, which is the same false
+  // statement the Booking.com note in that file refuses to make the other way
+  // round.
+  ok("the link counts as paid", isPartnerLink(LINK));
+  ok("and a plain mention of the same site does not",
+     !isPartnerLink("https://www.discovercars.com/car-rental/denmark"));
+  ok("the host test knows the domain either way",
+     isDiscovercarsUrl("https://www.discovercars.com/x") && isDiscovercarsUrl("https://discovercars.com/x"));
+  ok("and does not answer for somebody else", !isDiscovercarsUrl("https://discovercars.example.com/x"));
+
+  // ── AND www IS NOT A MERCHANT ───────────────────────────────────
+  //
+  // Every programme this file had met tracks on a subdomain of the network or
+  // on a bare domain, so the host's first label WAS the merchant. This is the
+  // first that tracks on its own site with the www on it, and without the
+  // strip the button read "Partner site" over a link to a company whose name
+  // is in the host.
+  is("the button names the company", linkLabel(LINK), "Book on DiscoverCars");
+  is("read off the host with the www taken off", partnerMerchant(LINK), "DiscoverCars");
+  ok("a plain mention is still called what it is", linkLabel("https://www.discovercars.com/car-rental/denmark") === "Official site");
+
+  // The three things a render site needs, and all three follow from the href.
+  const out = outboundLink(LINK);
+  is("the href is the link itself", out.href, LINK);
+  ok("with the rel a paid link has to carry", /sponsored/.test(out.rel) && /nofollow/.test(out.rel));
+  ok("and the sentence under it", /may earn a small commission/.test(partnerDisclosure(LINK)));
+  is("while a plain mention gets no sentence at all", partnerDisclosure("https://www.discovercars.com/car-rental/denmark"), "");
+
+  // ── AND THE CONFIG SAYS WHY IT IS THIS ONE ──────────────────────
+  // Oscar wins on inventory the day it answers and nothing here is exclusive,
+  // so the swap is one paste. What settled it is that an empty link earns
+  // nothing while Oscar does not answer.
+  const cfg = readFileSync(join(root, "src/config.js"), "utf8");
+  ok("the Oscar argument is kept rather than deleted", /Oscar/.test(cfg));
+  // Matched on one line: the comment wraps, and a phrase that spans a line
+  // break matches nothing however true it is.
+  ok("and the reason this one is in is written down", /Oscar has not answered since 14 September/.test(cfg));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

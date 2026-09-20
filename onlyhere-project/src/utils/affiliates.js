@@ -781,6 +781,14 @@ export const isBajabikesUrl = (url) => {
   return !!h && (h === BAJABIKES_HOST || h.endsWith(`.${BAJABIKES_HOST}`));
 };
 
+// The same shape, for the car hire programme. See the a_aid branch in
+// isPartnerLink for why the host alone is never the answer here.
+const DISCOVERCARS_HOST = "discovercars.com";
+export const isDiscovercarsUrl = (url) => {
+  const h = hostOf(url);
+  return !!h && (h === DISCOVERCARS_HOST || h.endsWith(`.${DISCOVERCARS_HOST}`));
+};
+
 // ── AND A PRODUCT IS ONE THIS PROGRAMME ACTUALLY SELLS ──────────────
 //
 // The same distinction isGetyourguideProductUrl and isTiqetsProductUrl draw, and
@@ -1006,6 +1014,24 @@ export const isPartnerLink = (url) => {
   // product pages are ordinary links until `bb` is on them, and a plain
   // reference to bajabikes.eu in prose must not be labelled as paid.
   if (/(?:[?&])bb=[^&]/.test(raw) && isBajabikesUrl(raw)) return true;
+  // ── AND DISCOVERCARS IS THE FOURTH ────────────────────────────────
+  //
+  // Oliver, 20 Sep 2026, with the link in his hand:
+  // "https://www.discovercars.com/?a_aid=gemlyx this is the affiliate link."
+  //
+  // NOT ON PARTNER_HOSTS, and the reason is the one the two branches above are
+  // here for: DiscoverCars tracks on its own domain, so the host says nothing.
+  // Listing discovercars.com as a partner host would print "this may earn us a
+  // commission" over any plain mention of the site in prose, which is the same
+  // false statement the Booking.com note four paragraphs up refuses to make in
+  // the other direction.
+  //
+  // `a_aid` is the part the tracking cannot hide, and it is the whole of what
+  // makes this link pay. Added in the SAME commit that puts the link in
+  // config.js, because the failure otherwise is the silent one this list
+  // exists to prevent: the button renders, the reader presses it, and nothing
+  // under it says who is being paid.
+  if (/(?:[?&])a_aid=[^&]/.test(raw) && isDiscovercarsUrl(raw)) return true;
   return /(?:[?&])aid=\d/.test(raw) && (h === "booking.com" || h.endsWith(".booking.com"));
 };
 
@@ -1238,7 +1264,20 @@ export const partnerMerchant = (url) => {
   // reading. A different CJ link falls through to the lookups below and gets
   // the honest generic label rather than being called Booking.
   if (BOOKING_CJ_LINK && String(url || "").trim().startsWith(BOOKING_CJ_LINK)) return "Booking.com";
-  const first = h.split(".")[0].toLowerCase();
+  // ── AND www IS NOT A MERCHANT ─────────────────────────────────────
+  //
+  // 20 Sep 2026, putting the DiscoverCars link in. Every programme this file
+  // had met until now tracks on a subdomain of the network (tiqets.tpx.li) or
+  // on a bare domain (booking.com), so the first label WAS the merchant. A
+  // programme that tracks on its own site with the www on it is the first one
+  // where that reads "www", falls through both lookups, and labels the button
+  // "Partner site" over a link to a company whose name is right there in the
+  // host.
+  //
+  // The line six below already strips it off the DESTINATION host and this one
+  // did not, which is the tell: the same string was being read two ways in one
+  // function.
+  const first = h.replace(/^www\./i, "").split(".")[0].toLowerCase();
   if (PARTNER_MERCHANTS[first]) return PARTNER_MERCHANTS[first];
   const dest = destinationIn(url);
   const destHost = dest ? hostOf(dest) : "";
