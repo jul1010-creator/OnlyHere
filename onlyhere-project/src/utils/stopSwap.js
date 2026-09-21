@@ -248,3 +248,14 @@ export const alreadyRuledOut = (guide) => {
   });
   return out;
 };
+
+// ── NOT EVERY STOP IS A CHOICE ──────────────────────────────────────
+//
+// Oliver, 21 Sep 2026, of a guide whose first stop is Copenhagen Airport, with
+// the swap control under it: "You want the airport to change ? o.O" Where the
+// traveller lands, and the station or ferry they leave from, is a fact of the
+// trip and not a pick, so nothing near it offers another one. Matched on the
+// whole word, so Nyhavn and Hou Havn are places and Billund Lufthavn is an
+// airport.
+const TRAVEL_POINT = /\b(?:airport|lufthavn|kastrup|hovedbaneg(?:å|aa)rd(?:en)?|baneg(?:å|aa)rd(?:en)?|central station|train station|railway station|bus station|busterminal|rutebilstation|f(?:æ|ae)rgeterminal(?:en)?|f(?:æ|ae)rgehavn(?:en)?|ferry terminal|ferry port|ferry harbour|cruise terminal)\b/i;
+export const isTravelPoint = (stop) => TRAVEL_POINT.test(String(stop?.name || ""));

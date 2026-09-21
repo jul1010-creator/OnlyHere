@@ -33,6 +33,11 @@ import { nightsLabel } from "./stayDoors";
 // reads "partners" as what it is. Oliver: "Also sounds more professionel."
 export const PARTNER_OPENER = "Book through our partners (optional)";
 
+// Oliver, 21 Sep 2026: "maybe write under with grey writing 'helps us keep
+// our tool free'". Under the opener, small and grey, because it is the reason
+// the opener is there and not an argument for pressing it.
+export const PARTNER_WHY = "Helps us keep Gemlyx free";
+
 export const PARTNER_INTRO = "Nothing here is needed to use the guide. These are the places you can book what it plans, if you want to do it in one go.";
 
 const clean = (v) => String(v == null ? "" : v).replace(/\s+/g, " ").trim();

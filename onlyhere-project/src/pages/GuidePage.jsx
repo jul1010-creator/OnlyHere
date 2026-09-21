@@ -75,7 +75,7 @@ import { dayStart, dayKey, dayPlus } from "../utils/calendarDay";
 import { TripCalendarCard } from "../components/TripCalendarCard";
 import { StopChangeSheet } from "../components/StopChangeSheet";
 import { problemList, problemHeading, PROBLEM_NOTE } from "../utils/planProblems";
-import { guideWithSwap, swapNote, swapIsAllowed, swapBlockedNote } from "../utils/stopSwap";
+import { guideWithSwap, swapNote, swapIsAllowed, swapBlockedNote, isTravelPoint } from "../utils/stopSwap";
 import { constraintViolations } from "../utils/constraintCheck";
 import { detectLegMode } from "../utils/helpers";
 import { shareMessage, shareTitle } from "../utils/share";
@@ -825,7 +825,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
     return {
       place,
       nights: run.nights,
-      door: door?.href ? { href: door.href, label: door.area ? `Hotels in ${place}` : "Find a room on Booking.com" } : null,
+      door: door?.href ? { href: door.href, area: !!door.area, label: door.area ? `Hotels in ${place}` : "Find a room on Booking.com" } : null,
       featured: featuredOut?.href ? { merchant: featured.merchant, href: featuredOut.href } : null,
       compare: i === 0 ? (tripcomStayUrl(place) || "") : "",
     };
@@ -2218,6 +2218,24 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                 const swapPoint = resolveStopCoords(stop.name, guide._geo || {}, stopTown(stop, real));
                 const swapOpen = changing === `${dayIdx}-${stopIdx}`;
                 const changedFrom = swapNote(stop);
+                // ── THE SWAP, INSIDE THE CARD IT CHANGES ──────────────
+                // Oliver, 21 Sep 2026, of "Change this stop" under Aarhus Street
+                // Food: "Is that related to Aarhus streetfood? Bad design. Put
+                // it inside the frame or something.. And make it smaller. Like
+                // a 'swap' icon in the right corner." It stood under the leg
+                // chip, so it read as belonging to the NEXT stop. Now a small
+                // ⇄ in the card's own corner, and the sheet it opens sits
+                // straight under that card, above the leg to the next.
+                // Never on an airport, a station or a ferry terminal: see
+                // isTravelPoint.
+                const canSwap = !lightMode && !!swapPoint && !isTravelPoint(stop);
+                const swapIcon = canSwap ? (
+                  <button onClick={(e) => { e.stopPropagation(); setChanging(swapOpen ? null : `${dayIdx}-${stopIdx}`); setSwapBlocked(""); }}
+                    aria-label={uiT("guide.changeStop", uiLang)} title={uiT("guide.changeStop", uiLang)}
+                    style={{ position: "absolute", top: 10, right: 10, width: 30, height: 30, borderRadius: 100, display: "flex", alignItems: "center", justifyContent: "center", background: swapOpen ? `${C.gold}26` : C.surface, border: `1px solid ${swapOpen ? C.gold : `${C.gold}55`}`, color: C.gold, fontSize: 14, fontWeight: 700, cursor: "pointer", padding: 0, fontFamily: "'Inter', sans-serif" }}>
+                    {swapOpen ? "✕" : "⇄"}
+                  </button>
+                ) : null;
                 return (
                 <div key={stopIdx} style={{ marginBottom: nextStop && lightMode ? 14 : 0 }}>
                   {real?.photo ? (
@@ -2256,11 +2274,11 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                         <span style={{ fontFamily: "'Fraunces', serif", fontStyle: pinNumber(stop, day.day || dayIdx + 1) ? "normal" : "italic", fontSize: 15, fontWeight: pinNumber(stop, day.day || dayIdx + 1) ? 800 : 500, color: C.gold }}>{pinNumber(stop, day.day || dayIdx + 1) || (stop.name || "◆").slice(0, 1)}</span>
                       </div>
                     </div>
-                    <div style={{ padding: "12px 14px 14px" }}>{titleRow}</div>
+                    <div style={{ position: "relative", padding: canSwap ? "12px 48px 14px 14px" : "12px 14px 14px" }}>{titleRow}{swapIcon}</div>
                   </div>
                   ) : (
                   <div onClick={real ? () => openStopDetail(real) : undefined}
-                    style={{ display: "flex", gap: 12, alignItems: "flex-start", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "12px 14px", cursor: real ? "pointer" : "default" }}>
+                    style={{ position: "relative", display: "flex", gap: 12, alignItems: "flex-start", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: canSwap ? "12px 48px 12px 14px" : "12px 14px", cursor: real ? "pointer" : "default" }}>
                     <div style={{ flexShrink: 0, width: 32, height: 32, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", background: `${C.gold}18`, border: `1px solid ${C.gold}33` }}>
                       {/* ── THE NUMBER THE CAPTION PROMISED ────────────
                           The map's caption has always said "every stop below is
@@ -2277,51 +2295,17 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                       <span style={{ fontFamily: "'Fraunces', serif", fontStyle: pinNumber(stop, day.day || dayIdx + 1) ? "normal" : "italic", fontSize: 16, fontWeight: pinNumber(stop, day.day || dayIdx + 1) ? 800 : 500, color: C.gold }}>{pinNumber(stop, day.day || dayIdx + 1) || (stop.name || "◆").slice(0, 1)}</span>
                     </div>
                     <div style={{ minWidth: 0, flex: 1 }}>{titleRow}</div>
+                    {swapIcon}
                   </div>
                   )}
-                  {/* Connector: the leg chip sits ON the line between the two
-                      stops it joins, centered — reads as "then you travel",
-                      not as a stray label under a random card. */}
-                  {/* ── A PLACE IS NOT A JOURNEY FROM ITSELF ───────────
-                      "Ærøskøbing" appeared as Day 2's overnight stop and again
-                      as Day 3, and the connector between them read "1 min on
-                      foot". The Directions API had honestly answered zero for a
-                      route from a point to itself. A stop repeated as a base is
-                      not a leg and gets no chip. */}
-                  {!lightMode && nextStop && nextStop.name.trim().toLowerCase() !== stop.name.trim().toLowerCase() && (
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "4px 0" }}>
-                      <div style={{ width: 1, height: 16, background: `${C.gold}55` }} />
-                      {legChip(stop.name, nextStop.name, day.glance?.legs?.[stopIdx]?.how)}
-                      <div style={{ width: 1, height: 16, background: `${C.gold}55` }} />
-                    </div>
-                  )}
-                  {/* ── AND THE WAY TO CHANGE IT ──────────────────────
-                      Under the card, not over the photo: this is a decision
-                      about the stop and it belongs where the stop is read.
-
-                      Hidden in lightMode, which is the plain guide with no
-                      routes and no leg times — a swap there would recompute
-                      nothing and the card has no coordinate work behind it. */}
-                  {!lightMode && swapPoint && (
+                  {canSwap && (changedFrom || swapOpen) && (
                     <div style={{ marginTop: 8 }}>
-                      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                        {/* ── A CONTROL, NOT A CAPTION ─────────────────
-                            Oliver, 21 Sep 2026, with it highlighted on his
-                            screen: "Make it more visible somehow." It was 11.5px
-                            grey text with no border, the same weight as the
-                            meta line beside it, so it read as a label. An
-                            outlined pill with an arrow says it does something. */}
-                        <button onClick={() => { setChanging(swapOpen ? null : `${dayIdx}-${stopIdx}`); setSwapBlocked(""); }}
-                          style={{ display: "inline-flex", alignItems: "center", gap: 6, background: swapOpen ? `${C.gold}1a` : "none", border: `1px solid ${swapOpen ? C.gold : `${C.gold}66`}`, color: C.gold, borderRadius: 100, padding: "6px 13px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                          {swapOpen ? uiT("guide.neverMind", uiLang) : `⇄ ${uiT("guide.changeStop", uiLang)}`}
-                        </button>
-                        {/* Said on the CARD, not in a changelog nobody opens: a
-                            traveller who swapped something and then shared the
-                            guide has a companion who never saw it happen. */}
-                        {changedFrom && (
-                          <span style={{ fontSize: 11, color: C.muted }}>{changedFrom}</span>
-                        )}
-                      </div>
+                      {/* Said on the CARD, not in a changelog nobody opens: a
+                          traveller who swapped something and then shared the
+                          guide has a companion who never saw it happen. */}
+                      {changedFrom && (
+                        <div style={{ fontSize: 11, color: C.muted }}>{changedFrom}</div>
+                      )}
                       {swapOpen && (
                         <StopChangeSheet
                           stop={stop} guide={guide} point={swapPoint}
@@ -2351,6 +2335,22 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                           }}
                         />
                       )}
+                    </div>
+                  )}
+                  {/* Connector: the leg chip sits ON the line between the two
+                      stops it joins, centered — reads as "then you travel",
+                      not as a stray label under a random card. */}
+                  {/* ── A PLACE IS NOT A JOURNEY FROM ITSELF ───────────
+                      "Ærøskøbing" appeared as Day 2's overnight stop and again
+                      as Day 3, and the connector between them read "1 min on
+                      foot". The Directions API had honestly answered zero for a
+                      route from a point to itself. A stop repeated as a base is
+                      not a leg and gets no chip. */}
+                  {!lightMode && nextStop && nextStop.name.trim().toLowerCase() !== stop.name.trim().toLowerCase() && (
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "4px 0" }}>
+                      <div style={{ width: 1, height: 16, background: `${C.gold}55` }} />
+                      {legChip(stop.name, nextStop.name, day.glance?.legs?.[stopIdx]?.how)}
+                      <div style={{ width: 1, height: 16, background: `${C.gold}55` }} />
                     </div>
                   )}
                 </div>
@@ -2496,6 +2496,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
               // night opens a stay is a fact about the run of nights. See
               // utils/stayDoors.js.
               const doors = doorOn(stayDoors, day.day || dayIdx + 1);
+              const stayHere = partnerStays.find(p => (p.nights || []).includes(Number(day.day || dayIdx + 1))) || null;
               const sameBed = doors.door ? "" : sameBaseLine(stayDoors, day.day || dayIdx + 1, days);
               return (
                 <div style={{ display: "flex", gap: 8, alignItems: "flex-start", background: C.surface, border: `1px solid ${C.gold}33`, borderRadius: 12, padding: "12px 14px", marginTop: 16 }}>
@@ -2522,14 +2523,26 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                         2026 survives this rebuild too: a guide with a night in
                         it still shows a way to book that night, one tap away,
                         instead of a button to a booking site on every card. */}
+                    {/* ── THE AREA IS THE LINK ──────────────────────────
+                        Oliver, 21 Sep 2026, of "Where to book these nights ›"
+                        opening the whole partner panel: "I click the link, and
+                        all of the affiliate pops up? I have a better idea..
+                        make 'central copenhagen' a hyperlink to booking in the
+                        suggested area." So the area this stay is in is the
+                        link, to rooms there on these nights, and it goes
+                        nowhere else. The panel keeps the full list. */}
                     {doors.door && doors.list?.length > 0 && (
-                      <div style={{ fontSize: 12, color: C.text, fontWeight: 700, marginTop: 6 }}>{nightsLabel(doors.list)}</div>
-                    )}
-                    {doors.door && partnerTotal > 0 && (
-                      <button onClick={() => setPartnersOpen(true)}
-                        style={{ background: "none", border: "none", padding: 0, marginTop: 4, color: C.gold, fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                        Where to book these nights ›
-                      </button>
+                      <div style={{ fontSize: 12, color: C.text, fontWeight: 700, marginTop: 6 }}>
+                        {nightsLabel(doors.list)}
+                        {/* Only a search IN the area may carry the area's name. A door
+                            that goes to Booking's front page does not. */}
+                        {stayHere?.door?.href && stayHere.door.area && stayHere.place && (<>
+                          {" in "}
+                          <a href={outboundLink(stayHere.door.href).href || stayHere.door.href} target="_blank" rel={outboundLink(stayHere.door.href).rel}
+                            style={{ color: C.gold, textDecoration: "underline", textUnderlineOffset: 3 }}>{stayHere.place}</a>
+                          <span style={{ color: C.muted, fontWeight: 600, fontSize: 11 }}> on Booking.com ↗</span>
+                        </>)}
+                      </div>
                     )}
                     {/* ── AND A NIGHT WITH NO BUTTON SAYS WHY ────────
                         Without it a reader on night four sees a stay card with

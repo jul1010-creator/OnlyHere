@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { C } from "../utils/theme";
 import { outboundLink } from "../utils/affiliates";
-import { PARTNER_OPENER, PARTNER_INTRO } from "../utils/partnerSheet";
+import { PARTNER_OPENER, PARTNER_INTRO, PARTNER_WHY } from "../utils/partnerSheet";
 
 // ── THE PANEL THE PAID DOORS MOVED INTO ─────────────────────────────
 //
@@ -66,9 +66,12 @@ export const PartnerSheet = ({ open, sections = [], onClose }) => {
 export const PartnerOpener = ({ count = 0, onOpen, label = PARTNER_OPENER, style = null }) => {
   if (!count) return null;
   return (
-    <button onClick={onOpen}
-      style={{ display: "inline-flex", alignItems: "center", gap: 7, background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", ...(style || {}) }}>
-      {label} <span style={{ color: C.muted, fontWeight: 600 }}>· {count}</span> ›
-    </button>
+    <div style={{ ...(style || {}) }}>
+      <button onClick={onOpen}
+        style={{ display: "inline-flex", alignItems: "center", gap: 7, background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+        {label} <span style={{ color: C.muted, fontWeight: 600 }}>· {count}</span> ›
+      </button>
+      <div style={{ fontSize: 11, color: C.muted, marginTop: 5, marginLeft: 4 }}>{PARTNER_WHY}</div>
+    </div>
   );
 };

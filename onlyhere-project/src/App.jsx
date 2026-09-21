@@ -24803,9 +24803,16 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         a blocking problem cannot be ticked at all. The names
                         already published are handed in so a second run does not
                         offer the same shop twice. */}
-                    {Array.isArray(manageItems) && (
+                    {/* NOT BEHIND MANAGE PUBLISHED. Oliver, 21 Sep 2026, in
+                        the Studio: "Where is cheap gems?" It only drew once
+                        the published rows had been loaded, which only the
+                        Manage Published button does. A run needs nothing from
+                        those rows but the names already up, and before they
+                        load that list is empty, which costs at most a
+                        duplicate he can see and untick. */}
+                    {(
                       <CheapGemsPanel
-                        existing={manageItems.filter(r => r?.type === GEM_TYPE).map(r => r?.payload?.name)}
+                        existing={(manageItems || []).filter(r => r?.type === GEM_TYPE).map(r => r?.payload?.name)}
                         onPublish={publishGems}
                         readPage={readSourcePage}
                         readImage={readPosterText} />

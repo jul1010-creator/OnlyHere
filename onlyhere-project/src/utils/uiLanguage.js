@@ -342,7 +342,6 @@ export const UI_STRINGS = {
   "guide.readMore":     { en: "Read more",         da: "Læs mere",             de: "Mehr lesen" },
   "guide.readLess":     { en: "Less",              da: "Mindre",               de: "Weniger" },
   "guide.changeStop":   { en: "Change this stop",  da: "Skift dette stop",     de: "Diesen Stopp ändern" },
-  "guide.neverMind":    { en: "Never mind",        da: "Glem det",             de: "Doch nicht" },
   "guide.askPlaceholder": { en: "Ask about this trip, or anything else…", da: "Spørg om turen, eller om noget helt andet…", de: "Frag zu dieser Reise oder zu etwas ganz anderem…" },
   "guide.chatFailed":   { en: "Sorry, I couldn't get an answer just now, try again in a moment.", da: "Beklager, jeg kunne ikke få et svar lige nu. Prøv igen om et øjeblik.", de: "Sorry, ich habe gerade keine Antwort bekommen. Versuch es gleich noch einmal." },
   "guide.noUpdates":    { en: "No current updates found.", da: "Ingen aktuelle opdateringer fundet.", de: "Keine aktuellen Updates gefunden." },

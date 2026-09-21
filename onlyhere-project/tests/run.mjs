@@ -284,7 +284,7 @@ writeFileSync(entry, `
   export { vehicleMismatches, guideRides, journeyCensus, censusNote, islandLegProblems, NO_FIXED_LINK_ISLANDS } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
   export { SWAP_REASONS, reasonById, swapCandidates, swapAnswer, candidateLine, swappedStop, swapNote, swapIsAllowed, swapBlockedNote } from ${JSON.stringify(join(root, "src/utils/stopSwap.js"))};
   export { newStreamState, readStreamEvent, visibleText, streamContent, streamContentForApi, streamDiagnosis, streamTrace } from ${JSON.stringify(join(root, "src/utils/streamRead.js"))};
-  export { guideWithSwap, alreadyRuledOut } from ${JSON.stringify(join(root, "src/utils/stopSwap.js"))};
+  export { guideWithSwap, alreadyRuledOut, isTravelPoint } from ${JSON.stringify(join(root, "src/utils/stopSwap.js"))};
   export { factCheckCopy } from ${JSON.stringify(join(root, "src/utils/factCheckCopy.js"))};
   export { routeOrder, reachBand, haversineKm, coordsOf, kmBetween, REACH_COMFORTABLE, REACH_STRETCH, REACH_FAR, returnLeg, describeReturn, travelModeKey, modeReachKm, MODE_DAY_KM, preferReachable, preferPassing, overnightMove, describeOvernightMove, spokenDuration, beyondModeRange, BEYOND_DAY_FACTOR, sameMode, howForReader, EATS_THE_DAY_MINUTES, dayStartsBeforeItCanArrive, OVERNIGHT_START_HOUR } from ${JSON.stringify(join(root, "src/utils/routeOrder.js"))};
   export { LANGUAGES, MONTH_INDEX, PARTY_BARE, PARTY_POSSESSIVE, YES_WORDS, NO_WORDS, alt, LETTER } from ${JSON.stringify(join(root, "src/utils/travellerWords.js"))};
@@ -8273,8 +8273,10 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     // advertisement." The room door is one per STAY in the affiliates panel,
     // and the card keeps the way in to it on the night that opens a stay.
     ok("the stay card links to no booking site", !/\bstayDoor\b/.test(src) && !/stayTripUrl/.test(src));
-    ok("and opens the panel on the night that opens a stay",
-       /\{doors\.door && partnerTotal > 0 && \(\s*<button onClick=\{\(\) => setPartnersOpen\(true\)\}/.test(src));
+    // And then, the same evening: the AREA is the link, to rooms there on
+    // those nights, not a button that opens the whole panel.
+    ok("and links the area on the night that opens a stay",
+       /\{doors\.door && doors\.list\?\.length > 0 && \([\s\S]{0,1400}?stayHere\.door\.area/.test(src));
     ok("saying how many nights it is", /\{doors\.door && doors\.list\?\.length > 0 && \([\s\S]{0,160}nightsLabel\(doors\.list\)/.test(src));
     ok("one room door per stay, built once for the page", /const partnerStays = staysIn\(days, stayNights\)\.map\(/.test(src));
     // THE STANDING RULE SURVIVES THE CUT, and it is the half that must not
@@ -35577,7 +35579,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // the badge cannot be moved out of the variant it was added for while the
     // count above still reads 2. A count says how many exist, not where they are.
     {
-      const photoBranch = gpN.slice(gpN.indexOf('<img src={real.photo}'), gpN.indexOf('<div style={{ padding: "12px 14px 14px" }}>{titleRow}</div>'));
+      const photoBranch = gpN.slice(gpN.indexOf('<img src={real.photo}'), gpN.indexOf('{titleRow}{swapIcon}</div>'));
       ok("the photo branch was found", photoBranch.length > 200 && photoBranch.length < 3000);
       ok("and the number is inside it", /pinNumber\(stop, day\.day \|\| dayIdx \+ 1\) \|\| \(stop\.name/.test(photoBranch));
       // Not hidden, not zero-sized, not behind the image: it is a rendered badge.
@@ -50220,7 +50222,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // Only where a swap can actually be offered: a stop plotted at the middle of
     // its town has no point to search around, and a control with nothing behind
     // it is the shape of button this project keeps removing.
-    ok("the control only appears where there is a real coordinate", /!lightMode && swapPoint &&/.test(gp));
+    ok("the control only appears where there is a real coordinate", /const canSwap = !lightMode && !!swapPoint &&/.test(gp));
   }
 }
 
@@ -71283,6 +71285,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
       ok("and transcribes a menu picture when the text has no price", /textHasPrice\(text\)/.test(panelK) && /menuImagesToRead\(\{ url: r\.url, text, banners: page\?\.banners \}\)/.test(panelK));
       ok("and says so, so he checks the figure", /Check the figure against it before publishing/.test(panelK));
       const appM = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+      ok("the panel is not hidden behind Manage Published", /existing=\{\(manageItems \|\| \[\]\)\.filter\(r => r\?\.type === GEM_TYPE\)/.test(appM) && !/Array\.isArray\(manageItems\) && \(\s*<CheapGemsPanel/.test(appM));
       ok("the Studio hands it the page reader and the image reader", /readPage=\{readSourcePage\}\s*readImage=\{readPosterText\}/.test(appM));
       ok("entry research reads a menu picture on a page that has text", /const menuShots = scanData\.text \? menuImagesToRead\(\{ url, text: scanData\.text, banners: scanData\.banners \}\) : \[\]/.test(appM));
       ok("and marks it as a menu in the draft text", /\[Read off a \$\{menuShots\.length \? "menu" : "poster"\} image on/.test(appM));
@@ -71792,8 +71795,30 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   ok("the tour is not a line under the day any more", !/<TourLine /.test(gpA));
   ok("nor the bike", !/<BikeRentalLine /.test(gpA));
   // ── "MAKE IT MORE VISIBLE SOMEHOW" ─────────────────────────
-  ok("Change this stop is a control, not a caption", /`⇄ \$\{uiT\("guide\.changeStop", uiLang\)\}`/.test(gpA)
-     && /border: `1px solid \$\{swapOpen \? C\.gold : `\$\{C\.gold\}66`\}`/.test(gpA));
+  // Then, the same evening: "Is that related to Aarhus streetfood? Bad
+  // design. Put it inside the frame or something.. And make it smaller. Like
+  // a 'swap' icon in the right corner."
+  ok("the swap is an icon in the card's corner", /position: "absolute", top: 10, right: 10, width: 30, height: 30/.test(gpA) && /\{swapOpen \? "✕" : "⇄"\}/.test(gpA));
+  ok("named for a screen reader", /aria-label=\{uiT\("guide\.changeStop", uiLang\)\}/.test(gpA));
+  ok("tapping it does not open the stop", /onClick=\{\(e\) => \{ e\.stopPropagation\(\); setChanging\(/.test(gpA));
+  ok("inside both kinds of card", /\{titleRow\}\{swapIcon\}<\/div>/.test(gpA) && /\{titleRow\}<\/div>\s*\{swapIcon\}/.test(gpA));
+  ok("and the sheet opens under the card, above the leg to the next stop",
+     /\{swapIcon\}\s*<\/div>\s*\)\}\s*\{canSwap && \(changedFrom \|\| swapOpen\) && \([\s\S]{0,3000}?<StopChangeSheet[\s\S]{0,3000}?legChip\(stop\.name, nextStop\.name/.test(gpA));
+  ok("the pill under the leg is gone", !/`⇄ \$\{uiT\("guide\.changeStop", uiLang\)\}`/.test(gpA));
+  // "You want the airport to change ? o.O"
+  {
+    const SW = M;
+    for (const n of ["Copenhagen Airport", "Billund Lufthavn", "Aarhus Hovedbanegård", "Odense Banegård", "Hou Færgehavn", "Mols-Linien ferry terminal", "Aalborg bus station"]) ok(`no swap on ${n}`, SW.isTravelPoint({ name: n }));
+    for (const n of ["Nyhavn", "Hou Havn", "Aarhus Street Food"]) ok(`a swap on ${n}`, !SW.isTravelPoint({ name: n }));
+    ok("and the card asks it", /const canSwap = !lightMode && !!swapPoint && !isTravelPoint\(stop\);/.test(gpA));
+  }
+  // "make 'central copenhagen' a hyperlink to booking in the suggested area"
+  ok("the stay's area is the link to rooms there", /stayHere\?\.door\?\.href && stayHere\.door\.area && stayHere\.place/.test(gpA) && />\{stayHere\.place\}<\/a>/.test(gpA));
+  ok("marked as leaving for Booking", / on Booking\.com ↗/.test(gpA) && /rel=\{outboundLink\(stayHere\.door\.href\)\.rel\}/.test(gpA));
+  ok("the stay card no longer opens the whole panel", !/Where to book these nights/.test(gpA));
+  ok("the stay knows its nights", /const stayHere = partnerStays\.find\(p => \(p\.nights \|\| \[\]\)\.includes\(Number\(day\.day \|\| dayIdx \+ 1\)\)\)/.test(gpA));
+  // "maybe write under with grey writing 'helps us keep our tool free'"
+  ok("the opener says why it is there", opener.text.includes("Helps us keep Gemlyx free"));
   // ── "NOT NECESSARY TO WRITE" ───────────────────────────────
   ok("a normals day keeps only the warnings that change the day",
      /\.filter\(w => wx\?\.source !== "normals" \|\| w\.level === "warn"\)/.test(gpA));
