@@ -77,7 +77,8 @@ import { PRICE_FIELDS } from "./entryPrice";
 // already lives, so this file and the town page cannot disagree about it.
 import { showsTicketForKind } from "./journeyScope";
 import { stampDay } from "./provenance";
-import { bedStateOf, openNightsLine } from "./nightsOpen";
+import { bedStateOf, openNightsLine, needsABed } from "./nightsOpen";
+import { staysIn } from "./stayDoors";
 
 export const COST_KIND = {
   ENTRY: "entry",
@@ -791,3 +792,78 @@ export const linkGaps = (lines) =>
     .filter(l => (l.kind === COST_KIND.ENTRY || l.kind === COST_KIND.EVENT))
     .filter(l => !l.href && !l.refused && l.price && l.price !== "Free")
     .map(l => `${l.name} costs money on day ${l.day} and the costs list has nowhere to send them. Add a ticket URL to that row, or the guide can only tell them to pay at the door.`);
+
+// ── THE WORD ON A DOOR, IN ONE PLACE ────────────────────────────────
+//
+// Moved here from CostsBlock on 21 Sep 2026, when the doors left that block
+// for the days they belong to. Two render sites now draw the same door, and a
+// label decided in one of them would have drifted from the other.
+export const costAction = (kind) =>
+  kind === COST_KIND.TRANSPORT || kind === COST_KIND.FERRY ? "Check times and fares"
+    : kind === COST_KIND.STAY ? "Find a room"
+    : kind === COST_KIND.CAR ? "Book the car"
+    // A walking tour is not a ticket, and "Buy tickets" over one is the label
+    // that made it need its own kind in the first place.
+    : kind === COST_KIND.AUDIO ? "Listen to a sample"
+    : "Buy tickets";
+
+
+// ── THE WHOLE TRIP ──────────────────────────────────────────────────
+//
+// Oliver, 21 Sep 2026: "I'd like if you can give the users an estimate on
+// their entire trip." What you pay was the tickets and nothing else, under a
+// line that said so: "a bed is not in it".
+//
+// The beds come from the build now. Each day's enrichment keeps the lowest
+// room price its own search stated, with the words that stated it and the day
+// it was read (see nightPriceFrom in utils/accommodation.js). A stay is priced
+// at the figure read for any of its nights, times its nights, for ONE ROOM:
+// the page says so rather than guessing how many rooms a party takes.
+//
+// A STAY WITH NO FIGURE IS NAMED, NOT GUESSED. It is counted as nights not in
+// the total, the same way an unpriced ticket is. And a guide built before this
+// existed has no figures at all, so it shows no whole-trip line and keeps the
+// tickets estimate it always had.
+export const bedsEstimate = (guide) => {
+  const days = Array.isArray(guide?.days) ? guide.days : [];
+  const state = bedStateOf(guide);
+  const nights = days.map((d, i) => Number(d?.day || i + 1)).filter(n => needsABed(n, state));
+  const byDay = new Map(days.map((d, i) => [Number(d?.day || i + 1), d]));
+  let from = 0, unpricedNights = 0;
+  const stays = [];
+  for (const run of staysIn(days, nights)) {
+    const read = run.nights.map(n => byDay.get(n)?.glance?.__night).find(x => Number(x?.kr) > 0) || null;
+    if (!read) { unpricedNights += run.nights.length; continue; }
+    const kr = Number(read.kr);
+    from += kr * run.nights.length;
+    stays.push({ nights: run.nights.length, kr, says: String(read.says || ""), at: String(read.at || "") });
+  }
+  if (!stays.length) return null;
+  return { from, stays, nights: nights.length, unpricedNights };
+};
+
+// The line under the tickets estimate. The tickets are per person and the beds
+// per room, and the sentence keeps them apart rather than adding people to
+// rooms: "for one room and N people's tickets" is a sum a reader can check.
+export const tripEstimate = (tickets, beds, party = null) => {
+  if (!beds) return null;
+  const heads = party?.heads > 1 ? party.heads : 1;
+  const ticketPart = tickets ? tickets.from * heads : 0;
+  return { from: ticketPart + beds.from, ticketPart, heads, beds };
+};
+
+export const describeTrip = (trip, { car = false, transport = false } = {}) => {
+  if (!trip) return [];
+  const out = [];
+  const b = trip.beds;
+  const nights = b.stays.reduce((n, s) => n + s.nights, 0);
+  out.push(`Beds from ${b.from} DKK for one room, ${nights} ${nights === 1 ? "night" : "nights"}, at the lowest room price the search found when this guide was built.`);
+  if (trip.ticketPart) out.push(`Tickets from ${trip.ticketPart} DKK${trip.heads > 1 ? ` for ${trip.heads} of you` : ""}.`);
+  const not = ["meals"];
+  if (car) not.push("the car");
+  if (transport) not.push("trains and buses");
+  if (b.unpricedNights) not.push(`${b.unpricedNights} ${b.unpricedNights === 1 ? "night" : "nights"} with no room price found`);
+  const list = not.length === 1 ? not[0] : `${not.slice(0, -1).join(", ")} and ${not[not.length - 1]}`;
+  out.push(`Not in it: ${list}.`);
+  return out;
+};

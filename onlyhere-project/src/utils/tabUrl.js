@@ -26,6 +26,7 @@ export const TAB_HASH = {
   home: "explore",
   essentials: "essentials",
   tips: "tips",
+  gems: "cheap-gems",
   attractions: "attractions",
   events: "events",
   food: "food",

@@ -26,7 +26,6 @@ import { GemlyxLoader, GemlyxMark } from "../components/GemlyxLogo";
 import { TypewriterText } from "../components/TypewriterText";
 import { DetailPage } from "../components/DetailPage";
 import { GuideRouteMap } from "../components/GuideRouteMap";
-import { TourLine, BikeRentalLine } from "../components/TourLine";
 import { ensureLiveContentLoaded } from "../utils/liveContent";
 import { guideTours } from "../utils/tourSweep";
 import { previewPools } from "../utils/previewMatch";
@@ -56,16 +55,22 @@ import { testTravelerLine, isFerryText, daysUntil, readerView } from "../utils/h
 import { aiDisclosureFor } from "../utils/aiDisclosure";
 import { stopKind, tripScaleLine, tripCharacter, bookingActions, tripDayDate, stopEventWhen, clampNote } from "../utils/guideReading";
 import { bedStateOf, needsABed } from "../utils/nightsOpen";
-import { doorsFor, doorOn, sameBaseLine } from "../utils/stayDoors";
+import { doorsFor, doorOn, sameBaseLine, staysIn, nightsLabel } from "../utils/stayDoors";
 import { journeyUrl, journeyLabel } from "../utils/rejseplanen";
 import { moreOnLine } from "../utils/communityEvents";
 import { accessOf, accessNote } from "../utils/eventAccess";
 import { newFinds, findsLine, findDetail, withFind, withoutFind, wasTurnedDown } from "../utils/guideFinds";
 import { communityEvents } from "../data/events";
+import { gems } from "../data/gems";
+import { gemsForGuide, gemHeading, checkedLabel, isOwnSite } from "../utils/cheapGems";
 import { namedIslandOf } from "../utils/geography";
 import { BOOKING_AFFILIATE_ID } from "../config";
-import { tiqetsBrowseUrl, partnerDisclosure, supportNote, partnerLinkCount, isPartnerLink, carRentalFits, stayDoorUrl, tripcomStayUrl, stayDisclosure, STAY_DISCLOSURE, outboundLink, featuredStayFor } from "../utils/affiliates";
+import { tiqetsBrowseUrl, partnerDisclosure, supportNote, partnerLinkCount, isPartnerLink, carRentalFits, stayDoorUrl, tripcomStayUrl, stayDisclosure, STAY_DISCLOSURE, outboundLink, featuredStayFor, tourMerchant } from "../utils/affiliates";
 import { CostsBlock } from "../components/CostsBlock";
+import { costLines } from "../utils/costLedger";
+import { PartnerSheet, PartnerOpener } from "../components/PartnerSheet";
+import { partnerSections, partnerCount } from "../utils/partnerSheet";
+import { tourPhrase } from "../utils/tourSweep";
 import { dayStart, dayKey, dayPlus } from "../utils/calendarDay";
 import { TripCalendarCard } from "../components/TripCalendarCard";
 import { StopChangeSheet } from "../components/StopChangeSheet";
@@ -611,6 +616,8 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
   // moment later, and a state variable nothing reads is a re-render that never
   // happens.
   const [mapPin, setMapPin] = useState(null);
+  // The side panel every paid door now lives in. See utils/partnerSheet.js.
+  const [partnersOpen, setPartnersOpen] = useState(false);
   const [libraryTick, setLibraryTick] = useState(0);
   useEffect(() => { ensureLiveContentLoaded().then(() => setLibraryTick(t => t + 1)).catch(() => {}); }, []);
   // ── ONE PARTNER ACTIVITY PER TOWN, WHERE THE TOWN IS ────────────────
@@ -762,6 +769,19 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
   }
 
   const days = guide.days || [];
+  // One cheap gem a day at most, read now rather than stored at build, so a
+  // guide opened in a month shows what is live in a month. See gemsForGuide
+  // in utils/cheapGems.js. Not a hook: this line sits below an early return.
+  const gemByDay = gemsForGuide(days, gems);
+  // The cost lines What you pay prices, read once more here for the panel.
+  const guideLines = costLines({
+    guide,
+    rowFor: lookupRealPlace,
+    dayDateFor: (n) => tripDayDate(guide?._arrivalDate, n),
+    today: now,
+    mode: guide?._mode || "",
+    saidNoCar: !!guide?._onlyWalking,
+  });
   // ── ONE BOOKING BUTTON PER BED, NOT PER NIGHT ────────────────────
   //
   // Oliver, 19 Sep 2026, relaying an outside read and agreeing with it: "the
@@ -780,6 +800,51 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
     .map((d, i) => Number(d?.day || i + 1))
     .filter(n => needsABed(n, bedStateOf(guide)));
   const stayDoors = doorsFor(days, stayNights);
+  // ── "USE OUR AFFILIATES (OPTIONAL)" ────────────────────────────────
+  // Oliver, 21 Sep 2026. Every paid door on the guide, gathered into the one
+  // panel a reader opens on purpose: a room per STAY with its nights on it,
+  // the tickets What you pay prices, the car, the tours, the bike. See
+  // utils/partnerSheet.js for what it says and components/PartnerSheet.jsx for
+  // the panel.
+  const partnerStays = staysIn(days, stayNights).map((run, i) => {
+    const d = days.find((x, j) => Number(x?.day || j + 1) === run.first) || {};
+    const lastTown = (d.stops || []).map(x => x?.town).filter(Boolean).slice(-1)[0] || "";
+    const place = d?.glance?.stayArea || lastTown || "";
+    const first = tripDayDate(guide?._arrivalDate, run.first);
+    const last = tripDayDate(guide?._arrivalDate, run.nights[run.nights.length - 1]);
+    const adultsSaid = (guide?._travelers || "").match(/\d+/);
+    const door = stayDoorUrl({
+      area: place, near: lastTown,
+      checkin: first ? dayKey(first) : undefined,
+      checkout: last ? dayKey(dayPlus(last, 1)) : undefined,
+      adults: adultsSaid ? adultsSaid[0] : "2",
+      slot: "partner-stay",
+    });
+    const featured = featuredStayFor(place);
+    const featuredOut = featured ? outboundLink(featured.url) : null;
+    return {
+      place,
+      nights: run.nights,
+      door: door?.href ? { href: door.href, label: door.area ? `Hotels in ${place}` : "Find a room on Booking.com" } : null,
+      featured: featuredOut?.href ? { merchant: featured.merchant, href: featuredOut.href } : null,
+      compare: i === 0 ? (tripcomStayUrl(place) || "") : "",
+    };
+  });
+  const partnerTours = days.map((d, i) => {
+    const t = dayTours[i];
+    if (!t?.url) return null;
+    const phrase = entryWord(tourPhrase(t.url, "town"), uiLang);
+    return { day: Number(d?.day || i + 1), url: t.url, label: `${tourMerchant(t.url)}: ${phrase.charAt(0).toUpperCase()}${phrase.slice(1)}` };
+  }).filter(Boolean);
+  const bikeDays = days.map((d, i) => {
+    const town = (d.stops || []).filter(x => x && x.name).map(x => stopTown(x)).find(Boolean) || "";
+    return bikeRentalFits({ mode: travelModeKey(guide._mode), town }) ? Number(d?.day || i + 1) : null;
+  }).filter(Boolean);
+  const partnerBikes = bikeDays.length
+    ? [{ url: `https://www.bajabikes.eu/en/${BAJABIKES_RENTAL_SLUG}/`, label: "Bike rental in Copenhagen", days: bikeDays }]
+    : [];
+  const partnerGroups = partnerSections({ stays: partnerStays, lines: guideLines, tours: partnerTours, bikes: partnerBikes });
+  const partnerTotal = partnerCount(partnerGroups);
   // Oliver's map-vs-plain choice, made before this page ever sees the guide
   // (App.jsx's generateGuide, search "chosenMode") — _lightMode true means
   // the plain day-by-day pick, so no route map and no leg time chips here,
@@ -1406,6 +1471,14 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                   never ask what came out — which is the gap four wiring failures
                   shipped through this month. See components/CostsBlock.jsx. */}
               <CostsBlock guide={guide} C={C} rowFor={lookupRealPlace} now={now} />
+              {/* ── THE ONE WAY IN TO EVERY PAID DOOR ─────────────
+                  Oliver, 21 Sep 2026: "Make a 'use our affiliates
+                  (optional)' and make it something clickable. When you click
+                  it, it then pops out into the side of the panel." Under the
+                  prices, so the reader has the numbers first and the doors
+                  only if they ask for them. */}
+              <PartnerOpener count={partnerTotal} onOpen={() => setPartnersOpen(true)} style={{ marginTop: 14 }} />
+              <PartnerSheet open={partnersOpen} sections={partnerGroups} onClose={() => setPartnersOpen(false)} />
             </div>
           </div>
         )}
@@ -1565,7 +1638,16 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
           // cold-and-wet pair, frost, heat, what the sky is doing, and the belt
           // crossing if this is the day it happens on. Every one of them cites
           // the number it came from. See utils/weatherWarn.js.
-          const wxWarnings = dayWarnings(wx, { mode: tripMode, crossing: crossings[dayIdx] || "" });
+          // ── TEN YEARS OF WEATHER IS NOT A WARNING ─────────────────
+          // Oliver, 21 Sep 2026, with two of these highlighted: "not
+          // necessary to write." On a day read from the normals, the quiet
+          // lines say what the badge beside the day title already says, "about
+          // 5 days in ten see rain", and a second time in the Weather line at
+          // the top. Only a "warn", which changes what somebody does, survives
+          // on a normals day. A real forecast keeps every line, because there
+          // the lines carry numbers the badge does not.
+          const wxWarnings = dayWarnings(wx, { mode: tripMode, crossing: crossings[dayIdx] || "" })
+            .filter(w => wx?.source !== "normals" || w.level === "warn");
           // LINK PARITY FIX (Oliver: "Public transport says 19 minutes... you
           // then check maps, and it's 27"): the in-app duration was fetched
           // with real resolved COORDINATES, but this Google Maps link was built
@@ -2223,9 +2305,15 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                   {!lightMode && swapPoint && (
                     <div style={{ marginTop: 8 }}>
                       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                        {/* ── A CONTROL, NOT A CAPTION ─────────────────
+                            Oliver, 21 Sep 2026, with it highlighted on his
+                            screen: "Make it more visible somehow." It was 11.5px
+                            grey text with no border, the same weight as the
+                            meta line beside it, so it read as a label. An
+                            outlined pill with an arrow says it does something. */}
                         <button onClick={() => { setChanging(swapOpen ? null : `${dayIdx}-${stopIdx}`); setSwapBlocked(""); }}
-                          style={{ background: "none", border: "none", color: swapOpen ? C.gold : C.muted, fontSize: 11.5, fontWeight: 700, cursor: "pointer", padding: 0, fontFamily: "'Inter', sans-serif" }}>
-                          {swapOpen ? uiT("guide.neverMind", uiLang) : uiT("guide.changeStop", uiLang)}
+                          style={{ display: "inline-flex", alignItems: "center", gap: 6, background: swapOpen ? `${C.gold}1a` : "none", border: `1px solid ${swapOpen ? C.gold : `${C.gold}66`}`, color: C.gold, borderRadius: 100, padding: "6px 13px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                          {swapOpen ? uiT("guide.neverMind", uiLang) : `⇄ ${uiT("guide.changeStop", uiLang)}`}
                         </button>
                         {/* Said on the CARD, not in a changelog nobody opens: a
                             traveller who swapped something and then shared the
@@ -2329,6 +2417,26 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
               </div>
               );
             })()}
+            {/* ── A CHEAP GEM ON THE WAY ───────────────────────────
+                Oliver, 21 Sep 2026: "Then do that", of a gem on the day a
+                guide passes it. Printed from the published row as it stands
+                today, with its own checked date and its own page, the same
+                way the Cheap gems page prints it. The writer never sees it,
+                so the writer cannot restate a discount in its own words. */}
+            {gemByDay[dayIdx] && (() => {
+              const { gem: g } = gemByDay[dayIdx];
+              return (
+                <div style={{ background: C.surface, border: `1px solid ${C.gold}33`, borderRadius: 12, padding: "12px 14px", marginTop: 16, fontSize: 12.5, color: C.light, lineHeight: 1.6 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 3 }}>{gemHeading(gemByDay[dayIdx])}</div>
+                  <div><b style={{ color: C.text }}>{g.name}</b>{g.what ? `: ${g.what}` : ""}{g.who ? `, for ${g.who.charAt(0).toLowerCase()}${g.who.slice(1)}` : ""}.</div>
+                  {g.how && <div>{g.how}</div>}
+                  {g.catch && <div style={{ color: C.text }}><b>The catch:</b> {g.catch}</div>}
+                  <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>
+                    {checkedLabel(g)} · <a href={g.source} target="_blank" rel="noreferrer" style={{ color: C.gold, fontWeight: 700, textDecoration: "none" }}>{isOwnSite(g.source, g.name) ? "Their page" : "Where this comes from"} ↗</a>
+                  </div>
+                </div>
+              );
+            })()}
             {day.glance?.accommodation && needsABed(day.day || dayIdx + 1, bedStateOf(guide)) && (() => {
               // ── "IT'S NOT EXACTLY A 'DAY-TRIP' FROM COPENHAGEN" ───
               // Oliver, 17 Aug 2026. The arithmetic for this was written that
@@ -2372,94 +2480,9 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
               // day render and shared with the stop cards. Checkout is the next
               // morning, through the same tested primitive rather than a second
               // mutating setDate.
-              const nextDate = dayPlus(dayDate, 1);
-              // ── AND toISOString UNDID THE LINE ABOVE IT ──────────
-              // dayStart returns LOCAL midnight of the arrival day, and
-              // toISOString converts that to UTC, which in Denmark is 22:00 the
-              // evening before. So this sent Booking.com checkin=2026-09-05 for
-              // somebody arriving on the 6th, and every later day booked night
-              // N minus one.
-              //
-              // Wrong in Denmark and RIGHT in New York, which is the reverse of
-              // the rest of this family and the reason it survived a seven
-              // timezone sweep: the suite cannot reach a JSX render, and the one
-              // person most likely to catch it by eye is sitting on the single
-              // clock where it reads correctly.
-              //
-              // It also sat three lines under tonight's dayStart fix, on the
-              // same value. dayKey formats from local getters, which is what it
-              // exists for. See utils/calendarDay.js.
-              const fmt = (d) => dayKey(d);
-              const adultsMatch = (guide._travelers || "").match(/\d+/);
-              const adults = adultsMatch ? adultsMatch[0] : "2";
-              const searchTerm = day.glance.recommendedStay || day.glance.stayArea;
-              // STANDING RULE — DO NOT REMOVE THIS CARD OR THIS LINK IN ANY
-              // REBUILD (Oliver: "why does the accommodation/booking
-              // affiliation keep getting removed"): the "Where to stay" card
-              // and its Booking.com link are a deliberate, permanent feature
-              // and the app's planned affiliate revenue path. If a redesign
-              // touches this section, the card and link must survive it.
-              // BOOKING_AFFILIATE_ID lives in src/config.js — one shared
-              // constant, empty until Oliver's Booking.com affiliate account
-              // is approved; pasting the aid number there turns every Booking
-              // link in the app into an affiliate link at once.
-              // ── AND THE TOWN GOES IN THE SEARCH ────────────────────
-              //
-              // 26 Aug 2026. This built its own Booking URL inline, a FOURTH
-              // copy of a builder that already lives in utils/affiliates.js,
-              // and it had drifted: the search string was `${name}, Denmark`.
-              // Denmark has more than one Hotel Phønix, so the Limfjord guide's
-              // link opened the one in HOLSTEBRO and reported it full — a
-              // different hotel, in a different town, 140 km from the Aalborg
-              // one the sentence above it is describing.
-              //
-              // One builder now, and the town of the day's own stops goes in
-              // with the name. See bookingUrl in utils/affiliates.js.
-              const stayTown = (day.stops || []).map(x => x?.town).find(Boolean) || "";
-              // ── AND THEN THERE WAS ONE ────────────────────────
-              //
-              // Oliver, 19 Sep 2026: "I'm going a bit back and fourth on the
-              // 'budget' and 'good hotel'.. because it's really a long-shot to
-              // take. Perhaps stick to the area and then just put Booking.com
-              // front-page affiliate link. I think that's the best solution."
-              //
-              // Three doors stood here: the property the guide named, a good
-              // search and a budget search. Every one promised a specific
-              // landing and the programme does not deep link, so every one
-              // arrived at Booking's front page. Sorting a search for one
-              // building by price is the long shot he means, and he had already
-              // found the pair of them on a screenshot: "budget vs budget.. with
-              // no links on either."
-              //
-              // ONE DOOR, and the AREA stays in the sentence above it where the
-              // guide has always said where to sleep. stayDoorUrl returns the
-              // label's permission with the href, so the button cannot name a
-              // town the link will not show, and the day the programme allows
-              // deep links every stay door in the app becomes that town's own
-              // results from one word in config.js. See utils/affiliates.js.
-              const stayAreaTerm = day.glance.stayArea || stayTown || searchTerm;
-              const stayDoor = stayDoorUrl({
-                area: stayAreaTerm,
-                near: stayTown,
-                checkin: fmt(dayDate) || undefined,
-                checkout: fmt(dayDate) ? fmt(nextDate) : undefined,
-                adults,
-                // Which surface earned it, when a commission arrives.
-                slot: "guide-stay",
-              });
-              const featuredStay = featuredStayFor(stayAreaTerm);
-              // ── AND TRIP.COM, WHERE IT HAS A CITY ────────────────
-              // Oliver, 7 Sep 2026: "Got another affiliate!" Booking has been
-              // approved-pending since 5 August and earns nothing meanwhile,
-              // and this is the surface that link exists for.
-              //
-              // BESIDE, NOT INSTEAD. bookingUrl takes free text and works for
-              // every town he publishes; Trip.com needs a city id and has one
-              // for twenty Danish cities, none of them the hidden gems. A town
-              // with no id gets null here and no second link, which is the
-              // right answer rather than a fallback that lands somebody 300 km
-              // from where the sentence above promised. See data/tripcom.js.
-              const stayTripUrl = tripcomStayUrl(day.glance.stayArea || stayTown || searchTerm);
+              // The Booking, Trip.com and partner hotel doors that were built
+              // here moved to the affiliates panel on 21 Sep 2026, built once
+              // per STAY above the day loop. See partnerStays.
               // ── WHICH OF THESE THIS NIGHT ACTUALLY GETS ──────────
               //
               // Oliver, 19 Sep 2026: "the guide has begun to look like a
@@ -2484,112 +2507,29 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                     {day.glance.recommendedStay && (
                       <div style={{ marginTop: 3 }}><span style={{ color: C.gold, fontWeight: 700 }}>{day.glance.recommendedStay}</span></div>
                     )}
-                    {/* ── A BUTTON, BECAUSE IT WAS BEING READ AS A CAPTION ──
-                        Oliver, 14 Sep 2026, relaying the first person to read
-                        one of these guides who did not build the app: "the
-                        affiliate links are quite small, according to my friend."
+                    {/* ── HOW LONG, AND THE WAY TO BOOK IT ─────────────
+                        Oliver, 21 Sep 2026, of guide z8f8otncrz2: "There is no
+                        clear idea of how long time the person is staying at a
+                        hotel.. and the affiliate link constantly feels like
+                        advertisement."
 
-                        Measured off the live page before touching it: 12.5px
-                        gold text, no background, no border, no padding, 18px
-                        tall, sitting directly under a paragraph in a similar
-                        weight. Nothing about it said it was a thing you press.
-                        It was a footnote and she read it as one.
-
-                        Outlined rather than filled. He asked for it to "shine
-                        up a bit", and a page carrying three solid gold buttons
-                        reads as advertising, which costs more trust than the
-                        click is worth. A border, a tint and real padding are
-                        enough to move it from prose into the class of things
-                        that do something. */}
-                    {/* ── ONE NAMED HOTEL, AND ONLY WHERE THE ROUTE ALREADY GOES ──
-                        Oliver, 18 Sep 2026: "an affiliate for a great hotel
-                        that we should probably somehow put on priority", and in
-                        the same breath, before a line of this existed:
-                        "Obviously don't make the guide give a biased route
-                        towards the hotel. But IF they go that route.."
-
-                        So it reads the town THIS DAY already has, and it can do
-                        nothing else: featuredStayFor is on
-                        INVENTORY_MAY_NOT_SELECT, so the suite fails if its name
-                        appears anywhere in the window of App.jsx that plans the
-                        days and picks the stops. It answers null until the
-                        banner is named in config.js, because a paid row that
-                        cannot name its partner has no honest wording available
-                        to it. */}
-                    {(() => {
-                      const featured = doors.featured ? featuredStay : null;
-                      if (!featured) return null;
-                      const out = outboundLink(featured.url);
-                      if (!out.href) return null;
-                      return (
-                        <div>
-                          <a href={out.href} target="_blank" rel={out.rel}
-                            style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 8, marginRight: 8, background: `${C.gold}1a`, border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "8px 13px", fontSize: 12, fontWeight: 700, textDecoration: "none" }}>
-                            🛏 {featured.merchant} ↗
-                          </a>
-                          {/* Named in the row's own prose and not only in the
-                              small print under it. The Copenhagen Card rule,
-                              16 Sep 2026. */}
-                          <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 4 }}>
-                            {featured.merchant} is a Gemlyx partner, so this link earns us a commission. It is here because this day is already in {featured.town}, and it changes nothing about what you pay.
-                          </div>
-                        </div>
-                      );
-                    })()}
-                    {/* ── THROUGH THE DOOR, NOT AROUND IT ──
-                        18 Sep 2026, the day Booking.com started paying. This
-                        href was the raw search URL and this rel was
-                        "noreferrer", both correct while the link earned nothing
-                        and both wrong the moment it did: a paid link without
-                        sponsored nofollow is what Google asks publishers not to
-                        do. outboundLink computes the href, the sentence and the
-                        rel in one place, which is what it was written for.
-
-                        ── AND ONE DOOR, NOT THREE ──
-                        Oliver, 19 Sep 2026: "stick to the area and then just
-                        put Booking.com front-page affiliate link. I think
-                        that's the best solution."
-
-                        Three stood here, each promising a landing the
-                        programme cannot deliver. The label now comes off
-                        stayDoorUrl's own answer, so it can never name a town
-                        the link will not show: today the door is the front page
-                        and the button says Booking.com, and the day deep links
-                        are allowed the same button becomes the area's results
-                        with the area on it. See utils/affiliates.js.
-
-                        The area is not lost by that. It is in the sentence
-                        above this, which is where the guide has always said
-                        where to sleep, and where a named property is named. */}
-                    {stayDoor && doors.door && (
-                      <a href={outboundLink(stayDoor.href).href || stayDoor.href} target="_blank" rel={outboundLink(stayDoor.href).rel}
-                        style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 8, marginRight: 8, background: `${C.gold}1a`, border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "8px 14px", fontSize: 13, fontWeight: 700, textDecoration: "none" }}>
-                        {stayDoor.area ? `🏨 Hotels in ${stayAreaTerm} ↗` : "🏨 Find a room on Booking.com ↗"}
-                      </a>
+                        The first night of each stay now says how many nights
+                        it is, which is the fact a person books with. The
+                        Booking, Trip.com and partner hotel buttons that stood
+                        here moved into the affiliates panel, grouped by stay
+                        with those same nights on them, and this card keeps the
+                        way in to it. That is how the standing rule of 7 Aug
+                        2026 survives this rebuild too: a guide with a night in
+                        it still shows a way to book that night, one tap away,
+                        instead of a button to a booking site on every card. */}
+                    {doors.door && doors.list?.length > 0 && (
+                      <div style={{ fontSize: 12, color: C.text, fontWeight: 700, marginTop: 6 }}>{nightsLabel(doors.list)}</div>
                     )}
-                    {/* ── AND THE INLINE COPY WAS DODGING THIS CHECK ──────
-                        The suite sweeps every file for a link wrapper used
-                        without its disclosure, and this card never tripped it,
-                        because it built its own Booking URL by hand instead of
-                        calling the shared builder, so the sweep had nothing to
-                        match. Reaching for the shared door made the rule fire
-                        on the first run, which is the argument for shared doors
-                        in one sentence. First day only: the sentence is the same
-                        on all seven and a reader learns to scroll past a
-                        repeat. */}
-                    {stayTripUrl && doors.compare && (
-                      <a href={stayTripUrl} target="_blank" rel="noreferrer sponsored nofollow"
-                        style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 8, background: `${C.gold}1a`, border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "8px 14px", fontSize: 13, fontWeight: 700, textDecoration: "none" }}>
-                        🏨 Compare hotels on Trip.com ↗
-                      </a>
-                    )}
-                    {/* The disclosure rides with the FIRST buttons rather
-                        than with day one, because day one may now be a night
-                        with no buttons on it and the sentence would then be
-                        printed over nothing while the real door two days later
-                        had none. */}
-                    {stayDoor && doors.door && doors.compare && (
-                      <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 4 }}>{stayDisclosure({ tripcom: !!(stayTripUrl && doors.compare) })}</div>
+                    {doors.door && partnerTotal > 0 && (
+                      <button onClick={() => setPartnersOpen(true)}
+                        style={{ background: "none", border: "none", padding: 0, marginTop: 4, color: C.gold, fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                        Where to book these nights ›
+                      </button>
                     )}
                     {/* ── AND A NIGHT WITH NO BUTTON SAYS WHY ────────
                         Without it a reader on night four sees a stay card with
@@ -2723,9 +2663,8 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                 checked writing, and a partner product in that slot borrows
                 their standing. A line underneath is obviously somebody
                 pointing somewhere else. */}
-            {dayTours[dayIdx] && (
-              <TourLine url={dayTours[dayIdx].url} kind="town" lang={uiLang} style={{ marginTop: 18 }} />
-            )}
+            {/* The day's tour moved into the affiliates panel on 21 Sep
+                2026 with every other paid door. See utils/partnerSheet.js. */}
 
             {/* ── AND A BIKE, ON THE DAY THEY NEED ONE ───────────────
                 Oliver, 11 Sep 2026, asked where bike rental belonged and chose
@@ -2734,11 +2673,8 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                 bikeRentalFits: Copenhagen, because Baja has no other Danish
                 city, and bike, because a traveller on trains is being sold
                 something they did not ask for. */}
-            {(() => {
-              const town = (day.stops || []).filter(s => s && s.name).map(s => stopTown(s)).find(Boolean) || "";
-              if (!bikeRentalFits({ mode: travelModeKey(guide._mode), town })) return null;
-              return <BikeRentalLine url={`https://www.bajabikes.eu/en/${BAJABIKES_RENTAL_SLUG}/`} lang={uiLang} style={{ marginTop: 14 }} />;
-            })()}
+            {/* The bike rental moved into the affiliates panel on 21 Sep
+                2026, on the days it fits. See partnerBikes above. */}
 
             {/* ── AND THE GAP THE BUILDER WOULD HAVE GUESSED AT ──────
                 Oliver, 10 Sep 2026, asked what fills the slots the nightlife cap

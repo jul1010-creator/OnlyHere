@@ -1,4 +1,4 @@
-import { costLines, byUrgency, estimateFrom, describeEstimate, partyOf, partyFrom, describeGroup, COST_KIND } from "../utils/costLedger";
+import { costLines, byUrgency, estimateFrom, describeEstimate, partyOf, partyFrom, describeGroup, costAction, bedsEstimate, tripEstimate, describeTrip, COST_KIND } from "../utils/costLedger";
 import { partnerDisclosure, outboundLink } from "../utils/affiliates";
 import { tripDayDate } from "../utils/guideReading";
 
@@ -29,7 +29,12 @@ import { tripDayDate } from "../utils/guideReading";
 // start deciding WHICH places exist, which is costLedger's job and nobody
 // else's. Everything the block decides lives in utils/costLedger.js; this is
 // only the drawing of it.
-export const CostsBlock = ({ guide, C, rowFor, now = new Date() }) => {
+// `doors` is FALSE on the guide since 21 Sep 2026. Oliver: "look at the
+// affiliate links at the start.. we gotta somehow make it less direct.." The
+// prices, the estimate and the list of things to arrange stay here; every
+// button moved to the day it is used. See doorsByDay in utils/costLedger.js.
+// The prop stays so a page that is ONLY a price list can still have them.
+export const CostsBlock = ({ guide, C, rowFor, now = new Date(), doors = false }) => {
   const lines = byUrgency(costLines({
     guide,
     rowFor,
@@ -71,18 +76,8 @@ export const CostsBlock = ({ guide, C, rowFor, now = new Date() }) => {
   // Asked of the door instead, which answers for all of them: a link that is
   // already tracked comes back unchanged, and the disclosure is read off the
   // same answer as the rel so the two cannot disagree.
-  const partnered = lines.map(l => outboundLink(l.href)).filter(o => o.href && o.note).map(o => o.href);
-  // The action word per kind. A ferry link goes to a timetable and a hotel link
-  // goes to a search, and calling both of them "Buy tickets" is the kind of
-  // label that makes a reader distrust the rest of the page.
-  const action = (kind) =>
-    kind === COST_KIND.TRANSPORT || kind === COST_KIND.FERRY ? "Check times and fares"
-      : kind === COST_KIND.STAY ? "Find a room"
-      : kind === COST_KIND.CAR ? "Book the car"
-      // A walking tour is not a ticket, and "Buy tickets" over one is the label
-      // that made it need its own kind in the first place.
-      : kind === COST_KIND.AUDIO ? "Listen to a sample"
-      : "Buy tickets";
+  const partnered = doors ? lines.map(l => outboundLink(l.href)).filter(o => o.href && o.note).map(o => o.href) : [];
+  const action = costAction;
 
   // One row, drawn the same way under either heading, because a reader should
   // not have to learn two layouts to read one block.
@@ -103,7 +98,7 @@ export const CostsBlock = ({ guide, C, rowFor, now = new Date() }) => {
                 there. See REFUSAL in utils/costLedger.js. */}
             {l.refused
               ? <div style={{ fontSize: 11.5, color: C.light, lineHeight: 1.5, marginTop: 3 }}>{l.refused}</div>
-              : l.href
+              : l.href && doors
                 /* ── A BUTTON, BECAUSE IT WAS BEING READ AS A CAPTION ──
                    Oliver, 14 Sep 2026, relaying the first person to read one of
                    these guides who did not build the app: "the affiliate links
@@ -132,6 +127,28 @@ export const CostsBlock = ({ guide, C, rowFor, now = new Date() }) => {
             )}
           </div>
   );
+
+  // The whole-trip figure, drawn under the tickets estimate when there is one
+  // and on its own when the tickets came to nothing, since free sights and a
+  // priced bed are still a trip with a cost.
+  const wholeTrip = (est) => {
+    const party = partyFrom(guide?._party) || partyOf(guide?._travelers);
+    const trip = tripEstimate(est, bedsEstimate(guide), party);
+    if (!trip) return null;
+    const said = describeTrip(trip, {
+      car: lines.some(l => l.kind === COST_KIND.CAR),
+      transport: lines.some(l => l.kind === COST_KIND.TRANSPORT),
+    });
+    return (
+      <div style={{ marginTop: 10, paddingTop: 9, borderTop: `1px solid ${C.gold}44` }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "0 8px", alignItems: "baseline" }}>
+          <span style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, letterSpacing: 0.8, textTransform: "uppercase" }}>The whole trip</span>
+          <span style={{ fontSize: 15, fontWeight: 800, color: C.text }}>from {trip.from} DKK</span>
+        </div>
+        {said.map(t => <div key={t} style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 2 }}>{t}</div>)}
+      </div>
+    );
+  };
 
   const heading = (text) => (
     <span style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, letterSpacing: 0.8, textTransform: "uppercase", flexShrink: 0, width: 92 }}>{text}</span>
@@ -196,12 +213,20 @@ export const CostsBlock = ({ guide, C, rowFor, now = new Date() }) => {
                   Left out, nothing to buy for these dates: {est.refusedNames.join(", ")}.
                 </div>
               )}
+              {/* ── AND THE WHOLE TRIP ─────────────────────────────
+                  Oliver, 21 Sep 2026: "an estimate on their entire trip."
+                  Only when the build found a room price, so a guide built
+                  before this, or one whose searches stated no price, shows
+                  the tickets figure above and nothing invented under it. See
+                  bedsEstimate in utils/costLedger.js. */}
+              {wholeTrip(est)}
             </div>
           );
         })()}
       </div>
     </div>
     )}
+    {!estimateFrom(priced) && wholeTrip(null)}
     {/* ── AND THE THINGS THAT HAVE NO PRICE YET ──────────────
         A bed, a crossing, a fare that depends on the sailing. Each one is a
         thing to arrange rather than a number to budget, and under its own

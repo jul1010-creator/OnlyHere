@@ -84,6 +84,7 @@ export const UI_STRINGS = {
   "nav.home":        { en: "Explore",         da: "Udforsk",        de: "Entdecken" },
   "nav.essentials":  { en: "Essentials",      da: "Praktisk info",  de: "Praktisches" },
   "nav.tips":        { en: "Tips",            da: "Tips",           de: "Tipps" },
+  "nav.gems":        { en: "Cheap gems",      da: "Billige perler", de: "Günstige Perlen" },
   // "Attraktionen" rather than "Sehenswürdigkeiten", which is the more usual
   // German word and is eighteen characters in a horizontal bar that already
   // hides itself below 1080px. Both are correct; this one fits.

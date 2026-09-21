@@ -10,7 +10,7 @@ import { matchedPlaces, previewPools, mentionsPlace, wantedCategories, groupKeyO
 import { ruledOutFor, excludedNote } from "../utils/exclusions";
 import { seasonWarnings } from "../utils/seasonFit";
 import { tripWindow, tripEvents, describePicks } from "../utils/tripEvents";
-import { briefThemes, rankOffers, offerReason, OFFER_LIMIT } from "../utils/interestFit";
+import { briefThemes, rankOffers, offerReason, OFFER_LIMIT, FIT_STRONG, profileFromWords } from "../utils/interestFit";
 import { cardLine } from "../utils/cardLine";
 import { buildPreviewReport, downloadReport, reportFilename } from "../utils/previewReport";
 import { readBrief } from "../utils/tripBrief";
@@ -386,6 +386,10 @@ export const GuidePreviewScreen = ({
   // constant it always did.
   const travellerTurns = aiMessages.slice(1).filter(m => m.role === "user").map(m => m.text || "");
   const saidByTraveller = travellerTurns.join("\n");
+  // Who is travelling, from the account when it says and from their own words
+  // when it does not. Orders what is offered and nothing else. See
+  // profileFromWords in utils/interestFit.js.
+  const readProfile = profileFromWords(saidByTraveller, userProfile);
   // The trip's own length reaches the matcher, because how many towns to offer
   // for a named region is a question about the trip, not about the region.
   // Computed here rather than inside, so the events and the towns read the same
@@ -505,7 +509,19 @@ export const GuidePreviewScreen = ({
       // to be honest about how many Gemlyx is holding. `picks` is the three
       // that render. Nothing is hidden that the line above it does not admit
       // to.
-      const offered = mine.filter(p => p._notAsked);
+      // ── A CATEGORY THEY DID NOT ASK FOR NEEDS A REAL FIT ─────────
+      // Oliver, 21 Sep 2026: three bars offered to parents in their sixties
+      // who never mentioned a night out, each on one loose word in its
+      // description, "the lakes" for nature and "craft brews" for design.
+      //
+      // NIGHTLIFE ONLY, and on purpose. His 15 Aug rule still stands for the
+      // rest: an attractions or food section nobody asked for keeps its door,
+      // "an empty section with a door, not a deletion". A night out is the one
+      // category he has said, three times now, the app pushes at people who
+      // did not ask, so unasked it is offered only when a bar is TAGGED with a
+      // theme they want. No such bar, no door.
+      const offered = mine.filter(p => p._notAsked
+        && (p._held !== "category" || cat.src !== "nightlife" || p._fit?.via === FIT_STRONG));
       // ── THE CAP HAS TO ADMIT TO ITSELF ────────────────────────────
       // Oliver, 19 Aug 2026: "for some reason there are far more things in the
       // actual guide, than in the review."
@@ -532,8 +548,8 @@ export const GuidePreviewScreen = ({
         // difference rather than the reader discovering it in the finished guide.
         itemsTotal: matching.length,
         offered,
-        picks: rankOffers(offered, { want: themes, profile: userProfile, limit: OFFER_LIMIT })
-          .map(entry => ({ ...entry, reason: offerReason(entry) })),
+        picks: rankOffers(offered, { want: themes, profile: readProfile, limit: OFFER_LIMIT })
+          .map(entry => ({ ...entry, reason: offerReason(entry, { said: saidByTraveller }) })),
       };
     })
     .filter(cat => cat.items.length > 0 || cat.offered.length > 0 || cat.consider.length > 0)
@@ -797,7 +813,7 @@ export const GuidePreviewScreen = ({
                   turnedDown: turnedDown || [],
                   matched,
                   namedNames: matched.filter(p => mentions(p.name)).map(p => p.name),
-                  profile: userProfile,
+                  profile: readProfile,
                   coverage,
                 });
                 downloadReport(report, reportFilename(at));

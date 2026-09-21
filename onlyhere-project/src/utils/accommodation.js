@@ -162,7 +162,7 @@ export const stayTier = (text) => {
 // a figure without a currency-per-day rule attached is not a tier, and null rules
 // nothing out.
 const BUDGET_LEVELS = [
-  { id: "tight", match: /\b(?:tight|cheap|shoestring|backpack(?:ing|er)?|hostel|as cheap as|saving money|watching (?:the )?(?:costs?|pennies)|not much (?:money|to spend))\b|\b(?:low|small|tight|limited|modest|strict)\s+budget\b|\bbudget\s+(?:is\s+)?(?:tight|small|low|limited|modest)\b|\bon a budget\b|\bbudget[- ]friendly\b/i },
+  { id: "tight", match: /\b(?:tight|cheap|shoestring|backpack(?:ing|er)?|hostel|as cheap as|saving money|watching (?:the )?(?:costs?|pennies)|not much (?:money|to spend))\b|\b(?:low|small|tight|limited|modest|strict)\s+budget\b|\bbudget\s+(?:is\s+)?(?:tight|small|low|limited|modest)\b|\bon a budget\b|\bbudget[- ]friendly\b|\bbudget[- ](?:trip|trips|travel|travell?ing|travell?er|holiday|vacation|break|getaway|stay)\b|\blow[- ]cost\b|\bbillig(?:t|e)?\b/i },
   // ── "WE EAT WELL AND WE DON'T MIND PAYING FOR IT" ──────────────────
   // 26 Aug 2026, the Winter Light brief. That sentence returned null, so
   // budgetSays reached the accommodation prompt EMPTY, and the guide invented a
@@ -684,4 +684,106 @@ export const stayTextProblem = ({ text = "", mode = null, kmFromTown = null } = 
 export const stayTextForReader = ({ text = "", mode = null, kmFromTown = null } = {}) => {
   const problem = stayTextProblem({ text, mode, kmFromTown });
   return problem ? problem.repaired : String(text || "");
+};
+
+// ── "COPENHAGEN IS AN EXPENSIVE CITY" ───────────────────────────────
+//
+// Oliver, 21 Sep 2026: "If someone says they want a 'budget-trip' perhaps
+// tell the user that Copenhagen is an expensive city, and if one is looking
+// for budget, then leaving the city is a good idea.."
+//
+// Found while wiring this: "budget trip" was not a tight budget at all. The
+// pattern above knew "on a budget" and "budget-friendly" and not the words he
+// used, so the sentence he wrote read as no budget, and the chat was told to
+// say nothing about money. Widened in the same edit, with "low cost" and the
+// Danish "billig" beside it.
+//
+// THE CLAIM CARRIES NO NUMBER. It is the direction every price the library
+// holds points in, and it is what the day writer is already told about a bed
+// in the capital against a bed in Odense. No official figure comparing the
+// capital's hotels with the provinces was found the evening this went in, so
+// the sentence says which way it goes and never by how much.
+//
+// ONCE. A traveller told twice that the capital is expensive has been told off
+// rather than helped, so the chat stops asking for it as soon as one of its
+// own earlier replies has said it.
+const CAPITAL_SAID = /(copenhagen|k.benhavn)[\s\S]{0,200}(expensive|pricey|dyr)|(expensive|pricey|dyr)[\s\S]{0,200}(copenhagen|k.benhavn)/i;
+export const capitalCostSaid = (priorReplies = []) =>
+  (Array.isArray(priorReplies) ? priorReplies : []).some(t => CAPITAL_SAID.test(String(t || "")));
+
+export const BUDGET_CAPITAL_RULE = "Copenhagen is the expensive end of Denmark, above all for a bed and for a meal out, and the same money goes further outside it. So if Copenhagen is in this trip, say that once, early and in your own words, and then make it useful: see the capital by day and sleep somewhere cheaper, or spend a day there and then move on, naming one or two real places that fit what they have said. Never put a number on the difference. And if they have said Copenhagen itself is the point of the trip, do not talk them out of it: say where the money goes there and let them choose.";
+
+// The guide's version. Shorter, and it may not name a place: the guide is
+// built only from places the conversation settled, so the chat is where a
+// cheaper base gets suggested and the guide is where the reason is written down.
+export const BUDGET_CAPITAL_GUIDE = "If this trip spends any nights in Copenhagen, say in essentials.budgetReality that the capital is the expensive end of Denmark, above all for a bed and a meal out, and that the same money goes further outside it. No number on the difference, and do not add a place the conversation did not name to make the point.";
+
+export const budgetCapitalBlock = ({ level = null, priorReplies = [] } = {}) => {
+  if (level !== "tight" || capitalCostSaid(priorReplies)) return "";
+  return `\n── THEY WANT A BUDGET TRIP ──\n${BUDGET_CAPITAL_RULE}\n`;
+};
+
+// ── A KEBAB, WHEN DANISH FOOD IS NOT THE POINT ─────────────────────
+//
+// Oliver, 21 Sep 2026: "I think you should advice someone on tight budgets
+// that 'kebab shops' tend to be a very cheap alternative if Danish food is of
+// no interest." Every Danish town has a pizza and kebab shop, and it is where
+// the cheapest hot meal in most of them is, so this holds outside the capital
+// as much as in it and is its own rule rather than a line in the one above.
+//
+// NOT FOR SOMEONE WHO CAME TO EAT. His condition is that Danish food is of no
+// interest, so a traveller who has asked for Danish food, smørrebrød, New
+// Nordic or a food trip is not told to go and have a kebab. Silence is not
+// interest: a budget traveller who has said nothing about food gets the tip,
+// worded as the option it is rather than as the plan.
+//
+// NO SHOP IS NAMED and NO PRICE IS PUT ON IT. A named kebab shop is a place
+// nobody checked, and a figure is one nobody read. ONCE, like the capital.
+const DANISH_FOOD = /\b(danish|nordic|local|traditional|scandinavian)\s+(food|cuisine|dishes|cooking|kitchen|flavou?rs?)\b|sm(ø|oe|o)rrebr(ø|oe|o)d|new nordic|\bfood(ie)?\s+(trip|tour|focus)|\bfoodies?\b|dansk\s+mad|danske\s+retter|frokostplatte|stjerneskud|stegt fl(æ|ae)sk|fl(æ|ae)skesteg|\bmichelin\b/i;
+// Food ticked as an interest on the intake counts as coming to eat.
+export const wantsDanishFood = (text = "", interests = []) =>
+  (Array.isArray(interests) ? interests : []).some(i => /^food$/i.test(String(i || "").trim())) || DANISH_FOOD.test(String(text || ""));
+
+const KEBAB_SAID = /\bkebab|\bshawarma|\bdürüm|\bdurum\b|\bgrillbar/i;
+export const kebabSaid = (priorReplies = []) =>
+  (Array.isArray(priorReplies) ? priorReplies : []).some(t => KEBAB_SAID.test(String(t || "")));
+
+export const BUDGET_FOOD_RULE = "If Danish food is not what they came for, a kebab or pizza shop is among the cheapest hot meals in almost any Danish town, the capital included. When eating out comes up, say that once, in your own words, as an option and not as the plan, and never as a verdict on Danish food. Do not name a particular shop unless it is in the lists below, and never put a price on it.";
+
+export const BUDGET_FOOD_GUIDE = "If Danish food was not a point of this trip, add in essentials.budgetReality that a kebab or pizza shop is among the cheapest hot meals in almost any Danish town. No price, and no named shop.";
+
+export const budgetFoodBlock = ({ level = null, priorReplies = [], travellerText = "", interests = [] } = {}) => {
+  if (level !== "tight" || wantsDanishFood(travellerText, interests) || kebabSaid(priorReplies)) return "";
+  return `\n── FOOD ON A BUDGET ──\n${BUDGET_FOOD_RULE}\n`;
+};
+
+export const budgetFoodGuide = ({ level = null, travellerText = "", interests = [] } = {}) =>
+  level === "tight" && !wantsDanishFood(travellerText, interests) ? ` ${BUDGET_FOOD_GUIDE}` : "";
+
+// ── A PRICE FOR THE NIGHT, AND WHERE IT WAS READ ────────────────────
+//
+// Oliver, 21 Sep 2026: "I'd like if you can give the users an estimate on
+// their entire trip." The estimate stopped at the tickets because nothing in
+// a guide carried a figure for a bed, and a bed is most of what a trip costs.
+//
+// The day enrichment already searches for "hotel hostel names and prices per
+// night" and reads the results. So it is asked for ONE more thing: the lowest
+// price for a room the search results state, and the words that state it.
+// This decides whether that answer is kept, and it keeps it only if the words
+// are in what the search returned, carry a currency, and carry that
+// number. A model cannot put a price on a night by writing one down; it has to
+// point at the sentence that says it.
+const squash = (v) => String(v || "").toLowerCase().replace(/\s+/g, " ").trim();
+export const NIGHT_KR_MIN = 100;
+export const NIGHT_KR_MAX = 10000;
+export const nightPriceFrom = ({ kr, says } = {}, context = "") => {
+  const n = Math.round(Number(kr));
+  if (!Number.isFinite(n) || n < NIGHT_KR_MIN || n > NIGHT_KR_MAX) return null;
+  const quote = squash(says);
+  if (!quote || quote.length > 200) return null;
+  if (!squash(context).includes(quote)) return null;
+  if (!/\b(?:kr|dkk|kroner)\b|,-/i.test(quote)) return null;
+  const digits = quote.replace(/(\d)[.,\s](?=\d{3}\b)/g, "$1");
+  if (!new RegExp(`\\b${n}\\b`).test(digits)) return null;
+  return { kr: n, says: String(says).replace(/\s+/g, " ").trim() };
 };

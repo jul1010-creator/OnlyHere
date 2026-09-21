@@ -45,6 +45,8 @@
 import { events, majorEvents, undatedEvents, communityEvents } from "../data/events";
 import { towns, TOWN_COORDS } from "../data/towns";
 import { islands } from "../data/islands";
+import { gems } from "../data/gems";
+import { GEM_TYPE } from "./cheapGems";
 import { freeEntrance } from "../data/freeEntrance";
 import { nightlifeSpots } from "../data/nightlife";
 import { nightlifeTowns } from "../data/nightlifeTowns";
@@ -174,6 +176,10 @@ const doLoad = async () => {
       // pool that asks for towns, and each of those would have been found
       // separately and fixed separately.
       else if (row.type === "island") islands.push({ id, ...item });
+      // A cheap gem is its own array for the reason an island is: it is not a
+      // place in any of the other pools, and a guide that asked for towns or
+      // food must never be handed a student discount. See utils/cheapGems.js.
+      else if (row.type === GEM_TYPE) gems.push({ id, ...item });
       // ── THREE SCALES, AND ONE OF THEM DOES NOT PUBLISH ────────
       // Major and Local are the two that reach a reader through a page, a chip,
       // the front page line and the chat. Community is Oliver's third, added
@@ -313,6 +319,7 @@ export const refreshLiveContent = async (onBookingRow) => {
 const ARRAY_FOR = {
   town: towns,
   island: islands,
+  [GEM_TYPE]: gems,
   free: freeEntrance,
   food: foodSpots,
   foodStreet: foodSpots,

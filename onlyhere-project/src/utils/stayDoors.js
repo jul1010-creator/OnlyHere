@@ -24,7 +24,7 @@
 //
 // So nothing here is about showing less advertising for its own sake. The door
 // appears once per PLACE THEY SLEEP rather than once per night, which is once
-// per decision the reader actually makes.
+// per decision the reader makes.
 //
 // ── WHAT THIS DOES NOT TOUCH ────────────────────────────────────────
 //
@@ -39,15 +39,55 @@
 // to book that night. That is the half of the rule this file must not break
 // while fixing the other half, and it is asserted rather than trusted.
 import { fold } from "./danishNames";
+import { townKeyFor } from "./guideEnrichment";
+import { TOWN_COORDS } from "../data/towns";
+import { haversineKm } from "./helpers";
 
-// The place a night is spent, as a comparable key. stayArea is what the
-// enrichment pass wrote and is the most specific thing there is; the day's own
-// town is the fallback, because a day with no stayArea still sleeps somewhere.
+// ── THE TOWN YOU SLEEP IN, NOT THE STREET ───────────────────────────
+//
+// Oliver, 21 Sep 2026, of guide z8f8otncrz2: "There is no clear idea of how
+// long time the person is staying at a hotel.. and the affiliate link
+// constantly feels like advertisement."
+//
+// Both halves had one cause, here. The key WAS stayArea, which each day's
+// enrichment call writes on its own without seeing the others, so a week in
+// Copenhagen came back as Nørreport, then Nyhavn and Kongens Nytorv, then
+// something else again. Every one of those is Copenhagen, and every one of
+// them counted as a new hotel: six stays, six booking buttons, and no card
+// that could say "three nights here" because no two nights agreed.
+//
+// A stay is the TOWN now: the town of the day's last stop, which is where a
+// relocation day ends and so where its night is spent. Two nights in
+// different streets of one city are one hotel, which is how people book.
+//
+// THE AREA OVERRIDES IT ONLY WHEN IT IS SOMEWHERE ELSE. A day trip to
+// Helsingør that sleeps back in Copenhagen says Copenhagen in its area, and
+// that has to win over the last stop. But the place list names neighbourhoods
+// too, Nyhavn among them, so a named place only counts as a different base
+// when it is more than AWAY_KM from the day's town. Nyhavn is a kilometre from
+// the centre of Copenhagen; Copenhagen is forty from Helsingør.
+export const AWAY_KM = 10;
 export const baseKey = (day) => {
   const area = String(day?.glance?.stayArea || "").trim();
-  const town = (Array.isArray(day?.stops) ? day.stops : []).map(s => s?.town).find(Boolean) || "";
-  const said = area || String(town || "").trim();
+  const stops = Array.isArray(day?.stops) ? day.stops : [];
+  const lastTown = String(stops.map(s => s?.town).filter(Boolean).slice(-1)[0] || "").trim();
+  const named = townKeyFor(area);
+  let said = lastTown || named || area;
+  if (named && lastTown && fold(named) !== fold(lastTown)) {
+    const a = TOWN_COORDS[named], b = TOWN_COORDS[townKeyFor(lastTown) || lastTown];
+    const km = a && b ? haversineKm({ lat: a[0], lon: a[1] }, { lat: b[0], lon: b[1] }) : null;
+    if (km != null && km > AWAY_KM) said = named;
+  }
   return said ? fold(said) : "";
+};
+
+// How long a stay is, in the words a person books in. Printed on the first
+// night of each stay, which is the fact the card was missing.
+export const nightsLabel = (nights = []) => {
+  const list = (Array.isArray(nights) ? nights : []).map(Number).filter(n => Number.isFinite(n)).sort((a, b) => a - b);
+  if (!list.length) return "";
+  if (list.length === 1) return `1 night here, night ${list[0]}`;
+  return `${list.length} nights here, nights ${list[0]} to ${list[list.length - 1]}`;
 };
 
 // ── ONE DOOR PER STAY, NOT PER NIGHT ────────────────────────────────
@@ -94,7 +134,7 @@ export const doorsFor = (days, nights = []) => {
   const stays = staysIn(days, nights);
   const map = {};
   stays.forEach((s, i) => {
-    map[s.first] = { door: true, compare: i === 0, featured: true, nights: s.nights.length };
+    map[s.first] = { door: true, compare: i === 0, featured: true, nights: s.nights.length, list: s.nights.slice() };
   });
   return map;
 };

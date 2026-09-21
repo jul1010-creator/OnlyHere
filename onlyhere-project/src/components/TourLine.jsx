@@ -69,7 +69,7 @@ export const TourLine = ({ url, kind = "", lang = DEFAULT_UI_LANGUAGE, style = n
   // the drift actually worth guarding. Same call as the labelledAt guard in
   // utils/eventDates.js.
   //
-  // BikeRentalLine below keeps ITS guard, and the difference is the point: that
+  // the bike rental line that stood below kept ITS guard, and the difference is the point: that
   // one has no isTourUrl in front of it, so an arbitrary address really can
   // reach it, and a mutant that removed it died.
   const merchant = tourMerchant(url);
@@ -96,36 +96,6 @@ export const TourLine = ({ url, kind = "", lang = DEFAULT_UI_LANGUAGE, style = n
   );
 };
 
-// ── AND THE ONE PARTNER LINK THAT IS NOT AN ACTIVITY ────────────────
-//
-// Oliver, 11 Sep 2026, asked where bike rental belonged and chose the guide day
-// over the town page: on a bike day, at the point they need one, never on a
-// public-transport trip.
-//
-// IN THIS FILE RATHER THAN ITS OWN, for the reason ChatPlaceCards gives about
-// its three layouts: "a second component would be a second place for the licence
-// credit rule to be got wrong". Here the rule with the edge on it is the
-// disclosure, and there is exactly one copy of it.
-//
-// The caller decides WHETHER, through bikeRentalFits. This decides how it reads.
-export const BikeRentalLine = ({ url, lang = DEFAULT_UI_LANGUAGE, style = null }) => {
-  const href = affiliateHref(url) || url;
-  if (!/^https?:\/\//i.test(String(href))) return null;
-  const merchant = tourMerchant(url);
-  if (!merchant) return null;
-  const note = affiliateNote(url, lang);
-  return (
-    <div style={{ marginTop: 14, ...(style || {}) }}>
-      <div style={{ fontSize: 13, color: C.light, lineHeight: 1.7 }}>
-        {uiT("rental.lead", lang)}{" "}
-        <a href={href} target="_blank" rel={note ? "noreferrer sponsored nofollow" : "noreferrer"}
-          style={{ color: C.gold, fontWeight: 700, textDecoration: "none" }}>
-          {uiT("rental.link", lang)} ↗
-        </a>
-      </div>
-      {note && (
-        <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 3 }}>{note}</div>
-      )}
-    </div>
-  );
-};
+// BikeRentalLine lived here until 21 Sep 2026, when the bike rental moved into
+// the guide's affiliates panel with every other paid door. See
+// utils/partnerSheet.js.

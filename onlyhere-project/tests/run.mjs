@@ -177,7 +177,7 @@ writeFileSync(entry, `
   export { DETOUR_PATH, ME_PATH, LEGAL_PATH, TAB_HASH as TAB_HASH_WORDS } from ${JSON.stringify(join(root, "src/utils/tabUrl.js"))};
   export { mapPlaces, railCss, railMapCss, RAIL_CLASS, INLINE_CARDS_CLASS, RAIL_BREAKPOINT_PX, MAP_CLASS, POPUP_CLASS, MAP_PIN_CAP, CHAT_PANEL_HEIGHT, MSG_ROW_CLASS, LABEL_CLASS, LABEL_SIDES, LABEL_GAP, labelBox, labelSides, SPOT_PIN_ZOOM, isSpotPin, spotsShowAt, PHONE_MAP_PINS, phoneMapShows } from ${JSON.stringify(join(root, "src/utils/chatRail.js"))};
   export { readMapBeats, beatsDue, beatTarget, MAP_BEAT_CAP, MAP_DIRECTION_RULE, cameraArrive, cameraLanded, frameFor, SLIDE_HOLD_MS, makeCamera, unplayedBeat } from ${JSON.stringify(join(root, "src/utils/mapDirections.js"))};
-  export { costLines, byUrgency, linkGaps, readPrice, readableFigure, refuseTicket, REFUSAL, COST_KIND, estimateFrom, describeEstimate, partyOf, partyFrom, describeGroup, stopHasADoor } from ${JSON.stringify(join(root, "src/utils/costLedger.js"))};
+  export { costLines, byUrgency, costAction, linkGaps, readPrice, readableFigure, refuseTicket, REFUSAL, COST_KIND, estimateFrom, describeEstimate, partyOf, partyFrom, describeGroup, stopHasADoor } from ${JSON.stringify(join(root, "src/utils/costLedger.js"))};
   export { freeButPriced, moneyProblems, LODGING_FLOOR_DKK } from ${JSON.stringify(join(root, "src/utils/moneyClaims.js"))};
   export { clampNote, NOTE_SHOW_WHOLE_MAX, NOTE_CLAMP_AT, NOTE_MIN_HIDDEN } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { budgetCharacterised } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
@@ -190,9 +190,15 @@ writeFileSync(entry, `
   export { nameFit, describeNameFit } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
   export { stayTextProblem, stayTextForReader, withoutStump, withoutDayTripClaim as wdtc } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
   export { offerReason as offerReasonFn, rowThemeWords, ARRIVAL_WORDS } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
+  export { nightPriceFrom } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
+  export { bedsEstimate, tripEstimate, describeTrip } from ${JSON.stringify(join(root, "src/utils/costLedger.js"))};
+  export { isSplurge, SPLURGE_KR } from ${JSON.stringify(join(root, "src/utils/budgetFit.js"))};
+  export { profileFromWords, FIT_STRONG as FIT_STRONG_WORD } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
+  export { priceAverageKr } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { outOfBudget, budgetWarning, BUDGET_RULES_OUT, PRICED_KINDS } from ${JSON.stringify(join(root, "src/utils/budgetFit.js"))};
   export { MAX_STOPS_ARRIVAL_DAY, MIN_STOPS_MIDDLE_DAY, MAX_BARS_A_NIGHT, MAX_CLUBS_A_NIGHT, namedIn, ISLAND_KOMMUNE_NAMES } from ${JSON.stringify(join(root, "src/utils/planGate.js"))};
   export { isSameSpot, SAME_SPOT_KM, cityFromLocation, stopTown } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
+  export { capitalCostSaid, budgetCapitalBlock, BUDGET_CAPITAL_RULE, BUDGET_CAPITAL_GUIDE, wantsDanishFood, kebabSaid, budgetFoodBlock, budgetFoodGuide, BUDGET_FOOD_RULE, BUDGET_FOOD_GUIDE } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
   export { travellerBudget, budgetTierMismatch, dayTripClaim, dayTripHonest, dayTripRadiusKm, withoutDayTripClaim, describeDayTripClaim, DAY_TRIP_FRACTION } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
   export { placedLibrary, nearbyPublished, describeLocation, distanceWords, walkMinutes, nearbyLabel, NEAR_KM, WALK_KMH, SAME_VISIT_KM, SAME_VISIT_LIMIT } from ${JSON.stringify(join(root, "src/utils/nearbyPlaces.js"))};
   export { TICKET_STATUS, TICKET_BADGE, ticketBadge, normaliseTicketStatus, statusFromCode, readTicketmasterEvent, appearances, otherDatesHere, alsoPlayingLine, describeAppearances, nameTokens, nameOverlap, daysApart, matchEvent, reconcileTickets, ticketsForPrompt, priceText, SAME_EDITION_DAYS, MIN_NAME_OVERLAP, stampTicketSource, ticketProvenance, isMeasured, statedAsFact, ticketCheckAgeDays, TICKET_STATUS_FRESH_DAYS, ticketPromptNote, ticketBookingWhy, ticketLabelLine, writtenStatusRule, lookupFailureNote, TICKET_SOURCES, TICKET_SOURCE_LABEL, isAncillaryListing, isSubEventListing, soldOutClaim, saleOpensLater, soldOutContradiction } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
@@ -255,8 +261,10 @@ writeFileSync(entry, `
   export { FERRY_ROUTES, crossings, crossingsTo, timetableFerryUrl, RP_CREDIT, GTFS_READ_ON } from ${JSON.stringify(join(root, "src/data/ferryRoutes.js"))};
   export { ferryUrlOf } from ${JSON.stringify(join(root, "src/utils/ferryDoor.js"))};
   export { FROZEN_TRANSPORT, frozenFrom, frozenIn, factsLost, frozenBlock, lostNote } from ${JSON.stringify(join(root, "src/utils/frozenFacts.js"))};
-  export { baseKey, staysIn as stayRunsIn, doorsFor, doorOn, sameBaseLine } from ${JSON.stringify(join(root, "src/utils/stayDoors.js"))};
+  export { PARTNER_OPENER, PARTNER_INTRO, partnerSections, partnerCount } from ${JSON.stringify(join(root, "src/utils/partnerSheet.js"))};
+  export { baseKey, staysIn as stayRunsIn, doorsFor, doorOn, sameBaseLine, nightsLabel } from ${JSON.stringify(join(root, "src/utils/stayDoors.js"))};
   export { SECTIONS as DIR_SECTIONS, ROW_KINDS, kindOf as dirKindOf, directoryLinks, pathWord, ferryDoorIn, DIRECTORY_PROMPT, rowsFromDirectory, directoryProblems, staysIn, eatsIn, islandSaysBlock, ISLAND_SAYS } from ${JSON.stringify(join(root, "src/utils/islandDirectory.js"))};
+  export { GEM_TYPE, GEM_KINDS, GEM_SECTION, WHERE_LABEL, RECHECK_DAYS, STALE_DAYS, isCouponSite, isOwnSite, shapeGem, gemProblems, gemLive, gemsView, checkedLabel, checkedAgo, gemSearches, GEMS_PROMPT, settleGems, gemRunNotes, gemsForGuide, gemHeading } from ${JSON.stringify(join(root, "src/utils/cheapGems.js"))};
   export { sentencesIn, readerBody, noticeAsk, noticeText, TRANSLATE_NOTICE, translatedNotice, DEAD_ENDS } from ${JSON.stringify(join(root, "src/utils/noticeVoice.js"))};
   export { guideClaims, guideClaimNote } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { resolveStopCoords } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
@@ -8221,11 +8229,14 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // showing a hotel to somebody who is going there and sending them there.
   // One value, read once and used by all three buttons, so the town the hotel
   // is matched against is the same town the searches beside it are for.
-  ok("the card reads the day's own town",
-     /const stayAreaTerm = day\.glance\.stayArea \|\| stayTown \|\| searchTerm;/.test(guide)
-     && /const featuredStay = featuredStayFor\(stayAreaTerm\);/.test(guide));
-  ok("and the Booking button goes through the door", /href=\{outboundLink\(stayDoor\.href\)\.href \|\| stayDoor\.href\}/.test(guide));
-  ok("with the rel that comes with it", /rel=\{outboundLink\(stayDoor\.href\)\.rel\}/.test(guide));
+  // Since 21 Sep 2026 the hotel, the Booking door and Trip.com are built once
+  // per STAY for the affiliates panel, off the place that stay sleeps in.
+  const sheetSrc = readFileSync(join(root, "src/components/PartnerSheet.jsx"), "utf8");
+  ok("the panel reads the stay's own place",
+     /const place = d\?\.glance\?\.stayArea \|\| lastTown \|\| "";/.test(guide)
+     && /const featured = featuredStayFor\(place\);/.test(guide));
+  ok("and every door in it goes through the door", /href=\{o\.href \|\| it\.href\}/.test(sheetSrc) && /const o = outboundLink\(it\.href\);/.test(sheetSrc));
+  ok("with the rel that comes with it", /rel=\{o\.rel\}/.test(sheetSrc));
   ok("and no raw rel is left on a link that now pays", !/href=\{stayDoor\.href\} target="_blank" rel="noreferrer"/.test(guide));
 
   // ── "STICK TO THE AREA AND JUST PUT THE FRONT-PAGE LINK" ──────────
@@ -8257,8 +8268,15 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     // so one door in the source was still seven doors on a week. The door is
     // now gated on the night that OPENS a stay, which is once per booking the
     // reader makes. See utils/stayDoors.js.
-    ok("there is one Booking door on the stay card", /\{stayDoor && doors\.door && \(/.test(src));
-    is("and only one", (src.match(/\{stayDoor && doors\.door && \(/g) || []).length, 1);
+    // ── AND THEN NONE ON THE CARD AT ALL ─────────────────────────
+    // Oliver, 21 Sep 2026: "the affiliate link constantly feels like
+    // advertisement." The room door is one per STAY in the affiliates panel,
+    // and the card keeps the way in to it on the night that opens a stay.
+    ok("the stay card links to no booking site", !/\bstayDoor\b/.test(src) && !/stayTripUrl/.test(src));
+    ok("and opens the panel on the night that opens a stay",
+       /\{doors\.door && partnerTotal > 0 && \(\s*<button onClick=\{\(\) => setPartnersOpen\(true\)\}/.test(src));
+    ok("saying how many nights it is", /\{doors\.door && doors\.list\?\.length > 0 && \([\s\S]{0,160}nightsLabel\(doors\.list\)/.test(src));
+    ok("one room door per stay, built once for the page", /const partnerStays = staysIn\(days, stayNights\)\.map\(/.test(src));
     // THE STANDING RULE SURVIVES THE CUT, and it is the half that must not
     // break while fixing the other half. Oliver, 7 Aug 2026: "why does the
     // accommodation/booking affiliation keep getting removed". The card and
@@ -8269,24 +8287,24 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     ok("and which night opens a stay is decided once for the page",
        /const stayDoors = doorsFor\(days, stayNights\);/.test(src));
     ok("the second booking site is offered once on the whole guide rather than beside the first every night",
-       /\{stayTripUrl && doors\.compare && \(/.test(src));
+       /compare: i === 0 \? \(tripcomStayUrl\(place\) \|\| ""\) : "",/.test(src));
     // A night with no button has to say why, or the page reads as broken.
     ok("and a night under an earlier booking says so", /\{sameBed && \(/.test(src));
     ok("built by the shared decider rather than by a search here",
-       /const stayDoor = stayDoorUrl\(\{/.test(src));
+       /const door = stayDoorUrl\(\{/.test(src));
     ok("and the three that used to stand here are gone",
        !/stayGoodUrl/.test(src) && !/stayBudgetUrl/.test(src) && !/stayBookingUrl/.test(src));
     // THE LABEL FOLLOWS THE LINK. This is the whole safety property: the button
     // names the area only when stayDoorUrl says the link will show it.
     ok("the label is chosen by what the link can keep",
-       /\{stayDoor\.area \? `🏨 Hotels in \$\{stayAreaTerm\} ↗` : "🏨 Find a room on Booking\.com ↗"\}/.test(src));
+       /door\.area \? `Hotels in \$\{place\}` : "Find a room on Booking\.com"/.test(src));
     // The area is not lost. It is in the sentence the guide has always used to
     // say where to sleep, one element up, and that is where he put it.
-    ok("the area is still read for the card", /const stayAreaTerm = day\.glance\.stayArea \|\| stayTown \|\| searchTerm;/.test(src));
-    ok("and handed to the door", /area: stayAreaTerm,/.test(src));
+    ok("the area is still read for the stay", /const place = d\?\.glance\?\.stayArea \|\| lastTown \|\| "";/.test(src));
+    ok("and handed to the door", /area: place, near: lastTown,/.test(src));
     // WHICH SURFACE EARNED IT. CJ lifts `sid` off the click URL, and with one
     // door everywhere it is the only way a commission can be attributed.
-    ok("the guide's door names itself in the click", /slot: "guide-stay",/.test(src));
+    ok("the guide's door names itself in the click", /slot: "partner-stay",/.test(src));
     ok("and the costs list names its own",
        /slot: "costs-stay"/.test(readFileSync(join(root, "src/utils/costLedger.js"), "utf8")));
     // ── AND THE DISCLOSURE FOLLOWS THE BUTTONS, NOT DAY ONE ──────
@@ -8295,7 +8313,8 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     // door. Now day one can be a night with no buttons on it, and that test
     // would print the paid-link sentence over nothing while the real door two
     // days later carried none. It rides with the first buttons instead.
-    ok("the disclosure follows the door", /\{stayDoor && doors\.door && doors\.compare && \(/.test(src));
+    // In the panel, the sentence is read off the doors the panel holds.
+    ok("the disclosure follows the door", /const notes = \[\.\.\.new Set\(sections\.flatMap\(s => s\.items\.map\(i => outboundLink\(i\.href\)\.note\)\)\.filter\(Boolean\)\)\];/.test(sheetSrc));
     ok("and never prints over a night with no button", !/\(stayDoor \|\| stayTripUrl\) && dayIdx === 0/.test(src));
 
     // ── AND THE DOOR ITSELF, ON BOTH SETTINGS ───────────────────────
@@ -12520,7 +12539,8 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   const blockAt = appSrc.indexOf("const chosenEventsBlock");
   ok("the block is built before the planner runs", blockAt > 0 && blockAt < plannerAt);
   ok("the planner prompt carries it", /not just within each single day\.\$\{chosenEventsBlock\}/.test(appSrc));
-  ok("the writer prompt carries it too", /atmosphere and experience instead\.\$\{CURRENCY_RULE\}\$\{chosenEventsBlock\}/.test(appSrc));
+  // The budget line went in between on 21 Sep 2026 and changes nothing here.
+  ok("the writer prompt carries it too", /atmosphere and experience instead\.\$\{CURRENCY_RULE\}(?:\$\{budgetCapitalGuide\})?\$\{chosenEventsBlock\}/.test(appSrc));
   // And the deterministic half, because a prompt has a failure rate.
   ok("a ticked event that never made the plan is a plan problem",
     /was added to this trip on the preview screen and no day contains it/.test(appSrc));
@@ -24095,7 +24115,7 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // ── THE SECTION NOBODY ASKED FOR ────────────────────────────────
   // "Have an empty attractions and eat places. And then like a 'add'
   // attractions, next to it." An empty section with a door, not a deletion.
-  ok("a section splits what was asked for from what was not", /const offered = mine\.filter\(p => p\._notAsked\)/.test(preview));
+  ok("a section splits what was asked for from what was not", /const offered = mine\.filter\(p => p\._notAsked\b/.test(preview));
   ok("and survives with nothing in it", /cat\.items\.length > 0 \|\| cat\.offered\.length > 0/.test(preview));
   ok("the offered count is stated rather than implied", /It holds \$\{cat\.offered\.length\}/.test(preview));
   ok("there is a door", /ADD_LABEL\[cat\.src\]/.test(preview));
@@ -28316,21 +28336,6 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
         is("the rental draws no tour line",
            (await renderSurface("src/components/TourLine.jsx", "TourLine",
              { url: "https://www.bajabikes.eu/en/bike-rental-copenhagen/", kind: "town", lang: "en" })).text.trim(), "");
-        // ── AND IT HAS ITS OWN SENTENCE ────────────────────────────
-        // Oliver chose the guide day over the town page: on a bike day, at the
-        // point the question is theirs.
-        const rent = async (lang) => (await renderSurface("src/components/TourLine.jsx", "BikeRentalLine",
-          { url: "https://www.bajabikes.eu/en/bike-rental-copenhagen/", lang })).text;
-        const rentEn = await rent("en"), rentDa = await rent("da");
-        ok("the rental line reads as transport rather than as an activity",
-           rentEn.includes(M.UI_STRINGS["rental.lead"].en) && rentEn.includes(M.UI_STRINGS["rental.link"].en));
-        ok("in the reader's language, disclosure included",
-           rentDa.includes(M.UI_STRINGS["rental.lead"].da) && rentDa.includes(M.UI_STRINGS["affiliate.disclosure"].da));
-        ok("and it says it earns, like every paid link on the site", /may earn Gemlyx/.test(rentEn));
-        is("something that is not a partner draws nothing",
-           (await renderSurface("src/components/TourLine.jsx", "BikeRentalLine",
-             { url: "https://example.com/bikes/", lang: "en" })).text.trim(), "");
-
         // ── WHO SELLS IT IS NOT WHO PAYS US ───────────────────────
         //
         // Found by a mutant on 11 Sep 2026 that survived everything above.
@@ -28391,8 +28396,10 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
         // The day's town, not the trip's: a Copenhagen trip spending day four in
         // Roskilde gets no line on day four, because the bike shop is not there.
         const gpB = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+        // Moved into the affiliates panel on 21 Sep 2026, and still asked of
+        // each day's own town, so only the bike days are named on it.
         ok("the guide asks about the day's own town",
-           /const town = \(day\.stops \|\| \[\]\)[^;]*stopTown\(s\)\)\.find\(Boolean\) \|\| "";\s*\n\s*if \(!bikeRentalFits\(\{ mode: travelModeKey\(guide\._mode\), town \}\)\) return null;/.test(gpB));
+           /const town = \(d\.stops \|\| \[\]\)[^;]*stopTown\(x\)\)\.find\(Boolean\) \|\| "";\s*\n\s*return bikeRentalFits\(\{ mode: travelModeKey\(guide\._mode\), town \}\) \? Number/.test(gpB));
         ok("and folds the traveller's own words through the shared reader",
            /travelModeKey\(guide\._mode\)/.test(gpB));
       }
@@ -28589,8 +28596,9 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       const gp = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
       ok("the guide page reads the traveller's own exclusions into it",
          /guideTours\(guide\?\.days, \{ rows: towns, excluded: guide\?\._constraints\?\.excluded \|\| \[\] \}\)/.test(gp));
-      ok("and prints the line under the day it belongs to",
-         /\{dayTours\[dayIdx\] && \(\s*\n\s*<TourLine url=\{dayTours\[dayIdx\]\.url\} kind="town" lang=\{uiLang\}/.test(gp));
+      // In the affiliates panel since 21 Sep 2026, labelled with its day.
+      ok("and files it under the day it belongs to",
+         /const t = dayTours\[i\];[\s\S]{0,300}return \{ day: Number\(d\?\.day \|\| i \+ 1\), url: t\.url/.test(gp));
     }
 
     // ── WHAT THE SENTENCE CALLS IT ────────────────────────────────
@@ -29044,7 +29052,9 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   const gp = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
   is("the booking date is not formatted through UTC",
     (gp.match(/toISOString\(\)\.slice\(0, 10\)/g) || []).length, 0);
-  ok("it is formatted from local parts instead", /const fmt = \(d\) => dayKey\(d\)/.test(gp));
+  // The stay door moved to the panel on 21 Sep 2026 and books a whole stay;
+  // its dates are still local parts, through the same primitive.
+  ok("it is formatted from local parts instead", /checkin: first \? dayKey\(first\) : undefined,/.test(gp));
   // dayKey is the thing being relied on, so the round trip is asserted rather
   // than assumed: a local-midnight Date must come back as the day it names.
   is("a local midnight date keys to its own day", M.dayKey(new Date(2026, 8, 6)), "2026-09-06");
@@ -29381,7 +29391,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   is("the day of the trip is computed once", (gpWhen.match(/const dayDate = tripDayDate\(/g) || []).length, 1);
   is("and the mutating setDate copy is gone",
     (gpWhen.match(/dayDate\.setDate\(dayDate\.getDate\(\)/g) || []).length, 0);
-  ok("checkout counts forward through the primitive", /const nextDate = dayPlus\(dayDate, 1\)/.test(gpWhen));
+  ok("checkout counts forward through the primitive", /checkout: last \? dayKey\(dayPlus\(last, 1\)\) : undefined,/.test(gpWhen));
   // The pipeline test panel answered "did they include events" with names only,
   // which is the same gap read by the one person most likely to catch it.
   ok("the test panel names the window too", /w\.runs/.test(gpWhen));
@@ -36359,10 +36369,13 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       // OUTLINED, NOT FILLED. He asked for it to shine "a bit", and a page
       // carrying three solid gold buttons reads as advertising, which costs more
       // trust than the click is worth.
+      // Since 21 Sep 2026 every door is drawn by the affiliates panel, one
+      // shape for all of them.
+      const sheetG = readFileSync(join(root, "src/components/PartnerSheet.jsx"), "utf8");
       ok("the stay link is a button rather than a caption",
-         /background: `\$\{C\.gold\}1a`, border: `1px solid \$\{C\.gold\}66`, color: C\.gold, borderRadius: 100, padding: "8px 14px", fontSize: 13/.test(gp));
-      is("both stay doors are drawn the same, so neither reads as the other's afterthought",
-         (gp.match(/background: `\$\{C\.gold\}1a`, border: `1px solid \$\{C\.gold\}66`, color: C\.gold, borderRadius: 100, padding: "8px 14px", fontSize: 13/g) || []).length, 2);
+         /background: `\$\{C\.gold\}1a`, border: `1px solid \$\{C\.gold\}66`, color: C\.gold, borderRadius: 100/.test(sheetG));
+      is("every door in the panel is drawn the same, so none reads as another's afterthought",
+         (sheetG.match(/<a href=/g) || []).length, 1);
       ok("and neither is the old bare text link",
          !/style=\{\{ display: "block", marginTop: 5, color: C\.gold, fontWeight: 700, textDecoration: "none" \}\}/.test(gp));
 
@@ -53284,8 +53297,10 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // the half that must never move. The word itself is asserted, in all three
     // languages, in the catalogue block.
     ok("Tips is in the nav", /\{ id: "tips", label: uiT\("nav\.tips", uiLang\), ico: "bulb" \}/.test(app));
+    // Cheap gems went in after Tips on 21 Sep 2026, which leaves Tips where
+    // this line is about: next to Essentials.
     ok("and in the swipe order, next to Essentials",
-      /"home", "essentials", "tips", "attractions"/.test(app));
+      /"home", "essentials", "tips", "gems", "attractions"/.test(app));
     // ONE RENDER, TWO TABS. Copying the block is how the two start disagreeing
     // about what a card looks like.
     ok("both tabs are drawn by one block", /\(tab === "essentials" \|\| tab === "tips"\)/.test(app));
@@ -54161,7 +54176,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("and does not build a Booking search of its own", !/bookingUrl\(\{/.test(gp));
     ok("and no longer hand-rolls a Booking search",
       !/booking\.com\/searchresults\.html\?ss=\$\{encodeURIComponent/.test(gp));
-    ok("and it passes the town it knows", /near: stayTown,/.test(gp));
+    ok("and it passes the town it knows", /near: lastTown,/.test(gp));
     // The builder is still reached, one file over, so its tiers and its town
     // handling stay live for the day deep links are allowed.
     const affS = stripComments(readFileSync(join(root, "src/utils/affiliates.js"), "utf8"));
@@ -54576,8 +54591,22 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   const draw = (props) => rsc("src/components/CostsBlock.jsx", "CostsBlock",
     { guide: GUIDE, C, rowFor: (n) => ROWS[n] || null, now: FEB, ...props });
 
+  // ── THE DOORS LEFT THIS BLOCK FOR THE DAYS ──────────────────────
+  // Oliver, 21 Sep 2026, of guide z8f8otncrz2: "look at the affiliate links at
+  // the start.. we gotta somehow make it less direct.." Five paid buttons stood
+  // before Day 1. On the guide this block now draws prices and no doors, and
+  // the block's own button tests below run with doors on, which is the page
+  // that is only a price list.
   {
     const r = await draw({});
+    ok("on the guide the block still prices things", r.says("145 DKK") && r.says("What you pay"));
+    ok("and says which day each is on", r.says("Day 1"));
+    ok("but draws no door at all", !/<a /.test(r.html));
+    ok("and so owes no sentence about commission", !/commission/i.test(r.text));
+    ok("while the bed is still a thing to arrange", r.says("Somewhere to sleep"));
+  }
+  {
+    const r = await draw({ doors: true });
     ok("the block draws at all", r.text.length > 0);
     ok("and calls itself what it is", r.says("What you pay"));
 
@@ -54714,7 +54743,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       days: [{ day: 1, stops: [{ name: "Nyhavn" }], glance: { stayArea: "Indre By", legs: [] } }, { day: 2, stops: [], glance: { legs: [] } }],
     };
     const r = await draw({ guide: bare, rowFor: () => ({ _src: "town" }) });
-    ok("the block still lists what has to be arranged", r.says("Find a room"));
+    ok("the block still lists what has to be arranged", r.says("Somewhere to sleep"));
     ok("but claims no estimate", !r.says("Estimated"));
     ok("and prints no total of nothing", !/from 0 DKK/i.test(r.text));
   }
@@ -54730,7 +54759,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
         { day: 2, stops: [{ name: "Nationalmuseet" }], glance: { stayArea: "Rønne", legs: [{ how: "~1h20 by ferry" }] } },
       ],
     };
-    const r = await draw({ guide: ferryGuide });
+    const r = await draw({ guide: ferryGuide, doors: true });
     ok("a crossing says check times, not buy tickets", r.says("Check times and fares"));
     ok("and a bed says find a room", r.says("Find a room"));
     // operators.js's standing rule: a crossing gets the national planner and
@@ -62940,8 +62969,9 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("the NAV_ITEMS array is findable at all", navStart > 0);
     const navSlice = app.slice(navStart, app.indexOf("];", navStart));
     const navIds = [...navSlice.matchAll(/\{ id: "([a-z]+)", label: uiT\("nav\.([a-z]+)"/g)];
-    // Ten since the Islands page went in beside Towns on 16 Sep 2026.
-    is("every page in the nav is translated", navIds.length, 10);
+    // Ten since the Islands page went in beside Towns on 16 Sep 2026, eleven
+    // since Cheap gems went in beside Tips on 21 Sep 2026.
+    is("every page in the nav is translated", navIds.length, 11);
     ok("every nav entry names a key that exists", navIds.every(m => UI_KEYS.includes(`nav.${m[2]}`)));
     ok("and inside NAV_ITEMS the id and the key agree", navIds.every(m => m[1] === m[2]));
     // Across the whole file, every uiT key that is referenced has to exist.
@@ -66867,9 +66897,10 @@ SOURCE: https://www.tripadvisor.com/whatever`;
 
     const ledger = stripComments(readFileSync(join(root, "src/utils/costLedger.js"), "utf8"));
     ok("the guide has its own kind for it", /AUDIO: "audio"/.test(ledger));
-    const block = stripComments(readFileSync(join(root, "src/components/CostsBlock.jsx"), "utf8"));
+    // The word moved to costLedger on 21 Sep 2026, when two places began
+    // drawing the same doors. One definition, read by both.
     ok("and its own action word, because a walk is not a ticket",
-       /COST_KIND\.AUDIO \? "Listen to a sample"/.test(block));
+       /COST_KIND\.AUDIO \? "Listen to a sample"/.test(ledger));
   }
 
   // ── THE GUIDE HALF, RUN ─────────────────────────────────────────
@@ -71090,6 +71121,224 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   ok("and the door is never followed",
      !WITH_DOOR.filter(l => ["visit", "stay", "eat"].includes(l.kind)).some(l => /teambooking/.test(l.url)));
 
+  // ══ CHEAP GEMS ═════════════════════════════════════════════════
+  //
+  // Oliver, 21 Sep 2026: "I want you to make 'cheap gems' navigation.. search
+  // up MSCH Copenhagen student discount, along with flying tiger discount app,
+  // and Brdr. simonsen." The three fixtures below are those three, as their
+  // own pages stated them that day.
+  {
+    const G = M;
+    const DAY = new Date(2026, 8, 21);
+    const MSCH = { name: "MSCH Copenhagen", kind: "scheme", what: "15% off", who: "Students with a valid student card",
+      how: "Email a photo of your student card and they send a personal code", where: "",
+      source: "https://www.mschcopenhagen.com/studentdiscount", checkedAt: "2026-09-21" };
+    const TIGER = { name: "Flying Tiger Copenhagen", kind: "scheme", what: "Up to 20% off", who: "Club members",
+      how: "Join the free Flying Tiger Copenhagen Club app", where: "shop",
+      catch: "Vouchers only work in the country you joined in, so join as a member in Denmark.",
+      source: "https://flyingtiger.com/pages/customer-club-app", checkedAt: "2026-09-21" };
+    const SIMONSEN = { name: "Brdr. Simonsen", kind: "cheap", what: "Menswear", where: "both",
+      desc: "They say modern menswear does not have to be expensive, and make their own to keep it that way.",
+      source: "https://brdr-simonsen.dk/pages/om-brdr-simonsen", checkedAt: "2026-09-21" };
+
+    // ── THE TYPE IS ITS OWN, AND NOT A DRAFTABLE ONE ────────────
+    is("a gem is its own row type", G.GEM_TYPE, "gem");
+    ok("and not one the normal pipeline drafts", !M.CONTENT_TYPES.includes(G.GEM_TYPE));
+    ok("but Manage has a word for it", M.TYPE_LABEL[G.GEM_TYPE] === "Cheap gems");
+    is("two kinds, the discount first", G.GEM_KINDS, ["scheme", "cheap"]);
+
+    // ── THE THREE HE NAMED, ALL ON THE PAGE ─────────────────────
+    const view = G.gemsView([SIMONSEN, TIGER, MSCH], { today: DAY });
+    is("both discounts are in the first section", view.scheme.map(g => g.name), ["Flying Tiger Copenhagen", "MSCH Copenhagen"]);
+    is("and the shop that is cheap anyway in the second", view.cheap.map(g => g.name), ["Brdr. Simonsen"]);
+    is("a chain with no town is not a town", view.towns, []);
+
+    // ── THE BRAND'S OWN PAGE ────────────────────────────────────
+    ok("msch is MSCH's own", G.isOwnSite(MSCH.source, MSCH.name));
+    ok("flyingtiger is Flying Tiger's own", G.isOwnSite(TIGER.source, TIGER.name));
+    ok("and brdr-simonsen is theirs", G.isOwnSite(SIMONSEN.source, SIMONSEN.name));
+    ok("a list of student discounts is nobody's own", !G.isOwnSite("https://www.studiz.dk/en/student-discounts", "MSCH Copenhagen"));
+    ok("and a place name in a brand does not make a city's site its own",
+       !G.isOwnSite("https://www.copenhagen.dk/x", "MSCH Copenhagen"));
+    // A discount's terms are the brand's to state, so from anywhere else it
+    // does not go up. A cheap place may be vouched for by somebody else.
+    ok("a discount from a third site is blocked",
+       G.gemProblems({ ...MSCH, source: "https://www.studiz.dk/en/student-discounts" }, DAY).blocks);
+    ok("a cheap place from a third site is not",
+       !G.gemProblems({ ...SIMONSEN, source: "https://www.aok.dk/shopping/billig-herretoej" }, DAY).blocks);
+
+    // ── THE RABATKODE SITES, WHICH WERE SIX OF NINE RESULTS ─────
+    ok("the coupon sites that came back for Brdr. Simonsen are all refused",
+       ["https://dk.coupert.com/rabatkoder/brdr-simonsen-dk-rabatkode", "https://www.bedstrabatkoder.dk/brdr-simonsen-rabatkode",
+        "https://www.rabat-kode.org/brdr-simonsen-kupon", "https://heftyapp.com/da/rabatkode/brdr-simonsen/",
+        "https://brdr-simonsen.danmarkcode.com/", "https://da.hotdeals.com/stores/brdr-simonsen-rabatkode"].every(G.isCouponSite));
+    ok("and the brand's own is not one", !G.isCouponSite("https://brdr-simonsen.dk/"));
+    ok("a coupon site blocks a row outright",
+       G.gemProblems({ ...SIMONSEN, source: "https://www.bedstrabatkoder.dk/brdr-simonsen-rabatkode" }, DAY).blocks);
+
+    // ── A DATE ON EVERY ONE, BORROWED FROM offer.js ─────────────
+    is("the card says when", G.checkedLabel(MSCH), "Checked 21 Sep 2026");
+    ok("a row with no check date is not live", !G.gemLive({ ...MSCH, checkedAt: "" }, DAY));
+    ok("a fresh one is", G.gemLive(MSCH, DAY));
+    ok("one past the recheck line still shows, and says so in the Studio",
+       G.gemLive(MSCH, new Date(2027, 0, 5)) && G.gemProblems(MSCH, new Date(2027, 0, 5)).problems.some(p => /Worth a look/.test(p)));
+    ok("one past half a year stops showing", !G.gemLive(MSCH, new Date(2027, 5, 1)));
+    ok("and a check dated in the future is not a check", !G.gemLive({ ...MSCH, checkedAt: "2026-12-01" }, DAY));
+
+    // ── WHAT A VISITOR IS MISSING, NAMED ────────────────────────
+    ok("a discount with no saving is blocked", G.gemProblems({ ...MSCH, what: "" }, DAY).blocks);
+    ok("with nobody to give it to, it is said", G.gemProblems({ ...MSCH, who: "" }, DAY).problems.some(p => /who gets it/.test(p)));
+    ok("and with no way to get it", G.gemProblems({ ...MSCH, how: "" }, DAY).problems.some(p => /how to get it/.test(p)));
+    ok("an unknown where says nothing on the page rather than guessing", G.shapeGem(MSCH).where === "" && !G.gemProblems(MSCH, DAY).blocks);
+    is("the catch reaches the table", G.shapeGem(TIGER).catch, TIGER.catch);
+
+    // ── THE TOWN FILTER ─────────────────────────────────────────
+    const LOCAL = { ...SIMONSEN, name: "Kaffebaren", towns: ["Aarhus"], source: "https://kaffebaren.dk/" };
+    const inAarhus = G.gemsView([TIGER, LOCAL], { town: "Aarhus", today: DAY });
+    ok("a chain shows in every town", inAarhus.scheme.some(g => g.name === TIGER.name));
+    ok("and so does the Aarhus place in Aarhus", inAarhus.cheap.some(g => g.name === "Kaffebaren"));
+    ok("but not in Odense", !G.gemsView([LOCAL], { town: "Odense", today: DAY }).cheap.length);
+    is("a named town becomes a filter", inAarhus.towns, ["Aarhus"]);
+
+    // ── THE ONE INSERT PATH NAMES EVERY FIELD ───────────────────
+    // shapeForLive has eaten a feature seven times by not naming a field. A
+    // gem goes through it and must come out whole.
+    const shaped = M.shapeForLive(G.GEM_TYPE, { ...TIGER, own: true, invented: "x" });
+    ok("shapeForLive knows a gem", !!shaped);
+    is("and every field the page reads survives it",
+       ["name", "kind", "towns", "what", "who", "how", "where", "catch", "desc", "source", "checkedAt"].filter(k => !(k in shaped)), []);
+    ok("while a field the model invented does not", !("invented" in shaped) && !("own" in shaped));
+
+    // ── THE RESEARCH PASS MAY READ AND MAY NOT DECIDE ───────────
+    const P = G.GEMS_PROMPT("Aarhus", [{ title: "t", url: "https://x.dk", snippet: "s" }]);
+    ok("the source is a number, so a page cannot be invented", /SOURCE IS THE NUMBER OF THE RESULT/.test(P));
+    ok("a saving is copied as the brand states it", /"Up to 20%" stays "up to 20%"/.test(P));
+    ok("the catch is the visitor's and never invented", /CATCH is what stops a VISITOR/.test(P) && /Never invent a catch/.test(P));
+    ok("a brand's claim stays theirs", /A BRAND'S CLAIM ABOUT ITSELF IS THEIRS/.test(P));
+    ok("coupon sites are named in the refusals", /LEAVE OUT: coupon code sites/.test(P));
+    is("four searches for a town", G.gemSearches("Aarhus").length, 4);
+    ok("in Danish where the thing is Danish", G.gemSearches("Aarhus").some(q => /studierabat/.test(q)));
+    ok("and the country gets its own four", G.gemSearches("").every(q => !/undefined/.test(q)) && G.gemSearches("Denmark")[0] === G.gemSearches("")[0]);
+
+    const RES = [
+      { title: "MSCH", url: MSCH.source, snippet: "15%" },
+      { title: "deal", url: "https://www.bedstrabatkoder.dk/x", snippet: "70%" },
+      { title: "list", url: "https://www.studiz.dk/en/student-discounts", snippet: "MSCH 15%" },
+    ];
+    const got = G.settleGems({ gems: [
+      { name: "MSCH Copenhagen", kind: "scheme", what: "15% off", source: 0 },
+      { name: "Somebody", kind: "cheap", source: 1 },
+      { name: "Ghost Shop", kind: "cheap", source: 9 },
+      { name: "MSCH Copenhagen", kind: "scheme", what: "15% off", source: 2 },
+      { name: "No Saving", kind: "scheme", source: 0 },
+      { name: "Odd", kind: "bargain", source: 0 },
+    ] }, RES, { today: DAY });
+    is("one survives, off the brand's own page", got.gems.map(g => `${g.name}|${g.own}`), ["MSCH Copenhagen|true"]);
+    is("and the address is the result's, not the model's", got.gems[0].source, MSCH.source);
+    is("stamped with the day it was read", got.gems[0].checkedAt, "2026-09-21");
+    is("the coupon one, the invented one and the two malformed ones are counted", got.dropped, { noSource: 1, coupon: 1, shape: 2 });
+    ok("and he is told about each", G.gemRunNotes(got).length === 3);
+
+    // ── THE PAGE, THE NAV AND THE STUDIO ────────────────────────
+    const appG = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    const pageG = stripComments(readFileSync(join(root, "src/components/CheapGemsPage.jsx"), "utf8"));
+    const panelG = stripComments(readFileSync(join(root, "src/components/CheapGemsPanel.jsx"), "utf8"));
+    ok("it is a page in the navigation", /\{ id: "gems", label: uiT\("nav\.gems", uiLang\), ico: "tag" \}/.test(appG));
+    ok("beside Tips in the swipe order", /"tips", "gems", "attractions"/.test(appG));
+    is("with its own address", M.TAB_HASH.gems, "cheap-gems");
+    ok("it renders the array liveContent fills", /tab === "gems" && <CheapGemsPage rows=\{gems\}/.test(appG));
+    ok("the page decides nothing itself", /gemsView\(rows, \{ town \}\)/.test(pageG));
+    ok("and only calls a page theirs when it is", /isOwnSite\(g\.source, g\.name\) \? "Their page"/.test(pageG));
+    ok("the Studio panel publishes through shapeForLive", /payload: shapeForLive\(GEM_TYPE, g\)/.test(appG));
+    ok("a blocked row cannot be ticked", /disabled=\{st\.blocks\}/.test(panelG));
+    ok("and a lead from somebody else's page starts unticked", /g\.own && !statusOf\(g\)\.blocks/.test(panelG));
+    ok("coupon results never reach the model", /isCouponSite\(url\)\) continue/.test(panelG));
+    ok("a name already published is not offered twice", /Already published under this name/.test(panelG));
+    const liveG = readFileSync(join(root, "src/utils/liveContent.js"), "utf8");
+    ok("liveContent files a gem into its own array", /row\.type === GEM_TYPE\) gems\.push/.test(liveG));
+    ok("and can replace one in place", /\[GEM_TYPE\]: gems/.test(liveG));
+
+    // ── AND ON THE DAY A GUIDE PASSES ONE ───────────────────────
+    // Oliver, 21 Sep 2026: "Then do that." One a day at most, never the same
+    // one twice, a chain only when the day stops at it by name, and read when
+    // the guide is opened rather than written into it.
+    const CAFE = { ...LOCAL, name: "Kaffebaren", towns: ["Aarhus"], kind: "cheap" };
+    const STUDENT = { ...MSCH, name: "Aarhus Studenterbar", towns: ["Aarhus"], source: "https://aarhusstudenterbar.dk/rabat" };
+    const DAYS = [
+      { stops: [{ name: "ARoS", town: "Aarhus" }, { name: "Den Gamle By", town: "Aarhus" }] },
+      { stops: [{ name: "Moesgaard", town: "Aarhus" }] },
+      { stops: [{ name: "Flying Tiger Copenhagen", town: "Copenhagen" }, { name: "Nyhavn", town: "Copenhagen" }] },
+      { stops: [{ name: "Rundetaarn", town: "Copenhagen" }] },
+    ];
+    const onDays = G.gemsForGuide(DAYS, [TIGER, CAFE, STUDENT, MSCH], { today: DAY });
+    is("a discount in town comes before a cheap place in town", onDays[0]?.gem.name, "Aarhus Studenterbar");
+    is("and the next Aarhus day gets the other, never the same twice", onDays[1]?.gem.name, "Kaffebaren");
+    is("a chain reaches a day that stops at it by name", onDays[2]?.gem.name, "Flying Tiger Copenhagen");
+    is("and never a day that merely stands in a town", onDays[3], null);
+    ok("MSCH, a chain nobody stops at, is on no day", !onDays.some(p => p?.gem.name === "MSCH Copenhagen"));
+    is("the heading names the town", G.gemHeading(onDays[0]), "Cheap gem in Aarhus");
+    ok("a stale gem is on no day", G.gemsForGuide(DAYS, [CAFE], { today: new Date(2027, 5, 1) }).every(p => p === null));
+    const guideG = stripComments(readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8"));
+    ok("the guide reads them when it is opened", /const gemByDay = gemsForGuide\(days, gems\);/.test(guideG));
+    ok("and prints the row's own date and page", /checkedLabel\(g\)/.test(guideG) && /isOwnSite\(g\.source, g\.name\)/.test(guideG));
+    const appNoGem = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("and the writer is never handed one", !/gemsForGuide|cheapGems\.js.*prompt/.test(appNoGem.slice(appNoGem.indexOf("const generateGuide"), appNoGem.indexOf("const generateGuide") + 90000)));
+  }
+  // ══ "COPENHAGEN IS AN EXPENSIVE CITY" ══════════════════════════
+  //
+  // Oliver, 21 Sep 2026: "If someone says they want a 'budget-trip' perhaps
+  // tell the user that Copenhagen is an expensive city, and if one is looking
+  // for budget, then leaving the city is a good idea.."
+  {
+    // His own words were not a tight budget until this edit.
+    is("a budget trip is a tight budget", M.travellerBudget("We want a budget trip to Denmark"), "tight");
+    is("and so is the hyphenated one he wrote", M.travellerBudget("looking for a budget-trip"), "tight");
+    is("and low cost", M.travellerBudget("a low-cost week"), "tight");
+    is("and the Danish", M.travellerBudget("det skal være billigt"), "tight");
+    is("while not minding paying is still generous", M.travellerBudget("we don't mind paying for good food"), "generous");
+    is("and mid range is still mid range", M.travellerBudget("Mid range, we do not mind paying for one or two good meals"), "middling");
+    ok("the chat is told on a tight budget", /THEY WANT A BUDGET TRIP/.test(M.budgetCapitalBlock({ level: "tight" })));
+    is("and on no other", [M.budgetCapitalBlock({ level: "middling" }), M.budgetCapitalBlock({ level: "generous" }), M.budgetCapitalBlock({})], ["", "", ""]);
+    is("once: not after a reply of its own has said it",
+       M.budgetCapitalBlock({ level: "tight", priorReplies: ["Worth knowing: Copenhagen is the pricey end of the country for a bed."] }), "");
+    ok("in Danish too", M.capitalCostSaid(["København er dyr at sove i."]));
+    ok("but a reply about something else is not the same thing", !M.capitalCostSaid(["Copenhagen has a lovely harbour bath."]));
+    ok("the rule carries no number", !/\d/.test(M.BUDGET_CAPITAL_RULE) && !/\d/.test(M.BUDGET_CAPITAL_GUIDE));
+    ok("and does not talk them out of a city they came for", /do not talk them out of it/.test(M.BUDGET_CAPITAL_RULE));
+    ok("the guide may not add a place to make the point", /do not add a place the conversation did not name/.test(M.BUDGET_CAPITAL_GUIDE));
+    const appB = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("the chat carries the block", /\$\{nightBlock\}\$\{budgetCapital\}/.test(appB));
+    ok("and the guide writer the rule, on a tight budget only", /writerLevel === "tight"\s*\? `\\nTHEY WANT A BUDGET TRIP\. \$\{BUDGET_CAPITAL_GUIDE\}\$\{budgetFoodGuide\(/.test(appB));
+    ok("which the writer prompt carries", /\$\{CURRENCY_RULE\}\$\{budgetCapitalGuide\}/.test(appB));
+  }
+  // Oliver, 21 Sep 2026: "I think you should advice someone on tight budgets
+  // that 'kebab shops' tend to be a very cheap alternative if Danish food is
+  // of no interest."
+  {
+    ok("a tight budget is told about the kebab shop", /kebab or pizza shop/.test(M.budgetFoodBlock({ level: "tight", travellerText: "a budget trip to Aarhus" })));
+    is("and no other budget is", [M.budgetFoodBlock({ level: "middling" }), M.budgetFoodBlock({ level: "generous" }), M.budgetFoodBlock({})], ["", "", ""]);
+    for (const said of ["we want to try Danish food", "smørrebrød is a must", "a food trip on a budget", "vi vil smage dansk mad", "New Nordic, cheaply"]) {
+      is(`not someone who came to eat: "${said}"`, M.budgetFoodBlock({ level: "tight", travellerText: said }), "");
+    }
+    is("nor someone who ticked Food", M.budgetFoodBlock({ level: "tight", interests: ["History", "Food"] }), "");
+    ok("but Nightlife ticked is not Food", M.budgetFoodBlock({ level: "tight", interests: ["Nightlife"] }).length > 0);
+    ok("silence about food is not interest in it", !M.wantsDanishFood("cheap week, we like hiking"));
+    is("once: not after a reply of its own has said it", M.budgetFoodBlock({ level: "tight", priorReplies: ["A grillbar kebab is the cheapest dinner in town."] }), "");
+    ok("a reply about something else does not count", !M.kebabSaid(["Aarhus has a lovely harbour."]));
+    ok("no price in either", !/\d/.test(M.BUDGET_FOOD_RULE) && !/\d/.test(M.BUDGET_FOOD_GUIDE));
+    ok("no shop invented in the chat", /Do not name a particular shop unless it is in the lists below/.test(M.BUDGET_FOOD_RULE));
+    ok("no shop named in the guide", /no named shop/.test(M.BUDGET_FOOD_GUIDE));
+    ok("and never a verdict on Danish food", /never as a verdict on Danish food/.test(M.BUDGET_FOOD_RULE));
+    ok("the guide gets it on a tight budget", M.budgetFoodGuide({ level: "tight" }).includes(M.BUDGET_FOOD_GUIDE));
+    is("and not otherwise", [M.budgetFoodGuide({ level: "middling" }), M.budgetFoodGuide({ level: "tight", travellerText: "Danish food please" }), M.budgetFoodGuide({ level: "tight", interests: ["Food"] })], ["", "", ""]);
+    ok("no dash in the copy", !/[–—]| - /.test(M.BUDGET_FOOD_RULE + M.BUDGET_FOOD_GUIDE));
+    const appK = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("the chat carries it after the capital", /\$\{nightBlock\}\$\{budgetCapital\}\$\{budgetFood\}/.test(appK));
+    ok("with the intake interests", /budgetFoodBlock\(\{[^}]*interests: intakeInterest/.test(appK));
+    ok("and the writer's budget line carries it", /BUDGET_CAPITAL_GUIDE\}\$\{budgetFoodGuide\(\{ level: writerLevel/.test(appK));
+  }
+
+
   // ── THE PROMPT MAY READ AND MAY NOT DECIDE ──────────────────────
   const PROMPT = DIRECTORY_PROMPT("Avernakø", "Spisning\nAvernakø Landhotel");
   ok("it asks for the page's own sentence word for word", /COPIED\. Do not translate it, do not tidy it/.test(PROMPT));
@@ -71383,6 +71632,199 @@ SOURCE: https://www.tripadvisor.com/whatever`;
      /Same bed as night 3/.test(sameBaseLine(MAP, 4, WEEK)));
   is("the night that opens a stay says nothing", sameBaseLine(MAP, 1, WEEK), "");
   is("and a night in a different place says nothing either", sameBaseLine(MAP, 6, WEEK), "");
+}
+
+// ── "NO CLEAR IDEA OF HOW LONG THE PERSON IS STAYING AT A HOTEL" ────
+//
+// Oliver, 21 Sep 2026, of guide z8f8otncrz2, a week in Copenhagen with a
+// Booking button on six stay cards. Each day's enrichment call names its own
+// neighbourhood without seeing the others, and the stay was keyed on that
+// neighbourhood, so every night was a new hotel.
+{
+  const { baseKey, stayRunsIn, nightsLabel, doorsFor } = M;
+  const cph = (day, area) => ({ day, glance: { stayArea: area }, stops: [{ town: "Copenhagen" }] });
+  const Z8 = [cph(1, "Nørreport"), cph(2, "Nyhavn and Kongens Nytorv"), cph(3, "Kongens Nytorv"), cph(4, "Vesterbro")];
+  is("four streets of one city are one stay", stayRunsIn(Z8, [1, 2, 3, 4]).map(x => x.nights), [[1, 2, 3, 4]]);
+  is("so the week has one door rather than four", Object.keys(doorsFor(Z8, [1, 2, 3, 4])).length, 1);
+  // A relocation day ends in the new town, and that is where its night is.
+  const MOVE = [cph(1, "Nørreport"), { day: 2, glance: { stayArea: "the old town" }, stops: [{ town: "Copenhagen" }, { town: "Odense" }] }];
+  is("a day that ends in Odense sleeps in Odense", stayRunsIn(MOVE, [1, 2]).length, 2);
+  // A day out that sleeps back where it started says so in its area, and the
+  // area wins when it is a different town rather than a street of this one.
+  is("a day trip that sleeps back in the city is still the city's stay",
+     baseKey({ day: 2, glance: { stayArea: "central Copenhagen" }, stops: [{ town: "Odense" }] }), baseKey(cph(1, "Nørreport")));
+  is("while a neighbourhood the place list knows is not a second town",
+     baseKey(cph(2, "Nyhavn and Kongens Nytorv")), baseKey(cph(1, "Nørreport")));
+  // The fact the card was missing, in the words a person books in.
+  is("a stay says how long it is", nightsLabel([1, 2, 3]), "3 nights here, nights 1 to 3");
+  is("one night says one night", nightsLabel([5]), "1 night here, night 5");
+  is("and nothing says nothing", nightsLabel([]), "");
+  ok("the door knows its nights", doorsFor(Z8, [1, 2, 3, 4])[1].list.join() === "1,2,3,4");
+  ok("with no dash anywhere in it", !/[\u2013\u2014]/.test(nightsLabel([1, 2])));
+}
+
+// ── "USE OUR AFFILIATES (OPTIONAL)" ─────────────────────────────────
+//
+// Oliver, 21 Sep 2026: "Make a 'use our affiliates (optional)' and make it
+// something clickable. When you click it, it then pops out into the side of
+// the panel."
+{
+  const { partnerSections, partnerCount, PARTNER_OPENER, COST_KIND } = M;
+  // His wording first, then his choice of the plainer word the same day.
+  is("the opener says what he chose it to say", PARTNER_OPENER, "Book through our partners (optional)");
+  const LINES = [
+    { kind: COST_KIND.ENTRY, name: "Kronborg Castle", day: 3, price: "150 kr", href: "https://tp.media/r?x=2" },
+    { kind: COST_KIND.ENTRY, name: "Amalienborg", day: 2, price: "125 kr", href: "https://tp.media/r?x=1" },
+    { kind: COST_KIND.EVENT, name: "Distortion", day: 4, href: "https://ticketmaster.evyy.net/x", refused: "nothing to buy for your dates" },
+    { kind: COST_KIND.CAR, name: "Car hire", day: 1, forWhat: "Collect at the airport on day 1.", href: "https://www.discovercars.com/?a_aid=gemlyx" },
+    { kind: COST_KIND.STAY, name: "Somewhere to sleep", day: 1, href: "https://www.kqzyfj.com/click-1" },
+    { kind: COST_KIND.ENTRY, name: "Nationalmuseet", day: 1, price: "Free", href: "" },
+  ];
+  const STAYS = [
+    { place: "Nørreport", nights: [1, 2, 3], door: { href: "https://www.kqzyfj.com/click-1", label: "Find a room on Booking.com" }, featured: null, compare: "https://www.trip.com/x" },
+    { place: "Helsingør", nights: [4], door: { href: "https://www.kqzyfj.com/click-2", label: "Find a room on Booking.com" }, featured: null, compare: "" },
+  ];
+  const TOURS = [{ day: 1, url: "https://www.getyourguide.com/x", label: "GetYourGuide: A beer tasting" }];
+  const BIKES = [{ url: "https://www.bajabikes.eu/en/bike-rental-copenhagen/", label: "Bike rental in Copenhagen", days: [2, 5] }];
+  const S = partnerSections({ stays: STAYS, lines: LINES, tours: TOURS, bikes: BIKES });
+  is("four groups, the rooms first", S.map(x => x.key), ["stay", "tickets", "travel", "tours"]);
+  ok("a room per stay, with its nights on it", S[0].items[0].detail === "3 nights here, nights 1 to 3" && S[0].items.some(i => i.detail === "1 night here, night 4"));
+  is("and the comparison once", S[0].items.filter(i => /Trip\.com/.test(i.label)).length, 1);
+  is("tickets in the order of the days", S[1].items.map(i => i.title), ["Amalienborg", "Kronborg Castle"]);
+  ok("each with its day and its price", S[1].items[0].detail === "Day 2, 125 kr");
+  ok("a refused line is not a door here either", !S.flatMap(x => x.items).some(i => i.title === "Distortion"));
+  ok("and a line with no link is not one", !S.flatMap(x => x.items).some(i => i.title === "Nationalmuseet"));
+  ok("the room from What you pay is not offered twice", S[0].items.filter(i => /click-1/.test(i.href)).length === 1);
+  ok("the bike names its days", /day 2, day 5/.test(S[2].items.find(i => /Bike/.test(i.title)).detail));
+  is("and they are all counted for the opener", partnerCount(S), 8);
+  is("an empty guide has nothing to open", partnerCount(partnerSections({})), 0);
+
+  // Drawn, not only computed.
+  const { renderSurface } = await import(pathToFileURL(join(root, "tests/render.mjs")).href);
+  const closed = await renderSurface("src/components/PartnerSheet.jsx", "PartnerSheet", { open: false, sections: S, onClose: () => {} });
+  is("closed, it draws nothing", closed.html, "");
+  const open = await renderSurface("src/components/PartnerSheet.jsx", "PartnerSheet", { open: true, sections: S, onClose: () => {} });
+  ok("open, it says what it is", open.text.includes("Book through our partners (optional)"));
+  ok("that none of it is needed", open.text.includes("Nothing here is needed to use the guide"));
+  ok("and draws every door", (open.html.match(/<a /g) || []).length === 8);
+  ok("each one marked sponsored where it pays", /rel="[^"]*sponsored/.test(open.html));
+  ok("and says how Gemlyx is paid, at the foot", /commission/i.test(open.text));
+  const opener = await renderSurface("src/components/PartnerSheet.jsx", "PartnerOpener", { count: 8, onOpen: () => {} });
+  ok("the opener says how many are behind it", opener.text.includes("8"));
+  is("and is not there when nothing is", (await renderSurface("src/components/PartnerSheet.jsx", "PartnerOpener", { count: 0 })).html, "");
+
+  // ── AND ON THE GUIDE ─────────────────────────────────────────
+  const gpA = stripComments(readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8"));
+  ok("the opener sits under the prices", /<CostsBlock guide=\{guide\}[^\n]*\/>[\s\S]{0,1200}?<PartnerOpener count=\{partnerTotal\} onOpen=\{\(\) => setPartnersOpen\(true\)\}/.test(gpA));
+  ok("the tickets are not on the stops any more", !/ticketDoor/.test(gpA));
+  ok("the tour is not a line under the day any more", !/<TourLine /.test(gpA));
+  ok("nor the bike", !/<BikeRentalLine /.test(gpA));
+  // ── "MAKE IT MORE VISIBLE SOMEHOW" ─────────────────────────
+  ok("Change this stop is a control, not a caption", /`⇄ \$\{uiT\("guide\.changeStop", uiLang\)\}`/.test(gpA)
+     && /border: `1px solid \$\{swapOpen \? C\.gold : `\$\{C\.gold\}66`\}`/.test(gpA));
+  // ── "NOT NECESSARY TO WRITE" ───────────────────────────────
+  ok("a normals day keeps only the warnings that change the day",
+     /\.filter\(w => wx\?\.source !== "normals" \|\| w\.level === "warn"\)/.test(gpA));
+}
+
+// ── THE PREVIEW FOR PARENTS IN THEIR SIXTIES ────────────────────────
+//
+// Oliver, 21 Sep 2026, of gemlyx-preview-2026-09-21_14-53-12.json: "Wow.. is
+// that because it was a test? Or was that just a ridiculous bug?" Not the
+// test. Four bugs, each asserted off that report's own rows.
+{
+  const said = "I'm planning 2 days in Denmark. It is my parents and me, they are in their sixties. We land at Copenhagen airport in the morning. Trains mostly, but we might rent a car for a day. We like quiet walks and history and architecture. Mid range, we do not mind paying for one or two good meals.";
+
+  // ── ONE: "YOU MENTIONED" IS A QUOTE ─────────────────────────
+  const barking = { place: { name: "The Barking Dog" }, fit: { fits: true, why: ["nature"], via: "words" } };
+  is("nobody said nature, so nobody is quoted", M.offerReason(barking, { said }), "Closest thing here to nature");
+  is("while history they did say", M.offerReason({ place: { name: "Rundetaarn" }, fit: { why: ["history"] } }, { said }), "Closest thing here to the history you mentioned");
+  ok("and a plural label still hears the singular", /you mentioned/.test(M.offerReason({ place: { name: "Torvehallerne" }, fit: { why: ["market"] } }, { said: "a food market" })));
+
+  // ── TWO: NO BAR ON ONE LOOSE WORD FOR PEOPLE WHO DID NOT ASK ─
+  const prev = stripComments(readFileSync(join(root, "src/components/GuidePreviewScreen.jsx"), "utf8"));
+  ok("an unasked night out is offered only on a tagged theme",
+     /p\._held !== "category" \|\| cat\.src !== "nightlife" \|\| p\._fit\?\.via === FIT_STRONG/.test(prev));
+  is("which is the tag, not the words", M.FIT_STRONG_WORD, "themes");
+  ok("and the card is told what they said", /offerReason\(entry, \{ said: saidByTraveller \}\)/.test(prev));
+
+  // ── THREE: MID RANGE HOLDS BACK A TASTING MENU ──────────────
+  const geranium = { _src: "food", name: "Geranium",
+    desc: "People come because head chef Rasmus Kofoed built this into one of the first Danish restaurants to hold three Michelin stars." };
+  ok("three Michelin stars in the row's own words is a splurge", M.isSplurge(geranium));
+  ok("so mid range holds it back", M.outOfBudget(geranium, "middling"));
+  ok("and says why", M.budgetWarning(geranium, "middling") === "Above the budget you mentioned");
+  ok("a stated figure over the line is one too", M.outOfBudget({ _src: "food", name: "X", price: "Tasting menu 2,800 DKK" }, "middling"));
+  ok("while a 260 kr dinner is not", !M.outOfBudget({ _src: "food", name: "Y", price: "260 DKK" }, "middling"));
+  ok("an unknown price is still not an expensive one", !M.outOfBudget({ _src: "food", name: "Z", price: "See website" }, "middling"));
+  ok("a generous budget rules out nothing, Geranium included", !M.outOfBudget(geranium, "generous"));
+  ok("and a tight one holds it back too", M.outOfBudget(geranium, "tight"));
+  ok("an attraction is never held for price", !M.outOfBudget({ ...geranium, _src: "free" }, "middling"));
+  is("the average is read the way the bands read it", M.priceAverageKr("150-250 DKK"), 200);
+  is("the line is a thousand kroner", M.SPLURGE_KR, 1000);
+
+  // ── FOUR: WHO IS TRAVELLING, FROM THE CHAT ──────────────────
+  const read = M.profileFromWords(said);
+  is("parents in their sixties is the oldest band", read.ageBand, "65+");
+  is("travelling with them is family", read.company, "With family");
+  is("and quiet walks is a slow pace", read.pace, "Slow, few things a day");
+  is("what the account says wins", M.profileFromWords(said, { ageBand: "25-34" }).ageBand, "25-34");
+  is("and nothing said is nothing read", M.profileFromWords("Two days in Aarhus"), { ageBand: "", company: "", pace: "" });
+  is("kids are kids", M.profileFromWords("with our two kids").company, "With kids");
+  ok("the preview ranks with it", /rankOffers\(offered, \{ want: themes, profile: readProfile,/.test(prev));
+  ok("and reports it", /profile: readProfile,/.test(prev));
+  // The report showed profilePull pulling nothing for them; now it can.
+  ok("a grown-up bar ranks above a party one for them",
+     M.profilePull({ desc: "quiet, grown-up wine bar for conversation" }, read) >= M.profilePull({ desc: "student party bar with shots" }, read));
+}
+
+// ── "AN ESTIMATE ON THEIR ENTIRE TRIP" ──────────────────────────────
+//
+// Oliver, 21 Sep 2026. The beds are priced from the build's own search, and a
+// figure is kept only when its words are in what the search returned.
+{
+  const ctx = "Budget options: Generator Copenhagen has dorm beds from 250 DKK. Hotel rooms near Nørreport start at 1.150 kr per night in winter.";
+  is("a price the search stated is kept", M.nightPriceFrom({ kr: 1150, says: "Hotel rooms near Nørreport start at 1.150 kr per night" }, ctx),
+     { kr: 1150, says: "Hotel rooms near Nørreport start at 1.150 kr per night" });
+  is("a price nobody stated is not", M.nightPriceFrom({ kr: 900, says: "rooms from 900 kr" }, ctx), null);
+  is("nor words that do not carry the number", M.nightPriceFrom({ kr: 1300, says: "Hotel rooms near Nørreport start at 1.150 kr per night" }, ctx), null);
+  is("nor a figure with no currency", M.nightPriceFrom({ kr: 250, says: "dorm beds from 250" }, "dorm beds from 250"), null);
+  is("nor zero, which means none was found", M.nightPriceFrom({ kr: 0, says: "" }, ctx), null);
+  is("nor something no room costs", M.nightPriceFrom({ kr: 45, says: "coffee 45 kr" }, "coffee 45 kr"), null);
+
+  const night = (kr) => ({ kr, says: `from ${kr} kr`, at: "2026-09-21" });
+  const GUIDE = { _travelers: "2 adults", days: [
+    { day: 1, stops: [{ name: "Nyhavn", town: "Copenhagen" }], glance: { stayArea: "Nørreport", __night: night(1150) } },
+    { day: 2, stops: [{ name: "Amalienborg", town: "Copenhagen" }], glance: { stayArea: "Nyhavn" } },
+    { day: 3, stops: [{ name: "Egeskov", town: "Odense" }], glance: { stayArea: "central Odense" } },
+    { day: 4, stops: [{ name: "Den Gamle By", town: "Aarhus" }], glance: {} },
+  ] };
+  const beds = M.bedsEstimate(GUIDE);
+  is("two Copenhagen nights at the figure read for the stay", beds.from, 2300);
+  is("and the Odense night, which found no price, is named rather than guessed", beds.unpricedNights, 1);
+  is("the last day has no night", beds.nights, 3);
+  const trip = M.tripEstimate({ from: 275 }, beds, { heads: 2 });
+  is("tickets for both, the room once", trip.from, 2300 + 550);
+  const lines = M.describeTrip(trip, { car: true });
+  ok("it says the beds are one room and where the price came from", /one room, 2 nights, at the lowest room price the search found/.test(lines[0]));
+  ok("that the tickets are for both of them", /Tickets from 550 DKK for 2 of you/.test(lines[1]));
+  ok("and what is not in it", /Not in it: meals, the car and 1 night with no room price found\./.test(lines[2]));
+  ok("with no dash anywhere", !lines.some(l => /[\u2013\u2014]/.test(l)));
+  is("a guide built before this has no whole-trip figure", M.bedsEstimate({ days: GUIDE.days.map(d => ({ ...d, glance: {} })) }), null);
+  is("and so no line", M.tripEstimate({ from: 275 }, null), null);
+
+  const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+  ok("the enrichment is asked for the lowest room price in its own results", /"nightFrom": "The LOWEST price for one room for one night/.test(app));
+  ok("and the words that state it", /"nightFromSays": "The exact words from the search context/.test(app));
+  ok("kept only through the check", /const night = nightPriceFrom\(\{ kr: glance\.nightFrom, says: glance\.nightFromSays \}, context\);/.test(app));
+  ok("and never kept raw", /delete glance\.nightFrom;/.test(app) && /delete glance\.nightFromSays;/.test(app));
+
+  const { renderSurface } = await import(pathToFileURL(join(root, "tests/render.mjs")).href);
+  const C = { surface: "#111", border: "#222", gold: "#D9A441", text: "#fff", light: "#ddd", muted: "#888", bg: "#0A0F1E" };
+  const drawn = await renderSurface("src/components/CostsBlock.jsx", "CostsBlock", { guide: GUIDE, C, rowFor: (n) => (n === "Amalienborg"
+    ? { _src: "free", __priceSource: { url: "https://kongernessamling.dk/x", host: "kongernessamling.dk", price: "125 DKK", at: "2026-09-04" } } : null) });
+  ok("the whole trip is on the page", drawn.text.includes("The whole trip") && drawn.text.includes("from 2550 DKK"));
+  ok("with its sum written out", drawn.text.includes("Beds from 2300 DKK for one room"));
 }
 
 

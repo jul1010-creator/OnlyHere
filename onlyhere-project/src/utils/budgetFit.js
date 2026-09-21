@@ -32,7 +32,7 @@
 // website" and for anything with no figure in it, and a null must never be treated
 // as over-250: that would quietly hide every entry whose price nobody has checked
 // yet, which is a large part of the library and the opposite of the fix.
-import { priceBand } from "./helpers";
+import { priceBand, priceAverageKr } from "./helpers";
 
 // The bands a level will not be handed. Keyed by the same ids priceBand returns.
 export const BUDGET_RULES_OUT = {
@@ -46,11 +46,38 @@ export const BUDGET_RULES_OUT = {
 // much smaller decision.
 export const PRICED_KINDS = ["food", "nightlife"];
 
+// ── "GERANIUM IS NOT MID-RANGE", A SECOND TIME ──────────────────────
+//
+// Oliver, 21 Sep 2026, reading a preview for "Mid range, we do not mind paying
+// for one or two good meals" that showed Geranium among the six food picks.
+// His 17 Aug sentence was exactly "geranium is NOT mid-range", and the fix
+// that answered it made a TIGHT budget rule out the top band while mid range
+// ruled out nothing. The top band starts at 251 kroner, so there was nothing
+// a mid-range rule could have said: a 260 kr pizza and a 3,000 kr tasting
+// menu are the same band.
+//
+// So a mid-range budget rules out the SPLURGE, measured two ways, either of
+// which is enough: a stated figure of SPLURGE_KR or more, or the row's own
+// words saying Michelin stars. The second is the row stating it, not the app
+// guessing, and it is what catches a starred restaurant whose price sentence
+// is "see website". Held behind the door with "Above the budget you
+// mentioned", the same as a tight budget's held rows, so somebody who wants
+// the one blowout meal can still pick it.
+export const SPLURGE_KR = 1000;
+const STARRED = /\bmichelin[- ]?starred\b|\bmichelin stars?\b|\b(?:one|two|three|[123])[- ]?(?:michelin[- ])?stars?\b[^.]{0,20}\bmichelin\b/i;
+export const isSplurge = (row) => {
+  const kr = priceAverageKr(row?.price);
+  if (kr != null && kr >= SPLURGE_KR) return true;
+  return STARRED.test([row?.name, row?.tag, row?.desc, row?.price].map(v => String(v || "")).join(" "));
+};
+
 export const outOfBudget = (row, level) => {
-  const rules = BUDGET_RULES_OUT[String(level || "")] || [];
-  if (!rules.length) return false;
   const kind = String(row?._src || row?.kind || "");
   if (kind && !PRICED_KINDS.includes(kind)) return false;
+  if (String(level || "") === "middling" && isSplurge(row)) return true;
+  const rules = BUDGET_RULES_OUT[String(level || "")] || [];
+  if (!rules.length) return false;
+  if (String(level || "") === "tight" && isSplurge(row)) return true;
   const band = priceBand(row?.price);
   if (!band) return false;              // unknown is not expensive
   return rules.includes(band);

@@ -19,6 +19,7 @@ import { placeCoords } from "./guideEnrichment";
 // the Café Broløs bug one level down. See utils/entryAudit.js.
 import { PRICE_UNKNOWN } from "./entryAudit";
 import { isOperatorSite } from "./ferryDoor";
+import { GEM_TYPE, shapeGem } from "./cheapGems";
 
 // ── THE THIRD SCALE, 19 SEP 2026 ────────────────────────────────────
 //
@@ -156,6 +157,11 @@ export const bulletsBlock = (heading, raw) => {
 // allow-list does not reach the database. Adding a field to a prompt is not
 // shipping it. This function is the only insert path into gemlyx_content.
 const shapeForLiveFields = (type, t) => {
+  // ── THE CHEAP GEM, WHOSE FIELDS ARE NAMED IN ONE PLACE ──────────
+  // Oliver, 21 Sep 2026. Handed whole to shapeGem in utils/cheapGems.js rather
+  // than listed a second time here, because a second list of the same fields
+  // is how this function has eaten a feature seven times.
+  if (type === GEM_TYPE) return shapeGem(t);
   // ── THE ISLAND, WHICH IS A TOWN'S FIELDS PLUS THE DOOR ──────────
   //
   // Deliberately the same field names as the town branch below wherever the two

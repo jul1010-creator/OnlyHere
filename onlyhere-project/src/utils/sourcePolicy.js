@@ -148,6 +148,9 @@ export const TYPE_LABEL = {
   // Manage panel groups by type and would otherwise head the group "undated".
   // See utils/undatedEvents.js.
   undated: "No confirmed date yet",
+  // Another row type that is deliberately not draftable: a cheap gem is only
+  // made by its own research pass. Labelled so Manage heads its group in words.
+  gem: "Cheap gems",
 };
 
 // ── A VENUE CALLED "TRAIN" POISONS ITS OWN RESEARCH ─────────────────

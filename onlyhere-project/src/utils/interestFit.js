@@ -353,6 +353,37 @@ export const profilePull = (place, profile) => {
   return n;
 };
 
+// ── AND WHO IS TRAVELLING, WHEN THEY SAID IT IN THE CHAT ────────────
+//
+// Oliver, 21 Sep 2026, of the same preview: "It is my parents and me, they
+// are in their sixties" reached nothing. profilePull read only the account's
+// three fields, and a traveller who types who they are into the chat instead
+// of into a profile form had told the ranking nothing.
+//
+// Read off their own words, in the three values profilePull already knows,
+// and only to FILL a field the account left empty: what somebody typed into
+// their profile is the more deliberate answer. Same promise profilePull
+// keeps: it changes the order behind a door and never puts a word on screen
+// about the person.
+const AGE_WORDS = [
+  ["65+", /\b(?:in (?:their|our|his|her) (?:sixties|seventies|eighties)|retired|retirees?|pensioners?|(?:6|7|8)0s)\b/i],
+  ["50-64", /\b(?:in (?:their|our|his|her) fifties|50s)\b/i],
+];
+const COMPANY_WORDS = [
+  ["With kids", /\b(?:kids?|children|child|toddlers?|son|daughter)\b/i],
+  ["With family", /\b(?:(?:my|our) (?:parents|mum|mom|dad|father|mother|family|grandparents|in-laws)|family trip)\b/i],
+  ["With friends", /\b(?:(?:my|some|a few|with) friends|mates|buddies)\b/i],
+];
+const SLOW_WORDS = /\b(?:slow|relaxed|relaxing|take it easy|not rushed|no rush|quiet walks?|gentle|unhurried)\b/i;
+export const profileFromWords = (text = "", profile = null) => {
+  const t = String(text || "");
+  const p = { ...(profile || {}) };
+  if (!p.ageBand) p.ageBand = (AGE_WORDS.find(([, re]) => re.test(t)) || [""])[0];
+  if (!p.company) p.company = (COMPANY_WORDS.find(([, re]) => re.test(t)) || [""])[0];
+  if (!p.pace) p.pace = SLOW_WORDS.test(t) ? "Slow, few things a day" : "";
+  return p;
+};
+
 const TIER_RANK = { must: 3, high: 2, worth: 1, nearby: 0 };
 
 // ── THREE, RANKED, NOT NINE IN A LIST ───────────────────────────────
@@ -645,7 +676,17 @@ export const rankOffers = (rows, { want = null, profile = null, limit = OFFER_LI
 // young", and profile.js promises the model never repeats a stored field back
 // as though it were a discovery. The card keeps that promise: the profile
 // changes the ORDER and the words on screen describe the venue.
-export const offerReason = (entry) => {
+// ── "YOU MENTIONED" IS A QUOTE, SO IT HAS TO BE ONE ────────────────
+//
+// Oliver, 21 Sep 2026, of a preview for parents in their sixties who said
+// "quiet walks and history and architecture": a pub was offered as "Closest
+// thing here to the nature you mentioned". Nobody mentioned nature. "Walks"
+// had been read as the nature theme, which is fine for ranking and a false
+// statement on a card, because the card attributes a word to the traveller.
+//
+// So the card says "you mentioned" only when their own words contain the
+// theme's name. Otherwise it names the theme and claims nothing about them.
+export const offerReason = (entry, { said = "" } = {}) => {
   const { place, fit } = entry || {};
   if (!place) return "";
   // ── MONEY FIRST, BECAUSE IT IS WHY THIS ONE IS HERE ────────────────
@@ -660,7 +701,9 @@ export const offerReason = (entry) => {
   const named = (fit?.why || []).map(t => THEME_LABEL[t]).filter(Boolean);
   if (named.length) {
     const list = named.length === 1 ? named[0].toLowerCase() : `${named.slice(0, -1).map(s => s.toLowerCase()).join(", ")} and ${named[named.length - 1].toLowerCase()}`;
-    return `Closest thing here to the ${list} you mentioned`;
+    const heard = fold(String(said || ""));
+    const quoted = named.every(n => saysWord(heard, fold(n)) || saysWord(heard, fold(n).replace(/s$/, "")));
+    return quoted ? `Closest thing here to the ${list} you mentioned` : `Closest thing here to ${list}`;
   }
   const tier = tierOf(place);
   if (tier && (tier.id === "must" || tier.id === "high")) return `Gemlyx rates this ${tier.label.toLowerCase()}`;

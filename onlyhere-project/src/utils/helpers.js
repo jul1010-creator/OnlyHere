@@ -413,6 +413,20 @@ const MONEY = /(\d[\d.,]*)\s*(?:(?:[–—-]|to)\s*(\d[\d.,]*)\s*)?(?:dkk|kr\b|k
 // only cares about the magnitude: strip the groupings, keep a real decimal.
 const kroner = (raw) => Number(String(raw).replace(/[.,](?=\d{3}\b)/g, "").replace(",", "."));
 
+// The average figure a price sentence states, in kroner, or null when it
+// states none. The number priceBand bands, exposed so a question the three
+// bands cannot answer (is this a tasting menu?) reads the same figure.
+export const priceAverageKr = (priceStr) => {
+  const text = String(priceStr || "");
+  const withCurrency = [...text.matchAll(MONEY)]
+    .flatMap(m => [m[1], m[2]])
+    .map(kroner)
+    .filter(n => Number.isFinite(n));
+  const nums = withCurrency.length ? withCurrency : (text.match(/\d+/g) || []).map(Number);
+  if (!nums.length) return null;
+  return nums.reduce((a, b) => a + b, 0) / nums.length;
+};
+
 export const priceBand = (priceStr) => {
   const text = String(priceStr || "");
   const withCurrency = [...text.matchAll(MONEY)]
