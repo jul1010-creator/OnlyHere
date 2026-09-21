@@ -23,7 +23,9 @@ set -e
 cd onlyhere-project
 
 printf "pre-push: running the suite\\n"
-node tests/run.mjs
+# 21 Sep 2026: the suite outgrew node's default heap and the push died with
+# "node::OnFatalError". Same limit as `npm test` and every run before a batch.
+node --max-old-space-size=3072 tests/run.mjs
 
 # ── NOT `npm run build` ─────────────────────────────────────────────
 # It failed here on Windows with "/usr/bin/env: bash: No such file or

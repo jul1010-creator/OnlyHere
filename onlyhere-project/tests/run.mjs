@@ -52,7 +52,7 @@ writeFileSync(entry, `
   export { cleanPlaceKind, cleanRelation, cleanIsland, placeIssues, placePatch, hasPlaceChange, duplicateNames } from ${JSON.stringify(join(root, "src/utils/placeEdit.js"))};
   export { dateProbeQueries, danishDay, englishDay, numericDay, parseEventDate, isPastDate, nextEditionYear, eventDateIssues, staleEvents, lastDateInText, looksFinished, splitFinishedCandidates, monthsInText } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
   export { byEventDate, eventTime, eventMonthShort, eventMonths, eventMonthsShort, MAX_EVENT_MONTHS, isUndated, UNDATED, datePropositionProblem, DATE_PROPOSITION_WHY, datePropositionWhy, nextEdition, dateRangesInText, isoDay, anchoredEdition, venueRatherThanEvent, PROGRAMME_DATES, dateMentions, labelledAt, otherLabelAt, CALENDAR_DATES, DATE_LABEL_WINDOW, looksLikeOffice, eventLocation, OFFICE_WORDS, EVENT_LOCATION_ORDER, OFFICE_CONTEXT_WINDOW, stepWords, STEP_LABELS, unresolvedTraces, CHECK_STEP_WORDS, WRONG_EDITION, readAnotherEdition, statusIsAboutAFinishedEdition, statusRefusalFor, STATUS_REFUSAL_WHY } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
-  export { faqLink, faqWorthReading, FAQ_FIELDS, FAQ_RULE, unpuny, stripToText, pageReadVerdict, worthDeepRead, firecrawlBody, firecrawlText, domainOf, describeRead, CHALLENGE_MARKERS, MIN_USEFUL_CHARS, CHALLENGE_MAX_CHARS, MARKER_WINDOW, TEXT_CAP, FIRECRAWL_URL, FIRECRAWL_CACHE_MS, NOT_WORTH_RETRYING, scrapeTier, isApiCoveredHost, API_COVERED_HOSTS, isListingHost, rankSource, rankSources, sourceOrderBlock, isReferenceHost, SOURCE_CLASS, REFERENCE_DOMAINS, factAge, newestDateIn, validityWindow, VALIDITY_GRACE_MONTHS, MAX_FACT_AGE_MONTHS, LISTING_DOMAINS, newestYearIn, pageEra, STALE_BEFORE_YEAR, PERISHABLE, perishableSentence, EXISTENCE_RULE, linksIn, ticketLinks, MAX_TICKET_PAGES, bannerImages, bannerImagesFromMarkdown, MAX_BANNERS, IMAGE_JUNK, linksInMarkdown, ticketLinksFromMarkdown, scoreTicketLinks } from ${JSON.stringify(join(root, "src/utils/pageScan.js"))};
+  export { faqLink, faqWorthReading, FAQ_FIELDS, FAQ_RULE, unpuny, stripToText, pageReadVerdict, worthDeepRead, firecrawlBody, firecrawlText, domainOf, describeRead, CHALLENGE_MARKERS, MIN_USEFUL_CHARS, CHALLENGE_MAX_CHARS, MARKER_WINDOW, TEXT_CAP, FIRECRAWL_URL, FIRECRAWL_CACHE_MS, NOT_WORTH_RETRYING, scrapeTier, isApiCoveredHost, API_COVERED_HOSTS, isListingHost, rankSource, rankSources, sourceOrderBlock, isReferenceHost, SOURCE_CLASS, REFERENCE_DOMAINS, factAge, newestDateIn, validityWindow, VALIDITY_GRACE_MONTHS, MAX_FACT_AGE_MONTHS, LISTING_DOMAINS, newestYearIn, pageEra, STALE_BEFORE_YEAR, PERISHABLE, perishableSentence, EXISTENCE_RULE, linksIn, ticketLinks, MAX_TICKET_PAGES, bannerImages, bannerImagesFromMarkdown, MAX_BANNERS, IMAGE_JUNK, MENU_WORDS, textHasPrice, menuImagesToRead, MAX_MENU_READS, linksInMarkdown, ticketLinksFromMarkdown, scoreTicketLinks } from ${JSON.stringify(join(root, "src/utils/pageScan.js"))};
   export { readPage, readPlain, readFirecrawl } from ${JSON.stringify(join(root, "src/utils/readPage.js"))};
   export { runOnce } from ${JSON.stringify(join(root, "src/utils/inFlight.js"))};
   export { DINING_STYLES, DINING_STYLE_LABEL, diningStyleOf, diningStyleLabel, unstyledEntries, styleCoverage, STYLE_COVERAGE_MIN, showStyleFacet, buildFoodFacets, foodCitiesIn, FOOD_SORTS, byFoodPrice } from ${JSON.stringify(join(root, "src/utils/foodStyle.js"))};
@@ -264,7 +264,7 @@ writeFileSync(entry, `
   export { PARTNER_OPENER, PARTNER_INTRO, partnerSections, partnerCount } from ${JSON.stringify(join(root, "src/utils/partnerSheet.js"))};
   export { baseKey, staysIn as stayRunsIn, doorsFor, doorOn, sameBaseLine, nightsLabel } from ${JSON.stringify(join(root, "src/utils/stayDoors.js"))};
   export { SECTIONS as DIR_SECTIONS, ROW_KINDS, kindOf as dirKindOf, directoryLinks, pathWord, ferryDoorIn, DIRECTORY_PROMPT, rowsFromDirectory, directoryProblems, staysIn, eatsIn, islandSaysBlock, ISLAND_SAYS } from ${JSON.stringify(join(root, "src/utils/islandDirectory.js"))};
-  export { GEM_TYPE, GEM_KINDS, GEM_SECTION, WHERE_LABEL, RECHECK_DAYS, STALE_DAYS, isCouponSite, isOwnSite, shapeGem, gemProblems, gemLive, gemsView, checkedLabel, checkedAgo, gemSearches, GEMS_PROMPT, settleGems, gemRunNotes, gemsForGuide, gemHeading } from ${JSON.stringify(join(root, "src/utils/cheapGems.js"))};
+  export { GEM_TYPE, GEM_KINDS, GEM_SECTION, WHERE_LABEL, RECHECK_DAYS, STALE_DAYS, isCouponSite, isOwnSite, shapeGem, gemProblems, gemLive, gemsView, checkedLabel, checkedAgo, gemSearches, gemSearchesFor, ownPagesIn, pageAsResult, MAX_OWN_PAGES, GEMS_PROMPT, settleGems, gemRunNotes, gemsForGuide, gemHeading } from ${JSON.stringify(join(root, "src/utils/cheapGems.js"))};
   export { sentencesIn, readerBody, noticeAsk, noticeText, TRANSLATE_NOTICE, translatedNotice, DEAD_ENDS } from ${JSON.stringify(join(root, "src/utils/noticeVoice.js"))};
   export { guideClaims, guideClaimNote } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { resolveStopCoords } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
@@ -43428,13 +43428,13 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // every draft to learn nothing. THE WHOLE GUARD is written out, because
   // matching the call alone survives a mutation that opens it on every page.
   ok("the draft reads a poster only when the page gave no text and had a banner",
-     /if \(!scanData\.text && \(scanData\.banners \|\| \[\]\)\.length && postersRead < MAX_POSTER_READS_PER_DRAFT\) \{/.test(appR));
+     /const picturesHere = scanData\.text \? menuShots : \(scanData\.banners \|\| \[\]\);\s*if \(picturesHere\.length && postersRead < MAX_POSTER_READS_PER_DRAFT\) \{/.test(appR) && /const menuShots = scanData\.text \? menuImagesToRead\(/.test(appR));
   ok("there is a per source ceiling", /const MAX_POSTER_READS_PER_SOURCE = \d+;/.test(appR));
   ok("and a per draft one, because a draft reads several sources",
      /const MAX_POSTER_READS_PER_DRAFT = \d+;/.test(appR));
   ok("the draft ceiling is counted against", /postersRead \+= 1;/.test(appR));
-  ok("and the loop is bounded by both", /slice\(0, Math\.min\(MAX_POSTER_READS_PER_SOURCE, MAX_POSTER_READS_PER_DRAFT - postersRead\)\)/.test(appR));
-  ok("one poster that answered is enough", /break;\s*\/\/ one poster that answered is enough/.test(appR));
+  ok("and the loop is bounded by both", /slice\(0, Math\.min\(menuShots\.length \? MAX_MENU_READS : MAX_POSTER_READS_PER_SOURCE, MAX_POSTER_READS_PER_DRAFT - postersRead\)\)/.test(appR));
+  ok("one poster that answered is enough", /if \(!menuShots\.length\) break;/.test(appR));
 
   // ── AND A TRANSCRIPTION IS MARKED AS ONE ────────────────────────
   // This string travels into the draft prompt beside the operator's own prose,
@@ -43442,10 +43442,10 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // A transcription off a picture is a weaker fact than a sentence off a page and
   // the writer has to be able to see which it is holding.
   ok("the text says out loud that it came off a picture",
-     /\[Read off a poster image on \$\{domainOf\(url\)\}, transcribed rather than quoted from page text\]/.test(appR));
+     /\[Read off a \$\{menuShots\.length \? "menu" : "poster"\} image on \$\{domainOf\(url\)\}, transcribed rather than quoted from page text\]/.test(appR));
   // Both outcomes are logged, not just the good one. A run log that speaks only
   // when something works cannot tell you how often it did not.
-  ok("a poster that answered is recorded", /note\(`Poster read on \$\{domainOf\(url\)\}`/.test(appR));
+  ok("a poster that answered is recorded", /note\(`\$\{menuShots\.length \? "Menu" : "Poster"\} read on \$\{domainOf\(url\)\}`/.test(appR));
   ok("and one that did not is recorded too", /note\(`Poster on \$\{domainOf\(url\)\}: \$\{shot\.none \? "no readable text printed on it"/.test(appR));
   ok("with 'nothing printed on it' told apart from 'the read failed'",
      /shot\.none \? "no readable text printed on it" : shot\.error \|\| "nothing came back"/.test(appR));
@@ -68177,7 +68177,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   ok("App.jsx has one page reader", /const readSourcePage = async \(url\) => \{/.test(appC));
   ok("and it asks for a fresh copy, not a cached one", /scan-source\?fresh=1&url=/.test(appC));
   ok("the whole-answer pass uses it", /readPage: readSourcePage,/.test(appC));
-  ok("and the assistant is given it", (appC.match(/readPage=\{readSourcePage\}/g) || []).length === 2);
+  ok("and the assistant is given it", (appC.match(/readPage=\{readSourcePage\}/g) || []).length === 3);
   ok("and the assistant passes it through",
      /deps: \{ askClaude, askPerplexity, parseJSON: parseClaudeJSON, directions, readPage, onStage: setStage \}/
        .test(readFileSync(join(root, "src/components/StudioAssistant.jsx"), "utf8")));
@@ -71216,7 +71216,79 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     ok("the catch is the visitor's and never invented", /CATCH is what stops a VISITOR/.test(P) && /Never invent a catch/.test(P));
     ok("a brand's claim stays theirs", /A BRAND'S CLAIM ABOUT ITSELF IS THEIRS/.test(P));
     ok("coupon sites are named in the refusals", /LEAVE OUT: coupon code sites/.test(P));
-    is("four searches for a town", G.gemSearches("Aarhus").length, 4);
+    is("five searches for a town", G.gemSearches("Aarhus").length, 5);
+    // Oliver, 21 Sep 2026, of Restaurant Sporvejen: "So food is covered in
+    // that navigation."
+    ok("one of them looks for food", G.gemSearches("Aarhus").some(q => /billig mad Aarhus/.test(q)));
+    ok("a place to eat needs a stated price for a dish", /A PLACE TO EAT is "cheap" only when a result gives a price/.test(P) && /Never "cheap food" with no figure/.test(P));
+    is("a name search is three searches on the name", G.gemSearchesFor("Restaurant Sporvejen", "Copenhagen"), ["Restaurant Sporvejen Copenhagen priser kr", "Restaurant Sporvejen Copenhagen menu pris", "Restaurant Sporvejen Copenhagen billig"]);
+    is("without a town when none is given", G.gemSearchesFor("Sporvejen", "Denmark")[0], "Sporvejen priser kr");
+    is("and nothing without a name", G.gemSearchesFor("  "), []);
+    ok("the prompt is told to stay on that place", /ONE PLACE ONLY: return rows about Sporvejen/.test(G.GEMS_PROMPT("Copenhagen", [], { only: "Sporvejen" })));
+    ok("and not when it is a town search", !/ONE PLACE ONLY/.test(P));
+    {
+      const R = [{ title: "Mig og KBH", url: "https://migogkbh.dk/her-kan-du-spise-burger-i-en-gammeldags-sporvogn/", snippet: "burger til under 100 kr" }];
+      const one = G.settleGems({ gems: [
+        { name: "Sporvejen", kind: "cheap", towns: ["Copenhagen"], what: "A burger under 100 kr at lunch", source: 0 },
+        { name: "Cafe Next Door", kind: "cheap", towns: ["Copenhagen"], source: 0 },
+      ] }, R, { today: DAY, only: "Restaurant Sporvejen" });
+      is("code keeps only the place he named", one.gems.map(g => g.name), ["Sporvejen"]);
+      is("and counts the other", one.dropped.other, 1);
+      ok("and says so", G.gemRunNotes(one).some(n => /about a different place than the one you named/.test(n)));
+      ok("a town search drops nothing for it", G.settleGems({ gems: [{ name: "Cafe Next Door", kind: "cheap", source: 0 }] }, R, { today: DAY }).gems.length === 1);
+      ok("a place vouched for by someone else's page can go up", !G.gemProblems(one.gems[0], DAY).blocks);
+      // "But the pipeline will always prioritise the home website, yes?"
+      const R2 = [...R, { title: "Sporvejen", url: "https://sporvejen.dk/frokost-menu/", snippet: "Burger 95 kr" }];
+      const pref = G.settleGems({ gems: [
+        { name: "Sporvejen", kind: "cheap", what: "A burger under 100 kr at lunch", source: 0 },
+        { name: "Sporvejen", kind: "cheap", what: "Burger 95 kr", source: 1 },
+      ] }, R2, { today: DAY });
+      is("the own site replaces a third page for the same place", pref.gems.map(g => g.source), ["https://sporvejen.dk/frokost-menu/"]);
+      ok("and is marked as theirs", pref.gems[0].own === true);
+      const kept = G.settleGems({ gems: [
+        { name: "Sporvejen", kind: "cheap", what: "Burger 95 kr", source: 1 },
+        { name: "Sporvejen", kind: "cheap", what: "A burger under 100 kr at lunch", source: 0 },
+      ] }, R2, { today: DAY });
+      is("and a third page never replaces the own site", kept.gems.map(g => g.source), ["https://sporvejen.dk/frokost-menu/"]);
+      ok("the prompt asks for the own site first", /WHEN THE PLACE'S OWN SITE SAYS IT TOO, THAT IS THE SOURCE/.test(P));
+    }
+    // Oliver, 21 Sep 2026: "some (very few) restaurants can have menus on
+    // pictures, instead of writing. So firecrawl needs to be prepared for that."
+    // Sporvejen's lunch page: address and hours as text, prices in Frokost.jpg.
+    {
+      const SPOR = "https://sporvejen.dk/frokost-menu/";
+      const pageText = "Frokost menu\nGråbrødretorv 17, 1154 København\nMan - Tors 11:00 - 22:00";
+      const shots = [
+        { url: "https://sporvejen.dk/wp-content/uploads/share.jpg", alt: "", fromMeta: true },
+        { url: "https://sporvejen.dk/wp-content/uploads/Frokost.jpg", alt: "", fromMeta: false },
+        { url: "https://sporvejen.dk/wp-content/uploads/tram.jpg", alt: "", fromMeta: false },
+      ];
+      ok("hours are not a price", !M.textHasPrice(pageText));
+      for (const t of ["Burger 95 kr", "95,-", "kr. 95", "DKK 120", "1.295 kr."]) ok(`a price: "${t}"`, M.textHasPrice(t));
+      is("the picture named as a menu is the one read", M.menuImagesToRead({ url: SPOR, text: pageText, banners: shots }).map(b => b.url), ["https://sporvejen.dk/wp-content/uploads/Frokost.jpg"]);
+      is("on a menu page with unnamed pictures, those that are not the share photo", M.menuImagesToRead({ url: "https://x.dk/menukort", text: "Velkommen", banners: [shots[0], shots[2]] }).map(b => b.url), [shots[2].url]);
+      is("a page whose text has a price reads nothing", M.menuImagesToRead({ url: SPOR, text: "Burger 95 kr", banners: shots }), []);
+      is("a page that is not a menu with no menu picture reads nothing", M.menuImagesToRead({ url: "https://x.dk/om-os", text: "Velkommen", banners: [shots[2]] }), []);
+      ok("two at most, lunch and dinner", M.menuImagesToRead({ url: SPOR, text: "", banners: ["frokost", "aften", "brunch"].map(w => ({ url: `https://x.dk/${w}.jpg` })) }).length === M.MAX_MENU_READS && M.MAX_MENU_READS === 2);
+      ok("a menu picture ranks above a photograph on the page", (() => { const b = M.bannerImages(`<img src="/a/tram.jpg"><img src="/a/Frokost.jpg">`, "https://sporvejen.dk/"); return b[0].url.endsWith("Frokost.jpg"); })());
+      is("the place's own pages are the ones read", G.ownPagesIn([{ url: "https://migogkbh.dk/x" }, { url: SPOR }, { url: "https://sporvejen.dk/en/dinner-menu/" }, { url: "https://sporvejen.dk/" }], "Sporvejen").map(r => r.url), [SPOR, "https://sporvejen.dk/en/dinner-menu/"]);
+      const fromPic = G.pageAsResult({ url: SPOR, text: "Burger 95,-\nBørneburger 49,-", fromImage: true });
+      ok("a transcription is marked as one", /^\[Transcribed from a menu picture on sporvejen\.dk\]/.test(fromPic.snippet) && fromPic.url === SPOR);
+      is("a text page gives the lines with a price", G.pageAsResult({ url: SPOR, text: "Velkommen\nBurger 95 kr\nÅbent 11 til 22" }).snippet, "Burger 95 kr");
+      is("and an empty read gives nothing", G.pageAsResult({ url: SPOR, text: "  " }), null);
+      const settledPic = G.settleGems({ gems: [{ name: "Sporvejen", kind: "cheap", what: "A burger at 95 kr", source: 0 }] }, [fromPic], { today: DAY, only: "Sporvejen" });
+      ok("and a row from it is theirs", settledPic.gems[0]?.own === true);
+      const panelK = readFileSync(join(root, "src/components/CheapGemsPanel.jsx"), "utf8");
+      ok("the panel reads the own pages on a name lookup", /if \(only && readPage\)/.test(panelK) && /ownPagesIn\(results, only\)/.test(panelK));
+      ok("and transcribes a menu picture when the text has no price", /textHasPrice\(text\)/.test(panelK) && /menuImagesToRead\(\{ url: r\.url, text, banners: page\?\.banners \}\)/.test(panelK));
+      ok("and says so, so he checks the figure", /Check the figure against it before publishing/.test(panelK));
+      const appM = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+      ok("the Studio hands it the page reader and the image reader", /readPage=\{readSourcePage\}\s*readImage=\{readPosterText\}/.test(appM));
+      ok("entry research reads a menu picture on a page that has text", /const menuShots = scanData\.text \? menuImagesToRead\(\{ url, text: scanData\.text, banners: scanData\.banners \}\) : \[\]/.test(appM));
+      ok("and marks it as a menu in the draft text", /\[Read off a \$\{menuShots\.length \? "menu" : "poster"\} image on/.test(appM));
+    }
+    const panelSrc = readFileSync(join(root, "src/components/CheapGemsPanel.jsx"), "utf8");
+    ok("the Studio panel can look one up by name", /gemSearchesFor\(only, place\)/.test(panelSrc) && /find\(named\.trim\(\)\)/.test(panelSrc));
     ok("in Danish where the thing is Danish", G.gemSearches("Aarhus").some(q => /studierabat/.test(q)));
     ok("and the country gets its own four", G.gemSearches("").every(q => !/undefined/.test(q)) && G.gemSearches("Denmark")[0] === G.gemSearches("")[0]);
 
@@ -71236,7 +71308,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     is("one survives, off the brand's own page", got.gems.map(g => `${g.name}|${g.own}`), ["MSCH Copenhagen|true"]);
     is("and the address is the result's, not the model's", got.gems[0].source, MSCH.source);
     is("stamped with the day it was read", got.gems[0].checkedAt, "2026-09-21");
-    is("the coupon one, the invented one and the two malformed ones are counted", got.dropped, { noSource: 1, coupon: 1, shape: 2 });
+    is("the coupon one, the invented one and the two malformed ones are counted", got.dropped, { noSource: 1, coupon: 1, shape: 2, other: 0 });
     ok("and he is told about each", G.gemRunNotes(got).length === 3);
 
     // ── THE PAGE, THE NAV AND THE STUDIO ────────────────────────

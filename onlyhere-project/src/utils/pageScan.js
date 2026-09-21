@@ -1636,10 +1636,19 @@ const POSTER_WORDS = /(?:poster|plakat|banner|hero|header|billboard|lineup|line-
 // Ranked, not filtered by rank: the caller takes the first MAX_BANNERS, so the
 // order is the whole decision. A page whose og:image is a stock photo still
 // gets its poster looked at second.
+// ── AND A MENU IS A PICTURE MORE OFTEN THAN IT SHOULD BE ────────────
+//
+// Oliver, 21 Sep 2026: "some (very few) restaurants can have menus on
+// pictures, instead of writing. So firecrawl needs to be prepared for that."
+// Found on Sporvejen the same evening: its lunch and dinner pages carry the
+// address and the hours as text, and every price is in Frokost.jpg. So the
+// words a menu picture is named with rank it beside a poster.
+export const MENU_WORDS = /(?:^|[^a-z])(?:menu|menukort|spisekort|frokost|aftensmad|aften|brunch|dinner|lunch|drikkekort|drinks|vinkort|prisliste|priser|a-la-carte|takeaway|take-away)(?:[^a-z]|$)/i;
+
 const scoreImage = (url, alt, cls, fromMeta, index) =>
   (fromMeta ? 100 : 0)
-  + (POSTER_WORDS.test(url) ? 8 : 0)
-  + (POSTER_WORDS.test(alt) ? 6 : 0)
+  + (POSTER_WORDS.test(url) || MENU_WORDS.test(url) ? 8 : 0)
+  + (POSTER_WORDS.test(alt) || MENU_WORDS.test(alt) ? 6 : 0)
   + (POSTER_WORDS.test(cls) ? 4 : 0)
   // Earlier on the page is more likely to be the announcement, but only as a
   // tiebreak, and it must never outweigh a page naming its own poster.
@@ -1660,6 +1669,31 @@ const bannerUrl = (raw, baseUrl) => {
   if (!/^https?:\/\//i.test(abs)) return "";
   if (/\.svg(?:$|[?#])/i.test(abs)) return "";
   return abs.split("#")[0];
+};
+
+// A price the text states, in the forms a Danish page writes one.
+export const textHasPrice = (text = "") =>
+  /\d[\d.,]*\s*(?:kr\b|kr\.|dkk\b|,-)|\b(?:kr|dkk)\.?\s*\d/i.test(String(text || ""));
+
+// ── WHICH PICTURES TO READ ON A PAGE THAT HAS TEXT ──────────────────
+//
+// The poster read runs only when a page came back with no text at all, and a
+// menu page is the exception to that: it has text, the address and the hours,
+// and still no price, because the prices are the picture. So a page whose text
+// states no price gets its menu pictures read: one named as a menu, or on a
+// page that is itself the menu, any picture that is not the og:image (which
+// is the share photo, a plate of food and not a price list). Two at most.
+// A page whose text states a price is answered and nothing is read.
+export const MAX_MENU_READS = 2;
+export const menuImagesToRead = ({ url = "", text = "", banners = [] } = {}) => {
+  if (textHasPrice(text)) return [];
+  const list = Array.isArray(banners) ? banners.filter(b => b?.url) : [];
+  const named = list.filter(b => MENU_WORDS.test(b.url) || MENU_WORDS.test(b.alt || ""));
+  if (named.length) return named.slice(0, MAX_MENU_READS);
+  let path = "";
+  try { path = new URL(url).pathname; } catch { path = ""; }
+  if (!MENU_WORDS.test(path)) return [];
+  return list.filter(b => !b.fromMeta).slice(0, MAX_MENU_READS);
 };
 
 // ── HTML ────────────────────────────────────────────────────────────

@@ -36,7 +36,7 @@
 import { fold } from "./danishNames";
 import { isNeverOwnSite } from "./sourcePolicy";
 // The one hostOf, which the suite holds to one declaration across utils.
-import { hostOf } from "./pageScan";
+import { hostOf, textHasPrice, menuImagesToRead } from "./pageScan";
 
 // The row type in gemlyx_content. Deliberately NOT in CONTENT_TYPES, for the
 // reason "undated" is not: nothing drafts a gem through the normal pipeline.
@@ -258,7 +258,53 @@ export const gemSearches = (place = "") => {
     `${p} kundeklub app rabat butik`,
     `billig ${p} spar penge lokale tip`,
     `${p} student discount cheap shop`,
+    // FOOD, Oliver 21 Sep 2026, of Restaurant Sporvejen: "I guess that can be
+    // included in cheap gems then? So food is covered in that navigation."
+    // The four above were written for shops, and a cheap place to eat never
+    // came up in them.
+    `billig mad ${p} frokost aftensmad kr`,
   ];
+};
+
+// ── ONE PLACE, BY NAME ──────────────────────────────────────────────
+//
+// For when he already knows the place, as he knew Sporvejen. The same pass as
+// a town search, run on the name instead, so a place he names still goes up
+// only on a page that states it: knowing a place is cheap is not a source.
+export const gemSearchesFor = (name = "", place = "") => {
+  const n = clean(name);
+  if (!n) return [];
+  const p = clean(place);
+  const at = p && !/^(danmark|denmark)$/i.test(p) ? ` ${p}` : "";
+  return [`${n}${at} priser kr`, `${n}${at} menu pris`, `${n}${at} billig`];
+};
+
+// ── AND THE PLACE'S OWN PAGE, READ, WHEN THE SNIPPET HAS NO PRICE ───
+//
+// Oliver, 21 Sep 2026, first "the pipeline will always prioritise the home
+// website, yes?" and then "some (very few) restaurants can have menus on
+// pictures, instead of writing. So firecrawl needs to be prepared for that."
+// A search snippet is a few lines, and a restaurant's price is further down
+// the page or, on Sporvejen, in Frokost.jpg. So on a name lookup the place's
+// own pages in the results are read in full, and when the text states no price
+// its menu pictures are transcribed. Two pages at most: this is a Studio run
+// he starts by hand, and two pages is one menu for lunch and one for dinner.
+export const MAX_OWN_PAGES = 2;
+export const ownPagesIn = (results = [], name = "") =>
+  (Array.isArray(results) ? results : []).filter(r => r?.url && isOwnSite(r.url, name)).slice(0, MAX_OWN_PAGES);
+
+// What a read page adds to the results the model is handed. The lines with a
+// price on them, since that is what the search was for; a transcription is
+// marked as one, because a figure read off a picture is weaker than a line of
+// text and the row that cites it should be looked at before it goes up.
+export const pageAsResult = ({ url = "", title = "", text = "", fromImage = false } = {}) => {
+  const body = clean(text);
+  if (!body) return null;
+  const lines = String(text || "").split(/\n+/).map(clean).filter(l => l && textHasPrice(l));
+  const snippet = fromImage
+    ? `[Transcribed from a menu picture on ${hostOf(url)}] ${body}`.slice(0, 1500)
+    : (lines.length ? lines.join(" | ") : body).slice(0, 1500);
+  return { title: clean(title) || hostOf(url), url, snippet };
 };
 
 // ── AND THE MODEL, WHICH MAY READ AND MAY NOT DECIDE ────────────────
@@ -267,14 +313,16 @@ export const gemSearches = (place = "") => {
 // that invents a page has nothing to invent it with: an index that is not in
 // the list is a row that does not come back. Same principle as islandDirectory
 // keeping the island's own words, one level down.
-export const GEMS_PROMPT = (place, results = []) => {
+export const GEMS_PROMPT = (place, results = [], { only = "" } = {}) => {
   const where = clean(place) || "Denmark";
+  const one = clean(only);
   const list = results.map((r, i) => `[${i}] ${clean(r.title)}\n${clean(r.url)}\n${clean(r.snippet)}`).join("\n\n");
   return `You are finding cheap gems for travellers in ${where}. Two kinds, and nothing else:\n\n`
     + `"scheme": a discount a shop, café or chain gives to anybody who does one thing first. A student card, joining a club, an app, a card. Only if a result below says so.\n`
     + `"cheap": a place that is cheap without doing anything, and only when a result below says it is.\n\n`
     + `Respond with ONLY strict JSON: {"gems":[{"name":"","kind":"scheme|cheap","towns":[],"what":"","who":"","how":"","where":"shop|online|both|","catch":"","desc":"","source":0}]}\n\n`
     + `SOURCE IS THE NUMBER OF THE RESULT that says it. A gem no result states does not come back.\n`
+    + `WHEN THE PLACE'S OWN SITE SAYS IT TOO, THAT IS THE SOURCE. Another page only when the own site does not state it.\n`
     + `WHAT IS THE SAVING AS THE BRAND STATES IT. "Up to 20%" stays "up to 20%". Never round up, never add a figure the result does not give.\n`
     + `WHO is who gets it, HOW is what they do to get it, in the order they do it. Leave either empty rather than guess.\n`
     + `WHERE is empty unless a result says whether it works in the shop, online or both.\n`
@@ -282,6 +330,8 @@ export const GEMS_PROMPT = (place, results = []) => {
     + `TOWNS is empty for a chain or a scheme that works in every shop the brand has. Name the town only for a single local place.\n`
     + `A BRAND'S CLAIM ABOUT ITSELF IS THEIRS. Write "they say their prices are the lowest in Denmark", never "the lowest prices in Denmark".\n`
     + `LEAVE OUT: coupon code sites and anything they list, one-off sales, campaign codes with an end date, and anything that is not a shop, café, restaurant or chain a visitor can walk into or order from.\n`
+    + `A PLACE TO EAT is "cheap" only when a result gives a price for something on its menu, and WHAT is that price as the result states it, with the dish: "a burger under 100 kr at lunch". Never "cheap food" with no figure.\n`
+    + (one ? `ONE PLACE ONLY: return rows about ${one} and nothing else.\n` : "")
     + `Write plain English. No dashes of any kind. An empty list is a normal answer.\n\n${list}`;
 };
 
@@ -289,11 +339,12 @@ export const GEMS_PROMPT = (place, results = []) => {
 //
 // Every rule the prompt states that can be enforced is enforced here, so a
 // model that ignores one is caught by code rather than trusted.
-export const settleGems = (json, results = [], { today = new Date() } = {}) => {
+export const settleGems = (json, results = [], { today = new Date(), only = "" } = {}) => {
+  const one = fold(only);
   const list = Array.isArray(json?.gems) ? json.gems : [];
   const at = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
   const out = [];
-  const dropped = { noSource: 0, coupon: 0, shape: 0 };
+  const dropped = { noSource: 0, coupon: 0, shape: 0, other: 0 };
   const seen = new Set();
   for (const raw of list) {
     const i = Number(raw?.source);
@@ -302,10 +353,22 @@ export const settleGems = (json, results = [], { today = new Date() } = {}) => {
     if (isCouponSite(hit.url)) { dropped.coupon += 1; continue; }
     const g = shapeGem({ ...raw, source: clean(hit.url), checkedAt: at });
     if (!g.name || !g.kind || (g.kind === "scheme" && !g.what)) { dropped.shape += 1; continue; }
+    // A name search that comes back with the place next door is a different
+    // run's answer, not this one's.
+    if (one && !fold(g.name).includes(one) && !one.includes(fold(g.name))) { dropped.other += 1; continue; }
     const key = `${fold(g.name)}|${g.kind}`;
-    if (seen.has(key)) continue;
+    const own = isOwnSite(g.source, g.name);
+    // THE PLACE'S OWN PAGE WINS. Oliver, 21 Sep 2026: "the pipeline will
+    // always prioritise the home website, yes?" It did not: the first row the
+    // model listed was kept, whoever's page it was. Now a later row for the
+    // same place on its own site takes the earlier one's place.
+    if (seen.has(key)) {
+      const at = out.findIndex(x => `${fold(x.name)}|${x.kind}` === key);
+      if (own && at >= 0 && !out[at].own) out[at] = { ...g, own };
+      continue;
+    }
     seen.add(key);
-    out.push({ ...g, own: isOwnSite(g.source, g.name) });
+    out.push({ ...g, own });
   }
   return { gems: out, dropped };
 };
@@ -316,6 +379,7 @@ export const gemRunNotes = ({ gems = [], dropped = {} } = {}) => {
   if (!gems.length) out.push("Nothing came back that a result states.");
   if (dropped.coupon) out.push(`${dropped.coupon} left out for coming off a coupon site.`);
   if (dropped.noSource) out.push(`${dropped.noSource} left out for pointing at no result.`);
+  if (dropped.other) out.push(`${dropped.other} left out for being about a different place than the one you named.`);
   if (dropped.shape) out.push(`${dropped.shape} left out for having no name, no kind, or a discount with no saving.`);
   const notOwn = gems.filter(g => !g.own).length;
   if (notOwn) out.push(`${notOwn} ${notOwn === 1 ? "comes" : "come"} from a page that is not the brand's own, unticked until you have looked.`);

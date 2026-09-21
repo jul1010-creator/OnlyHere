@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { C } from "../utils/theme";
 import { askOpenAI } from "../utils/aiClient";
-import { gemSearches, GEMS_PROMPT, settleGems, gemRunNotes, gemProblems, isCouponSite, WHERE_LABEL } from "../utils/cheapGems";
+import { menuImagesToRead, textHasPrice } from "../utils/pageScan";
+import { gemSearches, gemSearchesFor, ownPagesIn, pageAsResult, GEMS_PROMPT, settleGems, gemRunNotes, gemProblems, isCouponSite, WHERE_LABEL } from "../utils/cheapGems";
 
 // ── FINDING CHEAP GEMS, FOR HIM TO PICK ─────────────────────────────
 //
@@ -24,8 +25,9 @@ const parseJson = (text) => {
   try { return JSON.parse(raw.slice(a, b + 1)); } catch { return null; }
 };
 
-export const CheapGemsPanel = ({ existing = [], onPublish }) => {
+export const CheapGemsPanel = ({ existing = [], onPublish, readPage = null, readImage = null }) => {
   const [place, setPlace] = useState("");
+  const [named, setNamed] = useState("");
   const [rows, setRows] = useState([]);
   const [picked, setPicked] = useState([]);
   const [notes, setNotes] = useState([]);
@@ -40,12 +42,13 @@ export const CheapGemsPanel = ({ existing = [], onPublish }) => {
     return { problems: dupe ? [...problems, "Already published under this name."] : problems, blocks: blocks || dupe };
   };
 
-  const find = async () => {
+  // `only`: a place he already knows. The town field still narrows the search.
+  const find = async (only = "") => {
     setBusy("searching"); setError(""); setAdded(""); setRows([]); setPicked([]); setNotes([]);
     try {
       const seen = new Set();
       const results = [];
-      for (const q of gemSearches(place)) {
+      for (const q of only ? gemSearchesFor(only, place) : gemSearches(place)) {
         const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&n=6`);
         const data = await res.json().catch(() => null);
         for (const r of Array.isArray(data?.results) ? data.results : []) {
@@ -56,17 +59,41 @@ export const CheapGemsPanel = ({ existing = [], onPublish }) => {
         }
       }
       if (!results.length) { setError("The searches came back empty."); setBusy(""); return; }
+      // A NAME LOOKUP READS THE PLACE'S OWN PAGES, and a menu that is a
+      // picture is transcribed. What they add goes to the front, so it is
+      // inside the results the model is handed. See ownPagesIn.
+      const read = [];
+      const readNotes = [];
+      if (only && readPage) {
+        setBusy("reading the page");
+        for (const r of ownPagesIn(results, only)) {
+          const page = await readPage(r.url).catch(() => null);
+          const text = String(page?.text || "");
+          if (textHasPrice(text)) {
+            const got = pageAsResult({ url: r.url, title: r.title, text });
+            if (got) read.push(got);
+            continue;
+          }
+          for (const img of (readImage ? menuImagesToRead({ url: r.url, text, banners: page?.banners }) : [])) {
+            const shot = await readImage(img.url, only).catch(() => null);
+            if (!shot?.text) continue;
+            const got = pageAsResult({ url: r.url, title: r.title, text: shot.text, fromImage: true });
+            if (got) { read.push(got); readNotes.push(`Read a menu picture on ${new URL(r.url).hostname.replace(/^www\./, "")}. Check the figure against it before publishing.`); }
+          }
+        }
+      }
+      results.unshift(...read);
       setBusy("reading");
-      const out = await askOpenAI(GEMS_PROMPT(place, results.slice(0, MAX_RESULTS)), 3000);
+      const out = await askOpenAI(GEMS_PROMPT(place, results.slice(0, MAX_RESULTS), { only }), 3000);
       if (out?.error) { setError(String(out.error).slice(0, 200)); setBusy(""); return; }
       const json = parseJson(out?.text);
       if (!json) { setError("The model answered with something that was not a list."); setBusy(""); return; }
-      const settled = settleGems(json, results.slice(0, MAX_RESULTS));
+      const settled = settleGems(json, results.slice(0, MAX_RESULTS), { only });
       setRows(settled.gems);
       // TICKED ONLY WHEN IT MAY GO UP AND COMES FROM THE BRAND ITSELF. A lead
       // from somebody else's page waits for him to look at it.
       setPicked(settled.gems.map(g => g.own && !statusOf(g).blocks));
-      setNotes(gemRunNotes(settled));
+      setNotes([...readNotes, ...gemRunNotes(settled)]);
     } catch (err) {
       setError(String(err?.message || err).slice(0, 200));
     }
@@ -100,9 +127,17 @@ export const CheapGemsPanel = ({ existing = [], onPublish }) => {
       <div style={{ display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center" }}>
         <input value={place} onChange={e => setPlace(e.target.value)} placeholder="Town, or empty for all of Denmark"
           style={{ flex: "1 1 200px", minWidth: 0, background: C.surface, border: `1px solid ${C.border}`, color: C.text, borderRadius: 8, padding: "7px 10px", fontSize: 11.5, fontFamily: "'Inter', sans-serif" }} />
-        <button onClick={find} disabled={!!busy}
+        <button onClick={() => find()} disabled={!!busy}
           style={{ background: C.gold, border: "none", borderRadius: 100, padding: "8px 15px", fontSize: 11.5, fontWeight: 700, color: C.onGold, cursor: busy ? "default" : "pointer", opacity: busy ? 0.5 : 1, fontFamily: "'Inter', sans-serif" }}>
-          {busy === "searching" ? "Searching…" : busy === "reading" ? "Reading…" : `Find cheap gems in ${place.trim() || "Denmark"}`}
+          {busy === "searching" ? "Searching…" : busy === "reading the page" ? "Reading their page…" : busy === "reading" ? "Reading…" : `Find cheap gems in ${place.trim() || "Denmark"}`}
+        </button>
+      </div>
+      <div style={{ display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center", marginTop: 7 }}>
+        <input value={named} onChange={e => setNamed(e.target.value)} placeholder="A place you know, by name"
+          style={{ flex: "1 1 200px", minWidth: 0, background: C.surface, border: `1px solid ${C.border}`, color: C.text, borderRadius: 8, padding: "7px 10px", fontSize: 11.5, fontFamily: "'Inter', sans-serif" }} />
+        <button onClick={() => find(named.trim())} disabled={!!busy || !named.trim()}
+          style={{ background: "none", border: `1px solid ${C.gold}66`, borderRadius: 100, padding: "8px 15px", fontSize: 11.5, fontWeight: 700, color: C.gold, cursor: busy || !named.trim() ? "default" : "pointer", opacity: busy || !named.trim() ? 0.5 : 1, fontFamily: "'Inter', sans-serif" }}>
+          Look it up
         </button>
       </div>
       {notes.length > 0 && (

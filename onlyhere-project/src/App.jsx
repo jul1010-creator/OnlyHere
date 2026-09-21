@@ -88,7 +88,7 @@ import { stayDriftNote, LODGING_NOTES_RULE, isLodgingType } from "./utils/venueS
 import { modelProvenanceNote } from "./utils/modelProvenance";
 import { missingSourcesNote } from "./utils/provenance";
 import { startLog, endLog, note, decide, recentLogs, summariseLog, formatLog, formatLogs, logChips, storeState } from "./utils/runLog";
-import { domainOf, isListingHost, scrapeTier, faqWorthReading, FAQ_RULE, isApiCoveredHost, STALE_BEFORE_YEAR, MAX_FACT_AGE_MONTHS, rankSources, sourceOrderBlock, perishableSentence, EXISTENCE_RULE, PERISHABLE, MAX_TICKET_PAGES, isOwnSiteFor, urlNames, isKommuneHost } from "./utils/pageScan";
+import { domainOf, isListingHost, scrapeTier, faqWorthReading, FAQ_RULE, isApiCoveredHost, STALE_BEFORE_YEAR, MAX_FACT_AGE_MONTHS, rankSources, sourceOrderBlock, perishableSentence, EXISTENCE_RULE, PERISHABLE, MAX_TICKET_PAGES, isOwnSiteFor, urlNames, isKommuneHost, menuImagesToRead, MAX_MENU_READS } from "./utils/pageScan";
 import { weatherSourceFor, weatherBadge, normalsNote, dayWeather, FORECAST, NORMALS } from "./utils/weather";
 import { foodSpots } from "./data/food";
 import { essentials } from "./data/essentials";
@@ -6264,8 +6264,13 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
             //
             // Capped per draft as well as per page, because a draft reads up to
             // five sources and a per-page cap alone cannot see that.
-            if (!scanData.text && (scanData.banners || []).length && postersRead < MAX_POSTER_READS_PER_DRAFT) {
-              for (const banner of (scanData.banners || []).slice(0, Math.min(MAX_POSTER_READS_PER_SOURCE, MAX_POSTER_READS_PER_DRAFT - postersRead))) {
+            // AND A MENU PAGE, which has text and keeps its prices in a picture.
+            // Oliver, 21 Sep 2026: "some (very few) restaurants can have menus
+            // on pictures, instead of writing." See menuImagesToRead.
+            const menuShots = scanData.text ? menuImagesToRead({ url, text: scanData.text, banners: scanData.banners }) : [];
+            const picturesHere = scanData.text ? menuShots : (scanData.banners || []);
+            if (picturesHere.length && postersRead < MAX_POSTER_READS_PER_DRAFT) {
+              for (const banner of picturesHere.slice(0, Math.min(menuShots.length ? MAX_MENU_READS : MAX_POSTER_READS_PER_SOURCE, MAX_POSTER_READS_PER_DRAFT - postersRead))) {
                 postersRead += 1;
                 const shot = await readPosterText(banner.url, name);
                 if (shot.error || shot.none || !shot.text) {
@@ -6278,12 +6283,14 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
                 // and a transcription off a picture is a weaker fact than a
                 // sentence off a page: the writer has to be able to see which it
                 // is holding.
-                scanData.text = `${scanData.text || ""}\n[Read off a poster image on ${domainOf(url)}, transcribed rather than quoted from page text]\n${shot.text}`.trim();
-                note(`Poster read on ${domainOf(url)}`, {
+                scanData.text = `${scanData.text || ""}\n[Read off a ${menuShots.length ? "menu" : "poster"} image on ${domainOf(url)}, transcribed rather than quoted from page text]\n${shot.text}`.trim();
+                note(`${menuShots.length ? "Menu" : "Poster"} read on ${domainOf(url)}`, {
                   provider: "claude", detail: banner.url.slice(0, 120), outcome: "ok",
-                  why: "the page had no readable text, so its banner was transcribed", used: true,
+                  why: menuShots.length ? "the page states no price in its text, so its menu picture was transcribed" : "the page had no readable text, so its banner was transcribed", used: true,
                 });
-                break;   // one poster that answered is enough; the rest are photographs
+                // One poster that answered is enough; the rest are photographs.
+                // A menu can be two pictures, lunch and dinner, so it reads on.
+                if (!menuShots.length) break;
               }
             }
             if (scanData.text) {
@@ -24799,7 +24806,9 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     {Array.isArray(manageItems) && (
                       <CheapGemsPanel
                         existing={manageItems.filter(r => r?.type === GEM_TYPE).map(r => r?.payload?.name)}
-                        onPublish={publishGems} />
+                        onPublish={publishGems}
+                        readPage={readSourcePage}
+                        readImage={readPosterText} />
                     )}
 
                     {/* ── THE TOUR SWEEP ─────────────────────────────
