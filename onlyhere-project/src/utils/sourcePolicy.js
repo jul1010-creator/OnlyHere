@@ -225,7 +225,38 @@ export const nameIsDistinctive = (name) => {
 // nothing, which is right. An encyclopedia is a real source about a street's
 // history and no source at all about who drinks there on a Tuesday, and that
 // second half is not a host problem. See sourceFit in utils/entryAudit.js.
-const NEVER_OWN_SITE = /tripadvisor|booking\.com|expedia|hotels|hostelworld|airbnb|agoda|trivago|kayak\.|momondo|getyourguide|viator|tiqets|headout|klook|musement|yelp|facebook|instagram|twitter|x\.com|youtube|reddit|quora|pinterest|tiktok|google\.|wikipedia|wikivoyage|directferries|rome2rio|lonelyplanet|visitdenmark/i;
+// ── THE DESTINATION COMPANIES, FOUND BY LOOKING FOR FERRIES ─────────
+//
+// 20 Sep 2026, while researching the operator's own site for every island with
+// no ferry link on its row. isOperatorSite refuses whatever this refuses, and
+// it was accepting
+//
+//   https://destinationsjaelland.dk/oplevelser/faerger/faergen-til-agersoe-og-omoe/
+//
+// as Agersø and Omø's own ferry operator. Destination Sjælland is a tourist
+// board. Its page about that crossing carries a timetable it did not write and
+// no way to book, which is the exact page ferryDoor's comment says is worse
+// than no link at all, and it would have gone onto a published island.
+//
+// visitdenmark was in this list already, by name. Denmark reorganised its
+// tourism into regional companies years ago, and they are all called either
+// visitSOMETHING or destinationSOMETHING: visitodsherred.dk,
+// visitlolland-falster.com, destinationnord.dk, destinationlimfjorden.com.
+// Naming them one at a time is a list that goes stale, so the two prefixes are
+// matched instead.
+//
+// ANCHORED TO THE START OF THE HOST, because these are prefixes and not words.
+// Unanchored, "visit" would refuse a business whose name happens to contain it.
+//
+// AND THE THREE THAT DO NOT FOLLOW THE PATTERN are named, because each one came
+// back as a wrong answer while looking for a real operator: aebleoerne.dk for
+// Fejø and Femø, kystlandet.com for Endelave and Tunø, vadehavskysten for
+// Mandø and Fanø.
+//
+// AND THE FERRY AGGREGATORS WITH THEM. directferries was here already. faerge,
+// ferryguide, faergedanmark and danskefaergeruter are the same thing in
+// Danish: a page about a crossing, built by somebody who does not sail it.
+const NEVER_OWN_SITE = /tripadvisor|booking\.com|expedia|hotels|hostelworld|airbnb|agoda|trivago|kayak\.|momondo|getyourguide|viator|tiqets|headout|klook|musement|yelp|facebook|instagram|twitter|x\.com|youtube|reddit|quora|pinterest|tiktok|google\.|wikipedia|wikivoyage|directferries|rome2rio|lonelyplanet|visitdenmark|^visit[a-z0-9-]*\.|^destination[a-z0-9-]*\.|aebleoerne\.|kystlandet\.|vadehavskysten\.|^faerge\.|ferryguide\.|faergedanmark\.|danskefaergeruter\./i;
 
 // Strictly smaller, and every omission is deliberate. A reseller listing proves
 // a tour runs; an encyclopedia is a real reference; a tourist board is on the

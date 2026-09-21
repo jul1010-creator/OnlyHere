@@ -30,6 +30,9 @@
 // principle calendarFeed follows when it reads a page's markup rather than
 // guessing from its domain.
 import { fold } from "./danishNames";
+// For the one link an island puts on somebody else's host on purpose. See the
+// note on the ferry door in directoryLinks.
+import { isOperatorSite } from "./ferryDoor";
 
 // ── THE SECTIONS, AND WHAT EACH ONE IS ABOUT ────────────────────────
 //
@@ -108,30 +111,117 @@ const TAGS = /<[^>]+>/g;
 const ENTITIES = { amp: "&", lt: "<", gt: ">", quot: '"', "#39": "'", nbsp: " " };
 const decode = (v) => String(v || "").replace(/&(amp|lt|gt|quot|#39|nbsp);/g, (_, k) => ENTITIES[k]);
 
+// ── AND THE PART OF AN ADDRESS THAT IS ALLOWED TO SPEAK ─────────────
+//
+// 20 Sep 2026. Found by running this against oroe.dk rather than against a
+// fixture, which is the second time a real island has taught this file
+// something no fixture of mine would have.
+//
+// Orø files its beds and its restaurants under one parent, /spise-sove/, and
+// hangs the shelters off it at:
+//
+//   /spise-sove/shelterpladser-paa-oroe/
+//
+// Matching the whole address put that page under EAT, because the parent
+// segment says spise. A shelter is somewhere to sleep, and the page was going
+// to be handed to the model as a list of restaurants.
+//
+// So only the LAST segment speaks, plus any query, because a handful of these
+// sites still hang the word off index.php?page=overnatning. A parent segment
+// describes the section a page lives under and not the page.
+//
+// WHAT THIS GIVES UP, said plainly: a link like /overnatning/havblik/ now
+// reads as nothing rather than as a bed. That is the right way round. A page
+// about one guesthouse is not the island's bed list, and this reader is
+// looking for the list. Filing the wrong page under a heading sends the model
+// to read shelters as dinner; dropping it loses one lead.
+export const pathWord = (url) => {
+  let tail = String(url || "");
+  try {
+    const u = new URL(url);
+    const parts = u.pathname.split("/").filter(Boolean);
+    tail = (parts.length ? parts[parts.length - 1] : "") + (u.search || "");
+  } catch { /* a relative href before resolution, read as written */ }
+  return tail;
+};
+
 export const directoryLinks = (html, baseUrl = "") => {
   const out = [];
-  const seen = new Set();
+  const at = new Map();
   let m;
   ANCHOR.lastIndex = 0;
   while ((m = ANCHOR.exec(String(html || ""))) !== null) {
     const href = String(m[1] || "").trim();
     const text = decode(String(m[2] || "").replace(TAGS, " ")).replace(/\s+/g, " ").trim();
     if (!href || /^(?:#|mailto:|tel:|javascript:)/i.test(href)) continue;
-    const kind = kindOf(text) || kindOf(href);
-    if (!kind) continue;
     let url = href;
     try { url = new URL(href, baseUrl || undefined).toString(); } catch { continue; }
+    const kind = kindOf(text) || kindOf(pathWord(url));
+    if (!kind) continue;
     // Its own site only. A link to visitdenmark under a heading called Oplev is
     // a tourist board's page about the island rather than the island's own, and
     // the whole authority of this source is that it IS the island's own.
+    //
+    // ── EXCEPT THE ONE DOOR THAT IS OFF-HOST BY NATURE ──────────
+    //
+    // Oliver, 20 Sep 2026: "sejerø færgen has to be gone through when sejerø
+    // is put on the guide." Sejerø's own site carries that door, and this rule
+    // was throwing it away: the booking runs on
+    //
+    //   https://sejeroe-ferry.teambooking.dk/new-booking
+    //
+    // which is a different host, so the island's own ferry booking was being
+    // discarded as if it were a tourist board. Almost none of these operators
+    // run their booking on the island's domain.
+    //
+    // NARROWED TO THE FERRY, AND STILL TESTED. isOperatorSite is the same
+    // predicate ferryDoor already uses on this exact question, so an
+    // aggregator, a destination company or a Facebook page is refused here for
+    // the same reasons and by the same code rather than by a second list.
     if (baseUrl) {
-      try { if (new URL(url).hostname !== new URL(baseUrl).hostname) continue; } catch { continue; }
+      let sameHost = false;
+      try { sameHost = new URL(url).hostname === new URL(baseUrl).hostname; } catch { continue; }
+      if (!sameHost && !(kind === "ferry" && isOperatorSite(url))) continue;
     }
-    if (seen.has(url)) continue;
-    seen.add(url);
+    // ── AND THE LABELLED ANCHOR BEATS THE PICTURE OF IT ─────────
+    //
+    // Every one of these sites emits each menu item twice, once wrapped round
+    // an icon with no text and once with the words. sejero.dk emits the icon
+    // FIRST, so keeping whichever came first threw away the label on every
+    // section link on the island and left the founder reading a row with no
+    // name on it. Worse, a row with no text falls back to the address, and on
+    // a site like Orø the address is the thing that misreads.
+    const had = at.get(url);
+    if (had !== undefined) {
+      if (text && !out[had].text) { out[had].text = text; out[had].kind = kind; }
+      continue;
+    }
+    at.set(url, out.length);
     out.push({ url, text, kind });
   }
   return out;
+};
+
+// ── THE ISLAND'S OWN WAY ONTO THE BOAT ──────────────────────────────
+//
+// The one ferry link that is NOT on the island's own host, which is the shape
+// a booking system takes. The island's own /transport page is a page about the
+// crossing; this is the thing that sells a ticket, and it is the field
+// ferryDoor asks for by hand on eleven of the fifteen.
+//
+// Reported rather than followed. There are no businesses on a booking form, so
+// spending one of the four page reads on it would buy nothing.
+export const ferryDoorIn = (links = [], baseUrl = "") => {
+  let host = "";
+  try { host = new URL(baseUrl).hostname; } catch { /* no base, every ferry link counts */ }
+  for (const l of Array.isArray(links) ? links : []) {
+    if (l?.kind !== "ferry" || !isOperatorSite(l?.url)) continue;
+    let h = "";
+    try { h = new URL(l.url).hostname; } catch { continue; }
+    if (host && h === host) continue;
+    return { url: l.url, text: String(l.text || "").replace(/\s+/g, " ").trim() };
+  }
+  return { url: "", text: "" };
 };
 
 // ── AND THE EXTRACTION ──────────────────────────────────────────────

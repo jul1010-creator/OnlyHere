@@ -256,7 +256,7 @@ writeFileSync(entry, `
   export { ferryUrlOf } from ${JSON.stringify(join(root, "src/utils/ferryDoor.js"))};
   export { FROZEN_TRANSPORT, frozenFrom, frozenIn, factsLost, frozenBlock, lostNote } from ${JSON.stringify(join(root, "src/utils/frozenFacts.js"))};
   export { baseKey, staysIn as stayRunsIn, doorsFor, doorOn, sameBaseLine } from ${JSON.stringify(join(root, "src/utils/stayDoors.js"))};
-  export { SECTIONS as DIR_SECTIONS, ROW_KINDS, kindOf as dirKindOf, directoryLinks, DIRECTORY_PROMPT, rowsFromDirectory, directoryProblems, staysIn, eatsIn, islandSaysBlock, ISLAND_SAYS } from ${JSON.stringify(join(root, "src/utils/islandDirectory.js"))};
+  export { SECTIONS as DIR_SECTIONS, ROW_KINDS, kindOf as dirKindOf, directoryLinks, pathWord, ferryDoorIn, DIRECTORY_PROMPT, rowsFromDirectory, directoryProblems, staysIn, eatsIn, islandSaysBlock, ISLAND_SAYS } from ${JSON.stringify(join(root, "src/utils/islandDirectory.js"))};
   export { sentencesIn, readerBody, noticeAsk, noticeText, TRANSLATE_NOTICE, translatedNotice, DEAD_ENDS } from ${JSON.stringify(join(root, "src/utils/noticeVoice.js"))};
   export { guideClaims, guideClaimNote } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { resolveStopCoords } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
@@ -30243,6 +30243,47 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("a tourist board is not the own site", isNeverOwnSite("https://www.visitdenmark.dk/x"));
   ok("and is on his own vouched list, so still a source", !isNeverASource("https://www.visitdenmark.dk/x"));
   ok("a venue's own domain is neither", !isNeverOwnSite("https://natcafeen.dk/") && !isNeverASource("https://natcafeen.dk/"));
+
+  // ── AND THE DESTINATION COMPANIES, WHICH WERE GETTING THROUGH ───
+  //
+  // 20 Sep 2026, found while researching the ferry operator for every island
+  // with no link on its row. isOperatorSite refuses whatever this refuses, and
+  // Destination Sjælland's page about the Agersø and Omø crossing was being
+  // accepted as those islands' own ferry operator. It carries a timetable it
+  // did not write and no way to book, which is the page ferryDoor calls worse
+  // than no link at all.
+  ok("a destination company is not a ferry operator",
+     isNeverOwnSite("https://destinationsjaelland.dk/oplevelser/faerger/faergen-til-agersoe-og-omoe/"));
+  ok("nor is any of the others, whatever they are called",
+     ["https://www.visitodsherred.dk/x", "https://www.visitlolland-falster.com/x",
+      "https://www.destinationlimfjorden.com/x", "https://destinationnord.dk/x"].every(isNeverOwnSite));
+  // Matched on the PREFIX and anchored, because these are the two names Danish
+  // tourism gives itself and not words that may appear anywhere in a host.
+  ok("a business is not a tourist board for having the word in its name",
+     !isNeverOwnSite("https://revisitaarhus-bygg.dk/") && !isNeverOwnSite("https://mandoebussen.dk/"));
+  // The three that do not follow the pattern, each one a wrong answer this
+  // research actually produced while looking for a real operator.
+  ok("and the destination brands that are named something else",
+     ["https://aebleoerne.dk/faerger/", "https://www.kystlandet.com/islands/alro/ferry-routes",
+      "https://www.vadehavskysten.dk/x"].every(isNeverOwnSite));
+  // directferries was here already. These are the same thing in Danish.
+  ok("a ferry aggregator is not the operator",
+     ["https://ferryguide.dk/ruter/faerge-anholt-grenaa/", "https://danskefaergeruter.dk/tunoe",
+      "https://www.faergedanmark.dk/x", "http://www.faerge.dk/x"].every(isNeverOwnSite));
+
+  // ── AND THE SEVENTEEN REAL OPERATORS THAT MUST STILL PASS ───────
+  //
+  // Every one of these was opened in a browser on 20 Sep 2026 before being
+  // written down. Most of these crossings are run by the municipality, so this
+  // is also the assertion that a kommune domain is never mistaken for a
+  // tourist board by the prefixes above.
+  ok("every operator site found for a real island is still accepted",
+     ["https://www.kalundborg.dk/x", "https://mf-endelave.dk", "https://www.anholtfergen.dk",
+      "https://tunoefaergen.odder.dk", "https://lollandfaergefart.lolland.dk",
+      "https://aofaerger.slagelse.dk", "https://oefaergen.fmk.dk", "https://www.fanoelinjen.dk",
+      "https://langelandkommune.dk/x", "https://holbaek.dk/x", "https://www.aalborg.dk/x",
+      "https://furfaerge.dk", "https://mandoebussen.dk",
+      "https://sejeroe-ferry.teambooking.dk/new-booking"].every(u => !isNeverOwnSite(u)));
   const appG = readFileSync(join(root, "src/App.jsx"), "utf8");
   is("and there is no second copy of either list left in App.jsx",
     (appG.match(/tripadvisor\|booking/g) || []).length, 0);
@@ -70878,7 +70919,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
 // should be taken into consideration when booking hotels on other islands?
 // Recommending the places that the islands themselves recommend?"
 {
-  const { DIR_SECTIONS, ROW_KINDS, dirKindOf, directoryLinks, DIRECTORY_PROMPT, rowsFromDirectory,
+  const { DIR_SECTIONS, ROW_KINDS, dirKindOf, directoryLinks, pathWord, ferryDoorIn, DIRECTORY_PROMPT, rowsFromDirectory,
           directoryProblems, staysIn, eatsIn, islandSaysBlock, ISLAND_SAYS } = M;
 
   // ── THE HEADINGS, FOLDED THE WAY fold ACTUALLY FOLDS ────────────
@@ -70943,6 +70984,12 @@ SOURCE: https://www.tripadvisor.com/whatever`;
      onTurist.some(l => l.text === "Handels- & spisesteder"));
   const appDir = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
   ok("the reader follows the visitor page", /\["visit", "stay", "eat"\]\.includes\(l\.kind\)/.test(appDir));
+  // The door is told to him and never written onto the row: being sent to the
+  // wrong boat costs a day, so he looks at it first.
+  ok("and the ferry door is reported to him", /ferryDoorIn\(\[\.\.\.firstAll, \.\.\.deeperAll\], source\)/.test(appDir));
+  ok("as a note rather than a field he did not ask for",
+     /That site books its ferry at \$\{door\.url\}/.test(appDir));
+  ok("and nothing writes it onto the island", !/ferryUrl:\s*door\.url/.test(appDir));
   ok("and one hop past it, never two", /first\.filter\(x => x\.kind === "visit"\)\.slice\(0, 1\)/.test(appDir));
   // Avernakø needs one page and Sejerø needs all four. Measured, not chosen.
   ok("with room for the four a real island takes", /const DIR_PAGES = 4;/.test(appDir));
@@ -70968,6 +71015,80 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   ok("another site is never read as the island's own", !LINKS.some(l => l.url.includes("visitdenmark")));
   ok("an anchor and a mail link are not pages", !LINKS.some(l => l.url.includes("#") || l.url.startsWith("mailto")));
   is("and one page is one entry", LINKS.filter(l => l.url.endsWith("/visit")).length, 1);
+
+  // ══ AND THE THREE THINGS ONLY oroe.dk AND sejero.dk COULD TEACH ══
+  //
+  // 20 Sep 2026, second real-site run, against the live markup of both sites
+  // rather than against anything written here. Every one of these was a defect
+  // in shipped code and none of them was visible from a fixture.
+
+  // ── ONE. THE PARENT SEGMENT WAS DECIDING THE PAGE ───────────────
+  //
+  // Orø files beds and restaurants under one parent, /spise-sove/, and hangs
+  // the shelters off it. Matching the whole address put the shelter page under
+  // EAT, because the parent says spise, and it was going to be handed to the
+  // model as a list of restaurants.
+  is("only the last segment of an address speaks",
+     pathWord("https://oroe.dk/spise-sove/shelterpladser-paa-oroe/"), "shelterpladser-paa-oroe");
+  is("and the query with it, for the sites still on index.php",
+     pathWord("https://x.dk/index.php?page=overnatning"), "index.php?page=overnatning");
+  is("a bare domain says nothing", pathWord("https://oroe.dk/"), "");
+  const OROE = directoryLinks(`
+    <a href="https://oroe.dk/spise-sove/spisesteder/">Spisesteder</a>
+    <a href="https://oroe.dk/spise-sove/overnatning/">Overnatning</a>
+    <a href="https://oroe.dk/spise-sove/shelterpladser-paa-oroe/">Shelterpladser på Orø</a>
+  `, "https://oroe.dk/");
+  ok("so a shelter page is never read as somewhere to eat",
+     !OROE.some(l => l.kind === "eat" && /shelterpladser/.test(l.url)));
+  is("and the two that do say what they are still do",
+     OROE.map(l => l.kind), ["eat", "stay"]);
+
+  // ── TWO. THE PICTURE WAS BEATING THE LABEL ──────────────────────
+  //
+  // Every one of these sites emits each menu item twice, an icon with no text
+  // and then the words. sejero.dk emits the ICON FIRST, so keeping whichever
+  // came first threw away the label on every section link on the island.
+  const ICON_FIRST = directoryLinks(`
+    <a href="http://sejero.dk/oplev-sejeroe/overnatning/"><img src="/i.svg"></a>
+    <a href="http://sejero.dk/oplev-sejeroe/overnatning/">Overnatning</a>
+  `, "https://sejero.dk/");
+  is("one page is still one entry", ICON_FIRST.length, 1);
+  is("and it keeps the words rather than the picture", ICON_FIRST[0].text, "Overnatning");
+  const TEXT_FIRST = directoryLinks(`
+    <a href="http://sejero.dk/oplev-sejeroe/overnatning/">Overnatning</a>
+    <a href="http://sejero.dk/oplev-sejeroe/overnatning/"><img src="/i.svg"></a>
+  `, "https://sejero.dk/");
+  is("whichever order the site emits them in", TEXT_FIRST[0].text, "Overnatning");
+
+  // ── THREE. THE ISLAND'S OWN FERRY DOOR WAS BEING DISCARDED ──────
+  //
+  // Oliver, 20 Sep 2026: "sejerø færgen has to be gone through when sejerø is
+  // put on the guide." sejero.dk carries that door on its front page, pointing
+  // at the operator's booking system on ANOTHER HOST, and the same-host rule
+  // was throwing it away as if it were a tourist board.
+  const WITH_DOOR = directoryLinks(`
+    <a href="https://sejeroe-ferry.teambooking.dk/new-booking">Book færge<br>online</a>
+    <a href="https://www.visitdenmark.dk/faerge">Færge til øen</a>
+    <a href="https://www.facebook.com/sejerodk">Færgen på Facebook</a>
+    <a href="http://sejero.dk/turist-paa-sejeroe/">Turist på Sejerø</a>
+  `, "https://sejero.dk/");
+  ok("the island's own booking system is kept though it is off-host",
+     WITH_DOOR.some(l => l.kind === "ferry" && /teambooking\.dk/.test(l.url)));
+  ok("a tourist board's ferry page is still refused",
+     !WITH_DOOR.some(l => /visitdenmark/.test(l.url)));
+  ok("and a Facebook page standing in for a timetable is refused",
+     !WITH_DOOR.some(l => /facebook/.test(l.url)));
+  is("the door is the off-host one and not the island's own page about it",
+     ferryDoorIn(WITH_DOOR, "https://sejero.dk/").url, "https://sejeroe-ferry.teambooking.dk/new-booking");
+  is("with the island's own words on it", ferryDoorIn(WITH_DOOR, "https://sejero.dk/").text, "Book færge online");
+  // Orø links its own /transport page and books nowhere else. That is an
+  // honest empty answer rather than a page to send somebody to.
+  is("an island that books nowhere off its own site has no door",
+     ferryDoorIn(directoryLinks(`<a href="https://oroe.dk/om-oroe/transport-til-oroe/">Transport til Orø</a>`, "https://oroe.dk/"), "https://oroe.dk/").url, "");
+  // REPORTED, NEVER READ. There are no businesses on a booking form, so it
+  // must not spend one of the four page reads.
+  ok("and the door is never followed",
+     !WITH_DOOR.filter(l => ["visit", "stay", "eat"].includes(l.kind)).some(l => /teambooking/.test(l.url)));
 
   // ── THE PROMPT MAY READ AND MAY NOT DECIDE ──────────────────────
   const PROMPT = DIRECTORY_PROMPT("Avernakø", "Spisning\nAvernakø Landhotel");

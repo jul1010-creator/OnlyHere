@@ -170,7 +170,7 @@ import { unplaceableStops, mapGapNote } from "./utils/mapGaps";
 import { chipsFor, LOCATE } from "./utils/replyChips";
 import { icsUrlFor, parseIcs, communityRowsFrom, feedProblems, PAGE_ROWS_PROMPT, rowsFromExtract, readerFor, tribeApiFor, rowsFromTribe, rowsFromSimcal } from "./utils/calendarFeed";
 import { locateLabel, locateSentence, townFromReverse, countryFromReverse, isDenmark, reverseUrl } from "./utils/locateMe";
-import { directoryLinks, DIRECTORY_PROMPT, rowsFromDirectory, directoryProblems, islandSaysBlock, ISLAND_SAYS } from "./utils/islandDirectory";
+import { directoryLinks, DIRECTORY_PROMPT, rowsFromDirectory, directoryProblems, islandSaysBlock, ISLAND_SAYS, ferryDoorIn } from "./utils/islandDirectory";
 import { readerBody, noticeAsk, sentencesIn, TRANSLATE_NOTICE, translatedNotice, noticeText } from "./utils/noticeVoice";
 import { frozenFrom, factsLost, frozenBlock, lostNote } from "./utils/frozenFacts";
 import { crossingBlock, ferryLine, isOperatorSite } from "./utils/ferryDoor";
@@ -10053,7 +10053,7 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
           if (rawData?.error) notes.push(`Could not read ${url} for its links: ${rawData.error}`);
           return [];
         }
-        return directoryLinks(html, url).filter(l => ["visit", "stay", "eat"].includes(l.kind));
+        return directoryLinks(html, url);
       } catch (err) {
         notes.push(`Could not read ${url} for its links: ${String(err?.message || err).slice(0, 120)}`);
         return [];
@@ -10078,11 +10078,33 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
     // ONE HOP AND NO MORE. Two would be a crawler, and this is a reader that
     // follows a visitor page to the two sections it names. Neither the shop
     // nor the ferry timetable earns a page of the budget.
-    const first = await linksOn(source);
+    // The three kinds worth spending a page read on. A shop page is a list of
+    // opening hours and a ferry page is a booking form, and neither has a
+    // business on it that the stay and eat pages have not already named.
+    const followed = (ls) => ls.filter(l => ["visit", "stay", "eat"].includes(l.kind));
+    const firstAll = await linksOn(source);
+    const first = followed(firstAll);
     const deeper = [];
+    const deeperAll = [];
     for (const l of first.filter(x => x.kind === "visit").slice(0, 1)) {
-      deeper.push(...(await linksOn(l.url)));
+      const got = await linksOn(l.url);
+      deeperAll.push(...got);
+      deeper.push(...followed(got));
     }
+    // ── AND THE ONE LINK THAT IS REPORTED RATHER THAN READ ──────
+    //
+    // Oliver, 20 Sep 2026: "sejerø færgen has to be gone through when sejerø
+    // is put on the guide." sejero.dk carries that door on its own front page,
+    // pointing at the operator's booking system on another host. It is the
+    // exact field ferryDoor asks for by hand on eleven of the fifteen islands,
+    // and it was sitting on the island's own site the whole time.
+    //
+    // SAID, NEVER SET. He pastes it onto the row himself, because a link the
+    // app wrote onto a published island without him looking at it is the one
+    // kind of mistake this source cannot afford: being sent to the wrong boat
+    // costs a day. See utils/ferryDoor.js for what the field then does.
+    const door = ferryDoorIn([...firstAll, ...deeperAll], source);
+    if (door.url) notes.push(`That site books its ferry at ${door.url}${door.text ? ` ("${door.text}")` : ""}. If the island row has no ferry link yet, that is the one to paste in.`);
     const seenPage = new Set([source]);
     for (const l of [...first, ...deeper]) {
       if (pages.length >= DIR_PAGES) break;
