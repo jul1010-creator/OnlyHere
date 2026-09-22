@@ -10,6 +10,10 @@ import { PARTS_OF_COUNTRY } from "./sourcePolicy";
 // means, and two copies of a word boundary check drift the first time either
 // one of them is touched.
 import { saysWord, fitsBrief, FIT_STRONG } from "./interestFit";
+// A refused CATEGORY, which is the other half of a refused place. See
+// utils/kindRefusal.js: "not museums" narrowed what he wanted and narrowed
+// nothing about what he was shown.
+import { ruledOutKinds, isRefusedKind } from "./kindRefusal";
 // Where they land, and how to order a list of towns from it. See routeOrder.js
 // for the measurement that prompted both: 416 km shown against 279 km possible,
 // on a brief that had asked for two bases.
@@ -1026,7 +1030,15 @@ export const matchedPlaces = (convoText, pools, { days = null, wanted = null, th
   // same argument the exclusion filter above it makes and the reason it lives
   // here rather than at the three call sites.
   const theirs = (row) => !!row?.name && mentionsPlace(ownWords, row.name);
+  // ── AND A KIND THEY REFUSED COMES OFF THE SAME WAY ──────────────
+  //
+  // Oliver, 22 Sep 2026: "We mostly care about food and shopping, not
+  // museums", answered with a museum. Removed rather than marked, exactly as a
+  // refused place is, and for the same reason: a card on the screen is an
+  // offer, whatever label sits on it.
+  const kindsOut = ruledOutKinds(ownWords);
   const keep = (rows) => (ruledOut.length ? rows.filter(r => !isExcluded(r, ruledOut)) : rows)
+    .filter(r => !kindsOut.length || !isRefusedKind(r, kindsOut))
     .map(r => (r && r._byThem === undefined ? { ...r, _byThem: theirs(r) } : r));
   // ── AND THE ARRIVAL IS THEIRS TO STATE TOO ──────────────────────
   //

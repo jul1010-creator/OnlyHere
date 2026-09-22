@@ -65,7 +65,7 @@ import { normaliseTicketStatus } from "./tickets";
 import { isBookableTicketUrl } from "./ticketLink";
 import { stopEventWhen } from "./guideReading";
 import { affiliateHref, isPartnerLink, carRentalFits, carRentalUrl, stayDoorUrl, isWegotripUrl } from "./affiliates";
-import { OPERATORS } from "./operators";
+import { OPERATORS, isLongLeg } from "./operators";
 import { journeyUrl } from "./rejseplanen";
 import { isFerryText } from "./helpers";
 // One definition of each, read twice. priceLabel and pricesIn are how the price
@@ -304,12 +304,31 @@ const entryLine = ({ row, name, day, when, shutToday }) => {
 // in costLines is the only place that knows which stops the crossing sits
 // between, and a second reader of the same legs array is how two parts of one
 // file come to disagree. See utils/rejseplanen.js.
-const transportLines = ({ mode = "", ferryDays = [], travelDays = [], ferryLeg = null, dayDateFor = () => null } = {}) => {
+// ── AND "THE LONG HOPS" HAVE TO BE LONG ─────────────────────────────
+//
+// 22 Sep 2026, a live guide for two travellers on public transport in South
+// Jutland: Højer, Møgeltønder, Ribe, and then three days inside Ribe. Under To
+// arrange it read "FlixBus, coaches, slower and usually cheaper. The long hops
+// on day 2, day 3, day 4, day 5." FlixBus runs no coach on any of those legs,
+// which are regional buses and a local train, and days 4 and 5 never left
+// Ribe at all.
+//
+// `travelDays` was every day after the first that had a stop on it. Nothing
+// measured a hop, so a five day trip was five days of long hops by definition.
+// The leg chip on the same page has applied the real rule since 9 Aug:
+// operatorsForLeg names DSB and FlixBus only for a leg of LONG_LEG_KM or more,
+// and stays quiet on a leg it cannot measure, because "unknown is not long".
+//
+// So `longDays` is now the days on which SOME leg measures long, read by the
+// same isLongLeg the chip reads, and DSB and FlixBus are listed only when there
+// is one. The local line stays for any trip that moves between days, because
+// Rejseplanen is the answer for exactly the regional hops these two are not.
+const transportLines = ({ mode = "", ferryDays = [], travelDays = [], longDays = [], ferryLeg = null, dayDateFor = () => null } = {}) => {
   const m = String(mode || "").toLowerCase();
   const out = [];
   const publicTransport = /public transport|train|bus|tog|offentlig/.test(m);
-  if (publicTransport && travelDays.length) {
-    const onDays = `The long hops on day ${travelDays.join(", day ")}`;
+  if (publicTransport && longDays.length) {
+    const onDays = `The long hops on day ${longDays.join(", day ")}`;
     // ── A HEADING ON THIS LIST NAMES A CHARGE ─────────────────────
     //
     // Found 26 Aug 2026 reading the deployed block on guide q3xuswczshx. The
@@ -327,26 +346,39 @@ const transportLines = ({ mode = "", ferryDays = [], travelDays = [], ferryLeg =
     const rows = [
       { op: OPERATORS.dsb, name: OPERATORS.dsb.name, what: `${OPERATORS.dsb.what}. ${onDays}.` },
       { op: OPERATORS.flixbus, name: OPERATORS.flixbus.name, what: `${OPERATORS.flixbus.what}. ${onDays}.` },
-      {
-        op: OPERATORS.rejseplanen,
-        name: "Local buses and regional trains",
-        what: "The legs neither of those sells: city buses, the metro, the short regional hops. Rejseplanen prices every operator in one search.",
-      },
     ];
     for (const r of rows) {
       out.push({
         kind: COST_KIND.TRANSPORT,
         name: r.name,
-        day: travelDays[0],
+        day: longDays[0],
         forWhat: r.what,
         price: "",
         priceFrom: null,
         href: r.op.url,
         partner: false,
         refused: "",
-        bookAhead: r.op.id !== "rejseplanen",
+        bookAhead: true,
       });
     }
+  }
+  if (publicTransport && travelDays.length) {
+    out.push({
+      kind: COST_KIND.TRANSPORT,
+      name: "Local buses and regional trains",
+      day: travelDays[0],
+      // "Neither of those" only when DSB and FlixBus are on the list above it.
+      forWhat: longDays.length
+        ? "The legs neither of those sells: city buses, the metro, the short regional hops. Rejseplanen prices every operator in one search."
+        : "City buses, the metro and the regional hops on this trip. Rejseplanen prices every operator in one search.",
+      price: "",
+      priceFrom: null,
+      href: OPERATORS.rejseplanen.url,
+      partner: false,
+      refused: "",
+      // A tap-in ticket cannot sell out, so it never sorts above a booking.
+      bookAhead: false,
+    });
   }
   if (ferryDays.length) {
     out.push({
@@ -397,19 +429,37 @@ export const costLines = ({
   shutOn = () => false,
   mode = "",
   saidNoCar = false,
+  // The straight-line kilometres between two consecutive stops, or null when
+  // nobody could measure it. Injected like everything else here, and the guide
+  // page hands in the same legDistanceKm the leg chips use, so this list and
+  // the chips cannot disagree about which hop is long. See transportLines.
+  legKm = () => null,
 } = {}) => {
   const days = Array.isArray(guide?.days) ? guide.days : [];
   const lookup = typeof rowFor === "function" ? rowFor : () => null;
+  const measure = typeof legKm === "function" ? legKm : () => null;
   const out = [];
   const seen = new Set();
   const ferryDays = [];
   // The first crossing's two ends, for the journey planner link below.
   const ferryLeg = { from: "", to: "", day: null };
   const travelDays = [];
+  const longDays = [];
 
   days.forEach((d, i) => {
     const dayNo = d?.day || i + 1;
     const dayDate = dayDateFor(dayNo);
+    // Every hop that lands on this day: the one in from the day before, then
+    // each one between its own stops. A day is a long day when any of them
+    // measures long, and a hop nobody could measure is not long.
+    {
+      const stops = (d?.stops || []).filter(s => s && s.name);
+      const before = i > 0 ? (days[i - 1]?.stops || []).filter(s => s && s.name).slice(-1)[0] : null;
+      const hops = [];
+      if (before && stops[0]) hops.push([before, stops[0]]);
+      for (let k = 0; k < stops.length - 1; k++) hops.push([stops[k], stops[k + 1]]);
+      if (hops.some(([a, b]) => isLongLeg(measure(a, b)))) longDays.push(dayNo);
+    }
     (d?.stops || []).forEach((s) => {
       const name = String(s?.name || "").trim();
       if (!name || seen.has(name)) return;
@@ -499,7 +549,7 @@ export const costLines = ({
     });
   }
 
-  out.push(...transportLines({ mode, ferryDays, travelDays: travelDays.slice(0, 4), ferryLeg, dayDateFor }));
+  out.push(...transportLines({ mode, ferryDays, travelDays: travelDays.slice(0, 4), longDays: longDays.slice(0, 4), ferryLeg, dayDateFor }));
 
   // The car, when they said they are driving. carRentalFits is the same reader
   // the rental button uses, so the list and the button cannot disagree about

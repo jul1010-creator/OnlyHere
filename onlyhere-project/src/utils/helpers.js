@@ -753,6 +753,32 @@ export const AI_TELL_PHRASES = [
 // distinctive enough not to collide; a bare word cannot.
 export const FILLER_WORDS = ["actually", "truly", "genuinely", "simply"];
 
+// ── AND THE SAME WORD IN THE LANGUAGE THEY WROTE IN ─────────────────
+//
+// Oliver, 22 Sep 2026, on a Danish test conversation: "faktisk" all over a
+// reply his own four words would have been cut from. The trim runs on the
+// finished reply and the reply is written in the traveller's language, so a
+// list of four English adverbs covers the English conversations and nothing
+// else. It is one word doing one job, and which keyboard it was typed on says
+// nothing about whether it earned its place.
+//
+// KEPT AS ITS OWN LIST. FILLER_WORDS is what the copy scan holds the site's
+// own English writing to, and it is pinned to his four; widening it there
+// would make that scan answer a different question. This list is what gets
+// REMOVED at read time, which is the half that has ever worked.
+//
+// A WORD EARNS ITS PLACE BY BEING SEEN. Only the two that are near enough to
+// pure filler in this register to cut without reading the sentence: "faktisk"
+// is his "actually" and "simpelthen" is his "simply". "Egentlig" and
+// "virkelig" are left out on purpose, because both carry real meaning often
+// enough that cutting one blind would change what a sentence says, which is
+// the mistake FILLER_ADJECTIVES is already written about.
+export const FILLER_WORDS_OTHER = ["faktisk", "simpelthen"];
+
+// What the trim removes: his four and their counterparts, so a reply is held
+// to one standard whichever language it came back in.
+export const FILLER_TRIMMED = [...FILLER_WORDS, ...FILLER_WORDS_OTHER];
+
 // ── AND THE ADJECTIVE, WHICH IS COUNTED AND NOT CUT ─────────────────
 //
 // Oliver, 10 Sep 2026: "'Genuinely' and 'genuine' and 'actually' are three
@@ -858,7 +884,7 @@ const dropLast = (text, word) => {
 // Keeps `keep` of each word across the whole run of strings and removes the
 // rest. Returns the strings in the same order, so a caller can put them back
 // where they came from.
-export const trimFillerRuns = (texts, { words = FILLER_WORDS, keep = FILLER_REPEAT - 1 } = {}) => {
+export const trimFillerRuns = (texts, { words = FILLER_TRIMMED, keep = FILLER_REPEAT - 1 } = {}) => {
   const budget = new Map(words.map(w => [w, keep]));
   return texts.map((t) => {
     if (typeof t !== "string" || !t.trim()) return t;

@@ -47,7 +47,7 @@ writeFileSync(entry, `
   export { legSteps, journeyFromStored, worthShowingLegs, journeyParts, journeyFigure, NO_TRANSIT_NOTE, WAIT_INSIDE_TOTAL, journeyBlock, vehicleWord, arrivalStop, arrivalGlanceRow, ARRIVAL_WALK_LIMIT, transitProblems, journeyDurations, absenceClaims, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, legMinutesIn, closedButPlanned, storedJourney, journeyReach, journeyChanges, journeyBreakdown, journeyDriving, journeyStamp, journeyAgencies, JOURNEY_SOURCE } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
   export { normaliseDomain, cleanNote, cleanSource, sourcesFor, sourceRulesBlock, cleanPlace, placeMatches, blockCost, directSourceSearches, domainVariants, placeMightMatch, sourcesToSearch, MAX_DIRECT_SEARCHES, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { variantsOf, otherNameFor, samePlaceName, searchNames, PLACE_NAMES, SIGHT_NAMES, containsName, distinctiveWords, GENERIC_PLACE_WORDS, foundAt, matchVariantsOf, GENERIC_ALIASES } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
-  export { NIGHTLIFE_CITIES, townOfLocation, groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList, nightlifeSummaryFor, townOfStreet, streetForSpot, barsOnStreet, nightlifeForTown, nightKindOf, strandedNight, barsIntoStreets, PREVIEW_BARS_PER_STREET, PREVIEW_LOOSE_BARS } from ${JSON.stringify(join(root, "src/utils/nightlife.js"))};
+  export { NIGHTLIFE_CITIES, townOfLocation, groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList, nightlifeSummaryFor, townOfStreet, onThisStreet, streetForSpot, barsOnStreet, nightlifeForTown, nightKindOf, strandedNight, barsIntoStreets, PREVIEW_BARS_PER_STREET, PREVIEW_LOOSE_BARS } from ${JSON.stringify(join(root, "src/utils/nightlife.js"))};
   export { supabaseFailure, studioErrorMessage, refreshIsDead, missingColumn, EXPIRED, REFUSED, MISSING, OUTDATED, OTHER } from ${JSON.stringify(join(root, "src/utils/studioErrors.js"))};
   export { cleanPlaceKind, cleanRelation, cleanIsland, placeIssues, placePatch, hasPlaceChange, duplicateNames } from ${JSON.stringify(join(root, "src/utils/placeEdit.js"))};
   export { dateProbeQueries, danishDay, englishDay, numericDay, parseEventDate, isPastDate, nextEditionYear, eventDateIssues, staleEvents, lastDateInText, looksFinished, splitFinishedCandidates, monthsInText } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
@@ -59,6 +59,7 @@ writeFileSync(entry, `
   export { FILTER_THRESHOLD, showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, clearFacet, clearAllFacets, matchesQuery, toggleFacetValue, isOptionOn, selectedValues } from ${JSON.stringify(join(root, "src/utils/listControls.js"))};
   export { EVENT_TYPES, EVENT_TYPE_LABEL, eventTypesOf, hasEventType, eventTypesPresent, eventTypeCounts, untypedEvents, UNINFORMATIVE } from ${JSON.stringify(join(root, "src/utils/eventTypes.js"))};
   export { TIERS, TIER_VALUES, TIER_RULE } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
+  export { STREET_VIBES, STREET_VIBE_VALUES, vibeOf, STREET_VIBE_RULE, STREET_TIER_RULE, TIERS_WITHOUT_STREET_MEANING } from ${JSON.stringify(join(root, "src/utils/streetVibe.js"))};
   export { REGION_NAMES, REGION_PART, canonicalRegion, isRegion, regionPart, kommunerIn, kommuneAt, kommuneNameAt, regionAt, regionOf, kommuneOf, sameRegion, regionsPresent, describeRegion, danishAddressIn } from ${JSON.stringify(join(root, "src/utils/regions.js"))};
   export { KOMMUNER, K } from ${JSON.stringify(join(root, "src/data/kommuner.js"))};
   export { TICKET_HUNT_PROMPT, ticketHuntUrls } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
@@ -83,7 +84,7 @@ writeFileSync(entry, `
   export { tierBadge, TIER_TONE } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { withoutNonModes, travelModeKey as travelModeKeyForTest } from ${JSON.stringify(join(root, "src/utils/routeOrder.js"))};
   export { travelLabel, isAtTravelOrigin, ORIGIN_TAIL, TRAVEL_ORIGIN as TRAVEL_ORIGIN_NAME, dotJoin, isFullPlanText, isReadyToBuild, stripReadyMarker, READY_MARKER, stripMarkdown, getEventDate, hasFinished, externalHref, isUpcoming, isCurrentlyLive, isConfirmedUpcoming, hasConfirmedDate, isOnOrUpcoming, soonestFirst, daysUntil, priceBand, priceBandLabel, PRICE_BANDS, storeKindOf } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
-  export { fillerWordCounts, FILLER_WORDS, FILLER_ADJECTIVES, FILLER_COUNTED, FILLER_REPEAT, AI_TELL_PHRASES } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
+  export { fillerWordCounts, FILLER_WORDS, FILLER_WORDS_OTHER, FILLER_TRIMMED, FILLER_ADJECTIVES, FILLER_COUNTED, FILLER_REPEAT, AI_TELL_PHRASES } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { arrivalRow, transitDepartureAnchor, departureParam, HOUR_OF, scanForAITells, seededShuffle } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { auditEntry, auditAll, priceLabel } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
   export { icsEscape, icsFold, icsStamp, stayMinutes, DEFAULT_STAY_MINUTES, icsUid, stopEvent, guideEvents, buildIcs, icsFilename } from ${JSON.stringify(join(root, "src/utils/calendarExport.js"))};
@@ -115,7 +116,7 @@ writeFileSync(entry, `
   export { FEEDBACK_KINDS, FEEDBACK_TYPE, MIN_REPORT_CHARS, feedbackProblem, feedbackRow } from ${JSON.stringify(join(root, "src/utils/articleFeedback.js"))};
   export { previewReportRow, travellerTurns, PREVIEW_SAID_CAP, PREVIEW_SCREEN_CAP } from ${JSON.stringify(join(root, "src/utils/articleFeedback.js"))};
   export { trimFillerRuns, trimFillerAgainst, guideWithoutFiller } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
-  export { withoutRefused } from ${JSON.stringify(join(root, "src/utils/tripBrief.js"))};
+  export { withoutRefused, refusedClauses } from ${JSON.stringify(join(root, "src/utils/tripBrief.js"))};
   export { briefConflicts, conflictLabel, conflictSlots, CONFLICTS } from ${JSON.stringify(join(root, "src/utils/briefConflicts.js"))};
   export { clusterPins, clusterBounds, pixelAt, stopBlurb, stopCard, clusterLabel, clusterHint, OVERLAP_PX, BLURB_WORDS } from ${JSON.stringify(join(root, "src/utils/mapStops.js"))};
   export { DISTRICTS, CLASH_TOWNS, CLASH_WINDOW, districtsIn, townClashes, clashNote, townKey } from ${JSON.stringify(join(root, "src/utils/chatGeography.js"))};
@@ -141,6 +142,7 @@ writeFileSync(entry, `
   export { regionPoint, regionsAsked, spokenPlaces, regionsSpokenOf, planPlaces, regionsAskedButAbsent, minutesBetweenRegions, travelDaysTo, detourKmOf, scopeConflict, scopeWarning, agreesToDrop, agreedDrop, droppedPlaces, isAQuestion, CLEAR_BY_KM, CLEAR_BY_SHARE } from ${JSON.stringify(join(root, "src/utils/tripScope.js"))};
   export { directionsEndpoint, collapsedRoute, isSameTownWalk } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { upgradeWorthIt, onFootMinutes, MIN_UPGRADE_SAVING, COLLAPSE_KM } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
+  export { rowTownFits, publishedCoords, ODD_TOWN_KM as ODD_TOWN_KM_AT_READ } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { essentials } from ${JSON.stringify(join(root, "src/data/essentials.js"))};
   export { ESSENTIAL_KINDS, ESSENTIAL_KIND_LABEL, KIND_RULE, kindOf, kindStated, cleanKind, kindPatch, hasKindChange, essentialsOnly, tipsOnly, unsortedEssentials, categoriesPresent, categoryVocabulary, categoryOf, rowsInCategory, cleanCategory, categoryAnchor, categoryColor, categoryPatch, hasCategoryChange, UNSORTED_CATEGORY, MAX_CATEGORY_WORDS, NEW_CATEGORY_ICON, linksOf, isMerged, tabForEssential } from ${JSON.stringify(join(root, "src/utils/essentialKind.js"))};
   export { scopeOf, isNational, placeScopes, scopeFits, essentialsForPlace, scopePatch, hasScopeChange } from ${JSON.stringify(join(root, "src/utils/essentialPlace.js"))};
@@ -266,7 +268,7 @@ writeFileSync(entry, `
   export { PARTNER_OPENER, PARTNER_INTRO, partnerSections, partnerCount } from ${JSON.stringify(join(root, "src/utils/partnerSheet.js"))};
   export { baseKey, staysIn as stayRunsIn, doorsFor, doorOn, sameBaseLine, nightsLabel } from ${JSON.stringify(join(root, "src/utils/stayDoors.js"))};
   export { SECTIONS as DIR_SECTIONS, ROW_KINDS, kindOf as dirKindOf, directoryLinks, pathWord, ferryDoorIn, DIRECTORY_PROMPT, rowsFromDirectory, directoryProblems, staysIn, eatsIn, islandSaysBlock, ISLAND_SAYS } from ${JSON.stringify(join(root, "src/utils/islandDirectory.js"))};
-  export { GEM_TYPE, GEM_KINDS, GEM_SECTION, WHERE_LABEL, RECHECK_DAYS, STALE_DAYS, isCouponSite, isOwnSite, shapeGem, gemProblems, gemLive, gemsView, checkedLabel, checkedAgo, gemCategory, isForStudents, gemMatches, gemFilterOptions, GEM_CATEGORIES, GEM_CATEGORY_LABEL, gemSearches, gemSearchesFor, ownPagesIn, pageAsResult, MAX_OWN_PAGES, GEMS_PROMPT, settleGems, gemRunNotes, gemsForGuide, gemHeading } from ${JSON.stringify(join(root, "src/utils/cheapGems.js"))};
+  export { GEM_TYPE, GEM_KINDS, GEM_SECTION, WHERE_LABEL, RECHECK_DAYS, STALE_DAYS, isCouponSite, isOwnSite, shapeGem, gemProblems, gemLive, gemsView, checkedLabel, checkedAgo, isDataSite, gemWhere, gemCategory, isForStudents, gemMatches, gemFilterOptions, GEM_CATEGORIES, GEM_CATEGORY_LABEL, gemSearches, gemSearchesFor, ownPagesIn, pageAsResult, MAX_OWN_PAGES, GEMS_PROMPT, settleGems, gemRunNotes, gemsForGuide, gemHeading } from ${JSON.stringify(join(root, "src/utils/cheapGems.js"))};
   export { sentencesIn, readerBody, noticeAsk, noticeText, TRANSLATE_NOTICE, translatedNotice, DEAD_ENDS } from ${JSON.stringify(join(root, "src/utils/noticeVoice.js"))};
   export { guideClaims, guideClaimNote } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { resolveStopCoords } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
@@ -294,6 +296,7 @@ writeFileSync(entry, `
   export { auditRow, auditRows, auditLinks, auditSummary, auditNote, programmeState, ticketDestination, tourDestination, linkPatch, TICKET, TOUR } from ${JSON.stringify(join(root, "src/utils/affiliateAudit.js"))};
   export { problemText, problemList, problemHeading, PROBLEM_NOTE } from ${JSON.stringify(join(root, "src/utils/planProblems.js"))};
   export { readExclusions, isExcluded, withoutExcluded, excludedNote, ruledOutFor, excludedBlock } from ${JSON.stringify(join(root, "src/utils/exclusions.js"))};
+  export { REFUSABLE_KINDS, KIND_KEYS, ruledOutKinds, kindLabels, refusedKindsBlock, rowIsKind, isRefusedKind } from ${JSON.stringify(join(root, "src/utils/kindRefusal.js"))};
   export { readPromises, brokenPromises, promiseNote, rebuildKeptMore, promiseRetryBlock, DAY as PROMISE_DAY, WILL as PROMISE_WILL, THERE as PROMISE_THERE } from ${JSON.stringify(join(root, "src/utils/chatPromises.js"))};
   export { latestRelativeAnswer, departureDateIn } from ${JSON.stringify(join(root, "src/utils/tripEvents.js"))};
   export { launderedAbsence } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
@@ -307,7 +310,7 @@ writeFileSync(entry, `
   export { TILE_STYLES, tileConfig, tileCss, DEFAULT_TILE_STYLE, addTileLayer, styleRefused, __resetRefusedStyles, __setVectorLoader, TILE_ERROR_LIMIT, readRefusedMemo, writeRefusedMemo, REFUSED_TTL_MS } from ${JSON.stringify(join(root, "src/utils/mapTiles.js"))};
   export { BASEMAP_STYLE, OPENFREEMAP_TILEJSON, OPENFREEMAP_ATTRIBUTION, OPENMAPTILES_LAYERS } from ${JSON.stringify(join(root, "src/utils/mapStyle.js"))};
   export { coverageByPart, thinnestParts, coverageSummary, discoveryFraming, isAlreadyCovered, splitAlreadyCovered } from ${JSON.stringify(join(root, "src/utils/discovery.js"))};
-  export { DISCOVERY_TARGETS, targetById, coverageByTarget, framingForTarget, placeFromText, candidateFitsTarget, splitOffTarget, describeOffTarget, DISCOVERY_MONTHS, monthById, yearForMonth, framingForMonth, splitOffMonth, describeOffMonth } from ${JSON.stringify(join(root, "src/utils/discovery.js"))};
+  export { DISCOVERY_TARGETS, targetById, coverageByTarget, framingForTarget, placeFromText, candidateFitsTarget, splitOffTarget, describeOffTarget, DISCOVERY_MONTHS, monthById, yearForMonth, framingForMonth, splitOffMonth, describeOffMonth, streetFraming, splitOffStreet, describeOffStreet } from ${JSON.stringify(join(root, "src/utils/discovery.js"))};
   export { checkPlan, planProblemsForPrompt, titlePromises, MAX_DAY_KM, dayCeilingKm } from ${JSON.stringify(join(root, "src/utils/planGate.js"))};
   export { isPremium, PAID_PLANS } from ${JSON.stringify(join(root, "src/utils/premium.js"))};
   export { addInTitle, ADD_IN_SUB, ADD_IN_CATS, addInOffers, addInSeed, addInKindOf, addInNear } from ${JSON.stringify(join(root, "src/utils/addIn.js"))};
@@ -29524,6 +29527,72 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("a Funen brief still aims at Funen", /Fyn/.test(M.framingForTarget("funen", [], { typeLabel: "places" })));
 }
 
+// ── AND THE FIFTH SCOPE: ONE STREET ────────────────────────────────
+//
+// Oliver, 22 Sep 2026: "Can you make a 'discover' that discovers all the bars
+// inside the chosen barstreets? Right now, Aarhus has nothing on its
+// barstreets." A street entry holds no list of its bars by design, so an empty
+// street is a to-do list with an address on it.
+{
+  const { streetFraming, splitOffStreet, describeOffStreet, onThisStreet, streetForSpot } = M;
+  const GADE = { id: 1, name: "Jomfru Ane Gade", isStreet: true, town: "Aalborg", location: "Jomfru Ane Gade, Aalborg" };
+  // ── THE BRIEF ──────────────────────────────────────────────────
+  const aim = streetFraming(GADE);
+  ok("every query is aimed at the street, not at the town", /AIM EVERY QUERY AT ONE STREET: Jomfru Ane Gade in Aalborg/.test(aim));
+  ok("and asked in Danish, which is where a Danish bar is written about",
+     /barer på Jomfru Ane Gade/.test(aim) && /værtshuse Jomfru Ane Gade/.test(aim));
+  ok("the job is named as the bars rather than the street itself", /find the BARS, PUBS AND CLUBS that stand on that street/.test(aim));
+  ok("and the address is named as the proof", /the address is the only thing that proves a venue is on this street rather than near it/.test(aim));
+  is("no street, no framing", streetFraming(null), "");
+  ok("no dash in it", !/[–—]/.test(aim));
+  // ── AND THE FILTER, BECAUSE A BRIEF IS NOT A FILTER ────────────
+  // Fifth time in that file. The street is the easiest of the five to get
+  // wrong, because every candidate is a real bar in the right town.
+  const CANDS = [
+    { name: "Bar A", street: "Jomfru Ane Gade 15, 9000 Aalborg" },
+    { name: "Bar B", street: "Jomfru Ane Gade 3" },
+    { name: "Elsewhere", street: "Ved Stranden 9, 9000 Aalborg" },
+    { name: "No address", street: "" },
+    { name: "Near it", hook: "a short walk from Jomfru Ane Gade" },
+  ];
+  const split = splitOffStreet(CANDS, GADE, onThisStreet);
+  is("the ones with an address on it are kept", split.kept.map(c => c.name), ["Bar A", "Bar B"]);
+  is("another street is a miss, not a find", split.elsewhere.map(c => c.name), ["Elsewhere"]);
+  // "a short walk from Jomfru Ane Gade" says the opposite of what a name match
+  // on the hook would conclude, so the hook is never read.
+  is("and no address is its own answer", split.unstated.map(c => c.name), ["No address", "Near it"]);
+  // The matcher is nightlife.js's own, injected rather than copied, so a street
+  // page and this search cannot disagree about what stands on a street.
+  ok("the matcher is the one the street page already uses",
+     onThisStreet("Jomfru Ane Gade 15, 9000 Aalborg", GADE)
+     && streetForSpot({ location: "Jomfru Ane Gade 15, 9000 Aalborg" }, [GADE]) === GADE);
+  // A street row named with its town, which the Studio's own placeholder asks
+  // for, still matches an address that never carries one.
+  ok("a street named with its town still matches a bare address",
+     onThisStreet("Jomfru Ane Gade 15, 9000 Aalborg", { name: "Jomfru Ane Gade Aalborg", town: "Aalborg" }));
+  is("no street chosen filters nothing", splitOffStreet(CANDS, null, onThisStreet).kept.length, CANDS.length);
+  // ── AND IT IS NEVER SILENTLY SHORTER ───────────────────────────
+  const line = describeOffStreet(split.elsewhere, split.unstated, GADE);
+  ok("both counts are said, separately", /1 gave an address on another street/.test(line) && /2 gave no address at all/.test(line));
+  ok("and the reason is the one that matters", /A bar published onto the wrong street is worse than one not published/.test(line));
+  ok("the unstated ones are not written off", /may well be on it: the search never printed one/.test(line));
+  is("nothing dropped says nothing", describeOffStreet([], [], GADE), "");
+  ok("no dash in it", !/[–—]/.test(line));
+  // ── AND THE PANEL RUNS IT ──────────────────────────────────────
+  const appD = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the street is resolved from the published rows, for venues only",
+     /const streetRow = type === "night" && discoverStreet\s*\?\s*nightlifeStreets\.find\(st => st\?\.name === discoverStreet\) \|\| null/.test(appD));
+  ok("the framing is appended to the aim", /\+ streetFraming\(streetRow\);/.test(appD));
+  ok("and the filter runs after the other four",
+     /splitOffMonth\(inRegion, discoverMonth\);[\s\S]{0,600}?splitOffStreet\(inMonth, streetRow, onThisStreet\)/.test(appD));
+  ok("the candidate list is asked for an address it read rather than worked out",
+     /Never work an address out from the name of the place/.test(appD) && /"street": "\.\.\."/.test(appD));
+  ok("the count on each chip says which street has nothing on it",
+     /const n = barsOnStreet\(st, nightlifeSpots, nightlifeStreets\)\.length;/.test(appD));
+  ok("and the empty state does not call the street empty",
+     /a street with bars on it that nobody prints an address for is a search problem rather than an empty street/.test(appD));
+}
+
 
 // ── "ONE SOURCE? WHAT DA FK" ─────────────────────────────────────────
 //
@@ -30794,7 +30863,10 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // ── AND IT IS WIRED, BRIEF AND FILTER BOTH ──────────────────────
   const appM = readFileSync(join(root, "src/App.jsx"), "utf8");
   ok("the brief carries the month", /\+ framingForMonth\(discoverMonth, new Date\(\)\)/.test(appM));
-  ok("the pass filters on it", /const \{ kept, dropped: wrongMonth \} = splitOffMonth\(inRegion, discoverMonth\)/.test(appM));
+  // `inMonth` since 22 Sep 2026, when the street filter was added after this
+  // one and took the `kept` name off it. Four filters run in a row now, each
+  // handing its survivors to the next, so only the last of them is `kept`.
+  ok("the pass filters on it", /const \{ kept: inMonth, dropped: wrongMonth \} = splitOffMonth\(inRegion, discoverMonth\)/.test(appM));
   ok("and it runs after the region filter, on what that kept", /splitOffMonth\(inRegion, discoverMonth\)/.test(appM));
   ok("the panel reports what it dropped", /setDiscoverOffMonth\(describeOffMonth\(wrongMonth, discoverMonth\)\)/.test(appM));
   ok("with a render gated on it", /\{\s*discoverOffMonth\s*&&/.test(appM));
@@ -40024,7 +40096,12 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // shapeForLive's own output is the real proof that what it falls back to is "".
   // Three since the island type, which carries a tier for the same reason a
   // town does and falls back to the same empty string rather than to a rank.
-  is("every type that carries a tier still has a fallback there", (sc.match(/tier: t\.tier \|\|/g) || []).length, 3);
+  // ── AND FOUR SINCE THE BAR STREET, 22 SEP 2026 ──────────────────
+  // Oliver: "a tourist might pick between 3 streets, not knowing that Jomfru
+  // Ane Gade is by far the most popular." A street is ranked like everything
+  // else now, which means it falls back like everything else: to nothing, so
+  // the publish gate can refuse an unranked one. See utils/streetVibe.js.
+  is("every type that carries a tier still has a fallback there", (sc.match(/tier: t\.tier \|\|/g) || []).length, 4);
   is("and it is the empty string, measured on the output", shapeForLive("town", { name: "X", tier: "" }).tier, "");
 
   const findings = auditEntry({ type: "festival", payload: shaped }).findings || [];
@@ -52373,9 +52450,13 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 
   // ── THE OPERATORS, ONCE FOR THE TRIP ─────────────────────────────
   {
-    const pt = byUrgency(run({ mode: "public transport" }));
+    // Louisiana to Møns Klint is about 130 km, and since 22 Sep 2026 the DSB
+    // and FlixBus lines need a hop that measures long. See the block on "the
+    // long hops" further down for the guide that had none and was sold coaches.
+    const farHop = (a, b) => a?.name === "Louisiana" && b?.name === "Møns Klint" ? 130 : 12;
+    const pt = byUrgency(run({ mode: "public transport", legKm: farHop }));
     const tl = pt.filter(l => l.kind === COST_KIND.TRANSPORT);
-    is("a public transport trip lists three ways of paying for it", tl.length, 3);
+    is("a public transport trip with a long hop lists three ways of paying for it", tl.length, 3);
     is("each pointing somewhere different", new Set(tl.map(l => l.href)).size, 3);
     ok("and each says what it sells", tl.every(l => /trains|coaches|buses/.test(l.forWhat)));
     // ── A HEADING ON THIS LIST NAMES A CHARGE ─────────────────────
@@ -52391,7 +52472,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // something that takes no money.
     {
       const planners = [OPERATORS.rejseplanen.name, "Google Maps", "Rejsebillet"];
-      const all = byUrgency(run({ mode: "public transport" }));
+      const all = byUrgency(run({ mode: "public transport", legKm: farHop }));
       ok("no line on a list of what you pay is headed by a free journey planner",
         all.every(l => !planners.some(n => l.name.trim().toLowerCase() === n.toLowerCase())));
       // ── AND IT ARRIVES WITH THE CROSSING ON IT ──────────
@@ -60441,6 +60522,83 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 
 // ── "HOW DOES THE AI DETERMINE THE RATING?" ─────────────────────────
 //
+// ── WHICH OF THE THREE STREETS, AND WHAT HAPPENS ON IT ─────────────
+//
+// Oliver, 22 Sep 2026: "I think it's unfortunate that on the bar streets,
+// there is no tier or popularity rating.. like at Aalborg, we both know what
+// street is the most popular and who goes there. But a tourist might pick
+// between 3 streets, not knowing that Jomfru Ane Gade is by far the most
+// popular." Then the vocabulary, his own and better than the one I offered:
+// "Main street, pre-drinking street, quite street.. no?" And then the word
+// itself: "change to 'evening'.. because some countries go to main streets at
+// 02.00.. which is NOT the case in Denmark."
+{
+  const { STREET_VIBES, STREET_VIBE_VALUES, vibeOf, STREET_VIBE_RULE, STREET_TIER_RULE, TIERS_WITHOUT_STREET_MEANING, tierOf, shapeForLive, studioPrompts } = M;
+  is("his three, and no fourth", STREET_VIBE_VALUES, ["Main strip", "Where the evening starts", "Quiet street"]);
+  // EVENING, not night. A reader in Madrid hears "night" as two in the
+  // morning, by which time the Danish street he is describing has emptied.
+  ok("and the middle one says evening", !/night starts/i.test(STREET_VIBE_VALUES.join(" ")));
+  ok("with the reason written where it will be read",
+     /Denmark is not Spain/.test(STREET_VIBES.find(v => v.id === "start").meaning));
+  // Read loosely, because these rows are written over weeks by a model that
+  // capitalises differently. Tolerance of typography, never of meaning.
+  is("the three read back, however they were written",
+     ["Main strip", "main street", "Where the evening starts", "pre-drinking street", "Quiet street"].map(v => vibeOf({ vibe: v })?.id),
+     ["main", "main", "start", "start", "quiet"]);
+  // His own first word still reads, so a street drafted before the rename is
+  // not silently unranked.
+  is("and a row drafted before the rename still reads", vibeOf({ vibe: "Where the night starts" })?.id, "start");
+  is("a fourth kind is refused rather than guessed at", vibeOf({ vibe: "Vibrant" }), null);
+  is("and an empty one is empty", vibeOf({ vibe: "" }), null);
+  // ── EVERY VIBE HAS CRITERIA, NOT JUST A NAME ────────────────────
+  // placeThemes.js has the case at length: `tier` was four labels and a slash
+  // list while `themes` beside it got a paragraph of judgement.
+  ok("every vibe has a written meaning", STREET_VIBES.every(v => v.meaning.length > 80));
+  ok("and the rule is built from the list rather than typed beside it",
+     /\$\{STREET_VIBES\.map\(v => `- \$\{v\.value\}: \$\{v\.meaning\}`\)\.join/
+       .test(readFileSync(join(root, "src/utils/streetVibe.js"), "utf8")));
+  ok("the rule refuses a fourth", /Never invent a fourth kind/.test(STREET_VIBE_RULE));
+  ok("and refuses to soften one", /never soften a main strip into a quiet street/.test(STREET_VIBE_RULE));
+  // ── AND THE TIER KEEPS ITS OWN JOB ──────────────────────────────
+  // The vibe answers which street tonight, so the tier answers the question it
+  // answers everywhere else: is this worth travelling for. Two fields that
+  // mostly agreed would be a redundancy that goes stale.
+  ok("the street tier is measured against the country, not the town",
+     /ANYWHERE IN DENMARK/.test(STREET_TIER_RULE) && /not against the other streets in its own town/.test(STREET_TIER_RULE));
+  ok("and it says out loud that the two may disagree",
+     /those two fields often disagree and both are right/.test(STREET_TIER_RULE));
+  is("every tier has a street reading, so the rule cannot print an undefined", TIERS_WITHOUT_STREET_MEANING(), []);
+  // ── BOTH REACH THE DRAFT, AND BOTH SURVIVE PUBLISH ──────────────
+  const streetPrompt = studioPrompts("Jomfru Ane Gade").nightStreet;
+  ok("the prompt carries both rules", streetPrompt.includes(STREET_VIBE_RULE) && streetPrompt.includes(STREET_TIER_RULE));
+  ok("and asks for both fields", /"tier": "EXACTLY one of/.test(streetPrompt) && /"vibe": "EXACTLY one of/.test(streetPrompt));
+  ok("everything the prompt asks for is something the readers accept",
+     STREET_VIBE_VALUES.every(v => !!vibeOf({ vibe: v })) && streetPrompt.includes(STREET_VIBE_VALUES.join(" / ")));
+  const street = shapeForLive("nightStreet", { name: "Jomfru Ane Gade", town: "Aalborg", tier: "Can't Miss Out", vibe: "Main strip", desc: "One pedestrian street of bars." });
+  is("a published street carries the vibe", street.vibe, "Main strip");
+  is("and the tier, read by the same reader every other type uses", tierOf(street)?.id, "must");
+  // A word outside the three is dropped on the way in rather than stored, so
+  // the publish gate sees an empty field and says which three it wants.
+  is("a fourth kind never reaches the database",
+     shapeForLive("nightStreet", { name: "X", vibe: "Vibrant", desc: "d" }).vibe, "");
+  is("and an unjudged street publishes with no rank rather than an invented one",
+     shapeForLive("nightStreet", { name: "X", desc: "d" }).tier, "");
+  // ── AND THE GATE REFUSES BOTH GAPS ──────────────────────────────
+  const appV = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the publish gate asks for a vibe the way it asks for a tier",
+     /if \("vibe" in shaped && !vibeOf\(shaped\)\) \{/.test(appV));
+  ok("and names the three it accepts, so the refusal can be followed",
+     /STREET_VIBE_VALUES\.map\(v => `"\$\{v\}"`\)\.join\(", "\)/.test(appV));
+  // ── AND THE SCREEN HIS SENTENCE WAS ABOUT ───────────────────────
+  // Three streets in a town looked identical on this list, so the choice was
+  // made on the name.
+  ok("the town's list of streets shows the vibe", /\{vibeOf\(street\)\.emoji\} \{vibeOf\(street\)\.label\}/.test(appV));
+  ok("and the street's own page shows both", /\{\(vibeOf\(street\) \|\| tierBadge\(street\)\) && \(/.test(appV));
+  // The paste-out path is the other way a row reaches the data file, and a
+  // field missing there publishes a street with no rank by the back door.
+  ok("the pasted row carries both too", /tier: \$\{J\(t\.tier\)\}, vibe: \$\{J\(vibeOf\(t\)\?\.value \|\| ""\)\}/.test(appV));
+}
+
 // Oliver, 2 Sep 2026. It did not. The drafting prompts handed the model four
 // labels and a slash, with no criteria at all — while `themes`, the field
 // directly beside it, got a full paragraph of judgement.
@@ -60867,6 +61025,29 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   const { trimFillerRuns, trimFillerAgainst, fillerWordCounts, FILLER_WORDS, FILLER_REPEAT, cleanReaderProse } = M;
 
   ok("the word he named is on the list", FILLER_WORDS.includes("actually"));
+  // ── AND THE SAME WORD IN THE LANGUAGE THEY WROTE IN ──────────────
+  //
+  // Oliver, 22 Sep 2026, on a Danish test conversation: "faktisk" all over a
+  // reply his own four words would have been cut from. The trim runs on the
+  // finished reply and the reply is written in the traveller's language.
+  {
+    ok("his Danish counterpart is trimmed too", M.FILLER_TRIMMED.includes("faktisk") && M.FILLER_TRIMMED.includes("simpelthen"));
+    ok("and his four are still all of it in English", M.FILLER_WORDS.join(",") === "actually,truly,genuinely,simply");
+    ok("the trim reads the wider list by default",
+       /export const trimFillerRuns = \(texts, \{ words = FILLER_TRIMMED/.test(readFileSync(join(root, "src/utils/helpers.js"), "utf8")));
+    // The one that carries meaning stays. Cutting it blind rewrites the
+    // sentence, which is what FILLER_ADJECTIVES is already written about.
+    ok("and a word that means something is left alone",
+       !M.FILLER_TRIMMED.includes("egentlig") && !M.FILLER_TRIMMED.includes("virkelig"));
+    const da = ["Ribe er faktisk den ældste by i Danmark.", "Det er faktisk værd at se.", "Turen tager faktisk to timer."];
+    const cutDa = trimFillerRuns(da);
+    is("two of the three lose it, and the first keeps one",
+       cutDa.filter(t => /\bfaktisk\b/i.test(t)).length, 1);
+    ok("and the sentence still reads", /Det er værd at se\./.test(cutDa[1]) || /Det er værd at se\./.test(cutDa[2]));
+    // The counting half is a different question and stays on his four plus the
+    // adjective: a Studio audit is about the site's own English copy.
+    ok("the audit still counts his own words", M.FILLER_COUNTED.includes("genuine") && !M.FILLER_COUNTED.includes("faktisk"));
+  }
   // The budget is the one already agreed in August, not a new one.
   is("and the budget is the one already written down", FILLER_REPEAT, 2);
 
@@ -62185,6 +62366,10 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     "src/utils/helpers.js:priceBandLabel",
     "src/utils/helpers.js:seasonRank",
     "src/utils/interestFit.js:THEMES_WITHOUT_WORDS",
+    // Same shape and same reason as the line above it: a completeness check the
+    // suite runs, so that a tier cannot exist with no street reading behind it
+    // and print an undefined into a drafting prompt.
+    "src/utils/streetVibe.js:TIERS_WITHOUT_STREET_MEANING",
     "src/utils/linkPreview.js:articleHtml",
     "src/utils/linkPreview.js:guideIdFromPath",
     "src/utils/linkPreview.js:injectArticle",
@@ -62198,7 +62383,6 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     "src/utils/mapTiles.js:styleRefused",
     "src/utils/modelProvenance.js:readerFacingStages",
     "src/utils/nearbyPlaces.js:nearbyLabel",
-    "src/utils/operators.js:isLongLeg",
     "src/utils/pageScan.js:describeRead",
     "src/utils/placeChoice.js:applyChoice",
     "src/utils/placeChoice.js:choiceNote",
@@ -63798,13 +63982,29 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("a month on its own is not ready, because nothing has asked which day",
        !hisBrief({ asked: allAsked }).ready);
     is("and that is the one thing still loose", hisBrief({ asked: allAsked }).vagueToAsk, ["when"]);
+    // ── AND ASKING IS NOT ANSWERING, 22 SEP 2026 ──────────────────
+    //
+    // This fixture used to close on `asked` alone: the nights question was on
+    // the list of things put to him, no turn of his answered it, and the brief
+    // called that declined and went ready. That is the live case of 22 Sep,
+    // where "Everything I need, 7 of 7" appeared beside the reply that was
+    // asking the hotel question. So the question is now put AND answered, with
+    // a refusal, which is the honest way a blocking slot closes with nothing in
+    // it: he was asked which nights and said he did not know.
+    const NIGHTS_REFUSED = {
+      travellerTurns: [...HIS_TURNS, "Not sure yet"],
+      travellerText: [...HIS_TURNS, "Not sure yet"].join("\n"),
+      answering: [...HIS_ASKS, ["stayWhen"]],
+    };
+    ok("the nights question put and left open is still open",
+       hisBrief({ asked: [...allAsked, "when:sharper"] }).missing.includes("stayWhen"));
     ok("and the brief is ready on facts rather than on silence",
-       hisBrief({ asked: [...allAsked, "when:sharper"] }).ready);
+       hisBrief({ ...NIGHTS_REFUSED, asked: [...allAsked, "when:sharper"] }).ready);
     // The half that stops it deadlocking: the question is asked once, the month
     // is still a month, and the trip goes ahead. Refusing to build on a loose
     // answer forever would be the intake form he has objected to twice.
     ok("and a month that has been queried once stops holding the build",
-       hisBrief({ asked: [...allAsked, "when:sharper"] }).vague.includes("when"));
+       hisBrief({ ...NIGHTS_REFUSED, asked: [...allAsked, "when:sharper"] }).vague.includes("when"));
   }
 
   // ── AND EIGHT CHILDREN ARE EIGHT CHILDREN ─────────────────────────
@@ -64407,7 +64607,14 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       // The sharpening keys are in here for the reason the list itself is: this
       // fixture means every question has been put once, and a month-precision
       // date now carries a second one. See sharperAsk.
-      const calm = briefBlockC(hisBrief({ asked: ["origin", "days", "when", "party", "interests", "transport", "stay", "stayWhen", "when:sharper", "party:sharper"] }), []);
+      // And the nights question answered with a refusal, since 22 Sep 2026: a
+      // question put and not yet answered no longer closes on its own.
+      const calm = briefBlockC(hisBrief({
+        travellerTurns: [...HIS_TURNS, "Not sure yet"],
+        travellerText: [...HIS_TURNS, "Not sure yet"].join("\n"),
+        answering: [...HIS_ASKS, ["stayWhen"]],
+        asked: ["origin", "days", "when", "party", "interests", "transport", "stay", "stayWhen", "when:sharper", "party:sharper"],
+      }), []);
       ok("a brief with no conflict still closes the way it always did",
          /YOU HAVE EVERYTHING YOU NEED/.test(calm) && !/DO NOT FIT TOGETHER/.test(calm));
     }
@@ -68533,6 +68740,54 @@ SOURCE: https://www.tripadvisor.com/whatever`;
        /\$\{briefBlock\(brief, conflicts, \{ picked: pickedExtras, turnedDown \}\)\}/.test(app));
   }
 
+  // ── 1b. AND WHAT THEY TICKED IS A BRIEF, NOT A RECORD ────────────
+  //
+  // Oliver, 22 Sep 2026, testing the chat with Food and Shopping ticked on the
+  // form. Neither word appeared in either of the first two replies, and the
+  // second one offered a museum. The slot was filled and the block printed it
+  // under a heading about not asking again, which is a rule about questions.
+  // Nothing said the answer was supposed to steer what came back.
+  {
+    const ticked = briefBlock({ known: { interests: { value: "Food, History", source: "intake", label: "what kind of trip" } }, missing: [], unanswered: [], declined: [] });
+    ok("the ticks are still recorded as known", /what kind of trip: Food, History \(from the form they filled in\)/.test(ticked));
+    ok("and now say what to do with them",
+       /WHAT THEY CAME FOR IS Food, History\. That is the trip/.test(ticked));
+    ok("named in the next reply, which is where the failure was",
+       /the first real thing you put on the table in your next reply is one of those, by name/.test(ticked));
+    // A person who ticks Food has not ruled out a castle. The refusals are a
+    // different block, and this one may not become a second one.
+    ok("and it is not a fence, because a tick is not a refusal",
+       /never as the main thing and never instead/.test(ticked) && !/only|never offer/i.test(ticked.split("WHAT THEY CAME FOR")[1]));
+    is("no interests, no line", /WHAT THEY CAME FOR/.test(briefBlock({ known: {}, missing: [], unanswered: [], declined: [] })), false);
+    const cameLine = ticked.split("\n").find(l => /WHAT THEY CAME FOR/.test(l)) || "";
+    ok("the line carries no dash and no banned word", !!cameLine && !DASH.test(cameLine) && !BANNED.test(cameLine));
+  }
+
+  // ── 1c. AND NOBODY SAID THERE WERE CHILDREN ──────────────────────
+  //
+  // Oliver, 22 Sep 2026, on a test conversation where no child was ever
+  // mentioned: places offered because they suit kids. The mirror of the
+  // nightlife fault from 12 September, where the whole published bar list went
+  // into every prompt and a night out was raised in four conversations out of
+  // four.
+  {
+    const adults = briefBlock({ known: { party: { value: "2 adults", source: "said", hasKids: false } }, missing: [], unanswered: [], declined: [] });
+    ok("a party with no child in it is told so",
+       /NO CHILDREN HAVE BEEN MENTIONED ON THIS TRIP\. Do not offer a place because it suits kids/.test(adults));
+    ok("and it stays open to them saying otherwise", /If they name one later, that is the moment it changes/.test(adults));
+    const kids = briefBlock({ known: { party: { value: "2 adults and 2 kids", source: "intake", hasKids: true } }, missing: [], unanswered: [], declined: [] });
+    ok("and a party with children is told the other half", /THERE ARE CHILDREN ON THIS TRIP/.test(kids) && /never plan a night out/.test(kids));
+    // A silence is not an answer. Telling the model to plan for adults here
+    // would be the same invention in the other direction.
+    const quiet = briefBlock({ known: {}, missing: ["party"], unanswered: [], declined: [] });
+    ok("and an unstated party assumes neither way",
+       /NOBODY HAS SAID WHO IS COMING\. Do not assume children either way/.test(quiet));
+    ok("which is not the same line as an answered one", !/NO CHILDREN HAVE BEEN MENTIONED/.test(quiet));
+    const kidLines = [adults, kids, quiet].flatMap(b => b.split("\n")).filter(l => /CHILDREN|WHO IS COMING/.test(l));
+    ok("the lines carry no dash and no banned word",
+       kidLines.length === 3 && kidLines.every(l => !DASH.test(l) && !BANNED.test(l)));
+  }
+
   // ── 2. A NO HAS SOMEWHERE TO LIVE, AND IT IS NOT A SENTENCE ──────
   //
   // rejectedIn reads refusals out of TEXT. A tap is not text, and faking one by
@@ -68723,6 +68978,117 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     ok("the row under the map names what a No removed", /uiT\("map\.leftOut", uiCode\)/.test(mini));
     ok("and each name is a button that withdraws the No", /onClick=\{\(\) => \{ if \(typeof onRestore === "function"\) onRestore\(name\); \}\}/.test(mini));
     ok("wired to the list", /onRestore=\{\(name\) => setTurnedDown\(prev => \(prev \|\| \[\]\)\.filter\(n => n !== name\)\)\}/.test(app));
+  }
+
+  // ── 4b. AND A KIND THEY REFUSED, WHICH IS NOT A NAME ─────────────
+  //
+  // Oliver, 22 Sep 2026, testing the chat himself: "We mostly care about food
+  // and shopping, not museums", and two turns later Gemlyx offered Louisiana,
+  // described as a walk through a sculpture park. The refusal was read, in the
+  // sense that the interests slot came back with food and shopping and no
+  // museums in it. Nothing carried the other half: that a whole category had
+  // been refused. So it narrowed what he wanted and narrowed nothing about
+  // what he was shown, and the reframing is the part worth pinning, because
+  // the model did not offer him a museum, it offered him the garden around
+  // one. See utils/kindRefusal.js.
+  {
+    const { ruledOutKinds, refusedKindsBlock, kindLabels, rowIsKind, isRefusedKind, REFUSABLE_KINDS, KIND_KEYS, refusedClauses } = M;
+    // His sentence, which is the whole reason this file exists.
+    is("the refused category is read out of his own sentence",
+       ruledOutKinds("We mostly care about food and shopping, not museums"), ["museum"]);
+    // And the half of the sentence that was not a refusal is untouched, which
+    // is what the clause window in tripBrief.js is for.
+    ok("and the half in front of it still says what they want",
+       M.withoutRefused("We mostly care about food and shopping, not museums").includes("food and shopping"));
+    is("a refusal after the thing is read too", ruledOutKinds("Museums bore us"), ["museum"]);
+    is("and the flat verdict", ruledOutKinds("museums are not for me"), ["museum"]);
+    is("Danish, off the same clause reader", ruledOutKinds("vi vil ikke på museum"), ["museum"]);
+    // ── THE TWO WAYS THIS COULD RULE OUT A TRIP NOBODY REFUSED ─────
+    // "Not just museums" is a request for MORE, and exclusions.js has carried
+    // the same guard for place names since August, written the day "It's not
+    // just Legoland we're after" ruled Legoland out.
+    is("not just museums asks for more, not for none", ruledOutKinds("It's not just museums we want"), []);
+    is("and only, in their words or in Danish", ruledOutKinds("ikke kun museer, tak"), []);
+    // A named museum is ONE museum. exclusions.js reads the name out of that
+    // sentence and rules it out by name, which is the whole right answer to
+    // it: reading it as a category takes Kronborg and Louisiana out as well.
+    is("a named museum is a place, not a category", ruledOutKinds("I don't want to do the National Museum"), []);
+    is("in either order", ruledOutKinds("no Museum Jorn for us"), []);
+    // And the capital that starts a sentence is evidence of nothing.
+    is("a capital at the start of the clause proves nothing", ruledOutKinds("No museums please"), ["museum"]);
+    // Nothing widens. Somebody tired of museums has said nothing about a
+    // castle, which is the reason this file keeps its own vocabulary instead
+    // of running interestFit's themes backwards.
+    is("a refused kind stays one kind", ruledOutKinds("no museums this time, we want history"), ["museum"]);
+    is("and another kind is its own line", ruledOutKinds("not into castles"), ["castle"]);
+    is("a sentence with no refusal in it rules out nothing", ruledOutKinds("We love food and history"), []);
+    is("and an empty conversation", ruledOutKinds(""), []);
+    // The clause reader is tripBrief's, so the two cannot disagree about where
+    // a refusal ends.
+    ok("the clauses come from the same reader the interests slot uses",
+       refusedClauses("We love food, not museums").some(c => /not museums/i.test(c)));
+    ok("and kindRefusal imports it rather than matching a second time",
+       /import \{ refusedClauses \} from "\.\/tripBrief"/.test(readFileSync(join(root, "src/utils/kindRefusal.js"), "utf8")));
+    // ── THE BLOCK, AND THE DOOR IT HAS TO CLOSE ───────────────────
+    const block = refusedKindsBlock(["museum"]);
+    ok("the block names what was ruled out", /KINDS OF PLACE THE TRAVELER RULED OUT/.test(block) && /- museums/.test(block));
+    ok("and closes the reframing, which is how the museum got through",
+       /its garden, its park, its café, its shop, the walk around it or the view of the building are the same place/.test(block));
+    ok("and says the refusal is narrow, so nothing else is quietly dropped",
+       /a refusal of one kind says nothing about any other/.test(block));
+    is("nothing ruled out is no block at all", refusedKindsBlock([]), "");
+    const blockLines = block.split("\n").filter(Boolean);
+    ok("the block carries no dash and no banned word",
+       blockLines.length > 0 && blockLines.every(l => !DASH.test(l.replace(/^- /, "")) && !BANNED.test(l)));
+    is("the labels are readable rather than keys", kindLabels(["nightlife"]), ["bars, pubs and clubs"]);
+    is("and an unknown key is dropped rather than printed", kindLabels(["museum", "nonsense"]), ["museums"]);
+    // ── AND THE CARDS, BECAUSE A PROMPT RULE IS NOT A FILTER ──────
+    ok("a museum row is one", rowIsKind({ name: "Louisiana Museum of Modern Art", type: "Art museum" }, "museum"));
+    // The description is prose ABOUT a place. A town whose description names
+    // the museum on its square is not a museum, and filtering on it would take
+    // the town out of the trip.
+    ok("a town that merely mentions one is not one",
+       !rowIsKind({ name: "Aarhus", type: "City", desc: "Home to the ARoS museum" }, "museum"));
+    const pool4b = [{ name: "Louisiana", type: "Museum" }, { name: "Torvehallerne", type: "Food market" }];
+    is("the pool drops the refused kind",
+       pool4b.filter(r => !isRefusedKind(r, ["museum"])).map(r => r.name), ["Torvehallerne"]);
+    is("and nothing refused filters nothing", pool4b.filter(r => !isRefusedKind(r, [])).length, 2);
+    ok("no kind is unreachable, so nothing can be tagged and never refused",
+       KIND_KEYS.every(k => REFUSABLE_KINDS[k].said.length > 0 && REFUSABLE_KINDS[k].row.length > 0 && !!REFUSABLE_KINDS[k].label));
+    // ── AND IT REACHES ALL THREE PLACES A PLACE IS OFFERED ────────
+    const app4b = readFileSync(join(root, "src/App.jsx"), "utf8");
+    is("both build prompts carry it, beside the names",
+       (app4b.match(/\$\{ruledOutBlock\}\$\{kindsOutBlock\}/g) || []).length, 2);
+    ok("built once, from the traveller's own turns",
+       /const kindsOut = ruledOutKinds\(saidByTravellerForGuide\);\s*const kindsOutBlock = refusedKindsBlock\(kindsOut\);/.test(app4b));
+    ok("and the chat prompt carries it too",
+       /const kindsRuledOut = refusedKindsBlock\(ruledOutKinds\(travellerTurns\.join\("\\n"\)\)\);/.test(app4b)
+       && /\$\{flyingIn\}\$\{kindsRuledOut\}/.test(app4b));
+    const pm4b = readFileSync(join(root, "src/utils/previewMatch.js"), "utf8");
+    ok("and the preview pool filters on it, on the path every return goes through",
+       /const kindsOut = ruledOutKinds\(ownWords\);/.test(pm4b)
+       && /\.filter\(r => !kindsOut\.length \|\| !isRefusedKind\(r, kindsOut\)\)/.test(pm4b));
+    // Their own turns. Gemlyx names museums constantly, and a reader over the
+    // whole transcript would rule out a category off Gemlyx's own sentence.
+    ok("never off Gemlyx's own words",
+       !/ruledOutKinds\(convoText\)/.test(app4b) && !/ruledOutKinds\(text\)/.test(pm4b));
+    // ── AND ONE TICK CAME OFF THE FORM ENTIRELY ───────────────────
+    //
+    // Oliver, 22 Sep 2026: "I think you should delete shopping.. people can
+    // add it into their trip from 'cheap gems' if they want." A tick is a
+    // promise that the trip gets built around it, and that one could not keep
+    // it: no row carries a shopping theme, so it filled the brief with a word
+    // that steered nothing, in front of a page of real shops with a checked
+    // price on each.
+    ok("the form offers four, and shopping is not one of them",
+       /\["History", "Nature", "Food", "Nightlife"\]\.map\(i => \(/.test(app4b));
+    // Typed in a sentence it is still an interest. A person who writes the
+    // word has said something; the button is what came off.
+    ok("and the word still reads as an interest when they type it",
+       String(M.readBrief({ travellerText: "We want a few days of shopping in Copenhagen" })?.known?.interests?.value || "").toLowerCase().includes("shopping"));
+    // And a refusal of it is still a refusal, because they can still say no
+    // to the shops on that page.
+    is("and a refusal of it still reads", ruledOutKinds("no shopping for us"), ["shopping"]);
   }
 
   // ── 5. THE CARD ITSELF, READ OFF THE SCREEN ──────────────────────
@@ -71243,7 +71609,9 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     ok("the source is a number, so a page cannot be invented", /SOURCE IS THE NUMBER OF THE RESULT/.test(P));
     ok("a saving is copied as the brand states it", /"Up to 20%" stays "up to 20%"/.test(P));
     ok("the catch is the visitor's and never invented", /CATCH is what stops a VISITOR/.test(P) && /Never invent a catch/.test(P));
-    ok("a brand's claim stays theirs", /A BRAND'S CLAIM ABOUT ITSELF IS THEIRS/.test(P));
+    // 22 Sep 2026: a ranking is hedged, what the shop IS is stated plainly.
+    ok("a ranking a brand gives itself stays theirs", /A RANKING A BRAND GIVES ITSELF IS THEIRS/.test(P));
+    ok("while what the shop is is stated plainly", /never "they say low prices are central"/.test(P));
     ok("coupon sites are named in the refusals", /LEAVE OUT: coupon code sites/.test(P));
     is("five searches for a town", G.gemSearches("Aarhus").length, 5);
     // Oliver, 21 Sep 2026, of Restaurant Sporvejen: "So food is covered in
@@ -71359,7 +71727,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     ok("the Studio panel publishes through shapeForLive", /payload: shapeForLive\(GEM_TYPE, g\)/.test(appG));
     ok("a blocked row cannot be ticked", /disabled=\{st\.blocks\}/.test(panelG));
     ok("and a lead from somebody else's page starts unticked", /g\.own && !statusOf\(g\)\.blocks/.test(panelG));
-    ok("coupon results never reach the model", /isCouponSite\(url\)\) continue/.test(panelG));
+    ok("coupon and company-database results never reach the model", /isCouponSite\(url\) \|\| isDataSite\(url\)\) continue/.test(panelG));
     ok("a name already published is not offered twice", /Already published under this name/.test(panelG));
     const liveG = readFileSync(join(root, "src/utils/liveContent.js"), "utf8");
     ok("liveContent files a gem into its own array", /row\.type === GEM_TYPE\) gems\.push/.test(liveG));
@@ -72544,6 +72912,213 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   is("while a hostel stays", out[1].glance.recommendedStay, "Danhostel Ribe");
   is("and with no budget said nothing changes", M.withoutMismatchedStays(days, "")[0].glance.recommendedStay, "Tonderhus Hotel");
   ok("the build applies it after the check", /stayProblems\(parsed\.days, budgetSays\)\];[\s\S]{0,200}?parsed\.days = withoutMismatchedStays\(parsed\.days, budgetSays\);/.test(stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"))));
+}
+
+// ── THE LIVE TEST OF 22 SEP 2026, SECOND READ: FOUR THINGS THE PAGE SAID ─
+//
+// The same two travellers from Germany, on public transport in South Jutland:
+// Højer and Hoejer Sluse, then "Vadehavet" and Møgeltønder, then three days in
+// Ribe. The finished guide said four things nobody measured, and each block
+// below is one of them.
+{
+  const { resolveStopCoordsDetailed, legDistanceKm, rowTownFits, publishedCoords, lookupRealPlace,
+          coordFitsTown, ODD_TOWN_KM, ODD_TOWN_KM_AT_READ, MAX_TOWN_KM, freeEntrance, towns, TOWN_COORDS,
+          costLines, COST_KIND, LONG_LEG_KM, readBrief, briefProgress, progressLine } = M;
+
+  // Published the way liveContent pushes rows at runtime: Højer is a town with
+  // a frame, and the national park is a free entry listed under Ribe.
+  const HOJER = { lat: 54.963, lon: 8.706 };
+  const townsBefore = towns.length, freeBefore = freeEntrance.length;
+  const hadHojer = TOWN_COORDS["Højer"];
+  towns.push({ id: 100901, name: "Højer", __lat: HOJER.lat, __lon: HOJER.lon });
+  TOWN_COORDS["Højer"] = [HOJER.lat, HOJER.lon];
+  freeEntrance.push({ id: 100902, name: "Nationalpark og Verdensarv Vadehavet", city: "Ribe", __lat: 55.33, __lon: 8.70 });
+
+  // ── (b) "3 HOURS 34 MINS, HOEJER SLUSE TO VADEHAVET" ────────────
+  //
+  // Both stops in Højer by the guide's own town field. The short name matched
+  // the Ribe row through the widening tier, its coordinate is 41 km from the
+  // Højer point, which MAX_TOWN_KM waves through, and Google was paid to route
+  // to Ribe. The row's OWN town is the claim that disagrees.
+  {
+    const row = lookupRealPlace("Vadehavet");
+    is("the short stop name still finds the national park row", row?.name, "Nationalpark og Verdensarv Vadehavet");
+    ok("the coordinate check alone lets it through, which is the hole", coordFitsTown({ lat: 55.33, lon: 8.70 }, "Højer").ok);
+    const fit = rowTownFits(row, "Højer");
+    ok("the row's own town refuses it", !fit.ok);
+    is("and names the rule", fit.why, "row-in-another-town");
+    is("and both towns, so a log line can say which two", [fit.town, fit.rowTown], ["Højer", "Ribe"]);
+    ok("and the distance between them, which is past the line", fit.km > ODD_TOWN_KM);
+    is("so the row lends no coordinate to a stop in Højer", publishedCoords(row, "Højer"), null);
+    const d = resolveStopCoordsDetailed("Vadehavet", {}, "Højer");
+    ok("the stop falls back to the Højer stand-in rather than Ribe", d && d.precise === false);
+    is("on the Højer point", [d?.lat, d?.lon], [HOJER.lat, HOJER.lon]);
+    is("and the leg to it from the sluice is no longer a measurable distance",
+       legDistanceKm("Hoejer Sluse", "Vadehavet", {}, "Højer", "Højer"), null);
+    // One-sided, like coordFitsTown: the same row in its own town, or with no
+    // town to check against, is as precise as it ever was.
+    ok("the same row in Ribe is still precise", resolveStopCoordsDetailed("Vadehavet", {}, "Ribe")?.precise === true);
+    is("and it says the towns agree", rowTownFits(row, "Ribe").why, "same-town");
+    ok("with no town on the stop there is nothing to judge", rowTownFits(row, "").ok && resolveStopCoordsDetailed("Vadehavet", {})?.precise === true);
+    ok("a row that names no town is not accused", rowTownFits({ name: "Somewhere", __lat: 55.33, __lon: 8.70 }, "Højer").ok);
+    ok("nor a row whose town we hold no point for", rowTownFits({ name: "Somewhere", city: "Grindsted", __lat: 55.33, __lon: 8.70 }, "Højer").ok);
+    // A district against its city is one area: the line is ODD_TOWN_KM, the
+    // codebase's own figure for how far a thing can sit from the town it is
+    // listed under, declared once and read at publish time and at read time.
+    is("one line for both readers", ODD_TOWN_KM_AT_READ, ODD_TOWN_KM);
+    ok("and it sits under the coordinate line", ODD_TOWN_KM < MAX_TOWN_KM);
+    // The build's own copy of the resolver checks the same claim on the tier
+    // that decides what Google is paid to measure.
+    const appS = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("the build's resolver asks the row's town before calling a coordinate precise",
+       /if \(rc && coordFitsTown\(rc, town\)\.ok && rowTownFits\(real, town\)\.ok\) return \{ lat: rc\.lat, lon: rc\.lon, precise: true \};/.test(appS));
+    const enrich = stripComments(readFileSync(join(root, "src/utils/guideEnrichment.js"), "utf8"));
+    is("and both shared resolvers read the published coordinate through the one gate",
+       (enrich.match(/const real = publishedCoords\(lookupRealPlace\(name\), town\);/g) || []).length, 2);
+  }
+
+  // ── (a) "1 MIN ON FOOT", HØJER TO HOEJER SLUSE ──────────────────
+  //
+  // The town stop is precise, the sluice is the town centre standing in, and
+  // Google, sent the sluice by name, settled on the same town centre. A
+  // walking time with a stand-in at either end is not about the stop.
+  {
+    const town = resolveStopCoordsDetailed("Højer", {}, "Højer");
+    const sluice = resolveStopCoordsDetailed("Hoejer Sluse", {}, "Højer");
+    ok("the town stop is precise", town?.precise === true);
+    ok("the sluice is a stand-in", sluice && sluice.precise === false);
+    is("on the very same point", [sluice.lat, sluice.lon], [town.lat, town.lon]);
+    is("so no distance is claimed between them", legDistanceKm("Højer", "Hoejer Sluse", {}, "Højer", "Højer"), null);
+    const gp = stripComments(readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8"));
+    const chip = gp.slice(gp.indexOf("const legChip = (originName, destName, how) => {"), gp.indexOf("const journey = exact ? journeyFromStored(exact) : null;"));
+    ok("legChip is findable", chip.length > 2000);
+    ok("the chip asks the flagged resolver whether either end is a stand-in",
+       /const standInEnd = \(nm\) => \{\s*const d = resolveStopCoordsDetailed\(nm, geo, stopTownOf\(nm\)\);\s*return !d \|\| !d\.precise;\s*\};\s*const standIn = standInEnd\(originName\) \|\| standInEnd\(destName\);/.test(chip));
+    ok("a stored walking answer over a stand-in is refused, whichever mode was asked for",
+       /const walkOnStandIn = standIn && \(rawExact\?\.modeUsed \|\| mode\) === "walking";/.test(chip)
+       && /const exact = rawExact && !walkOnStandIn && \(/.test(chip));
+    ok("and the walking estimate is built from nothing in that case",
+       /const walkKm = standIn && usedMode === "walking" \? null : km;/.test(chip)
+       && /walkKm !== null \? `\$\{estimateDurationText\(walkKm, usedMode\)\} \$\{modeLabel\}`/.test(chip));
+    ok("so the chip reads as unverified rather than measured",
+       /const unverified = !exactLabel && !estIsImpossibleWalk && walkKm === null;/.test(chip));
+    ok("and the no-route branch prints no walking minutes over a stand-in either",
+       /km != null && !standIn \? `\$\{estimateDurationText\(km, "walking"\)\}/.test(chip));
+  }
+
+  // ── (c) "FLIXBUS ... THE LONG HOPS ON DAY 2, DAY 3, DAY 4, DAY 5" ─
+  //
+  // Højer to Møgeltønder to Ribe, then three days inside Ribe. Not one hop is
+  // long, two of the days never leave town, and FlixBus runs none of it.
+  {
+    const GUIDE = { days: [
+      { day: 1, stops: [{ name: "Højer", town: "Højer" }, { name: "Hoejer Sluse", town: "Højer" }], glance: { legs: [{ how: "~10 min by bus" }] } },
+      { day: 2, stops: [{ name: "Vadehavet", town: "Højer" }, { name: "Møgeltønder", town: "Møgeltønder" }], glance: { legs: [{ how: "~15 min by bus" }] } },
+      { day: 3, stops: [{ name: "Ribe", town: "Ribe" }, { name: "Ribe medieval core", town: "Ribe" }], glance: { legs: [{ how: "~5 min on foot" }] } },
+      { day: 4, stops: [{ name: "Ribe VikingeCenter", town: "Ribe" }], glance: { legs: [] } },
+      { day: 5, stops: [{ name: "Ribe old town", town: "Ribe" }], glance: { legs: [] } },
+    ] };
+    const measured = { "Højer|Hoejer Sluse": 4, "Vadehavet|Møgeltønder": 5, "Møgeltønder|Ribe": 38, "Ribe VikingeCenter|Ribe old town": 3 };
+    const legKm = (a, b) => measured[`${a.name}|${b.name}`] ?? null;
+    const lines = (extra = {}) => costLines({ guide: GUIDE, rowFor: () => null, mode: "public transport", legKm, ...extra })
+      .filter(l => l.kind === COST_KIND.TRANSPORT);
+    const short = lines();
+    ok("a trip of regional hops is sold no coach", !short.some(l => l.name === "FlixBus"));
+    ok("and no national rail booking", !short.some(l => l.name === "DSB"));
+    is("the one line left is the planner that prices those hops", short.map(l => l.name), ["Local buses and regional trains"]);
+    ok("and it no longer says 'neither of those' over a list with no those",
+       !/neither of those/.test(short[0].forWhat) && /Rejseplanen/.test(short[0].forWhat));
+    ok("and it is not a booking", short[0].bookAhead === false);
+    // Unknown is not long: a hop nobody measured earns no coach either.
+    ok("with nothing measured, nothing is called long", !lines({ legKm: () => null }).some(l => /long hops/.test(l.forWhat)));
+    // One hop past LONG_LEG_KM and both sellers appear, naming only that day.
+    const far = lines({ legKm: (a, b) => a.name === "Møgeltønder" ? LONG_LEG_KM + 40 : legKm(a, b) });
+    is("a long hop brings DSB and FlixBus, once each", far.filter(l => l.name === "DSB" || l.name === "FlixBus").length, 2);
+    ok("and they name the day of that hop and no other",
+       far.filter(l => l.name === "FlixBus").every(l => /The long hops on day 3\./.test(l.forWhat) && !/day 4|day 5|day 2/.test(l.forWhat)));
+    ok("and the local line then says what the other two do not sell", /neither of those/.test(far.find(l => /Local buses/.test(l.name)).forWhat));
+    // A long hop on the FIRST day counts: the old list skipped day 1 by index.
+    const firstDay = lines({ legKm: (a, b) => a.name === "Højer" ? LONG_LEG_KM : legKm(a, b) });
+    ok("a long hop inside day 1 is a long hop", firstDay.some(l => /The long hops on day 1\./.test(l.forWhat)));
+    // The measurement goes in the way everything else does, and the page hands
+    // in the chip's own reader with each end's town, so the two cannot disagree.
+    const gp = stripComments(readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8"));
+    ok("the guide page measures the ledger's hops with the chip's reader",
+       /legKm: \(a, b\) => legDistanceKm\(a\.name, b\.name, guide\._geo \|\| \{\}, stopTown\(a, lookupRealPlace\(a\.name\)\), stopTown\(b, lookupRealPlace\(b\.name\)\)\),/.test(gp));
+    const ledger = stripComments(readFileSync(join(root, "src/utils/costLedger.js"), "utf8"));
+    ok("and the ledger reads long through the one rule the chip reads", /isLongLeg\(measure\(a, b\)\)/.test(ledger));
+    ok("the day list nobody measured no longer feeds the coach line", !/travelDays\.join\(", day "\)/.test(ledger));
+  }
+
+  // ── (d) "EVERYTHING I NEED, 7 OF 7" BESIDE THE HOTEL QUESTION ───
+  //
+  // Their two turns, exactly. The moment the reply asking about a hotel
+  // landed, App.jsx recorded `stay` as asked, no turn of theirs had answered
+  // it, and the brief called that declined.
+  {
+    const turns = [
+      "Hi! Two friends from Germany, coming to Denmark 8 to 12 October. We love history and good beer, and we're on a budget. Where should we go?",
+      "Public transport",
+    ];
+    const read = (asked, extra = {}) => readBrief({
+      travellerText: turns.join("\n"), travellerTurns: turns, answering: [[], ["transport"]],
+      asked, today: new Date("2026-09-22T09:00:00Z"), ...extra,
+    });
+    const before = read(["transport"]);
+    ok("nothing they said is about a booking", !before.known.stay);
+    is("so the bar says what is left", progressLine(briefProgress(before)), "6 of 7, and I still need whether a hotel is booked");
+    const asking = read(["transport", "stay"]);
+    ok("the slot is still open the moment the question is put", asking.missing.includes("stay"));
+    is("and not declined, because nobody has declined anything", asking.declined, []);
+    ok("so the brief is not ready", !asking.ready);
+    is("and the bar still says so", progressLine(briefProgress(asking)), "6 of 7, and I still need whether a hotel is booked");
+    // The two honest ways it closes: an answer, or a refusal put to that slot.
+    const answered = readBrief({
+      travellerText: [...turns, "No, nothing booked yet"].join("\n"), travellerTurns: [...turns, "No, nothing booked yet"],
+      answering: [[], ["transport"], ["stay"]], asked: ["transport", "stay"], today: new Date("2026-09-22T09:00:00Z"),
+    });
+    is("a no fills it", answered.known.stay?.value, "not booked");
+    const refused = readBrief({
+      travellerText: [...turns, "Not sure yet"].join("\n"), travellerTurns: [...turns, "Not sure yet"],
+      answering: [[], ["transport"], ["stay"]], asked: ["transport", "stay"], today: new Date("2026-09-22T09:00:00Z"),
+    });
+    is("and a refusal to the question declines it", refused.declined, ["stay"]);
+    // A caller that never says what a turn answered keeps the old rule, so
+    // every assertion written against it holds.
+    ok("without an answering array, asked and empty still reads as declined",
+       read(["transport", "stay"], { answering: undefined }).declined.includes("stay"));
+    const tb = stripComments(readFileSync(join(root, "src/utils/tripBrief.js"), "utf8"));
+    ok("the fallback is gated on the caller not tracking answers at all",
+       /const tracksAnswers = Array\.isArray\(answering\);\s*const turnedItDown = \(k\) => \(!tracksAnswers && !putToThem\(k\)\) \|\| \(saidTo\.get\(k\) \|\| \[\]\)\.some\(said => isRefusal\(said\)\);/.test(tb));
+  }
+
+  towns.length = townsBefore;
+  freeEntrance.length = freeBefore;
+  if (hadHojer) TOWN_COORDS["Højer"] = hadHojer; else delete TOWN_COORDS["Højer"];
+}
+
+// ── THE CHEAP GEMS PAGE, 22 SEP 2026 ────────────────────────────────
+// A published Jem & Fix row sourced to zoominfo.com, hedged as "they say",
+// with "Where: in the shop" under it, on a page headed "Cheap anyway".
+{
+  ok("a company database is not a source", M.isDataSite("https://www.zoominfo.com/c/jem--fix/425971320") && M.isDataSite("https://www.proff.dk/firma/x"));
+  ok("and the shop's own site still is", !M.isDataSite("https://www.jemogfix.dk/"));
+  const blocked = M.gemProblems({ name: "Jem & Fix", kind: "cheap", what: "low prices", source: "https://www.zoominfo.com/c/jem--fix/425971320", checkedAt: "2026-09-22" }, new Date(2026, 8, 22));
+  ok("a row sourced to one cannot be published", blocked.blocks && blocked.problems.some(p => /company database/.test(p)));
+  is("a chain with no town is everywhere", M.gemWhere({ towns: [] }), "All over Denmark");
+  is("a town with no point is still the location", M.gemWhere({ towns: ["Ribe"] }), "Ribe");
+  is("and with a point and a reader, the distance", M.gemWhere({ towns: ["Ribe"] }, { point: () => ({ lat: 55.33, lon: 8.77 }), me: { lat: 55.68, lon: 12.57 } }), "Ribe · ~242 km from you");
+  is("under two kilometres reads as about two", M.gemWhere({ towns: ["Ribe"] }, { point: () => ({ lat: 55.33, lon: 8.77 }), me: { lat: 55.33, lon: 8.771 } }), "Ribe · ~2 km from you");
+  const pg2 = stripComments(readFileSync(join(root, "src/components/CheapGemsPage.jsx"), "utf8"));
+  ok("the page opens the way he wrote it", /Denmark is one of the most expensive countries to visit\. If you want to avoid that, you can try out the following shops\./.test(pg2));
+  ok("the two headings are gone, and the filters do that work", !/<Section /.test(pg2) && /<Grid rows=\{\[\.\.\.\(showScheme \? view\.scheme : \[\]\)/.test(pg2));
+  ok("where is only asked of a discount", /g\.where && g\.kind === "scheme"/.test(pg2));
+  ok("the location line is on every card", /gemWhere\(g, \{ point, me \}\)/.test(pg2));
+  const appGm = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+  ok("the app hands it the points and the reader", /pointFor=\{\(town\) => placeCoords\(lookupRealPlace\(town\)\) \|\| townPointFor\(town\)\}/.test(appGm) && /userCoords=\{isInDenmark\(userCoords\) \? userCoords : null\}/.test(appGm));
+  const panel2 = stripComments(readFileSync(join(root, "src/components/CheapGemsPanel.jsx"), "utf8"));
+  ok("a pasted web address is read as the place", /const url = \/\^https\?:\\\/\\\/\/i\.test\(String\(typed\)\.trim\(\)\)/.test(panel2) && /\.\.\.\(url \? \[\{ url, title: only \}\] : \[\]\)/.test(panel2));
+  ok("and the searches run on its host name", /hostOf\(url\)\.replace\(/.test(panel2));
 }
 
 // ── NOMINATIM, AT THE PACE ITS POLICY ASKS FOR ──────────────────────

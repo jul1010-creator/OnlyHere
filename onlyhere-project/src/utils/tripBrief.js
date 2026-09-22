@@ -1013,6 +1013,38 @@ const REFUSED_AFTER = new RegExp(
 export const withoutRefused = (text) =>
   String(text || "").replace(REFUSED_AFTER, " ").replace(NOT_WANTED, " ");
 
+// ── AND THE OTHER HALF OF THE SAME READING ──────────────────────────
+//
+// withoutRefused answers "what is left once the refusals are gone", which is
+// the question the interests slot asks. utils/kindRefusal.js asks the opposite
+// one: what was refused. Both are the same spans, so the spans are returned
+// from here rather than matched a second time somewhere else with a second
+// copy of the window rules, which is how two readers of one sentence start
+// disagreeing about where a clause ends.
+//
+// Both patterns run over the ORIGINAL text. withoutRefused runs the backward
+// one first and the forward one over what it left, because a scrub has to
+// avoid deleting the verdict it is looking for; nothing is being deleted here,
+// so each pattern sees the whole sentence and an overlap costs nothing worse
+// than the same clause twice.
+export const refusedClauses = (text) => {
+  const t = String(text || "");
+  if (!t.trim()) return [];
+  const out = [];
+  for (const re of [REFUSED_AFTER, NOT_WANTED]) {
+    re.lastIndex = 0;
+    let m;
+    while ((m = re.exec(t)) !== null) {
+      const hit = m[0].trim();
+      if (hit) out.push(hit);
+      // A zero-length match would otherwise sit on the same index forever.
+      if (m.index === re.lastIndex) re.lastIndex += 1;
+    }
+    re.lastIndex = 0;
+  }
+  return out;
+};
+
 // ── AND A WORD INSIDE A HOTEL NAME IS NOT AN INTEREST ──────────
 //
 // Oliver, 12 Sep 2026: "it also went bananas with 'islands'." He never asked for
@@ -1518,7 +1550,29 @@ export const readBrief = ({ travellerText = "", travellerTurns = null, intake = 
   // and every existing assertion keeps working unchanged, and the rule that
   // changed is the one the app runs.
   const putToThem = (k) => (saidTo.get(k) || []).length > 0;
-  const turnedItDown = (k) => !putToThem(k) || (saidTo.get(k) || []).some(said => isRefusal(said));
+  // ── AND A QUESTION STILL ON THE SCREEN IS NOT A REFUSAL ──────────
+  //
+  // 22 Sep 2026, a live test with two travellers from Germany. They had said
+  // where and when and "Public transport", the bar read "6 of 7, and I still
+  // need whether a hotel is booked", and the very next reply asked "Have you got
+  // somewhere booked to stay yet?" while the bar beside it read "Everything I
+  // need, 7 of 7" and the build button said "Ready to build". Nobody had said a
+  // word about a hotel.
+  //
+  // App.jsx records a slot as asked the moment the reply that asks it lands,
+  // and the brief is read again in that same render. `answering` was passed,
+  // as it always is from the app, but it holds one entry per TRAVELLER turn and
+  // the traveller had not typed anything yet, so no turn was put to `stay`. The
+  // line below then read "no turn put to it" as "turned it down", which is the
+  // fallback written for a caller that never passes `answering` at all, and a
+  // slot that was asked one second ago went to `declined`, which does not block.
+  //
+  // So the fallback applies only when the caller cannot say what they replied
+  // to: no `answering` array at all. A caller that tracks it, and has no reply
+  // yet, has an open question, and an open question is MISSING until a turn
+  // refuses it or fills it.
+  const tracksAnswers = Array.isArray(answering);
+  const turnedItDown = (k) => (!tracksAnswers && !putToThem(k)) || (saidTo.get(k) || []).some(said => isRefusal(said));
   const declined = unfilled.filter(k => wasAsked.has(k) && turnedItDown(k));
   // Everything else that is empty is still MISSING, which is the state that
   // gets it asked. A question they have not answered yet and a question that
@@ -1964,6 +2018,48 @@ export const briefBlock = (brief, conflicts = [], { picked = [], turnedDown = []
       const k = brief.known[s.key];
       lines.push(`  ${s.label}: ${k.value}${k.source === "intake" ? " (from the form they filled in)" : ""}`);
     });
+  }
+  // ── AND WHAT THEY TICKED IS A BRIEF, NOT A RECORD ───────────────
+  //
+  // Oliver, 22 Sep 2026, testing the chat himself with Food and Shopping
+  // ticked on the form. Neither word appeared in either of the first two
+  // replies, and the second one offered a museum. The slot was filled, the
+  // line above printed it, and printing it under a heading that says NEVER ASK
+  // ABOUT THESE AGAIN is a rule about questions. Nothing said the answer was
+  // supposed to steer what came back.
+  //
+  // So the one thing they told us about the trip gets a line of its own,
+  // saying what to do with it. Named in the next reply, because the failure
+  // was at the start of the conversation, where somebody who has just filled
+  // in a form is waiting to see whether it was read.
+  //
+  // NOT A FENCE. A person who ticks Food has not ruled out a castle, and a
+  // reply that can only name food is a worse conversation than one that leads
+  // with it. The refusals are the fence, and they are their own block: see
+  // utils/kindRefusal.js and utils/exclusions.js.
+  if (brief.known?.interests?.value) {
+    lines.push(`WHAT THEY CAME FOR IS ${brief.known.interests.value}. That is the trip, so the first real thing you put on the table in your next reply is one of those, by name, and every list of places you offer leads with them. Anything outside them is worth offering when it is on the way or too good to leave out, never as the main thing and never instead.`);
+  }
+  // ── AND NOBODY SAID THERE WERE CHILDREN ─────────────────────────
+  //
+  // Oliver, 22 Sep 2026, on a test conversation where no child was ever
+  // mentioned: places offered because they suit kids, and a pace built around
+  // one. The nightlife inventory has had a line like this since 12 September,
+  // written for the mirror image of the same fault, where the whole published
+  // bar list went into every prompt and Gemlyx raised a night out in four
+  // conversations out of four.
+  //
+  // TWO DIFFERENT SILENCES, and the line says which one this is. A party that
+  // is known and has no child in it is an answer; a party nobody has stated is
+  // not, and telling the model to plan for adults there would be the same
+  // invention in the other direction. `hasKids` is read by readParty from
+  // their own words and from the form, so both routes reach this.
+  if (brief.known?.party) {
+    lines.push(brief.known.party.hasKids
+      ? `THERE ARE CHILDREN ON THIS TRIP. Say what a place is like with them along when it matters, and never plan a night out.`
+      : `NO CHILDREN HAVE BEEN MENTIONED ON THIS TRIP. Do not offer a place because it suits kids, do not call anything family friendly, and do not build the day around a child's pace. If they name one later, that is the moment it changes.`);
+  } else {
+    lines.push(`NOBODY HAS SAID WHO IS COMING. Do not assume children either way: nothing is offered because it suits kids, and nothing is left out for the same reason.`);
   }
   // Names only, folded once, with the empties out. A tap holds a name and
   // nothing else, and a name repeated is one decision, not two.

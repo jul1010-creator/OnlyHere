@@ -781,6 +781,10 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
     today: now,
     mode: guide?._mode || "",
     saidNoCar: !!guide?._onlyWalking,
+    // The same reader, with the same town for each end, that legChip measures
+    // a hop with, so "the long hops on day 3" under To arrange names a day
+    // whose chip also names DSB and FlixBus. 22 Sep 2026, see transportLines.
+    legKm: (a, b) => legDistanceKm(a.name, b.name, guide._geo || {}, stopTown(a, lookupRealPlace(a.name)), stopTown(b, lookupRealPlace(b.name))),
   });
   // ── ONE BOOKING BUTTON PER BED, NOT PER NIGHT ────────────────────
   //
@@ -1749,6 +1753,43 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
             // walking cap below.
             const storedExact = exactDurations[`${originName}|${destName}|${mode}`];
             const rawExact = storedExact && storedExact.durationMinutes >= 1 ? storedExact : null;
+            // ── A WALK FROM THE MIDDLE OF A TOWN IS NOT A WALK ANYBODY MEASURED ──
+            //
+            // 22 Sep 2026, a live guide in South Jutland: "1 min on foot" from
+            // Højer, the town, to Hoejer Sluse, the sluice about 4 km outside
+            // it. The note under the map on the same page said the sluice pin
+            // was approximate and sat at the middle of the town.
+            //
+            // Both facts came from the same place. Nothing placed the sluice,
+            // so the resolver handed back the Højer town centre as a stand-in,
+            // flagged precise: false. The build then did the right thing with
+            // that flag and sent the stop to Google by NAME, and Google's
+            // geocoder, finding no such venue, settled on the locality, which
+            // is the same town centre. Two ends on one point, one minute, and
+            // the number was stored and printed with the confidence of a
+            // measurement.
+            //
+            // The straight-line estimate below already refuses this: legDistanceKm
+            // returns null for a sub-kilometre gap when either end is a stand-in,
+            // because half a kilometre of slop is normal in a town centre point.
+            // A walk is the one mode that lives entirely inside that slop, so
+            // the same reasoning covers a measured walk too: whatever Google
+            // answered, one end of the question was "somewhere in Højer", and a
+            // walking time to somewhere in a town is not a fact about the
+            // sluice. A transit or driving answer over the same ends is
+            // different in kind, a few hundred metres inside a two hour journey
+            // change nothing, so those still print.
+            //
+            // So when either end is only a town centre stand-in, no walking time
+            // is printed at all, measured or estimated. The chip falls back to
+            // the model's own leg text with "Check Maps", which is what every
+            // other unverified leg on the page already does.
+            const standInEnd = (nm) => {
+              const d = resolveStopCoordsDetailed(nm, geo, stopTownOf(nm));
+              return !d || !d.precise;
+            };
+            const standIn = standInEnd(originName) || standInEnd(destName);
+            const walkOnStandIn = standIn && (rawExact?.modeUsed || mode) === "walking";
             // Walking cap tightened 180 → WALK_MAX_MINUTES (Oliver: "there has
             // to be rules. No walking more than 15-20 minutes"). 180 minutes
             // is why a three-hour-capped "1 hour 15 min on foot" sailed through
@@ -1757,7 +1798,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
             // the chip falls back to the honest estimate for a real mode
             // instead of presenting an absurd walk.
             const plausibleCap = mode === "walking" ? WALK_MAX_MINUTES : mode === "bicycling" ? 300 : Infinity;
-            const exact = rawExact && (rawExact.durationMinutes <= plausibleCap || (rawExact.modeUsed && rawExact.modeUsed !== "walking")) ? rawExact : null;
+            const exact = rawExact && !walkOnStandIn && (rawExact.durationMinutes <= plausibleCap || (rawExact.modeUsed && rawExact.modeUsed !== "walking")) ? rawExact : null;
             // A transit leg with no transit route can have been rescued as a real
             // walking route by the build (see fetchExactDurations' walking retry) —
             // modeUsed is the mode the result actually came from, and the icon/
@@ -1771,6 +1812,10 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
             // turned into a confident "~1 min" for legs that were really 30:
             // the exact bug Oliver has now reported four times.
             const km = legDistanceKm(originName, destName, geo, legOriginTown, legDestTown);
+            // The distance a WALKING figure may be built from. Null on a
+            // stand-in end, for the reason written above rawExact: a walking
+            // time from the middle of a town is not about the stop.
+            const walkKm = standIn && usedMode === "walking" ? null : km;
             const modeLabel = uiT(usedMode === "bicycling" ? "guide.byBike" : usedMode === "driving" ? "guide.byCar" : usedMode === "walking" ? "guide.onFoot" : "guide.byTransit", uiLang);
             const routeFailed = noRouteFound[`${originName}|${destName}|${mode}`];
             if (routeFailed) {
@@ -1793,7 +1838,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                   <a href={routeUrl(originName, destName, "walking")} target="_blank" rel="noreferrer"
                     style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", background: C.bg, border: `1px solid ${C.gold}44`, borderRadius: 100, padding: "6px 12px" }}>
                     <span style={{ fontSize: 12 }}>🚶</span>
-                    <span style={{ fontSize: 11, color: C.gold, fontWeight: 600 }}>{km != null ? `${estimateDurationText(km, "walking")} ${uiT("guide.onFoot", uiLang)}` : uiT("guide.shortWalk", uiLang)}</span>
+                    <span style={{ fontSize: 11, color: C.gold, fontWeight: 600 }}>{km != null && !standIn ? `${estimateDurationText(km, "walking")} ${uiT("guide.onFoot", uiLang)}` : uiT("guide.shortWalk", uiLang)}</span>
                     <span style={{ fontSize: 9.5, color: C.light, fontWeight: 700 }}>· Maps ↗</span>
                   </a>
                 );
@@ -1886,10 +1931,10 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
             // write "~18 min by bike" whether or not it knows. Shown,
             // because it is usually right and always better than a blank,
             // but never dressed as a measurement.
-            const unverified = !exactLabel && !estIsImpossibleWalk && km === null;
+            const unverified = !exactLabel && !estIsImpossibleWalk && walkKm === null;
             const estLabel = estIsImpossibleWalk
               ? `Too far to walk, check the route`
-              : km !== null ? `${estimateDurationText(km, usedMode)} ${modeLabel}` : (how || uiT("guide.checkRoute", uiLang));
+              : walkKm !== null ? `${estimateDurationText(walkKm, usedMode)} ${modeLabel}` : (how || uiT("guide.checkRoute", uiLang));
             // ── "PERHAPS REFER THEM TO FLIXBUS OR DSB" ─────────
             // Oliver, 9 Aug 2026. A chip saying "~1h30 by train/bus" states a
             // fact and leaves the reader to work out who sells that seat, and

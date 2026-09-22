@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { C } from "../utils/theme";
 import { askOpenAI } from "../utils/aiClient";
-import { menuImagesToRead, textHasPrice } from "../utils/pageScan";
-import { gemSearches, gemSearchesFor, ownPagesIn, pageAsResult, GEMS_PROMPT, settleGems, gemRunNotes, gemProblems, isCouponSite, WHERE_LABEL } from "../utils/cheapGems";
+import { menuImagesToRead, textHasPrice, hostOf } from "../utils/pageScan";
+import { gemSearches, gemSearchesFor, ownPagesIn, pageAsResult, GEMS_PROMPT, settleGems, gemRunNotes, gemProblems, isCouponSite, isDataSite, WHERE_LABEL } from "../utils/cheapGems";
 
 // ── FINDING CHEAP GEMS, FOR HIM TO PICK ─────────────────────────────
 //
@@ -42,8 +42,13 @@ export const CheapGemsPanel = ({ existing = [], onPublish, readPage = null, read
     return { problems: dupe ? [...problems, "Already published under this name."] : problems, blocks: blocks || dupe };
   };
 
-  // `only`: a place he already knows. The town field still narrows the search.
-  const find = async (only = "") => {
+  // `only`: a place he already knows, by name or as its address. Oliver,
+  // 22 Sep 2026: "And I still can't search for https://www.mschcopenhagen.dk/".
+  // Pasting the shop's own page is the shortest way to say which shop, so a
+  // URL in that box is read directly and the searches run on its host name.
+  const find = async (typed = "") => {
+    const url = /^https?:\/\//i.test(String(typed).trim()) ? String(typed).trim() : "";
+    const only = url ? hostOf(url).replace(/\.[a-z.]{2,7}$/i, "").replace(/[-_]+/g, " ") : String(typed).trim();
     setBusy("searching"); setError(""); setAdded(""); setRows([]); setPicked([]); setNotes([]);
     try {
       const seen = new Set();
@@ -53,12 +58,12 @@ export const CheapGemsPanel = ({ existing = [], onPublish, readPage = null, read
         const data = await res.json().catch(() => null);
         for (const r of Array.isArray(data?.results) ? data.results : []) {
           const url = String(r?.url || "");
-          if (!url || seen.has(url) || isCouponSite(url)) continue;
+          if (!url || seen.has(url) || isCouponSite(url) || isDataSite(url)) continue;
           seen.add(url);
           results.push(r);
         }
       }
-      if (!results.length) { setError("The searches came back empty."); setBusy(""); return; }
+      if (!results.length && !url) { setError("The searches came back empty."); setBusy(""); return; }
       // A NAME LOOKUP READS THE PLACE'S OWN PAGES, and a menu that is a
       // picture is transcribed. What they add goes to the front, so it is
       // inside the results the model is handed. See ownPagesIn.
@@ -66,7 +71,8 @@ export const CheapGemsPanel = ({ existing = [], onPublish, readPage = null, read
       const readNotes = [];
       if (only && readPage) {
         setBusy("reading the page");
-        for (const r of ownPagesIn(results, only)) {
+        // The page he pasted first, then the place's own pages in the results.
+        for (const r of [...(url ? [{ url, title: only }] : []), ...ownPagesIn(results, only).filter(r => r.url !== url)]) {
           const page = await readPage(r.url).catch(() => null);
           const text = String(page?.text || "");
           // The page's own words go in whatever they are about, so a shop's
@@ -134,7 +140,7 @@ export const CheapGemsPanel = ({ existing = [], onPublish, readPage = null, read
         </button>
       </div>
       <div style={{ display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center", marginTop: 7 }}>
-        <input value={named} onChange={e => setNamed(e.target.value)} placeholder="A place you know, by name"
+        <input value={named} onChange={e => setNamed(e.target.value)} placeholder="A place you know, by name or its web address"
           style={{ flex: "1 1 200px", minWidth: 0, background: C.surface, border: `1px solid ${C.border}`, color: C.text, borderRadius: 8, padding: "7px 10px", fontSize: 11.5, fontFamily: "'Inter', sans-serif" }} />
         <button onClick={() => find(named.trim())} disabled={!!busy || !named.trim()}
           style={{ background: "none", border: `1px solid ${C.gold}66`, borderRadius: 100, padding: "8px 15px", fontSize: 11.5, fontWeight: 700, color: C.gold, cursor: busy || !named.trim() ? "default" : "pointer", opacity: busy || !named.trim() ? 0.5 : 1, fontFamily: "'Inter', sans-serif" }}>

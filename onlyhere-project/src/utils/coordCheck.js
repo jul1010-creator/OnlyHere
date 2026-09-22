@@ -40,7 +40,7 @@
 
 import { isInDenmark, haversineKm } from "./helpers";
 import { TOWN_COORDS } from "../data/towns";
-import { townKeyFor, MAX_TOWN_KM } from "./guideEnrichment";
+import { townKeyFor, MAX_TOWN_KM, ODD_TOWN_KM } from "./guideEnrichment";
 
 // Denmark is small. Copenhagen to Odense is about 140 km, so 50 km is roughly a
 // third of the way across the country: nothing legitimately described as being
@@ -58,7 +58,13 @@ export { MAX_TOWN_KM };
 // honestly sit 20 km outside the town it is listed under (Ribe VikingeCenter is
 // about 3 km out, Møns Klint about 15 from Møn town), so this is a look-at-it
 // line and never a block.
-export const ODD_TOWN_KM = 20;
+//
+// DECLARED IN guideEnrichment.js SINCE 22 Sep 2026 and re-exported here, for
+// the same reason MAX_TOWN_KM moved on 12 Aug: rowTownFits needs the identical
+// line at read time to decide whether a row listed under Ribe may lend its
+// coordinate to a stop the plan puts in Højer, and this file sits above
+// guideEnrichment in the import graph. One declaration, two names for it.
+export { ODD_TOWN_KM };
 
 // Printed in the town prompt's own JSON schema as an example, and copied
 // verbatim by drafts (PASS 45). Kept here beside the other coordinate rules;

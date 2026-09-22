@@ -357,9 +357,63 @@ const geoTownPoint = (geo, town) => {
   return hit && Number.isFinite(hit.lat) && Number.isFinite(hit.lon) ? { lat: hit.lat, lon: hit.lon } : null;
 };
 
+// ── AND THE ROW'S OWN TOWN IS A SECOND CLAIM ──────────────────────
+//
+// 22 Sep 2026, a live guide for two travellers in South Jutland. Day 2 had a
+// stop called "Vadehavet" with its town given as Højer. The Wadden Sea is a
+// region, and the only published row whose name contains that word is
+// "Nationalpark og Verdensarv Vadehavet", listed under Ribe, about 45 km up the
+// coast. lookupRealPlace's widening tier matched the short stop name to that
+// row, the row's coordinate was 41 km from the Højer town point, which is
+// inside MAX_TOWN_KM, so coordFitsTown let it through as precise, and Google
+// was then paid to route from Højer to Ribe. The page read "Longest single
+// journey: 3 hours 34 mins, Hoejer Sluse to Vadehavet", for two stops the
+// guide itself places in one town.
+//
+// coordFitsTown asks whether the COORDINATE is near the stop's town, and 50 km
+// is the right answer to that question: it is the line for a coordinate in the
+// wrong part of the country. It cannot see this case, because here the row is
+// exactly where it says it is. What disagrees is the row's own town field. A
+// published row says which town it belongs to, the plan says which town the
+// stop is in, and when those are two different towns the row is about
+// somewhere else, whatever its name shares with the stop.
+//
+// Two town names are one area when their points sit within ODD_TOWN_KM of
+// each other: that constant is already the codebase's line for how far a
+// thing can honestly sit from the town it is listed under (Ribe VikingeCenter
+// is 3 km out, Møns Klint about 15), so "Aarhus C" against "Aarhus", or a
+// district against its city, still agree. Ribe against Højer does not.
+//
+// ONE-SIDED, like coordFitsTown. Refusing here demotes the stop to the town
+// centre stand-in, which is drawn as approximate and never sent to Google as a
+// bare pair. It cannot delete a stop or invent a point. And it refuses to judge
+// with nothing to judge against: no town on the stop, no town on the row, or a
+// town we hold no point for, and the coordinate stands.
+export const ODD_TOWN_KM = 20;
+export const rowTownFits = (row, town) => {
+  const stopT = townPointFor(town);
+  if (!stopT) return { ok: true, why: "nothing-to-check-against" };
+  const rowTown = stopTown(null, row);
+  const rowT = townPointFor(rowTown);
+  if (!rowT) return { ok: true, why: "row-names-no-known-town" };
+  if (rowT.key === stopT.key) return { ok: true, why: "same-town", town: stopT.key };
+  const km = haversineKm({ lat: rowT.lat, lon: rowT.lon }, { lat: stopT.lat, lon: stopT.lon });
+  return km > ODD_TOWN_KM
+    ? { ok: false, why: "row-in-another-town", km, town: stopT.key, rowTown: rowT.key }
+    : { ok: true, why: "neighbouring-town", km, town: stopT.key, rowTown: rowT.key };
+};
+// The published coordinate a stop may borrow, or null. Both claims have to
+// hold: the coordinate sits near the stop's town AND the row is listed under
+// that town or one beside it. One reader, so the three resolvers below and the
+// build's own copy in App.jsx cannot drift on which claims they check.
+export const publishedCoords = (row, town) => {
+  const real = placeCoords(row);
+  return real && coordFitsTown(real, town).ok && rowTownFits(row, town).ok ? real : null;
+};
+
 export const resolveStopCoords = (name, geo = {}, town = "") => {
-  const real = placeCoords(lookupRealPlace(name));
-  if (real && coordFitsTown(real, town).ok) return { lat: real.lat, lon: real.lon };
+  const real = publishedCoords(lookupRealPlace(name), town);
+  if (real) return { lat: real.lat, lon: real.lon };
   if (geo[name] && coordFitsTown(geo[name], town).ok) return geo[name];
   const t = townFallbackFor(town, name);
   if (t) return { lat: t.lat, lon: t.lon };
@@ -392,8 +446,8 @@ export const kmBetween = (a, b) => {
 // and every caller already handles null by showing the AI's own leg text or
 // "Check route" instead of a fabricated figure.
 export const resolveStopCoordsDetailed = (name, geo = {}, town = "") => {
-  const real = placeCoords(lookupRealPlace(name));
-  if (real && coordFitsTown(real, town).ok) return { lat: real.lat, lon: real.lon, precise: true };
+  const real = publishedCoords(lookupRealPlace(name), town);
+  if (real) return { lat: real.lat, lon: real.lon, precise: true };
   if (geo[name] && coordFitsTown(geo[name], town).ok) return { ...geo[name], precise: true };
   const t = townFallbackFor(town, name);
   if (t) return { lat: t.lat, lon: t.lon, precise: false };

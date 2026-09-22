@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { C } from "../utils/theme";
 import { Pill } from "./Pill";
-import { gemsView, GEM_SECTION, WHERE_LABEL, checkedLabel, isOwnSite, gemMatches, gemFilterOptions, GEM_CATEGORY_LABEL } from "../utils/cheapGems";
+import { gemsView, GEM_SECTION, WHERE_LABEL, checkedLabel, isOwnSite, gemMatches, gemFilterOptions, gemWhere, GEM_CATEGORY_LABEL } from "../utils/cheapGems";
 
 // ── THE CHEAP GEMS PAGE ─────────────────────────────────────────────
 //
@@ -17,16 +17,29 @@ import { gemsView, GEM_SECTION, WHERE_LABEL, checkedLabel, isOwnSite, gemMatches
 // never apart.
 const sourceHost = (u) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return "Source"; } };
 
-const GemCard = ({ g }) => (
+const GemCard = ({ g, point, me }) => (
   <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "15px 16px" }}>
+    {/* ── WHERE IT IS, AND HOW FAR THAT IS ───────────────────────────
+        Oliver, 22 Sep 2026: "And also add location, and how far it is from
+        'you'." The town is the location a shop has; the distance is only
+        printed when the town is one we hold a point for and the reader is
+        somewhere in Denmark, so nothing here is a figure nobody measured.
+        A chain with no town works everywhere and says so. */}
+    <div style={{ fontSize: 9.5, fontWeight: 700, color: C.muted, letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 3 }}>
+      {gemWhere(g, { point, me })}
+    </div>
     <div style={{ fontSize: 18, fontWeight: 600, color: C.text, fontFamily: "'Fraunces', serif", lineHeight: 1.15 }}>{g.name}</div>
     {g.what && <div style={{ fontSize: 13.5, color: C.gold, fontWeight: 700, marginTop: 6 }}>{g.what}</div>}
     {g.desc && <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.65, marginTop: 6 }}>{g.desc}</div>}
-    {(g.who || g.how || g.where) && (
+    {(g.who || g.how || (g.where && g.kind === "scheme")) && (
       <div style={{ fontSize: 12, color: C.light, lineHeight: 1.65, marginTop: 8, display: "grid", gap: 3 }}>
         {g.who && <div><b style={{ color: C.text }}>For:</b> {g.who}</div>}
         {g.how && <div><b style={{ color: C.text }}>How:</b> {g.how}</div>}
-        {g.where && <div><b style={{ color: C.text }}>Where:</b> {WHERE_LABEL[g.where]}</div>}
+        {/* Only for a discount, where "in the shop" against "online" is the
+            thing that decides whether it is any use. Oliver, 22 Sep 2026, of a
+            cheap shop: "it should ONLY be in the shop. Nobody will buy
+            anything online." */}
+        {g.where && g.kind === "scheme" && <div><b style={{ color: C.text }}>Where:</b> {WHERE_LABEL[g.where]}</div>}
       </div>
     )}
     {g.catch && (
@@ -36,7 +49,6 @@ const GemCard = ({ g }) => (
     )}
     <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginTop: 10, fontSize: 11, color: C.muted }}>
       <span>{checkedLabel(g)}</span>
-      {g.towns?.length ? <span>{g.towns.join(", ")}</span> : null}
       {/* "Their page" only when it is theirs. A cheap place can be vouched for
           by a page that is not the place's own, and the link says whose it is
           rather than letting a third site pass for the brand. */}
@@ -47,16 +59,13 @@ const GemCard = ({ g }) => (
   </div>
 );
 
-const Section = ({ title, rows }) => (
-  <div style={{ marginBottom: 26 }}>
-    <h3 style={{ fontSize: 21, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, margin: "0 0 12px" }}>{title}</h3>
-    <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))" }}>
-      {rows.map(g => <GemCard key={`${g.kind}-${g.name}`} g={g} />)}
-    </div>
+const Grid = ({ rows, point, me }) => (
+  <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", marginBottom: 26 }}>
+    {rows.map(g => <GemCard key={`${g.kind}-${g.name}`} g={g} point={point} me={me} />)}
   </div>
 );
 
-export const CheapGemsPage = ({ rows = [], title = "Cheap gems" }) => {
+export const CheapGemsPage = ({ rows = [], title = "Cheap gems", pointFor = null, userCoords = null }) => {
   const [town, setTown] = useState("");
   const [kind, setKind] = useState("");
   const [category, setCategory] = useState("");
@@ -77,7 +86,7 @@ export const CheapGemsPage = ({ rows = [], title = "Cheap gems" }) => {
       <div style={{ marginBottom: 18, paddingTop: 8 }}>
         <h2 style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, margin: "0 0 10px" }}>{title}</h2>
         <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>
-          Denmark is expensive, and the people who live here know where it is less so. Two kinds on this page: discounts you only get if you know to ask, and places that are cheap without asking. Each one says when it was last checked and links the page it was checked against.
+          Denmark is one of the most expensive countries to visit. If you want to avoid that, you can try out the following shops.
         </div>
       </div>
       {empty ? (
@@ -110,8 +119,14 @@ export const CheapGemsPage = ({ rows = [], title = "Cheap gems" }) => {
             {opts.students && <Pill label="For students" active={students} onClick={() => setStudents(!students)} />}
           </div>
         )}
-        {showScheme && <Section title={GEM_SECTION.scheme} rows={view.scheme} />}
-        {showCheap && <Section title={GEM_SECTION.cheap} rows={view.cheap} />}
+        {/* ── ONE GRID, AND THE FILTERS DO THE SORTING ──────────────
+            Oliver, 22 Sep 2026: "remove 'Cheap anyway', swap it out with
+            filters." Two headings over two short lists read as two pages;
+            the pills above already say which kind is which, so the rows sit
+            in one grid with the discounts first. */}
+        {(showScheme || showCheap) && (
+          <Grid rows={[...(showScheme ? view.scheme : []), ...(showCheap ? view.cheap : [])]} point={pointFor} me={userCoords} />
+        )}
         {!showScheme && !showCheap && anyFilter && (
           <div style={{ textAlign: "center", padding: "36px 16px" }}>
             <div style={{ fontSize: 15, color: C.light, fontFamily: "'Fraunces', serif", marginBottom: 8 }}>Nothing published matches that.</div>

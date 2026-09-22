@@ -37,6 +37,7 @@ import { fold } from "./danishNames";
 import { isNeverOwnSite } from "./sourcePolicy";
 // The one hostOf, which the suite holds to one declaration across utils.
 import { hostOf, textHasPrice, menuImagesToRead } from "./pageScan";
+import { haversineKm } from "./helpers";
 
 // The row type in gemlyx_content. Deliberately NOT in CONTENT_TYPES, for the
 // reason "undated" is not: nothing drafts a gem through the normal pipeline.
@@ -84,6 +85,20 @@ export const COUPON_SITE = /rabat|kupon|coupon|coupert|promo|voucher|hotdeal|dea
 export const isCouponSite = (url) => {
   const h = hostOf(url);
   return !!h && COUPON_SITE.test(h);
+};
+
+// ── AND A COMPANY DATABASE IS NOT A SOURCE EITHER ───────────────────
+//
+// Oliver, 22 Sep 2026, of a published Jem & Fix row whose link opened a
+// zoominfo company profile: "not only is it ridiculous that it opens some
+// zoom page". These sites sell contact data about companies. They carry a
+// revenue figure and a phone number, never what a shop charges, and a
+// traveller who taps the link lands on a sales page. Same rule as a coupon
+// site: not a page a claim about prices may be checked against.
+export const DATA_SITE = /zoominfo|crunchbase|dnb\.com|dun.?bradstreet|bloomberg|pitchbook|owler|glassdoor|indeed|linkedin|proff\.|virk\.dk|cvrapi|biq\.dk|nordicnet|kompass|yellowpages|degulesider|krak\./i;
+export const isDataSite = (url) => {
+  const h = hostOf(url);
+  return !!h && DATA_SITE.test(h);
 };
 
 // ── IS THIS THE BRAND'S OWN PAGE ────────────────────────────────────
@@ -182,6 +197,9 @@ export const gemProblems = (payload = {}, today = new Date()) => {
   } else if (isCouponSite(g.source)) {
     out.push(`${hostOf(g.source)} is a coupon site. Those print figures the brand never offered.`);
     blocks = true;
+  } else if (isDataSite(g.source)) {
+    out.push(`${hostOf(g.source)} is a company database, not the shop. It sells contact data and says nothing about what anything costs.`);
+    blocks = true;
   } else if (!isOwnSite(g.source, g.name)) {
     // A DISCOUNT'S TERMS ARE THE BRAND'S TO STATE. A list of student discounts
     // on somebody else's site was right the day it was written, and the one
@@ -225,6 +243,26 @@ const inTown = (g, town) => {
   const towns = Array.isArray(g.towns) ? g.towns : [];
   if (!towns.length) return true;
   return towns.some(t => fold(t) === fold(town));
+};
+
+// ── WHERE A GEM IS, AND HOW FAR THAT IS FROM THE READER ─────────────
+//
+// Oliver, 22 Sep 2026: "also add location, and how far it is from 'you'."
+//
+// The towns the row names, and a distance only when two things are true: we
+// hold a point for one of those towns, and the reader is somewhere we can
+// measure from. A row with no town is a chain, and a chain is wherever they
+// are, which is the honest line for it.
+export const gemWhere = (g = {}, { point = null, me = null } = {}) => {
+  const towns = (Array.isArray(g?.towns) ? g.towns : []).map(clean).filter(Boolean);
+  if (!towns.length) return "All over Denmark";
+  const where = towns.join(", ");
+  const at = typeof point === "function" ? point(towns[0]) : null;
+  const lat = Number(me?.lat), lon = Number(me?.lon);
+  if (!at || !Number.isFinite(lat) || !Number.isFinite(lon)) return where;
+  const km = Math.round(haversineKm({ lat, lon }, { lat: Number(at.lat), lon: Number(at.lon) }));
+  if (!Number.isFinite(km)) return where;
+  return `${where} · ${km < 2 ? "~2" : `~${km}`} km from you`;
 };
 
 // ── FILTERS ON THE PAGE ─────────────────────────────────────────────
@@ -392,7 +430,7 @@ export const GEMS_PROMPT = (place, results = [], { only = "" } = {}) => {
     + `WHERE is empty unless a result says whether it works in the shop, online or both.\n`
     + `CATCH is what stops a VISITOR in particular: a voucher that only works in the country you joined in, a student card that has to be Danish, a club that wants a Danish phone number or MitID. Empty if no result states one. Never invent a catch.\n`
     + `TOWNS is empty for a chain or a scheme that works in every shop the brand has. Name the town only for a single local place.\n`
-    + `A BRAND'S CLAIM ABOUT ITSELF IS THEIRS. Write "they say their prices are the lowest in Denmark", never "the lowest prices in Denmark".\n`
+    + `A RANKING A BRAND GIVES ITSELF IS THEIRS: write "they say their prices are the lowest in Denmark", never "the lowest prices in Denmark". WHAT THE SHOP IS is not a ranking and is stated plainly: "low prices are central to this self service builders merchant chain", never "they say low prices are central". Hedge a claim nobody can check, not a description of the shop.\n`
     + `LEAVE OUT: coupon code sites and anything they list, one-off sales, campaign codes with an end date, and anything that is not a shop, café, restaurant or chain a visitor can walk into or order from.\n`
     + `A PLACE TO EAT is "cheap" only when a result gives a price for something on its menu, and WHAT is that price as the result states it, with the dish: "a burger under 100 kr at lunch". Never "cheap food" with no figure.\n`
     + (one ? `ONE PLACE ONLY: return rows about ${one} and nothing else.\n` : "")
@@ -414,7 +452,7 @@ export const settleGems = (json, results = [], { today = new Date(), only = "" }
     const i = Number(raw?.source);
     const hit = Number.isInteger(i) && i >= 0 && i < results.length ? results[i] : null;
     if (!hit || !/^https?:\/\//i.test(clean(hit.url))) { dropped.noSource += 1; continue; }
-    if (isCouponSite(hit.url)) { dropped.coupon += 1; continue; }
+    if (isCouponSite(hit.url) || isDataSite(hit.url)) { dropped.coupon += 1; continue; }
     const g = shapeGem({ ...raw, source: clean(hit.url), checkedAt: at });
     if (!g.name || !g.kind || (g.kind === "scheme" && !g.what)) { dropped.shape += 1; continue; }
     // A name search that comes back with the place next door is a different

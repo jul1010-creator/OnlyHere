@@ -236,6 +236,28 @@ const bareStreetName = (st, cities) => {
   return bare && bare.length >= 3 ? bare : name;
 };
 
+// ── AND THE SAME QUESTION, ASKED OF SOMETHING NOT YET PUBLISHED ─────
+//
+// Oliver, 22 Sep 2026: "Can you make a 'discover' that discovers all the bars
+// inside the chosen barstreets? Right now, Aarhus has nothing on its
+// barstreets."
+//
+// Discovery hands back a candidate with an address string and no row behind it
+// yet, so streetForSpot below cannot be asked: it takes a published spot and
+// walks every street. The question underneath is the same one, and it is the
+// awkward half: the typed name, the name without the town the row itself
+// carries, and the spelling variants that make "Noerregade 40" and "Nørregade"
+// one street. Exported so the discovery filter asks it here rather than
+// growing a second matcher, which is how a street page and a search start
+// disagreeing about what is on a street.
+export const onThisStreet = (where, street, cities = NIGHTLIFE_CITIES) => {
+  const text = String(where || "").trim();
+  if (!text || !street?.name) return false;
+  if (nameIsIn(text, street.name)) return true;
+  const bare = bareStreetName(street, cities);
+  return bare !== street.name && nameIsIn(text, bare);
+};
+
 export const streetForSpot = (spot, streets, cities = NIGHTLIFE_CITIES) => {
   const where = whereIsIt(spot);
   if (!where) return null;
@@ -248,9 +270,7 @@ export const streetForSpot = (spot, streets, cities = NIGHTLIFE_CITIES) => {
     if (stTown && town && !samePlaceName(stTown, town)) continue;
     // The typed name first, then the same name without the town the row itself
     // says it is in. Both, so a street named either way finds its venues.
-    if (nameIsIn(where, st.name)) return st;
-    const bare = bareStreetName(st, cities);
-    if (bare !== st.name && nameIsIn(where, bare)) return st;
+    if (onThisStreet(where, st, cities)) return st;
   }
   return null;
 };

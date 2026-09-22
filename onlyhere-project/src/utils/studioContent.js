@@ -6,6 +6,10 @@
 // helpers; shapeForLive turns a raw AI draft into the exact object shape each
 // hardcoded data array (towns/events/freeEntrance/foodSpots/etc.) expects.
 import { normaliseTicketStatus } from "./tickets";
+// A bar street says which street tonight and whether it is worth it. The vibe
+// is a closed list and an unknown value is dropped rather than stored. See
+// utils/streetVibe.js.
+import { vibeOf } from "./streetVibe";
 import { cleanKind, cleanCategory } from "./essentialKind";
 import { cleanIsland, cleanRelation } from "./placeEdit";
 import { isBookableTicketUrl, ticketUrlSaysElsewhere, ticketUrlIsASubEvent, isTourUrl, cleanTourUrl } from "./ticketLink";
@@ -300,8 +304,16 @@ const shapeForLiveFields = (type, t) => {
   // from an empty section. `location` stays too, for the card line and the map.
   // The bars on the street are deliberately NOT stored: they are matched from
   // their own rows at render time, so publishing a bar needs no edit here.
+  // ── AND WHICH STREET, AND WHAT KIND OF NIGHT ────────────────────
+  // Oliver, 22 Sep 2026, on a town with three of them: "a tourist might pick
+  // between 3 streets, not knowing that Jomfru Ane Gade is by far the most
+  // popular", and then the vocabulary itself: "Main street, pre-drinking
+  // street, quite street.. no?" `tier` is the same field towns carry, so the
+  // publish gate, the badge and the ranking need no new case; `vibe` is its
+  // own closed list and an unknown value is dropped rather than stored. Both
+  // empty rather than guessed. See utils/streetVibe.js.
   if (type === "nightStreet") return { name: t.name, isStreet: true, town: t.town || "", location: t.location || "", emoji: t.emoji || "🍻",
-    category: t.category || "Bar street", crowd: t.crowd || "", priceNote: t.priceNote || "",
+    category: t.category || "Bar street", tier: t.tier || "", vibe: vibeOf(t.vibe)?.value || "", crowd: t.crowd || "", priceNote: t.priceNote || "",
     photo: `/nightlife-streets/${slugify(t.name)}.jpg`, desc: t.desc, mapHint: t.mapHint || "", color: t.color || "#5D4037", gemlyxFind: t.gemlyxFind || "",
     blogBody: [
       ...bbData([["Who It's For", t.whoFor], ["Best Nights", t.bestNights], ["Walking It", t.walkIt], ["The Reality Check", t.realityCheck]]),

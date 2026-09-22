@@ -497,3 +497,76 @@ export const describeOffTarget = (dropped, targetId) => {
   const named = where.length ? ` They are in ${where.length === 1 ? where[0] : `${where.slice(0, -1).join(", ")} and ${where[where.length - 1]}`}.` : "";
   return `${list.length} ${list.length === 1 ? "was" : "were"} left out for not being in ${t.label} at all.${named} The search was aimed there and answered somewhere else, which is worth knowing about the run rather than about the places.`;
 };
+
+// ── AND THE FIFTH SCOPE: ONE STREET ─────────────────────────────────
+//
+// Oliver, 22 Sep 2026: "Can you make a 'discover' that discovers all the bars
+// inside the chosen barstreets? Right now, Aarhus has nothing on its
+// barstreets."
+//
+// That is the sharpest scope this panel has ever had, and it is the one the
+// content model was built for: a bar street entry holds no list of its bars,
+// because each bar is its own published row matched to the street at render
+// time. Publishing one more bar needs no edit to the street. So a street with
+// nothing on it is not a broken entry, it is a to-do list with a name and an
+// address, and the search that fills it can be aimed at a hundred metres of
+// pavement rather than at a country.
+//
+// A STREET IS NOT A TOWN, which is why this is its own framing rather than
+// typing the street into the town box. The town box aims queries at "Aarhus",
+// and Aarhus has hundreds of bars; four of the five would come back off the
+// same three listicles about the city. A street aims them at a name that
+// appears in an ADDRESS, which is the one string that says a bar is on it.
+export const streetFraming = (street) => {
+  const name = clean(street && street.name);
+  if (!name) return "";
+  const town = clean(street && street.town);
+  const where = town ? `${name} in ${town}` : name;
+  return `\n\nAIM EVERY QUERY AT ONE STREET: ${where}. The job is to find the BARS, PUBS AND CLUBS that stand on that street, named one by one, not to describe the street itself. Search its name the way an address is written, in Danish as well as English ("barer på ${name}", "værtshuse ${name}", "${name} ${town || "Denmark"} bar"), and use listings and review sites where addresses are printed, because the address is the only thing that proves a venue is on this street rather than near it. A venue on a different street in the same town is not a find here, however good it is.`;
+};
+
+// ── AND THE FILTER, BECAUSE A BRIEF IS NOT A FILTER ─────────────────
+//
+// Fifth time in this one file, which makes it the rule rather than the lesson:
+// the region, the month and the already-covered list each had to be enforced
+// in code after being asked for in prose. A street is the easiest of them to
+// get wrong, because every candidate WILL be a real bar in the right town and
+// the wrong street, which reads as a correct answer.
+//
+// TWO WAYS TO MISS, kept apart because they are different facts about the run.
+// A candidate that names another street was answered wrongly. A candidate that
+// names no street at all was answered vaguely, and it may well be on it: the
+// snippet simply did not carry an address. Neither is kept, because a bar
+// published onto the wrong street is worse than a bar not published, and the
+// street page matches on the address either way.
+//
+// The address is read off the candidate's own fields and never off its hook:
+// "a short walk from Jomfru Ane Gade" is a sentence saying the opposite of
+// what a name match on it would conclude.
+export const splitOffStreet = (candidates, street, onStreet) => {
+  const kept = [], elsewhere = [], unstated = [];
+  const named = clean(street && street.name);
+  if (!named || typeof onStreet !== "function") return { kept: Array.isArray(candidates) ? candidates : [], elsewhere, unstated };
+  for (const c of Array.isArray(candidates) ? candidates : []) {
+    const where = [c?.street, c?.address, c?.location].map(v => clean(v)).filter(Boolean).join(", ");
+    if (!where) { unstated.push(c); continue; }
+    if (onStreet(where, street)) kept.push({ ...c, _street: where });
+    else elsewhere.push({ ...c, _where: where });
+  }
+  return { kept, elsewhere, unstated };
+};
+
+// One sentence, both counts, because the panel promises a list is never
+// silently shorter. The unstated half carries advice rather than a verdict:
+// those are candidates the run could not place, and the founder can place one
+// in a second by opening it.
+export const describeOffStreet = (elsewhere, unstated, street) => {
+  const off = Array.isArray(elsewhere) ? elsewhere.filter(Boolean) : [];
+  const none = Array.isArray(unstated) ? unstated.filter(Boolean) : [];
+  if (!off.length && !none.length) return "";
+  const name = clean(street && street.name) || "this street";
+  const parts = [];
+  if (off.length) parts.push(`${off.length} gave an address on another street`);
+  if (none.length) parts.push(`${none.length} gave no address at all`);
+  return `${parts.join(" and ")}, so ${off.length + none.length === 1 ? "it is" : "they are"} not offered as being on ${name}. A bar published onto the wrong street is worse than one not published${none.length ? `, and the ones with no address may well be on it: the search never printed one` : ""}.`;
+};

@@ -51,11 +51,11 @@ import { reconcileHours, hoursForPrompt } from "./utils/openingHours";
 import { matchEvent, reconcileTickets, ticketsForPrompt, appearances, otherDatesHere, alsoPlayingLine, describeAppearances, ticketBadge, priceText, normaliseTicketStatus, stampTicketSource, ticketProvenance, statedAsFact, ticketPromptNote, writtenStatusRule, lookupFailureNote, TICKET_HUNT_PROMPT, ticketHuntUrls } from "./utils/tickets";
 import { readFactCheck, describeFactCheck, withRoots, datesConfirmedBy, readInventedCheck, researchForCheck, INVENTED_CHECK_FORMAT, correctionLanded, describeCorrection, correctionBanner, correctionPublisherNote } from "./utils/factCheckRead";
 import { tracePrices, describePriceTrace, untracedPriceClaim, readerText, glanceProblems, repairGlance, curatedFindProblems, selfContradictions, launderedAbsence, priceSource, priceMisses, findTicketPrice, whoSaid, ticketPriceOn, pricesAdmission, evidenceStanding, describeEvidence, statesAPrice, unpricedLine, describeUnpriced, PRICE_UNCHECKED, sourceFit, describeSourceFit, LIVING_TYPES, VENUE_KINDS, UNCONFIRMED_IDENTITY, UNVERIFIED_PROSE } from "./utils/entryAudit";
-import { townPointFor, isSameTownWalk, legDistanceKm, resolveLegMode, lookupRealPlace, placeCoords, directionsEndpoint, collapsedRoute, WALK_MAX_MINUTES, WALK_MAX_KM, townKeyFor, coordFitsTown, MAX_TOWN_KM, upgradeWorthIt, onFootMinutes } from "./utils/guideEnrichment";
+import { townPointFor, isSameTownWalk, legDistanceKm, resolveLegMode, lookupRealPlace, placeCoords, directionsEndpoint, collapsedRoute, WALK_MAX_MINUTES, WALK_MAX_KM, townKeyFor, coordFitsTown, rowTownFits, MAX_TOWN_KM, upgradeWorthIt, onFootMinutes } from "./utils/guideEnrichment";
 import { checkPlan, planProblemsForPrompt, titlePromises, MAX_BARS_A_NIGHT, MAX_CLUBS_A_NIGHT } from "./utils/planGate";
 import { isPremium } from "./utils/premium";
 import { stayProblems, withoutMismatchedStays, travellerBudget, budgetTierMismatch, budgetCapitalBlock, BUDGET_CAPITAL_GUIDE, budgetFoodBlock, budgetFoodGuide, nightPriceFrom } from "./utils/accommodation";
-import { discoveryFraming, framingForTarget, coverageByTarget, DISCOVERY_TARGETS, targetById, splitAlreadyCovered, splitOffTarget, describeOffTarget, DISCOVERY_MONTHS, monthById, yearForMonth, framingForMonth, splitOffMonth, describeOffMonth } from "./utils/discovery";
+import { discoveryFraming, framingForTarget, coverageByTarget, DISCOVERY_TARGETS, targetById, splitAlreadyCovered, splitOffTarget, describeOffTarget, DISCOVERY_MONTHS, monthById, yearForMonth, framingForMonth, splitOffMonth, describeOffMonth, streetFraming, splitOffStreet, describeOffStreet } from "./utils/discovery";
 import { swipeAxis, dragOffset, swipeTarget } from "./utils/swipe";
 import { placeSlug, townPath, findBySlug, COUNTRY, kindForSeg, entryUrlPath, isEntryUrl, entryPathForKind, parseEntryUrl } from "./utils/placeUrl";
 import { startRun, endRun, summarise, averageFor, describe, describeAverage, recentRuns, installFetchMeter } from "./utils/apiCost";
@@ -199,6 +199,9 @@ import { townClashes, clashNote } from "./utils/chatGeography";
 // ruledOutFor is the typed refusals and the tapped ones merged once, which is
 // what the guide's constraints are built from.
 import { withoutExcluded, ruledOutFor, excludedBlock } from "./utils/exclusions";
+// A refused CATEGORY. exclusions.js rules out names; this rules out kinds, and
+// the two blocks sit side by side in both build prompts and in the chat.
+import { ruledOutKinds, refusedKindsBlock } from "./utils/kindRefusal";
 // ── THE AUDIT, WHICH HAD ONE CALLER AND IT WAS NOT THE BUILD ─────────
 //
 // constraintCheck.js has checked a guide against what the traveller said
@@ -277,7 +280,7 @@ import { venueStyleOf, showVenueStyleFacet, stylesPresent, VENUE_STYLE_LABEL } f
 import { VenueStyleChip } from "./components/VenueStyleChip";
 import { dayKey, dayStart, dayPlus } from "./utils/calendarDay";
 import { arrivalPoint } from "./utils/arrival";
-import { groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList, nightlifeSummaryFor, nightlifeForTown, barsOnStreet, townOfLocation, nightKindOf, strandedNight } from "./utils/nightlife";
+import { groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList, nightlifeSummaryFor, nightlifeForTown, barsOnStreet, townOfLocation, nightKindOf, strandedNight, onThisStreet } from "./utils/nightlife";
 import { showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, clearFacet, clearAllFacets, matchesQuery } from "./utils/listControls";
 import { supabaseFailure, studioErrorMessage, refreshIsDead, EXPIRED, REFUSED, MISSING, OUTDATED } from "./utils/studioErrors";
 import { cleanPlaceKind, cleanRelation, cleanIsland, placeIssues, placePatch, hasPlaceChange, duplicateNames } from "./utils/placeEdit";
@@ -325,6 +328,9 @@ import { partOfCountry, partsPresent, matchesSearch, islandOf, namedIslandOf, is
 import { tileCss } from "./utils/mapTiles";
 import { dayCrossings, tripWeatherWarning } from "./utils/weatherWarn";
 import { THEME_LABEL, THEME_EMOJI, themesOf, hasTheme, themesPresent, tierLabel, tierBadge, TIERS, tierOf, TIER_VALUES } from "./utils/placeThemes";
+// A bar street carries both: the vibe says which street tonight, the tier says
+// whether it is worth travelling for. See utils/streetVibe.js.
+import { STREET_VIBES, STREET_VIBE_VALUES, vibeOf } from "./utils/streetVibe";
 import { EVENT_TYPE_LABEL, eventTypesOf, hasEventType, eventTypesPresent, eventTypeCounts } from "./utils/eventTypes";
 import { SWEEPS, sweepById, selectRows, applyCap, knownPlacesFor, proposeSweep, applySweepPatch, buildSnapshot, readSnapshot, snapshotFilename, MARKS } from "./utils/sweeps";
 import { classifyFerry, ferryFindings, FERRY } from "./utils/transport";
@@ -3217,6 +3223,13 @@ function GemlyxApp() {
   // the one it was aimed at. A sentence rather than a count, because the
   // interesting part is WHERE it went instead. See describeOffTarget.
   const [discoverOffTarget, setDiscoverOffTarget] = useState("");
+  // ── AND THE ONE STREET, 22 SEP 2026 ──────────────────────────────
+  // Oliver: "Can you make a 'discover' that discovers all the bars inside the
+  // chosen barstreets? Right now, Aarhus has nothing on its barstreets." Held
+  // as the street's NAME rather than the row, so a republish of the streets
+  // array cannot leave this pointing at an object nothing renders.
+  const [discoverStreet, setDiscoverStreet] = useState("");
+  const [discoverOffStreet, setDiscoverOffStreet] = useState("");
   const [discoverError, setDiscoverError] = useState(null);
   const [discoverPicked, setDiscoverPicked] = useState([]); // names ticked in the pick-list
   // Which content type the current pick-list was discovered FOR. Without this,
@@ -7207,7 +7220,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         code = `// 1) Ctrl+F for \`const craftItemsFallback = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, type: ${J(t.type || "Local")}, what: ${JSON.stringify(Array.isArray(t.what) ? t.what : [t.what].filter(Boolean))}, rating: ${t.rating ? Number(t.rating).toFixed(1) : "null"}, location: ${J(t.location)}, price: ${J(t.price)}, priceNote: ${J(t.priceNote)}, travelTime: ${J(t.travelTime)}, bookingType: ${J(t.bookingType || "contact")}, popularityTag: ${J(t.popularityTag || "")}, transportWarning: ${t.transportWarning ? "true" : "false"}, emoji: ${J(t.emoji || "🔨")}, photo: "/craft/${slug}.jpg", color: ${J(t.color || "#8E6B1F")}, accessibility: ${J(t.accessibility)}, nearestStation: ${J(t.nearestStation)}, gemlyxFind: ${J(t.gemlyxFind)},\n  desc: ${J(t.desc)},\n  blogBody: [\n${bb([["Being There", t.special], ["Who It's For", t.whoFor], ["The Reality Check", t.realityCheck]])}\n${bbBullets("Things to Know", t.thingsToKnow)}\n  ] },\n\n// 2) Add a photo at public/craft/${slug}.jpg (or remove the photo field)\n// 3) rating is left null unless the research found a real one — leave it as null rather than inventing a number.\n// 4) VERIFY price, booking method, and that it still operates before committing.`;
       } else if (sType === "nightStreet") {
         const nextId = Math.max(0, ...nightlifeStreets.map(x => x.id)) + 1;
-        code = `// 1) Ctrl+F for \`const nightlifeStreets = [\` in src/data/nightlifeStreets.js and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, isStreet: true, town: ${J(t.town)}, location: ${J(t.location)}, emoji: ${J(t.emoji || "🍻")}, category: ${J(t.category || "Bar street")}, crowd: ${J(t.crowd)}, priceNote: ${J(t.priceNote)}, photo: "/nightlife-streets/${slug}.jpg",\n  desc: ${J(t.desc)},\n  mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#5D4037")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Who It's For", t.whoFor], ["Best Nights", t.bestNights], ["Walking It", t.walkIt], ["The Reality Check", t.realityCheck]])}\n${bbBullets("What to Be Aware Of", t.thingsToKnow)}\n  ] },\n\n// 2) Add a photo at public/nightlife-streets/${slug}.jpg (or remove the photo field)\n// 3) The bars ON this street are NOT listed here. They are matched from their own published rows by town + street name, so publishing one more bar needs no edit to this entry.`;
+        code = `// 1) Ctrl+F for \`const nightlifeStreets = [\` in src/data/nightlifeStreets.js and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, isStreet: true, town: ${J(t.town)}, location: ${J(t.location)}, emoji: ${J(t.emoji || "🍻")}, category: ${J(t.category || "Bar street")}, tier: ${J(t.tier)}, vibe: ${J(vibeOf(t)?.value || "")}, crowd: ${J(t.crowd)}, priceNote: ${J(t.priceNote)}, photo: "/nightlife-streets/${slug}.jpg",\n  desc: ${J(t.desc)},\n  mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#5D4037")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Who It's For", t.whoFor], ["Best Nights", t.bestNights], ["Walking It", t.walkIt], ["The Reality Check", t.realityCheck]])}\n${bbBullets("What to Be Aware Of", t.thingsToKnow)}\n  ] },\n\n// 2) Add a photo at public/nightlife-streets/${slug}.jpg (or remove the photo field)\n// 3) The bars ON this street are NOT listed here. They are matched from their own published rows by town + street name, so publishing one more bar needs no edit to this entry.`;
       } else if (sType === "nightTown") {
         const nextId = Math.max(0, ...nightlifeTowns.map(x => x.id)) + 1;
         code = `// 1) Ctrl+F for \`const nightlifeTowns = [\` in src/data/nightlifeTowns.js and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, emoji: ${J(t.emoji || "🌃")}, photo: "/nightlife-towns/${slug}.jpg",\n  desc: ${J(t.desc)},\n  color: ${J(t.color || "#5D4037")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Who It's For", t.whoFor], ["After Dark", t.afterDark], ["The Reality Check", t.realityCheck]])}\n${bbBullets("What to Be Aware Of", t.thingsToKnow)}\n  ] },\n\n// 2) Add a photo at public/nightlife-towns/${slug}.jpg (or remove the photo field)\n// 3) VERIFY this matches the town's actual nightlife character before committing.`;
@@ -10704,7 +10717,7 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
     if (discoverLoading) return;
     const type = typeOverride || studioType;
     setDiscoverForType(type);
-    setDiscoverLoading(true); setDiscoverError(null); setDiscoverResults(null); setDiscoverPicked([]); setDiscoverDropped(0); setDiscoverCovered(0); setDiscoverOffTarget(""); setDiscoverOffMonth("");
+    setDiscoverLoading(true); setDiscoverError(null); setDiscoverResults(null); setDiscoverPicked([]); setDiscoverDropped(0); setDiscoverCovered(0); setDiscoverOffTarget(""); setDiscoverOffMonth(""); setDiscoverOffStreet("");
     try {
       const existing = (discoverSourceArrays()[type] || []).map(i => i.name).filter(Boolean);
       const typeLabel = DISCOVER_TYPE_LABEL[type] || "places in Denmark";
@@ -10716,10 +10729,24 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
       // the country are thinnest, and the instruction to search in Danish,
       // which is what actually reaches past the tourist canon. See
       // utils/discovery.js.
+      // ── AND THE ONE STREET, WHICH IS THE TIGHTEST SCOPE HERE ──
+      //
+      // Oliver, 22 Sep 2026: "Right now, Aarhus has nothing on its
+      // barstreets." A street entry holds no list of its bars by design, so an
+      // empty street is a to-do list with an address on it, and this is the
+      // search that fills it. Only for venues, and only when the street is
+      // published, because the filter below folds a candidate's address
+      // against the street's OWN row. See utils/discovery.js.
+      const streetRow = type === "night" && discoverStreet
+        ? nightlifeStreets.find(st => st?.name === discoverStreet) || null
+        : null;
       const discoverAim = framingForTarget(discoverTarget, manageItems || [], { typeLabel, town: discoverTown })
         // The month, appended rather than replacing: where and when are separate
         // questions and a brief can carry both.
-        + framingForMonth(discoverMonth, new Date());
+        + framingForMonth(discoverMonth, new Date())
+        // The street last, because it is the narrowest of the three and the one
+        // the queries should be built around when it is set.
+        + streetFraming(streetRow);
       // ── "I MEAN THE 'DISCOVER NEW EVENTS' TAB" ─────────────────────
       // Oliver, 13 Aug 2026, pointing at exactly this function. His eighteen
       // vouched domains have never been searched by it: five queries are
@@ -10736,7 +10763,11 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
       // The town is the only place context discovery has, and it is often
       // blank, which is correct and strict: a place-scoped source stays out
       // when nothing says where we are.
-      const discoverCtx = discoverTown ? { name: discoverTown, town: discoverTown } : null;
+      // A chosen street carries its town, and a place-scoped source is worth
+      // more here than anywhere: a bar's first appearance anywhere is usually a
+      // local listing rather than a national one.
+      const ctxTown = discoverTown || (streetRow ? String(streetRow.town || "").trim() : "");
+      const discoverCtx = ctxTown ? { name: streetRow ? `${streetRow.name}, ${ctxTown}` : ctxTown, town: ctxTown } : null;
       const discoverHunt = discoverSourceSearch(founderSources, type, discoverCtx);
       const discoverNote = discoverSourceNote(founderSources, type, discoverCtx);
 
@@ -10820,7 +10851,9 @@ For each real candidate found, give its exact name, the town/region it's in (emp
 
 For each one also give WHEN it runs, in its own words from the search results: a month, a date range, or an empty string if the results do not say. This is read by code to check the month a search was aimed at, so give the month by name ("early December", "28 August to 6 September 2026") rather than a season or a vague phrase, and leave it empty rather than guessing.
 
-Respond with ONLY a JSON array: [{"name": "...", "region": "...", "when": "...", "hook": "..."}]
+For each one also give its STREET ADDRESS exactly as the search results print it, and an empty string when they do not print one. Never work an address out from the name of the place or from a phrase like "in the heart of the old town": this field is read by code to decide whether a venue stands on a particular street, and a worked-out address puts a real bar on the wrong street.
+
+Respond with ONLY a JSON array: [{"name": "...", "region": "...", "when": "...", "street": "...", "hook": "..."}]
 
 TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 16000)}`,
           2200
@@ -10859,7 +10892,14 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
       // lesson. Reads each candidate's own stated `when`, and keeps anything that
       // states no month: not knowing when something runs is not evidence it runs
       // at the wrong time.
-      const { kept, dropped: wrongMonth } = splitOffMonth(inRegion, discoverMonth);
+      const { kept: inMonth, dropped: wrongMonth } = splitOffMonth(inRegion, discoverMonth);
+      // ── AND THE FIFTH, WHICH IS THE EASIEST ONE TO MISS ─────────
+      // Every candidate here is a real bar in the right town, and the wrong
+      // street reads as a correct answer. The matcher is nightlife.js's own,
+      // injected rather than imported over there, so a street page and this
+      // search cannot disagree about what stands on a street.
+      const { kept, elsewhere: offStreet, unstated: noStreet } = splitOffStreet(inMonth, streetRow, onThisStreet);
+      setDiscoverOffStreet(describeOffStreet(offStreet, noStreet, streetRow));
       setDiscoverCovered(covered.length);
       setDiscoverDropped(dropped.length);
       setDiscoverOffTarget(describeOffTarget(elsewhere, discoverTarget));
@@ -13889,6 +13929,30 @@ ${researchRules("festival", ev)}`
         );
         return;
       }
+      // ── 3b. AND A STREET WITH NO KIND OF NIGHT ON IT ───────────
+      //
+      // Oliver, 22 Sep 2026: "a tourist might pick between 3 streets, not
+      // knowing that Jomfru Ane Gade is by far the most popular." The tier
+      // above says whether a street is worth travelling for and the vibe says
+      // which one to walk down tonight, so a street published without one is
+      // the half of his complaint the tier cannot answer.
+      //
+      // Asked of the VALUE, exactly as the tier is: a shape that carries a
+      // vibe must fill it, a shape that never carries one is not scolded for a
+      // field it does not have, and an edit is gated for the same reason.
+      // shapeForLive drops a word outside the three, so an unrecognised one
+      // arrives here as an empty string and the message says which it was.
+      if ("vibe" in shaped && !vibeOf(shaped)) {
+        setPublishStatus(null);
+        const saidVibe = String(editedDraft?.vibe ?? shaped.vibe ?? "").trim();
+        setDraftEditError(
+          `Not published. ${saidVibe
+            ? `The vibe reads "${saidVibe.slice(0, 40)}", which is not one of the three Gemlyx uses.`
+            : "There is no vibe on this street, and that is what tells a visitor which of a town's streets to walk down tonight."} `
+          + `Set "vibe" in the draft above to one of: ${STREET_VIBE_VALUES.map(v => `"${v}"`).join(", ")}.`
+        );
+        return;
+      }
       // ── 4. AND A ROW THAT DISAGREES WITH ITSELF ────────────────
       //
       // Oliver, 5 Sep 2026, after a day of cleaning up: "the rest is obviously
@@ -15881,7 +15945,11 @@ THE LIST ABOVE COUNTS AS CONTEXT FOR recommendedStay, and it is the only list th
   const resolveStopCoordsPrecise = (name, extraGeo = null, town = "") => {
     const real = lookupRealPlace(name);
     const rc = placeCoords(real);
-    if (rc && coordFitsTown(rc, town).ok) return { lat: rc.lat, lon: rc.lon, precise: true };
+    // AND THE ROW'S OWN TOWN, 22 Sep 2026: a row listed under Ribe may not
+    // lend its coordinate to a stop the plan puts in Højer, whatever the name
+    // match. See rowTownFits in utils/guideEnrichment.js for the guide that
+    // routed "Hoejer Sluse to Vadehavet" as 3 hours 34 minutes.
+    if (rc && coordFitsTown(rc, town).ok && rowTownFits(real, town).ok) return { lat: rc.lat, lon: rc.lon, precise: true };
     if (extraGeo && extraGeo[name] && coordFitsTown(extraGeo[name], town).ok) return { ...extraGeo[name], precise: true };
     if (geocodedCoords[name] && coordFitsTown(geocodedCoords[name], town).ok) return { ...geocodedCoords[name], precise: true };
     const key = townKeyFor(town) || townKeyFor(name);
@@ -16732,6 +16800,15 @@ THE LIST ABOVE COUNTS AS CONTEXT FOR recommendedStay, and it is the only list th
       // the audit after the writer and the swap gate on the guide page then
       // check the same guide against the same object.
       const guideConstraints = { excluded: ruledOut, transport: { ruledOut: [] } };
+      // ── AND A KIND OF PLACE THEY REFUSED, WHICH IS NOT A NAME ────
+      //
+      // Oliver, 22 Sep 2026, on his own test conversation: "We mostly care
+      // about food and shopping, not museums", answered with a museum
+      // described as a park. ruledOut holds NAMES, so a sentence refusing a
+      // whole category reached neither prompt. Their own turns only, because
+      // Gemlyx's replies name museums constantly. See utils/kindRefusal.js.
+      const kindsOut = ruledOutKinds(saidByTravellerForGuide);
+      const kindsOutBlock = refusedKindsBlock(kindsOut);
       if (agreedToDrop) {
         note("The region they agreed to give up", {
           detail: `they were offered the trade and said yes, so ${agreedToDrop} comes out`,
@@ -16820,7 +16897,7 @@ THE LIST ABOVE COUNTS AS CONTEXT FOR recommendedStay, and it is the only list th
       let planProblems = [];
       try {
         const plannerRes = await askOpenAI(
-          `You are planning the STRUCTURE of a Denmark trip itinerary from this conversation — day count, which real places go on which day, in what order, and roughly when. Do NOT write any descriptive prose, do NOT write notes, explanations or reasons — structure only, nothing else.${requestedDays ? ` The traveler explicitly wants exactly ${requestedDays} days — the "days" array must have exactly ${requestedDays} entries.` : ""}\n\nRespond with ONLY strict JSON, no markdown, no commentary: {"days": [{"day": 1, "stops": [{"name": "real place name mentioned in the conversation", "town": "the real Danish town/city it's in", "arrivalTime": "suggested clock time"}]}]}\n\nA NIGHT OUT IS AT MOST ${MAX_BARS_A_NIGHT} BARS AND ${MAX_CLUBS_A_NIGHT} CLUB, PER DAY, AND THE CLUB IS OPTIONAL. Nobody follows an itinerary once the night has started, so a day carrying four bars is a day where two of them will never be reached and the whole plan reads as padding. Pick the one or two worth STARTING at and leave the rest out. This is a ceiling and not a target: most days need no bar at all.\n\nUse only real place names mentioned in the conversation — never invent one. Group each day's stops by geography so nothing zigzags needlessly, put any long-distance leg first in its day, and leave a realistic arrival/departure buffer on the first and last days.${beenBlock}\n\nCRITICAL — SEQUENCE THE DAYS THEMSELVES ALONG ONE SENSIBLE ROUTE, using real Danish geography (Copenhagen/Zealand is a different region from Jutland — they're connected only by a long bridge/ferry crossing or a flight, never a short hop): the trip as a whole should move in one general direction across the country, not double back across a major region-crossing more than once. Bad, avoid this shape: Day 1 in central Jutland, Day 2 further into Jutland, Day 3 suddenly Copenhagen (a full region jump with nothing bridging it, right after two days moving the opposite way). If the conversation gives a real starting point and/or return point, treat the whole itinerary as one path between them; otherwise, order the days to minimize total region-crossings and backtracking across the WHOLE trip, not just within each single day.${chosenEventsBlock}${chosenExtrasBlock}${ruledOutBlock}\n\nConversation:\n${convoText}`,
+          `You are planning the STRUCTURE of a Denmark trip itinerary from this conversation — day count, which real places go on which day, in what order, and roughly when. Do NOT write any descriptive prose, do NOT write notes, explanations or reasons — structure only, nothing else.${requestedDays ? ` The traveler explicitly wants exactly ${requestedDays} days — the "days" array must have exactly ${requestedDays} entries.` : ""}\n\nRespond with ONLY strict JSON, no markdown, no commentary: {"days": [{"day": 1, "stops": [{"name": "real place name mentioned in the conversation", "town": "the real Danish town/city it's in", "arrivalTime": "suggested clock time"}]}]}\n\nA NIGHT OUT IS AT MOST ${MAX_BARS_A_NIGHT} BARS AND ${MAX_CLUBS_A_NIGHT} CLUB, PER DAY, AND THE CLUB IS OPTIONAL. Nobody follows an itinerary once the night has started, so a day carrying four bars is a day where two of them will never be reached and the whole plan reads as padding. Pick the one or two worth STARTING at and leave the rest out. This is a ceiling and not a target: most days need no bar at all.\n\nUse only real place names mentioned in the conversation — never invent one. Group each day's stops by geography so nothing zigzags needlessly, put any long-distance leg first in its day, and leave a realistic arrival/departure buffer on the first and last days.${beenBlock}\n\nCRITICAL — SEQUENCE THE DAYS THEMSELVES ALONG ONE SENSIBLE ROUTE, using real Danish geography (Copenhagen/Zealand is a different region from Jutland — they're connected only by a long bridge/ferry crossing or a flight, never a short hop): the trip as a whole should move in one general direction across the country, not double back across a major region-crossing more than once. Bad, avoid this shape: Day 1 in central Jutland, Day 2 further into Jutland, Day 3 suddenly Copenhagen (a full region jump with nothing bridging it, right after two days moving the opposite way). If the conversation gives a real starting point and/or return point, treat the whole itinerary as one path between them; otherwise, order the days to minimize total region-crossings and backtracking across the WHOLE trip, not just within each single day.${chosenEventsBlock}${chosenExtrasBlock}${ruledOutBlock}${kindsOutBlock}\n\nConversation:\n${convoText}`,
           1200
         );
         if (!plannerRes.error && plannerRes.text) {
@@ -17212,7 +17289,7 @@ CRITICAL — GEOGRAPHIC GROUPING AND SEQUENCING: within a single day, group stop
 CRITICAL — SEQUENCE THE DAYS THEMSELVES ALONG ONE ROUTE, NOT JUST EACH DAY INTERNALLY: this applies across the whole trip, not just within one day — Copenhagen/Zealand and Jutland are different regions connected only by a long bridge/ferry crossing or a flight, never a short hop. Don't send the trip deeper into one region for several days and then jump straight to the other with no bridging day (e.g. Day 1-2 further into Jutland, Day 3 suddenly Copenhagen). If a planning skeleton is provided below, its day-to-day order already accounts for this — follow it. If you're structuring the trip yourself (no skeleton, or it's missing this), order the days to move in one general direction across the country and minimize total region-crossings over the whole trip.
 CRITICAL — REALISTIC ARRIVAL-DAY TIMING: on the actual arrival day, never schedule the first real activity at or right after the exact landing time — leave a real buffer for immigration/baggage claim, then getting from the airport to accommodation and checking in, roughly 60-90 minutes depending on distance, before anything else starts. Someone landing at 12:00 realistically reaches their hotel/hostel around 13:00-13:30, not before — the first stop's arrivalTime should reflect that reality, not the literal landing timestamp.
 CRITICAL — REALISTIC DEPARTURE-DAY TIMING: on the actual departure day, never schedule an activity (a museum visit, a meal, anything) that runs right up against the flight's departure time — leave a real buffer BEFORE it for getting to the airport, checking in, and security, same logic as the arrival buffer but in reverse. People commonly arrive at the airport 2-3 hours before a flight, so if departure is at 14:00, the last real activity should wrap up by roughly 11:00-11:30 at the latest, not 13:30. If the departure time is early enough that there's no realistic room for any activity that day at all, say so plainly rather than forcing one in anyway — a half-day or single relaxed stop near the accommodation is the honest call, not a full itinerary crammed against the clock. If "Traveling with kids" is mentioned, adjust the plan for it — shorter, less-packed days (2-3 stops, not 4-5), avoid late-night-only venues and anything inappropriate for children, favor stops with real breaks (parks, casual food) between bigger activities, and mention if something specific is a poor fit for kids rather than including it anyway.
-If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day.${requestedDays ? ` CRITICAL — the traveler explicitly said they have ${requestedDays} day${requestedDays > 1 ? "s" : ""} for this trip: the "days" array MUST contain exactly ${requestedDays} entries, one per day, even if the conversation text itself didn't spell out "Day 1:", "Day 2:" etc. for each one — split ALL the places discussed across those ${requestedDays} days yourself, in a sensible geographic/logical order (don't cram everything into day 1 and leave later days empty). If too few distinct places were discussed to fill every day with something real, it's fine for a day to have fewer stops or repeat a base town for a slower day — but never invent a place that wasn't mentioned just to fill a day.` : ""} Use only real place names mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.${CURRENCY_RULE}${budgetCapitalGuide}${chosenEventsBlock}${chosenExtrasBlock}${ruledOutBlock}${bookedStayBlock}${homeStartsHere}${beenBlock}${essentialsFacts}${communityFound ? `\n${communityFound}` : ""}${activitySaysForGuide ? `\n${activitySaysForGuide}` : ""}${crossingsForGuide ? `\n${crossingsForGuide}` : ""}${plannerSkeleton ? `\nA planning pass already worked out a day-by-day structure (which places, which day, what order) — follow this exact breakdown unless it's missing something the conversation clearly mentioned; your job is to write the full essentials and every stop's note yourself, this only gives you the skeleton: ${plannerSkeleton}` : ""}${tavilyGrounding ? `\nWEB RESEARCH (Tavily, real current results — weigh alongside the conversation for prices, hours, and current details): ${tavilyGrounding}` : ""}${guideGrounding ? `\nGOOGLE AI CROSS-CHECK (weigh this alongside the conversation — if it reveals a mentioned place doesn't seem to exist, prefer the nearest real equivalent rather than inventing): ${guideGrounding}` : ""}${guideLangBlock}`;
+If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day.${requestedDays ? ` CRITICAL — the traveler explicitly said they have ${requestedDays} day${requestedDays > 1 ? "s" : ""} for this trip: the "days" array MUST contain exactly ${requestedDays} entries, one per day, even if the conversation text itself didn't spell out "Day 1:", "Day 2:" etc. for each one — split ALL the places discussed across those ${requestedDays} days yourself, in a sensible geographic/logical order (don't cram everything into day 1 and leave later days empty). If too few distinct places were discussed to fill every day with something real, it's fine for a day to have fewer stops or repeat a base town for a slower day — but never invent a place that wasn't mentioned just to fill a day.` : ""} Use only real place names mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.${CURRENCY_RULE}${budgetCapitalGuide}${chosenEventsBlock}${chosenExtrasBlock}${ruledOutBlock}${kindsOutBlock}${bookedStayBlock}${homeStartsHere}${beenBlock}${essentialsFacts}${communityFound ? `\n${communityFound}` : ""}${activitySaysForGuide ? `\n${activitySaysForGuide}` : ""}${crossingsForGuide ? `\n${crossingsForGuide}` : ""}${plannerSkeleton ? `\nA planning pass already worked out a day-by-day structure (which places, which day, what order) — follow this exact breakdown unless it's missing something the conversation clearly mentioned; your job is to write the full essentials and every stop's note yourself, this only gives you the skeleton: ${plannerSkeleton}` : ""}${tavilyGrounding ? `\nWEB RESEARCH (Tavily, real current results — weigh alongside the conversation for prices, hours, and current details): ${tavilyGrounding}` : ""}${guideGrounding ? `\nGOOGLE AI CROSS-CHECK (weigh this alongside the conversation — if it reveals a mentioned place doesn't seem to exist, prefer the nearest real equivalent rather than inventing): ${guideGrounding}` : ""}${guideLangBlock}`;
       // Guide-building is genuine multi-step reasoning (timing, geography, avoiding
       // duplicates, family-mode adjustments) — this is the one call in Detour worth
       // Opus's extra reasoning depth, and it already has a loading screen the person
@@ -20826,6 +20903,15 @@ If the conversation only covers a single day or a few stops with no explicit day
       // and home is what makes Skyscanner a useful sentence. utils/homeCountry.js.
       const flyingIn = skyscannerBlock(homeCountryIn(intakeStartPoint));
       const budgetFood = budgetFoodBlock({ level: tightRead, priorReplies: ownReplies, travellerText: travellerTurns.join("\n"), interests: intakeInterest });
+      // ── AND A KIND OF PLACE THEY SAID NO TO ──────────────────────
+      //
+      // Oliver, 22 Sep 2026, two turns after typing "We mostly care about food
+      // and shopping, not museums", was offered Louisiana as a walk through a
+      // sculpture park. The refusal reached the interests slot, which is why
+      // museums are not in it, and reached nothing that decides what gets
+      // offered. Their own turns, because Gemlyx's replies name museums
+      // constantly. See utils/kindRefusal.js.
+      const kindsRuledOut = refusedKindsBlock(ruledOutKinds(travellerTurns.join("\n")));
       const nightTip = reservedEssential(essentials, { convoText: travellerTurns.join("\n"), interests: intakeInterest });
       const nightBlock = !nightTip ? "" : `\n── AND THE ONE THING A NIGHT OUT HERE NEEDS ──\nThey have said nightlife is part of this trip, so tell them about this once, in your own words, at whatever point in the conversation it is useful rather than all at once. It is a published Gemlyx entry, quoted here as written: state it, never embellish it, and never invent a second app like it.\n\n${essentialsBlock([nightTip])}\n`;
 
@@ -20900,7 +20986,7 @@ ONE QUESTION PER TURN. Not two, whatever else is missing. Somebody asked two thi
 DO NOT COMPLIMENT THEIR CHOICE. "Great pick", "excellent choice", "you'll love it", "way underrated" said about a place they just named is the banned filler in a different costume: it is a sentence with no information in it, spent on making them feel approved of.
 
 GIVE BEFORE YOU ASK. Every turn puts one real thing on the table before its question: a fact about the place they named, an opinion about it, or a warning worth having. One thing, not three, and off the block below when there is one. A conversation where one side only asks is an intake form, and it puts the whole weight of the trip on somebody who came here so they would not have to carry it. This is also what makes a short answer workable: a traveller who types four words at a time is normal, and a turn that gives something is still a real turn when their half is thin.
-${heldBlock}${nightBlock}${budgetCapital}${budgetFood}${flyingIn}${seasonSays ? `\n${seasonSays}\n` : ""}${homeSays ? `\n${homeSays}\n` : ""}${activitySays ? `\n${activitySays}\n` : ""}
+${heldBlock}${nightBlock}${budgetCapital}${budgetFood}${flyingIn}${kindsRuledOut}${seasonSays ? `\n${seasonSays}\n` : ""}${homeSays ? `\n${homeSays}\n` : ""}${activitySays ? `\n${activitySays}\n` : ""}
 ── THE TRIP BRIEF, AS MEASURED RATHER THAN AS YOU FEEL IT ──
 This block is computed from what the traveller has typed and from the form they filled in. It is not your impression of the conversation and it overrides your impression of the conversation. Never say you have everything you need unless this block says so, and never say a traveller has already told you something that is not listed as known here.
 
@@ -24692,6 +24778,44 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                               ? `Every query will name ${discoverTown.trim()}, in Danish too. Works for events as well as places.`
                               : t.hint}
                           </div>
+                          {/* ── OR ONE PUBLISHED BAR STREET ───────────
+                              Oliver, 22 Sep 2026: "Can you make a 'discover'
+                              that discovers all the bars inside the chosen
+                              barstreets? Right now, Aarhus has nothing on its
+                              barstreets."
+
+                              The count on each chip is the point, exactly as it
+                              is on the region chips above: a street with 0 on it
+                              is the one to press, and it is the state his
+                              sentence describes. Only for the venue type,
+                              because a street is not a scope for a town or a
+                              festival, and absent entirely until a street is
+                              published, so the panel never shows an empty
+                              control. */}
+                          {studioType === "night" && nightlifeStreets.length > 0 && (
+                            <div style={{ marginTop: 12 }}>
+                              <div style={{ fontSize: 9.5, fontWeight: 700, color: C.muted, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 7 }}>Or one bar street</div>
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                                {nightlifeStreets.map(st => {
+                                  const on = discoverStreet === st.name;
+                                  const n = barsOnStreet(st, nightlifeSpots, nightlifeStreets).length;
+                                  return (
+                                    <button key={st.id || st.name} onClick={() => setDiscoverStreet(on ? "" : st.name)}
+                                      title={`${st.name}${st.town ? `, ${st.town}` : ""}: ${n} published on it`}
+                                      style={{ background: on ? C.gold : "none", border: `1px solid ${on ? C.gold : C.border}`, color: on ? "#0A0F1E" : C.light, borderRadius: 100, padding: "5px 11px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                      {st.name}
+                                      <span style={{ color: on ? "#0A0F1E99" : n === 0 ? "#FFB347" : C.muted, fontWeight: 700 }}> {n}</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                              <div style={{ fontSize: 10.5, color: C.muted, marginTop: 6, lineHeight: 1.5 }}>
+                                {discoverStreet
+                                  ? `Every query will hunt for the bars standing on ${discoverStreet}, in Danish too, and anything whose address is on another street is dropped rather than offered.`
+                                  : "A street entry never holds a list of its bars. Each bar is its own row, matched to the street by its address, so a street showing 0 needs the bars found rather than the street rewritten."}
+                              </div>
+                            </div>
+                          )}
                           {/* ── AND WHEN ──────────────────────────────
                               Only for the dated types, because a bar street does
                               not happen in a month and offering the choice would
@@ -24759,7 +24883,9 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                              sentence there would send him looking for content
                              that exists and hide a broken search. */
                           <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.6 }}>
-                            {discoverOffTarget
+                            {discoverOffStreet
+                              ? <>Nothing with an address on {discoverStreet} turned up. {discoverOffStreet} Worth re-running: a street with bars on it that nobody prints an address for is a search problem rather than an empty street.</>
+                              : discoverOffTarget
                               ? <>Nothing in {targetById(discoverTarget).label} turned up. {discoverOffTarget} Worth re-running: this is the search missing, not the region being empty.</>
                               : <>Nothing new turned up that isn't already in Gemlyx — try again later, or try the dedicated events search if you're after upcoming dates.</>}
                           </div>
@@ -24777,6 +24903,14 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                             {discoverOffTarget && (
                               <div style={{ fontSize: 10.5, color: "#FFB347", marginBottom: (discoverCovered || discoverDropped) ? 5 : 10, lineHeight: 1.5 }}>
                                 {discoverOffTarget}
+                              </div>
+                            )}
+                            {/* The fifth reason a list is shorter, and the one
+                                that bites hardest: every candidate here is a
+                                real bar in the right town. */}
+                            {discoverOffStreet && (
+                              <div style={{ fontSize: 10.5, color: "#FFB347", marginBottom: (discoverCovered || discoverDropped) ? 5 : 10, lineHeight: 1.5 }}>
+                                {discoverOffStreet}
                               </div>
                             )}
                             {discoverCovered > 0 && (
@@ -27675,7 +27809,11 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               Its own component, reading the one array liveContent fills. Every
               rule about what may show lives in utils/cheapGems.js, so the page
               cannot disagree with the Studio about what is live. */}
-          {tab === "gems" && <CheapGemsPage rows={gems} title={uiT("nav.gems", uiLang)} />}
+          {tab === "gems" && <CheapGemsPage rows={gems} title={uiT("nav.gems", uiLang)}
+            // Where each shop is, and how far that is from the reader. The
+            // town's own published point first, the hand-checked table after.
+            pointFor={(town) => placeCoords(lookupRealPlace(town)) || townPointFor(town)}
+            userCoords={isInDenmark(userCoords) ? userCoords : null} />}
           {tab === "attractions" && (() => {
             // ── ONE DEFINITION, SHARED WITH THE FOOD FILTER ──────
             // This was a hardcoded list of ten city names beside a lookalike
@@ -28421,6 +28559,29 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 10 }}>
                           {street.category || "Bar street"}{street.location ? ` · ${street.location}` : ""}
                         </div>
+                        {/* ── WHICH STREET TONIGHT, AND IS IT WORTH IT ────
+                            Oliver, 22 Sep 2026: "a tourist might pick between 3
+                            streets, not knowing that Jomfru Ane Gade is by far
+                            the most popular." The two answer different halves
+                            of that, so they sit side by side and neither is
+                            dropped into the prose. Absent when the row does not
+                            carry them, because a street published before this
+                            existed says nothing rather than guessing.
+                            See utils/streetVibe.js. */}
+                        {(vibeOf(street) || tierBadge(street)) && (
+                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+                            {vibeOf(street) && (
+                              <span style={{ fontSize: 11, fontWeight: 700, color: readableOn(vibeOf(street).color, C.surface), background: `${vibeOf(street).color}1E`, border: `1px solid ${vibeOf(street).color}44`, padding: "5px 12px", borderRadius: 100 }}>
+                                {vibeOf(street).emoji} {vibeOf(street).label}
+                              </span>
+                            )}
+                            {tierBadge(street) && (
+                              <span style={{ fontSize: 11, fontWeight: 700, color: tierBadge(street).fg, background: tierBadge(street).bg, padding: "5px 12px", borderRadius: 100 }}>
+                                {tierBadge(street).label}
+                              </span>
+                            )}
+                          </div>
+                        )}
                         <div style={{ fontSize: 13, color: C.light, lineHeight: 1.7, marginBottom: 12 }}>{street.desc}</div>
                         {street.crowd && (
                           <div style={{ display: "inline-block", fontSize: 11, fontWeight: 700, color: readableOn(street.color || C.gold, C.surface), background: `${street.color || C.gold}18`, padding: "5px 12px", borderRadius: 100, marginBottom: 12 }}>
@@ -28477,10 +28638,23 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: 17, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif" }}>{street.name}</div>
-                            <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
-                              {bars.length === 0
-                                ? `${street.category || "Bar street"}, no venues published yet`
-                                : `${bars.length} bar${bars.length !== 1 ? "s" : ""} and club${bars.length !== 1 ? "s" : ""} published here`}
+                            {/* THE LINE HE WAS READING. Three streets in a
+                                town looked identical here, so the choice was
+                                made on the name. The vibe leads because it is
+                                the one that decides the evening, and the count
+                                of published bars follows it. */}
+                            <div style={{ fontSize: 11, color: C.muted, marginTop: 2, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                              {vibeOf(street) && (
+                                <span style={{ fontWeight: 700, color: readableOn(vibeOf(street).color, C.bg) }}>
+                                  {vibeOf(street).emoji} {vibeOf(street).label}
+                                </span>
+                              )}
+                              <span>
+                                {bars.length === 0
+                                  ? `${street.category || "Bar street"}, no venues published yet`
+                                  : `${bars.length} bar${bars.length !== 1 ? "s" : ""} and club${bars.length !== 1 ? "s" : ""} published here`}
+                              </span>
+                              {tierOf(street)?.id === "must" && <span style={{ fontWeight: 700, color: C.gold }}>★</span>}
                             </div>
                           </div>
                           <span style={{ fontSize: 18, color: C.muted }}>›</span>
@@ -29276,7 +29450,21 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
 
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Into <span style={{ textTransform: "none", fontWeight: 400, color: C.muted }}>(pick as many as apply)</span></div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
-                  {["History", "Nature", "Food", "Nightlife", "Shopping"].map(i => (
+                  {/* ── FOUR, AND SHOPPING IS NOT ONE OF THEM ──────────
+                      Oliver, 22 Sep 2026: "I think you should delete
+                      shopping.. people can add it into their trip from 'cheap
+                      gems' if they want."
+
+                      A tick here is a promise that the trip will be built
+                      around it, and this one could not keep it: there is no
+                      shopping theme for a row to carry, so ticking it filled
+                      the brief with a word that steered nothing. Cheap gems is
+                      a national page of real shops with a checked price on
+                      each, which is the answer the tick was standing in front
+                      of. Typed in a sentence it still reads as an interest,
+                      because a person who writes it has said something; this
+                      is only the button that offered it. */}
+                  {["History", "Nature", "Food", "Nightlife"].map(i => (
                     <Pill key={i} label={i} active={intakeInterest.includes(i)} onClick={() => setIntakeInterest(intakeInterest.includes(i) ? intakeInterest.filter(x => x !== i) : [...intakeInterest, i])} />
                   ))}
                 </div>
