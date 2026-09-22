@@ -15195,8 +15195,60 @@ is("missing licence does not require credit", creditIsRequired({}), false);
 
   // Visible without reading the note, because most people will not read it.
   ok("the map draws an approximate pin differently", /const approx = !!p\.approx;/.test(stripNonCode(map)));
-  ok("with a dashed ring", /approx \? "dashed" : "solid"/.test(map));
-  ok("and a hollow centre", /background:\$\{approx \? "rgba\(10,15,30,\.72\)" : bg\}/.test(map));
+  // ── AND THE TOWN PICTURES, WHERE THERE IS ROOM ────────────────
+  //
+  // Oliver, 22 Sep 2026: "And also, the 'town' pictures gotta pop up. BUT ONLY
+  // WHEN THEY'RE NOT OVERLAPPING ONE ANOTHER!!!"
+  //
+  // The shouting is the design. Four cards stacked on each other is worse than
+  // none: they cover the route, they cover each other, and they cover the pins
+  // underneath, which are the only things on that map you can press. So the
+  // test is arithmetic at the current zoom rather than a rule of thumb, and
+  // this pins all four ways a card is refused.
+  // stripComments rather than stripNonCode: half of what these assertions
+  // quote contains a string literal, and stripNonCode blanks string CONTENTS.
+  // The comments in that file quote none of these lines, so nothing here can
+  // pass on a comment about itself.
+  const photoMap = stripComments(map);
+  ok("a card is measured against the edge of the map",
+     /b\.l < EDGE \|\| b\.r > size\.x - EDGE \|\| b\.t < EDGE \|\| b\.b > size\.y - EDGE/.test(photoMap));
+  ok("against the cards already up",
+     /const hitsCard = taken\.some\(o => !\(b\.r \+ PHOTO_GAP < o\.l/.test(photoMap));
+  ok("and against every pin, because a covered pin cannot be pressed",
+     /const hitsPin = pinAt\.some\(q => q\.x > b\.l - 6/.test(photoMap));
+  ok("and it is simply not drawn when it does not fit", /if \(!box\) continue;/.test(photoMap));
+  // ONE CARD PER TOWN, not per stop: his own screenshot has pins reading "2"
+  // because two stops share a town, and two identical photographs of Aarhus
+  // side by side would be the mess this rule exists to prevent.
+  ok("one card per town, not per stop", /if \(!key \|\| seen\.has\(key\)\) continue;/.test(photoMap));
+  // A fact about the screen, so it is answered again every time the screen
+  // changes. A pan moves the pins without changing the zoom.
+  ok("and it is redrawn on every zoom and pan", /map\.on\("zoomend moveend", drawPhotos\);/.test(photoMap));
+  ok("the layer goes with the map when it unmounts",
+     /map\.off\("zoomend moveend", drawPhotos\);/.test(photoMap) && /photoLayerRef\.current\?\.remove\(\);/.test(photoMap));
+  // The picture is the town's OWN published photograph, under the same licence
+  // check the cards use, so a map never shows a picture nobody chose for that
+  // town and never shows a CC BY one without its line.
+  const gpPhoto = stripComments(readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8"));
+  ok("the picture comes off a published row", /const row = rows\.find\(t => samePlaceName\(t\.name, key\)\) \|\| null;/.test(gpPhoto));
+  ok("through the same licence check the cards use", /const shot = showablePhoto\(row\);/.test(gpPhoto));
+  ok("and a required credit is carried onto the card",
+     /credit && creditIsRequired\(credit\) \? String\(credit\.photographer \|\| ""\)\.trim\(\) : ""/.test(gpPhoto));
+  ok("every stop knows which town it is in, precise or not", /townName: String\(st\.town \|\| ""\)\.trim\(\) \|\| town \|\| townKeyFor\(st\.name\) \|\| ""/.test(gpPhoto));
+  ok("and the map is handed the resolver", /photoFor=\{townPhotoFor\}/.test(gpPhoto));
+  // A map with no resolver draws no cards rather than throwing, which is what
+  // every other caller of this component gets.
+  ok("a map with no pictures behind it draws none", /if \(typeof photoFor !== "function"\) return;/.test(photoMap));
+
+  // ── DRAWN AS A PIN SINCE 22 SEP 2026 ──────────────────────────
+  // Oliver: "We need the same 'pointers' as on the chat map." The circle went
+  // and the pin came, so the two marks that say "near here" moved with it: the
+  // ring is the ball's own stroke, dashed, and the hollow centre is the ball
+  // unlit. Same claim, same reader, one file along. See utils/mapPins.js.
+  ok("with a dashed ring", /hollow: approx/.test(map)
+     && /stroke-dasharray=/.test(readFileSync(join(root, "src/utils/mapPins.js"), "utf8")));
+  ok("and a hollow centre", /hollow \? "rgba\(10,15,30,\.78\)" : `url\(#\$\{id\}b\)`/
+     .test(readFileSync(join(root, "src/utils/mapPins.js"), "utf8")));
 
   // The honest line that was already right stays right.
   ok("unplaced stops are still named",
@@ -55352,8 +55404,14 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // ONE GREEN. The dot is drawn here and pulsed and echoed in the corner by
     // the CSS in chatRail.js, so the value lives there and this file reads it.
     // Two greens meaning one thing is how the mark and its label drift apart.
+    // PIN_RED moved to utils/mapPins.js with the pin itself on 22 Sep 2026,
+    // when the guide map was asked for the same pointers. Still one spelling of
+    // each colour, still neither of them written twice, which is the whole
+    // claim this line has ever made.
     ok("the dot is green and the pin stays red",
-       /DOT_GREEN/.test(miniSrc) && !/const DOT_GREEN =/.test(miniSrc) && /const PIN_RED = "#E8232A";/.test(miniSrc));
+       /DOT_GREEN/.test(miniSrc) && !/const DOT_GREEN =/.test(miniSrc)
+       && !/const PIN_RED =/.test(miniSrc)
+       && /export const PIN_RED = "#E8232A";/.test(readFileSync(join(root, "src/utils/mapPins.js"), "utf8")));
     ok("and the green is spelled once, beside the CSS that pulses it",
        /export const DOT_GREEN = "#3FBF6A";/.test(readFileSync(join(root, "src/utils/chatRail.js"), "utf8")));
     // ── THE PULSE AND THE CORNER, 19 SEP 2026 ──────────────────────
@@ -58844,10 +58902,40 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // were making is still made: the tip is still the anchor, the colour is still
   // his red, and the newest place still reads louder without a second colour.
   // Only the silhouette changed.
-  ok("the head is a ball with a light on it", /radialGradient id="\$\{id\}b"/.test(chatCode));
-  ok("on a steel needle", /linearGradient id="\$\{id\}n"/.test(chatCode));
-  ok("pushed in at an angle rather than standing upright", /const PIN_TILT = 10;/.test(chatCode));
-  ok("and no round dot is left", !/border-radius:50%/.test(chatCode));
+  // ── AND IT BELONGS TO BOTH MAPS NOW, 22 SEP 2026 ────────────────
+  //
+  // Oliver, with the guide's route map open beside the chat's: "We need the
+  // same 'pointers' as on the chat map." The guide map, which is the one a
+  // traveller keeps, was still drawing flat numbered circles while all of this
+  // was being argued about the other one. So the pin moved to utils/mapPins.js
+  // and these assertions follow it there, unchanged in what they claim: the
+  // same shape, the same anchor, the same red.
+  const pinCode = stripComments(readFileSync(join(root, "src/utils/mapPins.js"), "utf8"));
+  const guideCode = stripComments(readFileSync(join(root, "src/components/GuideRouteMap.jsx"), "utf8"));
+  ok("the head is a ball with a light on it", /radialGradient id="\$\{id\}b"/.test(pinCode));
+  ok("on a steel needle", /linearGradient id="\$\{id\}n"/.test(pinCode));
+  ok("pushed in at an angle rather than standing upright", /const PIN_TILT = 10;/.test(pinCode));
+  ok("and no round dot is left", !/border-radius:50%/.test(chatCode) && !/border-radius:50%/.test(pinCode));
+  // Both maps draw it, and neither keeps a copy. A second copy of this shape
+  // is how two maps in one product start looking like two products.
+  ok("the chat map imports it rather than holding it",
+     /import \{ pushPin, pinId, PIN_RED, PIN_HEAD_PX \} from "\.\.\/utils\/mapPins";/.test(chatCode)
+     && !/const pushPin = /.test(chatCode));
+  ok("and the guide map draws the same object",
+     /import \{ pushPin, pinId, PIN_RED \} from "\.\.\/utils\/mapPins";/.test(guideCode)
+     && /const pin = pushPin\(head, true, pinId\("g"\), \{ label: String\(i \+ 1\), color: bg, reach: 1\.45, hollow: approx \}\);/.test(guideCode));
+  // The number goes ON the ball, because the list under the map is numbered to
+  // match and a reader pairs them by eye. Upright inside a tilted ball, since
+  // a pushed-in pin leans and a printed digit does not lean with it.
+  ok("a route pin carries its number", /<text x="\$\{cx\}" y="\$\{cy\}" transform="rotate\(\$\{-PIN_TILT\}/.test(pinCode));
+  // An approximate stop is plotted at the middle of its town, and a pin drawn
+  // solid there is the map asserting something nobody checked.
+  ok("and an unconfirmed coordinate still looks unconfirmed",
+     /stroke-dasharray=/.test(pinCode) && /hollow \? "rgba\(10,15,30,\.78\)"/.test(pinCode));
+  // The two colours that mean something on the route map, and the chat map's
+  // red everywhere else, which is the point of the change.
+  ok("the route map keeps where it starts and where it ends",
+     /const bg = isFirst \? "#4CAF50" : isLast \? C\.accent : PIN_RED;/.test(guideCode));
   // THE ANCHOR IS THE TIP, which is the half a dot could never get right: a
   // circle centred on its coordinate covers the thing it marks. The tip is no
   // longer the bottom of the box, because the pin leans and its shadow needs
@@ -58856,16 +58944,28 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // RED, which he asked for in one word after being shown the site's gold.
   // Gold is the accent on every heading and badge here, so a gold pin reads as
   // furniture; red is the one colour nothing else in this app uses.
-  ok("the pin is red", /const PIN_RED = "#E8232A";/.test(chatCode) && /stop-color="\$\{PIN_RED\}"/.test(chatCode));
+  // The middle stop of the gradient is the colour the pin was given, which
+  // defaults to his red; the top and the bottom are mixed off it, so a green
+  // or a gold ball is lit the same way rather than coming out flat beside a
+  // red one.
+  ok("the pin is red", /const PIN_RED = "#E8232A";/.test(pinCode)
+     && /stop-color="\$\{color\}"/.test(pinCode)
+     && /color = PIN_RED/.test(pinCode));
   // The newest place keeps the reading the dots carried in colour, in SIZE and
   // weight instead: bigger, full strength, and a halo. Two reds would have been
   // a second thing to learn.
   ok("and the newest one is still the one you notice",
-     /p\.latest \? PIN_HEAD_PX \* 1\.36 : PIN_HEAD_PX/.test(chatCode) && /latest \? "" : "opacity:\.88;"/.test(chatCode));
+     /p\.latest \? PIN_HEAD_PX \* 1\.36 : PIN_HEAD_PX/.test(chatCode) && /latest \? "" : "opacity:\.88;"/.test(pinCode));
   // Each pin needs gradient ids of its own. Without that every pin on the map
   // paints itself with the first one's gradient, which is one shared ball that
   // never changes size, and it only shows up once two pins differ.
-  ok("every pin gets its own gradients", /let pinSeq = 0;/.test(chatCode) && /pushPin\(r, p\.latest, `p\$\{pinSeq\+\+\}`\)/.test(chatCode));
+  // One counter, shared, because two maps can be mounted at once and two
+  // <defs> answering to the same id is the bug the counter exists to prevent.
+  ok("every pin gets its own gradients",
+     /let pinSeq = 0;/.test(pinCode)
+     && /export const pinId = \(prefix = "p"\) => `\$\{prefix\}\$\{pinSeq\+\+\}`;/.test(pinCode)
+     && /pushPin\(r, p\.latest, pinId\(\)\)/.test(chatCode)
+     && !/let pinSeq/.test(chatCode) && !/let pinSeq/.test(guideCode));
   // ── AND EVERY PIN SAYS WHAT IT IS ────────────────────────────────
   //
   // This used to read "a nameplate is lifted clear of the head" and pin the

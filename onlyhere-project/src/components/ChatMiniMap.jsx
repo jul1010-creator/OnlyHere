@@ -2,6 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import L from "leaflet";
 import { addTileLayer } from "../utils/mapTiles";
+// The marking pin moved out on 22 Sep 2026, when Oliver asked for the same
+// pointers on the guide's route map: "We need the same 'pointers' as on the
+// chat map." Two maps, one pin. See utils/mapPins.js.
+import { pushPin, pinId, PIN_RED, PIN_HEAD_PX } from "../utils/mapPins";
 import { ChatPlaceCards, showablePhoto } from "./ChatPlaceCards";
 import { POPUP_CLASS, RAIL_BREAKPOINT_PX, LABEL_CLASS, CORNER_CLASS, DOT_GREEN, labelSides, isSpotPin, spotsShowAt, phoneMapOpen, placesAround } from "../utils/chatRail";
 import { distinctThemes, THEME_LABEL } from "../utils/placeThemes";
@@ -99,53 +103,6 @@ const OUT_SECONDS = 1.9, IN_SECONDS = 1.1, FIT_SECONDS = 0.9;
 // pin effect for how that moved), and the wider box would now only push Denmark
 // into the middle of four other countries. Oliver, 12 Sep 2026, looking at
 // precisely that: "Have the map default as a map of Denmark from start."
-
-// The pin's own colour, named once. Oliver, 8 Sep 2026, asked for the shape
-// everyone knows and then, shown it in the site's gold, said "red". Gold is
-// this app's accent and is already on every heading and badge, so a gold pin
-// reads as furniture; red is the one colour nothing else here uses.
-const PIN_RED = "#E8232A";
-// The ball on an ordinary pin, in pixels. The newest place gets the same pin
-// larger rather than a second colour, which is the rule the teardrop set.
-// ── HALVED, 14 SEP 2026 ─────────────────────────────────────────────
-// "I like the pins, although maybe they should be ½ size." This is the only
-// number that decides it; the needle and the tilt are ratios off it, so the
-// whole pin scales from here.
-const PIN_HEAD_PX = 6;
-// The needle, in ball diameters. Life is 2.7 and looks like a matchstick at this
-// size; 2.1 keeps the pin under 40px tall, which matters on the 190px phone strip.
-const PIN_REACH = 2.1;
-const PIN_TILT = 10;
-// Each gradient needs an id of its own or every pin on the map inherits the
-// first one's, which is a single shared ball that never changes size.
-let pinSeq = 0;
-// ── THE MARKING PIN ─────────────────────────────────────────────────
-// Returns the markup and the three numbers Leaflet needs: the box, the point
-// inside it that sits on the coordinate, and how much of the pin stands above
-// that point, which is what the label layout measures against.
-const pushPin = (r, latest, id) => {
-  const L2 = r * PIN_REACH * 2;
-  const topW = r * 0.5, pad = r * 0.95;
-  const w = Math.ceil(r * 2 + pad * 2), h = Math.ceil(r + L2 + pad * 2);
-  const cx = w / 2, cy = pad + r, tip = cy + L2;
-  const glow = latest ? ` drop-shadow(0 0 ${(r * 0.8).toFixed(1)}px ${PIN_RED}77)` : "";
-  return { w, h, cx, tip, above: Math.round(L2 + r),
-    svg: `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="display:block;overflow:visible;`
-      + `filter:drop-shadow(${(r * 0.3).toFixed(1)}px ${(r * 0.45).toFixed(1)}px ${(r * 0.45).toFixed(1)}px rgba(0,0,0,.62))${glow};${latest ? "" : "opacity:.88;"}">`
-      + `<defs><radialGradient id="${id}b" cx="33%" cy="28%" r="75%">`
-      + `<stop offset="0%" stop-color="#FF9A93"/><stop offset="38%" stop-color="${PIN_RED}"/>`
-      + `<stop offset="100%" stop-color="#7A0E13"/></radialGradient>`
-      + `<linearGradient id="${id}n" x1="0" y1="0" x2="1" y2="0">`
-      + `<stop offset="0%" stop-color="#8892A6"/><stop offset="34%" stop-color="#F2F5FA"/>`
-      + `<stop offset="68%" stop-color="#AAB4C6"/><stop offset="100%" stop-color="#636B7D"/></linearGradient></defs>`
-      + `<g transform="rotate(${PIN_TILT} ${cx} ${tip})">`
-      + `<path d="M${cx - topW} ${cy} L${cx + topW} ${cy} L${cx + topW * 0.1} ${tip} L${cx - topW * 0.1} ${tip} Z" fill="url(#${id}n)"/>`
-      + `<path d="M${cx + topW} ${cy} L${cx + topW * 0.1} ${tip} L${cx - topW * 0.1} ${tip} Z" fill="#0A0F1E" opacity=".3"/>`
-      + `<circle cx="${cx}" cy="${cy}" r="${r}" fill="url(#${id}b)" stroke="#0A0F1E" stroke-width="${(r * 0.11).toFixed(2)}" stroke-opacity=".7"/>`
-      + `<ellipse cx="${cx - r * 0.3}" cy="${cy - r * 0.36}" rx="${(r * 0.34).toFixed(2)}" ry="${(r * 0.24).toFixed(2)}" fill="#fff" opacity=".78"`
-      + ` transform="rotate(-30 ${cx - r * 0.3} ${cy - r * 0.36})"/>`
-      + `</g></svg>` };
-};
 
 // ── AND THE ONE THAT IS ONLY BEING CONSIDERED ───────────────────────
 //
@@ -676,7 +633,7 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
       const r = dot
         ? (p.latest ? DOT_PX * 1.3 : DOT_PX) / 2
         : (p.latest ? PIN_HEAD_PX * 1.36 : PIN_HEAD_PX) / 2;
-      const pin = dot ? consideredDot(r, p.latest) : pushPin(r, p.latest, `p${pinSeq++}`);
+      const pin = dot ? consideredDot(r, p.latest) : pushPin(r, p.latest, pinId());
       const h = pin.above;   // what stands above the coordinate, for the labels
       const icon = L.divIcon({
         // ── AND THE DOT BREATHES, 19 SEP 2026 ────────────────────

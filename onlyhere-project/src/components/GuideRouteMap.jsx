@@ -4,6 +4,9 @@ import { addTileLayer } from "../utils/mapTiles";
 import { C } from "../utils/theme";
 import { departureParam } from "../utils/helpers";
 import { clusterPins, clusterBounds, clusterLabel, clusterHint } from "../utils/mapStops";
+// Oliver, 22 Sep 2026: "We need the same 'pointers' as on the chat map." One
+// pin, drawn by both maps. See utils/mapPins.js.
+import { pushPin, pinId, PIN_RED } from "../utils/mapPins";
 
 // ── REAL ROUTE GEOMETRY ────────────────────────────────────────────
 // Oliver, 5 Aug 2026: "It shouldn't be difficult to make a route…", with
@@ -65,6 +68,19 @@ const MAP_CSS = `
 .gemlyx-near-label{background:transparent;color:${C.light};border:0;box-shadow:none;
   font:600 10px 'Inter',sans-serif;text-shadow:0 1px 3px rgba(0,0,0,.9)}
 .gemlyx-near-label::before{display:none}
+/* ── THE TOWN PICTURE ────────────────────────────────────────────
+   Styled here for the same reason the label above it is: a guide opened
+   cold from a shared link mounts without App.jsx's inline style block, and
+   a card that loses its styling on exactly the pages a stranger sees is
+   worse than no card. */
+.gemlyx-town-photo{pointer-events:auto}
+.town-photo-card{width:112px;border-radius:10px;overflow:hidden;background:${C.surface};
+  border:1px solid ${C.border};box-shadow:0 6px 18px rgba(0,0,0,.5);cursor:pointer}
+.town-photo-card img{display:block;width:100%;height:60px;object-fit:cover}
+.town-photo-name{font:700 10.5px 'Inter',sans-serif;color:${C.text};padding:4px 7px 5px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.town-photo-credit{font:400 8px 'Inter',sans-serif;color:${C.muted};padding:0 7px 5px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 `;
 
 // Whether zooming in further could ever pull these apart: is there room left on
@@ -78,13 +94,16 @@ const separable = (points, map) => {
   return room >= 1 && span > 0.03;   // 30 metres, roughly a pin's width on the ground
 };
 
-export const GuideRouteMap = ({ points, legs, nearby = [], onSelect = null, selectedName = "" }) => {
+export const GuideRouteMap = ({ points, legs, nearby = [], onSelect = null, selectedName = "", photoFor = null }) => {
   const holderRef = useRef(null);
   const mapRef = useRef(null);
   const layerRef = useRef(null);
   const didFitRef = useRef(false);
   // The secondary layer of our own nearby places, redrawn on every zoom and pan.
   const nearLayerRef = useRef(null);
+  // The town pictures, which are a fact about the SCREEN and so are redrawn on
+  // every zoom and pan, exactly as the pins and the nearby dots are.
+  const photoLayerRef = useRef(null);
   // ── THE STOP PINS, WHICH NOW DEPEND ON THE ZOOM ─────────────────────
   //
   // Oliver, 5 Sep 2026: "If something is on top of oneanother, then when you
@@ -270,8 +289,25 @@ export const GuideRouteMap = ({ points, legs, nearby = [], onSelect = null, sele
         }
         const i = first;
         const isFirst = i === 0, isLast = i === points.length - 1;
-        const size = isFirst || isLast ? 26 : 22;
-        const bg = isFirst ? "#4CAF50" : isLast ? C.accent : C.gold;
+        // ── A POINTER, NOT A DOT, ON THIS MAP TOO ───────────────────
+        //
+        // Oliver, 22 Sep 2026, with the guide map open beside the chat's: "We
+        // need the same 'pointers' as on the chat map."
+        //
+        // This drew a flat numbered circle centred on its coordinate, which is
+        // the shape the chat map was talked out of on 8 September: a circle is
+        // a dot ON the map and covers the thing it marks, while a pin's tip
+        // sits on the spot and its body stands above it. The argument is
+        // written out in full in utils/mapPins.js, and it was true of the map a
+        // traveller actually keeps the whole time it was being made about the
+        // other one.
+        //
+        // WHAT THIS MAP KEEPS. The number, because the route is an order and
+        // the stop list below is numbered to match, so it goes on the ball
+        // rather than beside it. And the two colours that carry meaning here:
+        // where the trip starts and where it ends. Everything between them is
+        // the chat map's red, which is the point of the change.
+        const bg = isFirst ? "#4CAF50" : isLast ? C.accent : PIN_RED;
         // ── AN APPROXIMATE PIN LOOKS APPROXIMATE ────────────────────
         // A stop that could not be geocoded is plotted at the middle of its
         // town. Drawn identically to a real one, that pin is the map asserting
@@ -280,14 +316,16 @@ export const GuideRouteMap = ({ points, legs, nearby = [], onSelect = null, sele
         // the note under the map to have been read. See tripPoints in
         // pages/GuidePage.jsx for where the flag comes from.
         const approx = !!p.approx;
+        // Big enough for two digits on the ball, and the needle shortened to
+        // match so the whole pin stays in proportion. Both are ratios off this
+        // one number, which is the rule the chat pin scales by.
+        const head = isFirst || isLast ? 11.5 : 10.5;
+        const pin = pushPin(head, true, pinId("g"), { label: String(i + 1), color: bg, reach: 1.45, hollow: approx });
         const icon = L.divIcon({
           className: "gemlyx-stop-pin",
-          html: `<div style="width:${size}px;height:${size}px;border-radius:50%;`
-              + `background:${approx ? "rgba(10,15,30,.72)" : bg};color:${approx ? bg : "#0A0F1E"};`
-              + `font:700 ${isFirst || isLast ? 12 : 11}px 'Inter',sans-serif;display:flex;align-items:center;justify-content:center;`
-              + `border:2px ${approx ? "dashed" : "solid"} ${approx ? bg : "#0A0F1E"};box-shadow:0 2px 6px rgba(0,0,0,.55);">${i + 1}</div>`,
-          iconSize: [size, size],
-          iconAnchor: [size / 2, size / 2],
+          html: pin.svg,
+          iconSize: [pin.w, pin.h],
+          iconAnchor: [pin.cx, pin.tip],
         });
         // ── LABELS GO QUIET ON A LONG ROUTE ──────────────────────
         // Oliver, 7 Aug 2026, asking for one map across the whole trip instead
@@ -300,7 +338,12 @@ export const GuideRouteMap = ({ points, legs, nearby = [], onSelect = null, sele
           .bindTooltip(p.name, {
             permanent: points.length <= LABEL_LIMIT,
             direction: "top",
-            offset: [0, -(size / 2 + 2)],
+            // Above the pin's HEAD rather than above its centre: the tip is
+            // the anchor now, so the body of the pin is entirely above the
+            // coordinate and a half-height offset would put the label inside
+            // it. `above` is what the pin itself reports standing above the
+            // point it marks.
+            offset: [0, -(pin.above + 4)],
             className: "gemlyx-map-label",
           })
           .addTo(layer);
@@ -329,8 +372,101 @@ export const GuideRouteMap = ({ points, legs, nearby = [], onSelect = null, sele
         });
       });
     };
+    // ── AND THE TOWN PICTURES, WHERE THERE IS ROOM FOR THEM ─────
+    //
+    // Oliver, 22 Sep 2026: "And also, the 'town' pictures gotta pop up. BUT
+    // ONLY WHEN THEY'RE NOT OVERLAPPING ONE ANOTHER!!!"
+    //
+    // The shouting is the design. A picture on a map is worth having and four
+    // of them stacked on each other is worse than none: they cover the route,
+    // they cover each other, and they cover the pins underneath, which are the
+    // only things on this map you can press. So a card goes up only when it
+    // fits, and the test is arithmetic rather than a rule of thumb, for the
+    // same reason the chat map counts which side to open its card on.
+    //
+    // FOUR WAYS TO NOT FIT, and a card that hits any of them is not drawn:
+    // it would run off the edge of the map, it would overlap a card already
+    // up, it would cover another stop's pin, or it would sit on the pin it
+    // belongs to. Measured in container pixels at the CURRENT zoom, because
+    // that is the actual question and its answer changes every time the map
+    // moves.
+    //
+    // ONE CARD PER TOWN, not per stop. His pins read "2" because two stops
+    // share a town, and two identical photographs of Aarhus side by side would
+    // be the mess this rule exists to prevent. The town is also what the
+    // picture is OF, which is the other half of his sentence.
+    const PHOTO_W = 112, PHOTO_H = 84, PHOTO_GAP = 10, EDGE = 8;
+    const drawPhotos = () => {
+      photoLayerRef.current?.remove();
+      photoLayerRef.current = null;
+      if (typeof photoFor !== "function") return;
+      const size = map.getSize();
+      const at = (p) => map.latLngToContainerPoint([p.lat, p.lon]);
+      // Every pin on the map, cards included or not: a card may not cover any
+      // of them, because a covered pin cannot be pressed at all.
+      const pinAt = points.filter(p => Number.isFinite(p?.lat) && Number.isFinite(p?.lon)).map(at);
+      const taken = [];
+      const layer = L.layerGroup();
+      const seen = new Set();
+      for (const cl of clusterPins(points, map.getZoom())) {
+        const p = cl.points[0];
+        const shot = photoFor(p);
+        if (!shot || !shot.photo) continue;
+        const key = String(shot.town || shot.name || "").toLowerCase();
+        if (!key || seen.has(key)) continue;
+        const here = at(p);
+        // Right first, then left. A tie is broken by the first one that fits,
+        // which keeps the layout stable as the map moves rather than flipping
+        // a card from side to side on a one pixel pan.
+        let box = null;
+        for (const dir of [1, -1]) {
+          const cx = here.x + dir * (PHOTO_W / 2 + 16);
+          const cy = here.y - PHOTO_H / 2;
+          const b = { l: cx - PHOTO_W / 2, r: cx + PHOTO_W / 2, t: cy - PHOTO_H / 2, b: cy + PHOTO_H / 2, dir };
+          if (b.l < EDGE || b.r > size.x - EDGE || b.t < EDGE || b.b > size.y - EDGE) continue;
+          const hitsCard = taken.some(o => !(b.r + PHOTO_GAP < o.l || b.l - PHOTO_GAP > o.r || b.b + PHOTO_GAP < o.t || b.t - PHOTO_GAP > o.b));
+          if (hitsCard) continue;
+          const hitsPin = pinAt.some(q => q.x > b.l - 6 && q.x < b.r + 6 && q.y > b.t - 6 && q.y < b.b + 6);
+          if (hitsPin) continue;
+          box = b;
+          break;
+        }
+        if (!box) continue;
+        taken.push(box);
+        seen.add(key);
+        // Escaped, because this is built as HTML rather than as elements. The
+        // values are the founder's own published rows, so this is not a
+        // sanitiser so much as the habit that keeps one from being needed.
+        const esc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+        const name = esc(shot.town || shot.name || "");
+        const credit = esc(shot.credit || "");
+        const marker = L.marker([p.lat, p.lon], {
+          icon: L.divIcon({
+            className: "gemlyx-town-photo",
+            html: `<div class="town-photo-card"><img src="${esc(shot.photo)}" alt="" onerror="this.parentNode.style.display='none'"/>`
+                + `<div class="town-photo-name">${name}</div>`
+                + (credit ? `<div class="town-photo-credit">${credit}</div>` : "")
+                + `</div>`,
+            iconSize: [PHOTO_W, PHOTO_H],
+            // Beside the pin, on the side that was measured to fit.
+            iconAnchor: [box.dir > 0 ? -16 : PHOTO_W + 16, PHOTO_H],
+          }),
+          keyboard: false,
+          // Under the pins in the stacking order: a picture is something to
+          // look at and a pin is something to press.
+          zIndexOffset: -200,
+        }).addTo(layer);
+        marker.on("click", () => { if (onSelect) onSelect(p); });
+      }
+      layer.addTo(map);
+      photoLayerRef.current = layer;
+    };
     drawPins();
+    drawPhotos();
     map.on("zoomend", drawPins);
+    // Pans move the pins across the container without changing the zoom, so a
+    // card that fitted before the pan can be half off the edge after it.
+    map.on("zoomend moveend", drawPhotos);
     // ── AND OUR OWN PLACES, ONCE YOU ARE CLOSE ENOUGH TO CARE ────
     // Oliver: "Also make the map look a little more realistic. Having some of our
     // written tourism attractions written down. It's close to King's Garden. So
@@ -447,17 +583,20 @@ export const GuideRouteMap = ({ points, legs, nearby = [], onSelect = null, sele
     return () => {
       map.off("zoomend moveend", drawNearby);
       map.off("zoomend", drawPins);
+      map.off("zoomend moveend", drawPhotos);
       nearLayerRef.current?.remove();
       nearLayerRef.current = null;
       pinLayerRef.current?.remove();
       pinLayerRef.current = null;
+      photoLayerRef.current?.remove();
+      photoLayerRef.current = null;
       // A new route is a new overview, so the view saved from the old one is not
       // somewhere to go back to.
       beforeFlyRef.current = null;
       group.remove();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(points), JSON.stringify(legs), geometry, JSON.stringify(nearby)]);
+  }, [JSON.stringify(points), JSON.stringify(legs), geometry, JSON.stringify(nearby), photoFor]);
 
   // ── AND CLICKING OUT ZOOMS BACK OUT ─────────────────────────────────
   //

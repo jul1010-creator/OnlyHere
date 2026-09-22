@@ -26,6 +26,9 @@ import { GemlyxLoader, GemlyxMark } from "../components/GemlyxLogo";
 import { TypewriterText } from "../components/TypewriterText";
 import { DetailPage } from "../components/DetailPage";
 import { GuideRouteMap } from "../components/GuideRouteMap";
+import { showablePhoto } from "../components/ChatPlaceCards";
+import { samePlaceName } from "../utils/danishNames";
+import { creditFor, creditIsRequired, loadImageCredits } from "../utils/imageCredits";
 import { ensureLiveContentLoaded } from "../utils/liveContent";
 import { guideTours } from "../utils/tourSweep";
 import { previewPools } from "../utils/previewMatch";
@@ -620,6 +623,12 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
   const [partnersOpen, setPartnersOpen] = useState(false);
   const [libraryTick, setLibraryTick] = useState(0);
   useEffect(() => { ensureLiveContentLoaded().then(() => setLibraryTick(t => t + 1)).catch(() => {}); }, []);
+  // The credits file, for the line under a town picture on the map. Fetched
+  // once per session and cached in the module, so this costs one request
+  // however many pictures end up on screen; the tick is what makes the card
+  // redraw with its credit once it lands, because creditFor reads a module
+  // that is empty on first paint. Same shape as the line above it.
+  useEffect(() => { loadImageCredits().then(() => setLibraryTick(t => t + 1)).catch(() => {}); }, []);
   // ── ONE PARTNER ACTIVITY PER TOWN, WHERE THE TOWN IS ────────────────
   //
   // Oliver, 9 Sep 2026: "If they're sent to Roskilde, then a GetYourGuide
@@ -648,6 +657,43 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
     [libraryTick],
   );
   const [addInOpen, setAddInOpen] = useState(null);   // `${dayIdx}:${cat.key}`
+
+  // ── THE PICTURE OF THE TOWN A STOP IS IN ────────────────────────
+  //
+  // Oliver, 22 Sep 2026: "And also, the 'town' pictures gotta pop up. BUT ONLY
+  // WHEN THEY'RE NOT OVERLAPPING ONE ANOTHER!!!" The map decides the second
+  // half, which is a question about the screen; this answers the first, which
+  // is a question about the library.
+  //
+  // OFF A PUBLISHED ROW AND NOTHING ELSE. The photograph is the one on the
+  // town's own entry, so a picture on the map is a picture somebody chose for
+  // that town, and a stop in a town Gemlyx has not written yet shows no card
+  // rather than a stock image of Denmark.
+  //
+  // THE LICENCE RULE IS THE SAME ONE THE CARDS USE. showablePhoto refuses a
+  // photo whose credit is required and missing, which is the rule with a legal
+  // edge on it, and it lives in one place for that reason. Where a credit IS
+  // required and present, the photographer's name goes on the card, because a
+  // CC BY picture without its line is the same problem in the other direction.
+  const townPhotoFor = useMemo(() => {
+    const rows = [...towns, ...islands].filter(t => t?.name && t?.photo);
+    return (p) => {
+      const key = String(p?.townName || p?.town || "").trim();
+      if (!key) return null;
+      const row = rows.find(t => samePlaceName(t.name, key)) || null;
+      if (!row) return null;
+      const shot = showablePhoto(row);
+      if (!shot) return null;
+      const credit = shot.credit || creditFor(shot.photo);
+      return {
+        photo: shot.photo,
+        town: row.name,
+        credit: credit && creditIsRequired(credit) ? String(credit.photographer || "").trim() : "",
+      };
+    };
+    // libraryTick for the same reason mapLibrary reads it: the arrays are
+    // filled in place once the published rows land.
+  }, [libraryTick]);
 
   const mapLibrary = useMemo(
     () => placedLibrary(previewPools({
@@ -946,6 +992,14 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
       _day: st._day,
       approx: !c.precise,
       town,
+      // ── AND WHICH TOWN IT IS IN, EVEN WHEN THE PIN IS EXACT ──────
+      // `town` above is only filled for a pin that FELL BACK to a town
+      // centre, because that is what it was written for: the "(somewhere in
+      // Ribe)" in the label. The picture needs the town for every stop,
+      // including the ones we placed to the door, so it is read from what the
+      // planner said and from the name as a fallback. Oliver, 22 Sep 2026:
+      // "the 'town' pictures gotta pop up."
+      townName: String(st.town || "").trim() || town || townKeyFor(st.name) || "",
       lat: c.lat,
       lon: c.lon,
       // ── AND WHAT THE GUIDE ALREADY SAID ABOUT IT ────────────────
@@ -1341,6 +1395,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                 points={tripRoute}
                 legs={tripLegs}
                 nearby={mapLibrary}
+                photoFor={townPhotoFor}
                 selectedName={mapPin?.name || ""}
                 onSelect={setMapPin}
               />
