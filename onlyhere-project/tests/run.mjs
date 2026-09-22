@@ -114,7 +114,7 @@ writeFileSync(entry, `
   export { MEASURED_BY, remeasureFor, pendingRemeasure, describeRemeasure, looksLikeAPlace, REMEASURE, REMEASURE_CLEARS, enforceScope, resolveField, classifyClaim, routeMessage, allowedFieldsFor, isEditRequest, factsIn, factsPreserved, editEntry, EDITABLE_FIELDS, PROSE_FIELDS as CORRECTION_PROSE_FIELDS, VERIFY_PROMPT, settleVerdict, ownSiteFor, OWN_SITE_PROMPT, settleOwnSite, whoseWord, PASTED_MIN, keepMeasured, isPipelineOwned, MEASURED_FIELDS, claimCitation, urlsIn, sourceLinksIn, citationRefusal, claimIsPerishable, CITATION_PROMPT, settleCitation, SPLIT_PROMPT, correctEntry, dropAppliedClaims, CLAIMS_APPLIED, namesField, verifyTransportClaim, asksWhatItCarries } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
   export { FEEDBACK_KINDS, FEEDBACK_TYPE, MIN_REPORT_CHARS, feedbackProblem, feedbackRow } from ${JSON.stringify(join(root, "src/utils/articleFeedback.js"))};
   export { previewReportRow, travellerTurns, PREVIEW_SAID_CAP, PREVIEW_SCREEN_CAP } from ${JSON.stringify(join(root, "src/utils/articleFeedback.js"))};
-  export { trimFillerRuns, trimFillerAgainst } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
+  export { trimFillerRuns, trimFillerAgainst, guideWithoutFiller } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { withoutRefused } from ${JSON.stringify(join(root, "src/utils/tripBrief.js"))};
   export { briefConflicts, conflictLabel, conflictSlots, CONFLICTS } from ${JSON.stringify(join(root, "src/utils/briefConflicts.js"))};
   export { clusterPins, clusterBounds, pixelAt, stopBlurb, stopCard, clusterLabel, clusterHint, OVERLAP_PX, BLURB_WORDS } from ${JSON.stringify(join(root, "src/utils/mapStops.js"))};
@@ -264,7 +264,7 @@ writeFileSync(entry, `
   export { PARTNER_OPENER, PARTNER_INTRO, partnerSections, partnerCount } from ${JSON.stringify(join(root, "src/utils/partnerSheet.js"))};
   export { baseKey, staysIn as stayRunsIn, doorsFor, doorOn, sameBaseLine, nightsLabel } from ${JSON.stringify(join(root, "src/utils/stayDoors.js"))};
   export { SECTIONS as DIR_SECTIONS, ROW_KINDS, kindOf as dirKindOf, directoryLinks, pathWord, ferryDoorIn, DIRECTORY_PROMPT, rowsFromDirectory, directoryProblems, staysIn, eatsIn, islandSaysBlock, ISLAND_SAYS } from ${JSON.stringify(join(root, "src/utils/islandDirectory.js"))};
-  export { GEM_TYPE, GEM_KINDS, GEM_SECTION, WHERE_LABEL, RECHECK_DAYS, STALE_DAYS, isCouponSite, isOwnSite, shapeGem, gemProblems, gemLive, gemsView, checkedLabel, checkedAgo, gemSearches, gemSearchesFor, ownPagesIn, pageAsResult, MAX_OWN_PAGES, GEMS_PROMPT, settleGems, gemRunNotes, gemsForGuide, gemHeading } from ${JSON.stringify(join(root, "src/utils/cheapGems.js"))};
+  export { GEM_TYPE, GEM_KINDS, GEM_SECTION, WHERE_LABEL, RECHECK_DAYS, STALE_DAYS, isCouponSite, isOwnSite, shapeGem, gemProblems, gemLive, gemsView, checkedLabel, checkedAgo, gemCategory, isForStudents, gemMatches, gemFilterOptions, GEM_CATEGORIES, GEM_CATEGORY_LABEL, gemSearches, gemSearchesFor, ownPagesIn, pageAsResult, MAX_OWN_PAGES, GEMS_PROMPT, settleGems, gemRunNotes, gemsForGuide, gemHeading } from ${JSON.stringify(join(root, "src/utils/cheapGems.js"))};
   export { sentencesIn, readerBody, noticeAsk, noticeText, TRANSLATE_NOTICE, translatedNotice, DEAD_ENDS } from ${JSON.stringify(join(root, "src/utils/noticeVoice.js"))};
   export { guideClaims, guideClaimNote } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { resolveStopCoords } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
@@ -285,6 +285,7 @@ writeFileSync(entry, `
   export { SWAP_REASONS, reasonById, swapCandidates, swapAnswer, candidateLine, swappedStop, swapNote, swapIsAllowed, swapBlockedNote } from ${JSON.stringify(join(root, "src/utils/stopSwap.js"))};
   export { newStreamState, readStreamEvent, visibleText, streamContent, streamContentForApi, streamDiagnosis, streamTrace } from ${JSON.stringify(join(root, "src/utils/streamRead.js"))};
   export { guideWithSwap, alreadyRuledOut, isTravelPoint } from ${JSON.stringify(join(root, "src/utils/stopSwap.js"))};
+  export { makeNominatim, NOMINATIM_GAP_MS, NOMINATIM_CACHE_DAYS } from ${JSON.stringify(join(root, "src/utils/nominatim.js"))};
   export { factCheckCopy } from ${JSON.stringify(join(root, "src/utils/factCheckCopy.js"))};
   export { routeOrder, reachBand, haversineKm, coordsOf, kmBetween, REACH_COMFORTABLE, REACH_STRETCH, REACH_FAR, returnLeg, describeReturn, travelModeKey, modeReachKm, MODE_DAY_KM, preferReachable, preferPassing, overnightMove, describeOvernightMove, spokenDuration, beyondModeRange, BEYOND_DAY_FACTOR, sameMode, howForReader, EATS_THE_DAY_MINUTES, dayStartsBeforeItCanArrive, OVERNIGHT_START_HOUR } from ${JSON.stringify(join(root, "src/utils/routeOrder.js"))};
   export { LANGUAGES, MONTH_INDEX, PARTY_BARE, PARTY_POSSESSIVE, YES_WORDS, NO_WORDS, alt, LETTER } from ${JSON.stringify(join(root, "src/utils/travellerWords.js"))};
@@ -11842,7 +11843,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
         // one lookup that turns them into a name.
         ok("the coordinate is read straight into the lookup and nowhere else",
            /const \{ latitude, longitude \} = pos\.coords \|\| \{\};/.test(appL)
-           && /fetch\(reverseUrl\(latitude, longitude\)\)/.test(appL));
+           && /nominatimJson\(reverseUrl\(latitude, longitude\), \{ cache: false \}\)/.test(appL));
         ok("and nothing stores it", !/setLocating\((?:latitude|longitude)/.test(appL) && !/useState\(.*latitude/.test(appL));
         ok("a lookup with no town in it sends nothing", /if \(!say\) \{ setLocating\("failed"\); return; \}/.test(appL));
       }
@@ -15173,9 +15174,9 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // one of them had already been collapsed into the pin before it. The note
   // counted stops; the map draws points.
   ok("the approximate stops are collected off the pins that were drawn",
-     /const tripApprox = tripRoute\.filter\(p => p\.approx\)\.map\(p => p\.stopName\)/.test(code));
+     /const tripApproxPins = tripRoute\.filter\(p => p\.approx\)\.map\(p => p\.stopName\)/.test(code));
   ok("and the dedupe runs before it, or it is counting the wrong list",
-     code.indexOf("const tripRoute = tripPlaced.filter") < code.indexOf("const tripApprox = tripRoute"));
+     code.indexOf("const tripRoute = tripPlaced.filter") < code.indexOf("const tripApproxPins = tripRoute"));
   // The stops the dedupe removed are said out loud too, which nothing did: the map
   // was quietly shorter than the list and the highest pin number lower than the
   // stop count, with no line anywhere explaining either.
@@ -23127,7 +23128,7 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
 {
   const { geocodePostcode } = M;
   const realFetch = globalThis.fetch;
-  const stub = (rows) => { globalThis.fetch = async () => ({ json: async () => rows }); };
+  const stub = (rows) => { globalThis.fetch = async () => ({ ok: true, json: async () => rows }); };
 
   // A bare number that is not a Danish postcode is never sent as one.
   for (const bad of ["", "abc", "0123", "423", "42305", null]) {
@@ -23147,8 +23148,11 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // THE CHECK THAT MAKES THIS SAFE. The answer must carry the postcode the
   // question asked about, whatever else it has going for it. This is the exact
   // Holbaek shape: a real place, real coordinates, wrong postcode.
+  // Each case below asks a different postcode: answers are cached by the
+  // question now (utils/nominatim.js), so asking 4230 twice would be answered
+  // from the first stub.
   stub([{ lat: "55.6887", lon: "11.7060", address: { postcode: "4300", town: "Holbaek" } }]);
-  is("an answer carrying a different postcode is refused", await geocodePostcode("4230"), null);
+  is("an answer carrying a different postcode is refused", await geocodePostcode("4231"), null);
 
   stub([{ lat: "55.2531", lon: "11.2912", address: { postcode: "4230", town: "Skaelskoer" } }]);
   const good = await geocodePostcode("4230");
@@ -23160,13 +23164,13 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // Nominatim does not always return an address block. Absent is not wrong, so
   // it is accepted; only a CONTRADICTING postcode is refused.
   stub([{ lat: "55.2531", lon: "11.2912" }]);
-  ok("a result with no address block is still usable", (await geocodePostcode("4230"))?.lat === 55.2531);
-  stub([{ lat: "not a number", lon: "11.29", address: { postcode: "4230" } }]);
-  is("an unparseable coordinate is refused", await geocodePostcode("4230"), null);
+  ok("a result with no address block is still usable", (await geocodePostcode("4232"))?.lat === 55.2531);
+  stub([{ lat: "not a number", lon: "11.29", address: { postcode: "4233" } }]);
+  is("an unparseable coordinate is refused", await geocodePostcode("4233"), null);
   stub([]);
-  is("and no result is null, never a guess", await geocodePostcode("4230"), null);
+  is("and no result is null, never a guess", await geocodePostcode("4234"), null);
   globalThis.fetch = async () => { throw new Error("network"); };
-  is("a thrown lookup is null too", await geocodePostcode("4230"), null);
+  is("a thrown lookup is null too", await geocodePostcode("4235"), null);
   globalThis.fetch = realFetch;
 
   const appPc = readFileSync(join(root, "src/App.jsx"), "utf8");
@@ -62617,7 +62621,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ["shape.stopCount", "guide.stop", "guide.stops"],
     ["shape.towns.length", "guide.town", "guide.towns"],
     ["tripUnplaced.length", "guide.unplacedEndOne", "guide.unplacedEndMany"],
-    ["tripApprox.length", "guide.approxEndOne", "guide.approxEndMany"],
+    ["tripApproxPins.length", "guide.approxEndOne", "guide.approxEndMany"],
   ];
   is("every plural pair puts the singular on the singular branch",
      PAIRS.filter(([n, one, many]) => !guideSrc.includes(`uiT(${n} === 1 ? "${one}" : "${many}", uiLang)`))
@@ -62627,7 +62631,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   const COUNTED = [
     ["tripUnplaced.length", "guide.unplacedOne", "guide.unplacedMany"],
     ["tripCollapsed", "guide.sharedPinOne", "guide.sharedPinMany"],
-    ["tripApprox.length", "guide.approxOne", "guide.approxMany"],
+    ["tripApproxPins.length", "guide.approxOne", "guide.approxMany"],
   ];
   is("and the counted ones print the number in front of the many, not the one",
      COUNTED.filter(([n, one, many]) => {
@@ -71322,7 +71326,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     ok("beside Tips in the swipe order", /"tips", "gems", "attractions"/.test(appG));
     is("with its own address", M.TAB_HASH.gems, "cheap-gems");
     ok("it renders the array liveContent fills", /tab === "gems" && <CheapGemsPage rows=\{gems\}/.test(appG));
-    ok("the page decides nothing itself", /gemsView\(rows, \{ town \}\)/.test(pageG));
+    ok("the page decides nothing itself", /const narrowed = rows\.filter\(g => gemMatches\(g, \{ category, students, q \}\)\);\s*const view = gemsView\(narrowed, \{ town \}\);/.test(pageG));
     ok("and only calls a page theirs when it is", /isOwnSite\(g\.source, g\.name\) \? "Their page"/.test(pageG));
     ok("the Studio panel publishes through shapeForLive", /payload: shapeForLive\(GEM_TYPE, g\)/.test(appG));
     ok("a blocked row cannot be ticked", /disabled=\{st\.blocks\}/.test(panelG));
@@ -72260,6 +72264,190 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   const dp2 = stripComments(readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8"));
   ok("the island page asks the same resolver", /const door = ferryUrlOf\(item\);/.test(dp2));
   ok("and prints the credit under the link", /note: door\.credit/.test(dp2));
+}
+
+// ── WHAT THE REVIEW OF 21 SEP 2026 FOUND ────────────────────────────
+// Oliver asked for a check through the day's work before a first beta
+// tester. Each of these was verified against the code before it was fixed.
+{
+  // 1. With Booking's deep links off, the stay card still has a way to book.
+  const gpR = stripComments(readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8"));
+  ok("a stay whose door cannot carry the area still links to Booking", /stayHere\?\.door\?\.href && !stayHere\.door\.area && \([\s\S]{0,400}?Find a room on Booking\.com<\/a>/.test(gpR));
+  // 2. A day trip to a town the table does not know is not its own stay.
+  const day = (n, town, area) => ({ day: n, stops: [{ name: "x", town }], glance: { stayArea: area } });
+  is("Helsingør sleeping in Copenhagen is the Copenhagen stay", M.baseKey(day(2, "Helsingør", "Copenhagen")), M.baseKey(day(1, "Copenhagen", "Nørreport, Copenhagen")));
+  is("Nyhavn is Copenhagen", M.baseKey(day(1, "Frederiksberg", "Nyhavn")), M.baseKey(day(1, "Copenhagen", "")));
+  is("a relocation to an unknown town is still that town", M.baseKey(day(3, "Rømø", "")), "romo");
+  is("and a known day trip still works", M.baseKey(day(2, "Roskilde", "Copenhagen")), M.baseKey(day(1, "Copenhagen", "")));
+  // 3. The deer park is not a price.
+  ok("Dyrehaven does not say Copenhagen is expensive", !M.capitalCostSaid(["From Copenhagen take the S-train to Klampenborg and walk into Dyrehaven"]));
+  ok("while dyrt still does", M.capitalCostSaid(["København er dyrt at sove i."]) && M.capitalCostSaid(["Copenhagen is expensive"]));
+  // 4. A brand's own site spelt the way domains spell ø.
+  ok("foetex.dk is Føtex's own site", M.isOwnSite("https://www.foetex.dk/kundeklub", "Føtex"));
+  ok("and blaavand.dk is Blåvand's", M.isOwnSite("https://blaavand.dk/", "Blåvand Is"));
+  ok("while studiz.dk is still not MSCH's", !M.isOwnSite("https://www.studiz.dk/x", "MSCH Copenhagen"));
+  // 5. A menu picture survives the three-picture cut.
+  const pics = M.bannerImages(`<meta property="og:image" content="/og.jpg"><img src="/header.jpg"><img src="/banner-forside.jpg"><img src="/interior.jpg"><img src="/Frokost.jpg">`, "https://x.dk/frokost/").slice(0, M.MAX_BANNERS).map(b => b.url.split("/").pop());
+  ok("Frokost.jpg is in the three", pics.includes("Frokost.jpg"));
+  is("and is the one read", M.menuImagesToRead({ url: "https://x.dk/frokost/", text: "Velkommen", banners: M.bannerImages(`<meta property="og:image" content="/og.jpg"><img src="/header.jpg"><img src="/banner-forside.jpg"><img src="/Frokost.jpg">`, "https://x.dk/frokost/").slice(0, M.MAX_BANNERS) }).map(b => b.url.split("/").pop()), ["Frokost.jpg"]);
+  // 6. The swap comment says what the code does.
+  ok("the swap comment no longer promises a precise point", !/a stop plotted at the middle\s*\/\/\s*of its town is not at a known point/.test(readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8")));
+  // 7. Danish station names, and a sea bath.
+  for (const n of ["København H", "Aarhus H", "Odense St.", "Lufthavnen", "Kastrup Lufthavn"]) ok(`no swap on ${n}`, M.isTravelPoint({ name: n }));
+  for (const n of ["Kastrup Søbad", "Hotel Hafnia", "The H Bar"]) ok(`a swap on ${n}`, !M.isTravelPoint({ name: n }));
+  // 8. Locate me waits its turn and is never written down.
+  const appR = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+  ok("the reverse lookup goes through the queue, uncached", /nominatimJson\(reverseUrl\(latitude, longitude\), \{ cache: false \}\)/.test(appR) && !/fetch\(reverseUrl/.test(appR));
+  {
+    let clock = 0; const sent = []; const saved = { data: {} };
+    const N = M.makeNominatim({ fetchImpl: async (u) => { sent.push(u); return { ok: true, json: async () => ({ address: { town: "Aalborg" } }) }; }, now: () => clock, wait: async (ms) => { clock += ms; }, store: { read: () => saved.data, write: (o) => { saved.data = o; } } });
+    const R = "https://nominatim.openstreetmap.org/reverse?lat=57.05&lon=9.92";
+    await N.json(R, { cache: false }); await N.json(R, { cache: false });
+    is("an uncached question is asked each time", sent.length, 2);
+    is("and its position is never stored", Object.keys(saved.data).length, 0);
+  }
+  // 9. One place under two names is one row on a name lookup.
+  const R2 = [{ title: "studiz", url: "https://www.studiz.dk/x", snippet: "Burger 95 kr" }, { title: "Sporvejen", url: "https://sporvejen.dk/frokost-menu/", snippet: "Burger 95 kr" }];
+  const both = M.settleGems({ gems: [{ name: "Sporvejen", kind: "cheap", source: 0 }, { name: "Restaurant Sporvejen", kind: "cheap", source: 1 }] }, R2, { only: "Restaurant Sporvejen" });
+  is("the own site's row is the one kept", both.gems.map(g => g.source), ["https://sporvejen.dk/frokost-menu/"]);
+  is("and a town search keeps two names apart", M.settleGems({ gems: [{ name: "Sporvejen", kind: "cheap", source: 0 }, { name: "Restaurant Sporvejen", kind: "cheap", source: 1 }] }, R2).gems.length, 2);
+  // 10. The unit glued to the number.
+  const ctx = "Hotel X. Priser fra 1200kr pr. nat. Morgenmad inkluderet.";
+  is("1200kr is a price", M.nightPriceFrom({ kr: 1200, says: "Priser fra 1200kr pr. nat" }, ctx)?.kr, 1200);
+  is("while a bare number is still not", M.nightPriceFrom({ kr: 1200, says: "Priser fra 1200 pr. nat" }, "Priser fra 1200 pr. nat"), null);
+}
+
+// ── FILTERS ON THE NEW PAGES ────────────────────────────────────────
+// Oliver, 21 Sep 2026: "Bring some filters in on our new navigations as well."
+{
+  const D = "2026-09-20";
+  const G = [
+    { name: "Sporvejen", kind: "cheap", towns: ["Copenhagen"], what: "A burger under 100 kr at lunch", source: "https://sporvejen.dk/", checkedAt: D },
+    { name: "MSCH Copenhagen", kind: "scheme", what: "15% off", who: "Students with a valid student card", source: "https://mschcopenhagen.com/", checkedAt: D },
+    { name: "Flying Tiger Copenhagen", kind: "scheme", what: "A voucher in the app", who: "Club members", how: "Join the club in the app", source: "https://flyingtiger.com/", checkedAt: D },
+    { name: "Danhostel Aalborg", kind: "cheap", towns: ["Aalborg"], what: "Dorm beds", desc: "A hostel by the marina", source: "https://danhostel.dk/", checkedAt: D },
+  ];
+  is("each gem has a category", G.map(M.gemCategory), ["food", "other", "other", "stay"]);
+  is("a stated category wins", M.gemCategory({ name: "Sporvejen", category: "shop" }), "shop");
+  ok("a category the model invents is dropped", M.shapeGem({ name: "x", kind: "cheap", category: "bargains" }).category === "");
+  ok("students are found in who", M.isForStudents(G[1]) && !M.isForStudents(G[2]));
+  ok("and in Danish", M.isForStudents({ who: "Studerende med studiekort" }));
+  is("the food filter keeps the burger", G.filter(g => M.gemMatches(g, { category: "food" })).map(g => g.name), ["Sporvejen"]);
+  is("search reads every field, all words", G.filter(g => M.gemMatches(g, { q: "hostel marina" })).map(g => g.name), ["Danhostel Aalborg"]);
+  ok("and Danish letters either way", M.gemMatches({ name: "Føtex" }, { q: "fotex" }));
+  const O = M.gemFilterOptions(G, { today: new Date(2026, 8, 21) });
+  is("the categories worth a pill", O.categories, ["food", "stay", "other"]);
+  is("both kinds, so both pills", O.kinds, ["scheme", "cheap"]);
+  ok("a students pill, since some are and some are not", O.students);
+  ok("no search box for four", !O.search);
+  const one = M.gemFilterOptions([G[0]], { today: new Date(2026, 8, 21) });
+  ok("a page of one gem draws no filters", !one.categories.length && !one.kinds.length && !one.students);
+  ok("the prompt asks for the category", /"category":"food\|shop\|stay\|travel\|other"/.test(M.GEMS_PROMPT("Aarhus", [])));
+  const { renderSurface } = await import(pathToFileURL(join(root, "tests/render.mjs")).href);
+  const page = await renderSurface("src/components/CheapGemsPage.jsx", "CheapGemsPage", { rows: G });
+  for (const label of ["Food and drink", "Beds", "Discounts you have to ask for", "For students"]) ok(`the page draws "${label}"`, page.text.includes(label));
+  const pg = stripComments(readFileSync(join(root, "src/components/CheapGemsPage.jsx"), "utf8"));
+  ok("a filter that empties the page offers to clear it", /Nothing published matches that\./.test(pg) && /onClick=\{clearAll\}/.test(pg));
+  // Islands.
+  const appI = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+  ok("islands can be narrowed by region", /if \(islandRegion && String\(i\.region \|\| ""\)\.trim\(\) !== islandRegion\) return false;/.test(appI));
+  ok("with the pill only when there are two regions or more", /if \(regions\.length < 2\) return null;/.test(appI));
+  ok("and Clear clears it", /setIslandLink\(null\); setIslandRegion\(null\);/.test(appI));
+  ok("no box-drawing dash on the bridge pill", !/─ Bridge or causeway/.test(appI));
+}
+
+// ── WHAT THE LIVE GUIDE SHOWED, 21 SEP 2026 ─────────────────────────
+// Read on gemlyxtravel.com/guide/z8f8otncrz2 after the push, the check Oliver
+// asked for before bed.
+{
+  // "Copenhagen Airport is about 9 km back to Copenhagen Airport"
+  const CPH = { name: "Copenhagen Airport", lat: 55.618, lon: 12.656 };
+  const airportAtCentre = { name: "Copenhagen Airport", lat: 55.676, lon: 12.568 };
+  ok("a trip that ends at the airport it landed at has no way back to print", !M.returnLeg({ ordered: [{ name: "Rundetaarn", lat: 55.681, lon: 12.576 }, airportAtCentre], from: CPH, days: 7 }).needed);
+  ok("nor one ending at a different airport", !M.returnLeg({ ordered: [{ name: "Billund Lufthavn", lat: 55.74, lon: 9.15 }], from: CPH, days: 7 }).needed);
+  ok("while one ending in Aalborg still has", M.returnLeg({ ordered: [{ name: "Aalborg Zoo", lat: 57.04, lon: 9.9 }], from: CPH, days: 7 }).needed);
+  // "Keep the morning genuinely short"
+  const G = M.guideWithoutFiller({ title: "t", essentials: { budgetReality: "Skip the car except for the one day you actually want it." }, days: [{ day: 7, glance: { stayArea: "Truly central", __night: { kr: 500 } }, stops: [{ name: "Airport", note: "Keep the morning genuinely short. Simply walk." }] }] });
+  is("a stop note loses its filler", G.days[0].stops[0].note, "Keep the morning short. Walk.");
+  is("so does the money line", G.essentials.budgetReality, "Skip the car except for the one day you want it.");
+  is("and a glance line", G.days[0].glance.stayArea, "Central");
+  is("while what is not text is left alone", G.days[0].glance.__night.kr, 500);
+  ok("a guide with no days is handed back as it came", M.guideWithoutFiller(null) === null && M.guideWithoutFiller({ x: 1 }).x === 1);
+  const gpL = stripComments(readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8"));
+  ok("applied to every way a guide is opened", /useState\(\(\) => guideWithoutFiller\(freshGuide\) \|\| null\)/.test(gpL) && /setGuide\(guideWithoutFiller\(rows\[0\]\.payload\)\)/.test(gpL) && /setGuide\(guideWithoutFiller\(liveGuide\)\)/.test(gpL));
+  // "Copenhagen Admiral Hotel" above "Same bed as night 1"
+  ok("a same-bed night does not name a second hotel", /\{day\.glance\.recommendedStay && !sameBed && \(/.test(gpL));
+  // "Copenhagen Airport, Helsingør Old Town, Copenhagen Airport"
+  ok("an approximate pin is named once", /const tripApprox = \[\.\.\.new Set\(tripApproxPins\)\];/.test(gpL) && /\$\{tripApproxPins\.length\} \$\{uiT\("guide\.approxMany"/.test(gpL));
+}
+
+// ── DASHES THE LIVE SITE STILL SHOWED, 21 SEP 2026 ──────────────────
+{
+  const scan = (f) => {
+    const src = readFileSync(join(root, f), "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'`])\/\/.*$/gm, "$1");
+    return (src.match(/"(?:[^"\\\n]|\\.)*[\u2013\u2014][^"\n]*"/g) || []);
+  };
+  is("no dash in a Tips string", scan("src/data/essentials.js"), []);
+  is("nor in the shop list", scan("src/data/shop.js"), []);
+  const appD = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+  ok("workshops read from craft_items go through the dash rule", /setCraftItems\(data\.map\(d => stripDashesDeep\(/.test(appD));
+}
+
+// ── NOMINATIM, AT THE PACE ITS POLICY ASKS FOR ──────────────────────
+// 21 Sep 2026, before a first beta tester: at most one request a second, and
+// the answers cached. See src/utils/nominatim.js.
+{
+  const U = (q) => `https://nominatim.openstreetmap.org/search?q=${q}&format=json`;
+  let clock = 0;
+  const sent = [];
+  const waits = [];
+  const saved = { data: {} };
+  const store = { read: () => saved.data, write: (o) => { saved.data = JSON.parse(JSON.stringify(o)); } };
+  const fetchImpl = async (url) => { sent.push({ url, at: clock }); return { ok: true, json: async () => (url.includes("nothing") ? [] : [{ lat: "55.6", lon: "12.5" }]) }; };
+  const wait = async (ms) => { waits.push(ms); clock += ms; };
+  const N = M.makeNominatim({ fetchImpl, now: () => clock, wait, store });
+  const [a, b] = await Promise.all([N.json(U("a")), N.json(U("b"))]);
+  ok("two at once both answer", a?.[0]?.lat === "55.6" && b?.[0]?.lat === "55.6");
+  ok("and go out at least a second apart", sent.length === 2 && sent[1].at - sent[0].at >= 1000);
+  ok("the gap is over the policy's one second", M.NOMINATIM_GAP_MS >= 1000);
+  await N.json(U("a"));
+  is("asked again, it is answered from the cache", sent.length, 2);
+  await N.json(U("nothing"));
+  await N.json(U("nothing"));
+  is("an empty answer is an answer, and cached too", sent.filter(x => x.url.includes("nothing")).length, 1);
+  const [c1, c2] = await Promise.all([N.json(U("same")), N.json(U("same"))]);
+  is("the same question at the same moment is one request", sent.filter(x => x.url.includes("same")).length, 1);
+  ok("and both callers get the answer", c1 === c2 && c1?.[0]);
+  ok("the cache is written down", Object.keys(saved.data).length === 4);
+  // A new tab, reading what the last one saved.
+  const sent2 = [];
+  const N2 = M.makeNominatim({ fetchImpl: async (url) => { sent2.push(url); return { ok: true, json: async () => [] }; }, now: () => clock, wait, store });
+  await N2.json(U("a"));
+  is("a later visit reads the saved answer", sent2.length, 0);
+  const N3 = M.makeNominatim({ fetchImpl: async (url) => { sent2.push(url); return { ok: true, json: async () => [] }; }, now: () => clock + (M.NOMINATIM_CACHE_DAYS + 1) * 86400000, wait, store });
+  await N3.json(U("a"));
+  is("but not one older than the cache is kept for", sent2.length, 1);
+  let errs = 0;
+  const N4 = M.makeNominatim({ fetchImpl: async () => { errs += 1; return { ok: false, status: 429, json: async () => ({}) }; }, now: () => clock, wait, store: { read: () => ({}), write: () => {} } });
+  is("a refusal comes back as nothing", await N4.json(U("x")), null);
+  await N4.json(U("x"));
+  is("and is never cached, so it is asked again", errs, 2);
+  const N5 = M.makeNominatim({ fetchImpl: async () => { throw new Error("offline"); }, now: () => clock, wait, store: { read: () => ({}), write: () => {} } });
+  let threw = false; try { await N5.json(U("y")); } catch { threw = true; }
+  ok("a network failure throws the way fetch did, for the callers' own catch", threw);
+  let after = false;
+  const N6 = M.makeNominatim({ fetchImpl: async () => ({ ok: true, json: async () => [] }), now: () => clock, wait, store: { read: () => ({}), write: () => {} } });
+  try { await N6.json("https://example.com/x"); } catch { after = true; }
+  ok("it only talks to Nominatim", after);
+  let broken = 0;
+  const N7 = M.makeNominatim({ fetchImpl: async () => { broken += 1; return { ok: true, json: async () => [] }; }, now: () => clock, wait, store: { read: () => { throw new Error("blocked"); }, write: () => { throw new Error("blocked"); } } });
+  let fine = true; try { await N7.json(U("z")); } catch { fine = false; }
+  ok("storage that throws does not break a lookup", fine && broken === 1);
+  // Every search in the app goes through it.
+  const every = ["src/App.jsx", "src/utils/geo.js", "src/utils/aiClient.js"].map(f => stripComments(readFileSync(join(root, f), "utf8"))).join("\n");
+  is("no search calls Nominatim with a bare fetch", (every.match(/fetch\(`https:\/\/nominatim\.openstreetmap\.org\/search/g) || []).length, 0);
+  ok("and they call the shared door", (every.match(/nominatimJson\(`https:\/\/nominatim\.openstreetmap\.org\/search/g) || []).length >= 6);
+  ok("the 250 ms waits are gone", !/setTimeout\(r, 250\)\); \/\/ be a polite/.test(every));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

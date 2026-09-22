@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { C } from "../utils/theme";
 import { Pill } from "./Pill";
-import { gemsView, GEM_SECTION, WHERE_LABEL, checkedLabel, isOwnSite } from "../utils/cheapGems";
+import { gemsView, GEM_SECTION, WHERE_LABEL, checkedLabel, isOwnSite, gemMatches, gemFilterOptions, GEM_CATEGORY_LABEL } from "../utils/cheapGems";
 
 // ── THE CHEAP GEMS PAGE ─────────────────────────────────────────────
 //
@@ -58,9 +58,20 @@ const Section = ({ title, rows }) => (
 
 export const CheapGemsPage = ({ rows = [], title = "Cheap gems" }) => {
   const [town, setTown] = useState("");
-  const view = gemsView(rows, { town });
+  const [kind, setKind] = useState("");
+  const [category, setCategory] = useState("");
+  const [students, setStudents] = useState(false);
+  const [q, setQ] = useState("");
+  const narrowed = rows.filter(g => gemMatches(g, { category, students, q }));
+  const view = gemsView(narrowed, { town });
   const all = gemsView(rows);
+  const opts = gemFilterOptions(rows);
   const empty = !all.scheme.length && !all.cheap.length;
+  const showScheme = kind !== "cheap" && view.scheme.length > 0;
+  const showCheap = kind !== "scheme" && view.cheap.length > 0;
+  const anyFilter = !!(town || kind || category || students || q);
+  const clearAll = () => { setTown(""); setKind(""); setCategory(""); setStudents(false); setQ(""); };
+  const row = { display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 };
   return (
     <div style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
       <div style={{ marginBottom: 18, paddingTop: 8 }}>
@@ -77,15 +88,39 @@ export const CheapGemsPage = ({ rows = [], title = "Cheap gems" }) => {
           </div>
         </div>
       ) : (<>
+        {opts.search && (
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search cheap gems" aria-label="Search cheap gems"
+            style={{ width: "100%", maxWidth: 420, boxSizing: "border-box", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 100, padding: "10px 16px", fontSize: 13, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif", marginBottom: 12 }} />
+        )}
         {all.towns.length > 0 && (
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 18 }}>
+          <div style={row}>
             {[{ id: "", label: "All of Denmark" }, ...all.towns.map(t => ({ id: t, label: t }))].map(o => (
               <Pill key={o.id || "all"} label={o.label} active={town === o.id} onClick={() => setTown(o.id)} />
             ))}
           </div>
         )}
-        {view.scheme.length > 0 && <Section title={GEM_SECTION.scheme} rows={view.scheme} />}
-        {view.cheap.length > 0 && <Section title={GEM_SECTION.cheap} rows={view.cheap} />}
+        {(opts.categories.length > 0 || opts.kinds.length > 0 || opts.students) && (
+          <div style={{ ...row, marginBottom: 18 }}>
+            {opts.categories.map(c => (
+              <Pill key={c} label={GEM_CATEGORY_LABEL[c]} active={category === c} onClick={() => setCategory(category === c ? "" : c)} />
+            ))}
+            {opts.kinds.map(k => (
+              <Pill key={k} label={GEM_SECTION[k]} active={kind === k} onClick={() => setKind(kind === k ? "" : k)} />
+            ))}
+            {opts.students && <Pill label="For students" active={students} onClick={() => setStudents(!students)} />}
+          </div>
+        )}
+        {showScheme && <Section title={GEM_SECTION.scheme} rows={view.scheme} />}
+        {showCheap && <Section title={GEM_SECTION.cheap} rows={view.cheap} />}
+        {!showScheme && !showCheap && anyFilter && (
+          <div style={{ textAlign: "center", padding: "36px 16px" }}>
+            <div style={{ fontSize: 15, color: C.light, fontFamily: "'Fraunces', serif", marginBottom: 8 }}>Nothing published matches that.</div>
+            <button onClick={clearAll}
+              style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "8px 16px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>
+              Clear
+            </button>
+          </div>
+        )}
       </>)}
     </div>
   );

@@ -171,6 +171,7 @@ import { unplaceableStops, mapGapNote } from "./utils/mapGaps";
 import { chipsFor, LOCATE } from "./utils/replyChips";
 import { icsUrlFor, parseIcs, communityRowsFrom, feedProblems, PAGE_ROWS_PROMPT, rowsFromExtract, readerFor, tribeApiFor, rowsFromTribe, rowsFromSimcal } from "./utils/calendarFeed";
 import { locateLabel, locateSentence, townFromReverse, countryFromReverse, isDenmark, reverseUrl } from "./utils/locateMe";
+import { nominatimJson } from "./utils/nominatim";
 import { directoryLinks, DIRECTORY_PROMPT, rowsFromDirectory, directoryProblems, islandSaysBlock, ISLAND_SAYS, ferryDoorIn } from "./utils/islandDirectory";
 import { readerBody, noticeAsk, sentencesIn, TRANSLATE_NOTICE, translatedNotice, noticeText } from "./utils/noticeVoice";
 import { frozenFrom, factsLost, frozenBlock, lostNote } from "./utils/frozenFacts";
@@ -1367,6 +1368,8 @@ function GemlyxApp() {
   // and not an inference.
   const [islandSearch, setIslandSearch] = useState("");
   const [islandLink, setIslandLink] = useState(null);
+  // Oliver, 21 Sep 2026: "Bring some filters in on our new navigations as well."
+  const [islandRegion, setIslandRegion] = useState(null);
   const [nightlifeDetail, setNightlifeDetail] = useState(null);
   const [freeDetail, setFreeDetail] = useState(null);
   const [foodDetail, setFoodDetail] = useState(null);
@@ -5162,8 +5165,8 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
             const [originRes, destRes] = await Promise.all([
               held
                 ? Promise.resolve([{ lat: held.lat, lon: held.lon }])
-                : fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(name + ", Denmark")}&format=json&limit=1&countrycodes=dk`).then(r => r.json()),
-              fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(detectedCity + " Station, Denmark")}&format=json&limit=1&countrycodes=dk`).then(r => r.json()),
+                : nominatimJson(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(name + ", Denmark")}&format=json&limit=1&countrycodes=dk`),
+              nominatimJson(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(detectedCity + " Station, Denmark")}&format=json&limit=1&countrycodes=dk`),
             ]);
             if (originRes?.[0] && destRes?.[0]) {
               const transport = await checkNightTransport(
@@ -15978,8 +15981,7 @@ THE LIST ABOVE COUNTS AS CONTEXT FOR recommendedStay, and it is the only list th
         // real venue instead of landing somewhere generic nearby.
         const real = lookupRealPlace(name);
         const query = real?.mapHint || (townByName[name] ? `${name}, ${townByName[name]}, Denmark` : `${name}, Denmark`);
-        const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=dk`);
-        const data = await res.json();
+        const data = await nominatimJson(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=dk`);
         // limit=1 means we take whatever the geocoder ranked first and never
         // look at what it is. A Danish place name is not unique, and the top
         // hit is accepted here into the tier that draws a solid pin, is
@@ -15999,7 +16001,8 @@ THE LIST ABOVE COUNTS AS CONTEXT FOR recommendedStay, and it is the only list th
           });
         }
       } catch { /* leave this one unresolved — map/leg for it just won't show, no crash */ }
-      await new Promise(r => setTimeout(r, 250)); // be a polite, low-volume client to a free public service
+      // The pace is nominatimJson's now: one a second, whoever asks. See
+      // utils/nominatim.js.
     }
     // ── AND THE TOWN ITSELF, WHEN GEMLYX HOLDS NO PAGE FOR IT ────
     //
@@ -16027,14 +16030,12 @@ THE LIST ABOVE COUNTS AS CONTEXT FOR recommendedStay, and it is the only list th
     )].filter(t => t && !townKeyFor(t) && !found[t]);
     for (const town of openTowns) {
       try {
-        const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(`${town}, Denmark`)}&format=json&limit=1&countrycodes=dk`);
-        const data = await res.json();
+        const data = await nominatimJson(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(`${town}, Denmark`)}&format=json&limit=1&countrycodes=dk`);
         const hit = data?.[0] ? { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) } : null;
         // No coordFitsTown, because this IS the town and there is nothing above
         // it to check against. A pair that will not parse is refused instead.
         if (hit && Number.isFinite(hit.lat) && Number.isFinite(hit.lon)) found[town] = hit;
       } catch { /* leave it unplaced: the stop keeps no pin, which is honest */ }
-      await new Promise(r => setTimeout(r, 250));
     }
     if (Object.keys(found).length > 0) setGeocodedCoords(prev => ({ ...prev, ...found }));
     return found; // returned directly too — setGeocodedCoords won't be visible in this same closure until
@@ -18776,8 +18777,10 @@ If the conversation only covers a single day or a few stops with no explicit day
       try {
         const { latitude, longitude } = pos.coords || {};
         if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) { setLocating("failed"); return; }
-        const res = await fetch(reverseUrl(latitude, longitude));
-        const data = await res.json();
+        // Through the same queue as every guide build's lookups, so a tap
+        // mid-build is not a second request in the same second, and never
+        // cached: this URL is where the traveller is standing.
+        const data = await nominatimJson(reverseUrl(latitude, longitude), { cache: false });
         // The country only when it is not this one, and decided by its CODE:
         // `country` comes back localised, so a German phone would have been
         // told it was starting from "Aarhus, Dänemark".
@@ -19965,7 +19968,10 @@ If the conversation only covers a single day or a few stops with no explicit day
         });
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) {
-          setCraftItems(data.map(d => ({ ...d, what: Array.isArray(d.what) ? d.what : (d.what || "").split(",").map(s => s.trim()).filter(Boolean) })));
+          // Through the dash rule like every other row. This table is read on
+          // its own, outside liveContent, and "Bornholm Ceramics — Hjorths
+          // Fabrik" was on the live Attractions page, 21 Sep 2026.
+          setCraftItems(data.map(d => stripDashesDeep({ ...d, what: Array.isArray(d.what) ? d.what : (d.what || "").split(",").map(s => s.trim()).filter(Boolean) })));
         }
       } catch { /* keep fallback data */ }
       setCraftLoading(false);
@@ -28899,16 +28905,32 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       a place bridgeless in PROSE because nobody wrote it down, is
                       the one this page must never make, and it does not: the chip
                       narrows a list, it does not print a claim. */}
-                  {[{ id: "bridge", label: "─ Bridge or causeway" }, { id: "ferry", label: "⛴ Ferry only" }].map(o => (
+                  {/* "Bridge or causeway" had a box-drawing line in front of
+                      it, which reads as a dash. No dashes, 21 Sep 2026. */}
+                  {[{ id: "bridge", label: "Bridge or causeway" }, { id: "ferry", label: "⛴ Ferry only" }].map(o => (
                     <Pill key={o.id} label={o.label} active={islandLink === o.id} onClick={() => setIslandLink(islandLink === o.id ? null : o.id)} />
                   ))}
                 </div>
+                {/* BY REGION, when the islands published sit in more than one.
+                    A pill that matches every island is a pill nobody needs. */}
+                {(() => {
+                  const regions = [...new Set(islands.map(i => String(i.region || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, "da"));
+                  if (regions.length < 2) return null;
+                  return (
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+                      {regions.map(r => (
+                        <Pill key={r} label={r} active={islandRegion === r} onClick={() => setIslandRegion(islandRegion === r ? null : r)} />
+                      ))}
+                    </div>
+                  );
+                })()}
                 {(() => {
                   const q = String(islandSearch || "").trim().toLowerCase();
                   const shown = islands.filter(i => {
                     const hasLink = !!String(i.fixedLink || "").trim();
                     if (islandLink === "bridge" && !hasLink) return false;
                     if (islandLink === "ferry" && hasLink) return false;
+                    if (islandRegion && String(i.region || "").trim() !== islandRegion) return false;
                     if (!q) return true;
                     return [i.name, i.region, i.tag, i.ferryFrom, i.ferryTo, i.ferryOperator]
                       .some(v => String(v || "").toLowerCase().includes(q));
@@ -28916,7 +28938,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   if (!shown.length) return (
                     <div style={{ textAlign: "center", padding: "36px 16px" }}>
                       <div style={{ fontSize: 15, color: C.light, fontFamily: "'Fraunces', serif", marginBottom: 8 }}>Nothing published matches that.</div>
-                      <button onClick={() => { setIslandSearch(""); setIslandLink(null); }}
+                      <button onClick={() => { setIslandSearch(""); setIslandLink(null); setIslandRegion(null); }}
                         style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "8px 16px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>
                         Clear
                       </button>

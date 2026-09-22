@@ -67,16 +67,25 @@ import { haversineKm } from "./helpers";
 // when it is more than AWAY_KM from the day's town. Nyhavn is a kilometre from
 // the centre of Copenhagen; Copenhagen is forty from Helsingør.
 export const AWAY_KM = 10;
+const NEIGHBOURHOOD_OF = { Nyhavn: "Copenhagen" };
 export const baseKey = (day) => {
   const area = String(day?.glance?.stayArea || "").trim();
   const stops = Array.isArray(day?.stops) ? day.stops : [];
   const lastTown = String(stops.map(s => s?.town).filter(Boolean).slice(-1)[0] || "").trim();
-  const named = townKeyFor(area);
+  // Nyhavn is the one neighbourhood in the town table, and a night there is
+  // a night in Copenhagen.
+  const namedKey = townKeyFor(area);
+  const named = NEIGHBOURHOOD_OF[namedKey] || namedKey;
   let said = lastTown || named || area;
   if (named && lastTown && fold(named) !== fold(lastTown)) {
     const a = TOWN_COORDS[named], b = TOWN_COORDS[townKeyFor(lastTown) || lastTown];
     const km = a && b ? haversineKm({ lat: a[0], lon: a[1] }, { lat: b[0], lon: b[1] }) : null;
     if (km != null && km > AWAY_KM) said = named;
+    // A DAY TRIP TO A TOWN THE TABLE DOES NOT KNOW. Helsingør is not in it,
+    // so there was no distance and the day trip became its own stay, three
+    // bookings for one hotel. Found by review, 21 Sep 2026. A named area the
+    // table does know is where they sleep.
+    else if (a && !b) said = named;
   }
   return said ? fold(said) : "";
 };

@@ -51,7 +51,7 @@ import { journeyFromStored, legSteps, worthShowingLegs, journeyAgencies, JOURNEY
 import { dayWeather, weatherIsStale, weatherChanges, weatherNoteNow } from "../utils/weather";
 import { dayWarnings, dayCrossings, tripWeatherWarning } from "../utils/weatherWarn";
 import { askClaude } from "../utils/aiClient";
-import { testTravelerLine, isFerryText, daysUntil, readerView } from "../utils/helpers";
+import { testTravelerLine, isFerryText, daysUntil, readerView, guideWithoutFiller } from "../utils/helpers";
 import { aiDisclosureFor } from "../utils/aiDisclosure";
 import { stopKind, tripScaleLine, tripCharacter, bookingActions, tripDayDate, stopEventWhen, clampNote } from "../utils/guideReading";
 import { bedStateOf, needsABed } from "../utils/nightsOpen";
@@ -239,7 +239,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
     return { added: after.length - before.length, of: rows.length };
   };
 
-  const [guide, setGuide] = useState(freshGuide || null);
+  const [guide, setGuide] = useState(() => guideWithoutFiller(freshGuide) || null);
   // The language THIS GUIDE was written in, read off the guide itself rather
   // than off the picker, and after the state that may still be loading it. A
   // guide built before __lang existed, or one whose tag nobody has a
@@ -347,7 +347,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
   // is untouched by this.
   useEffect(() => {
     if (liveGuide && typeof liveGuide === "object" && liveGuide._gid && guide?._gid === liveGuide._gid) {
-      setGuide(liveGuide);
+      setGuide(guideWithoutFiller(liveGuide));
     }
   }, [liveGuide]);
 
@@ -471,7 +471,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
       .then(r => r.json())
       .then(rows => {
         if (!rows?.[0]?.payload) { setLoadError(uiT("guide.linkGone", uiLang)); return; }
-        setGuide(rows[0].payload);
+        setGuide(guideWithoutFiller(rows[0].payload));
       })
       .catch(() => setLoadError(uiT("guide.loadOffline", uiLang)))
       .finally(() => setLoading(false));
@@ -976,7 +976,11 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
   // approximate: Tivoli Christmas market, Amalienborg", on a map where the second
   // of any consecutive pair had already been collapsed away. The note counted
   // stops; the map draws points.
-  const tripApprox = tripRoute.filter(p => p.approx).map(p => p.stopName);
+  // Counted by pin, named once each: the same airport at both ends of a trip
+  // read "Copenhagen Airport, Helsingør Old Town, Copenhagen Airport" on the
+  // live guide, 21 Sep 2026.
+  const tripApproxPins = tripRoute.filter(p => p.approx).map(p => p.stopName);
+  const tripApprox = [...new Set(tripApproxPins)];
   // ── AND WHICH PIN A STOP IS, IF IT IS ONE ─────────────────────────
   // Read off tripRoute itself, so the number under the map and the number ON the
   // map cannot drift. Two stops in one place collapse to one pin by design, and
@@ -1392,9 +1396,9 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
             )}
             {tripApprox.length > 0 && (
               <div style={{ fontSize: 11, color: C.muted, marginTop: 6, lineHeight: 1.5 }}>
-                {tripApprox.length === 1
+                {tripApproxPins.length === 1
                   ? uiT("guide.approxOne", uiLang)
-                  : `${tripApprox.length} ${uiT("guide.approxMany", uiLang)}`} {tripApprox.join(", ")}. {uiT(tripApprox.length === 1 ? "guide.approxEndOne" : "guide.approxEndMany", uiLang)}
+                  : `${tripApproxPins.length} ${uiT("guide.approxMany", uiLang)}`} {tripApprox.join(", ")}. {uiT(tripApproxPins.length === 1 ? "guide.approxEndOne" : "guide.approxEndMany", uiLang)}
               </div>
             )}
           </div>
@@ -2210,11 +2214,13 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                   </>
                 );
                 // ── THE CHANGE BUTTON ────────────────────────────────
-                // Only where a swap can actually be offered: it needs a real
-                // coordinate to search around, and a stop plotted at the middle
-                // of its town is not at a known point. Offering the control and
-                // then having nothing to put in it is the shape of button this
-                // project keeps removing.
+                // Only where a swap can be offered: it needs a point to search
+                // around. That is the stop's own coordinate when one is held,
+                // and otherwise the centre of its town, which resolveStopCoords
+                // falls back to, so "too far out of the way" is then measured
+                // from the town centre. A stop with neither gets no control.
+                // (This comment used to promise a precise point; a review on
+                // 21 Sep 2026 found the code never asked for one.)
                 const swapPoint = resolveStopCoords(stop.name, guide._geo || {}, stopTown(stop, real));
                 const swapOpen = changing === `${dayIdx}-${stopIdx}`;
                 const changedFrom = swapNote(stop);
@@ -2505,7 +2511,13 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                     <span style={{ color: C.muted, fontWeight: 700 }}>{uiT("guide.whereToStay", uiLang)} </span>
                     <span style={{ color: C.light }}>{stayText}</span>
 
-                    {day.glance.recommendedStay && (
+                    {/* Not on a same-bed night. Found on the live guide the
+                        night of 21 Sep 2026: night 2 named "Copenhagen Admiral
+                        Hotel" right above "Same bed as night 1", which had
+                        named Next House. Each day's enrichment picks a hotel
+                        on its own, so a night that is the same bed must not
+                        print a second one. */}
+                    {day.glance.recommendedStay && !sameBed && (
                       <div style={{ marginTop: 3 }}><span style={{ color: C.gold, fontWeight: 700 }}>{day.glance.recommendedStay}</span></div>
                     )}
                     {/* ── HOW LONG, AND THE WAY TO BOOK IT ─────────────
@@ -2541,6 +2553,17 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                           <a href={outboundLink(stayHere.door.href).href || stayHere.door.href} target="_blank" rel={outboundLink(stayHere.door.href).rel}
                             style={{ color: C.gold, textDecoration: "underline", textUnderlineOffset: 3 }}>{stayHere.place}</a>
                           <span style={{ color: C.muted, fontWeight: 600, fontSize: 11 }}> on Booking.com ↗</span>
+                        </>)}
+                        {/* AND WHEN THE LINK CANNOT CARRY THE AREA. With
+                            Booking's deep links off, the door is Booking's
+                            front page, and the area's name may not be put on
+                            it. Found by review the same night: the card then
+                            had no way to book at all. So it says what it is. */}
+                        {stayHere?.door?.href && !stayHere.door.area && (<>
+                          {" · "}
+                          <a href={outboundLink(stayHere.door.href).href || stayHere.door.href} target="_blank" rel={outboundLink(stayHere.door.href).rel}
+                            style={{ color: C.gold, textDecoration: "underline", textUnderlineOffset: 3 }}>Find a room on Booking.com</a>
+                          <span style={{ color: C.muted, fontWeight: 600, fontSize: 11 }}> ↗</span>
                         </>)}
                       </div>
                     )}

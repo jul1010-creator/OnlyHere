@@ -44,6 +44,8 @@ import { hostOf, textHasPrice, menuImagesToRead } from "./pageScan";
 export const GEM_TYPE = "gem";
 
 export const GEM_KINDS = ["scheme", "cheap"];
+// What a gem is for. See gemCategory, under the filters.
+export const GEM_CATEGORIES = ["food", "shop", "stay", "travel", "other"];
 
 // The two sections, in his order. A scheme is the realisation, so it leads.
 export const GEM_SECTION = {
@@ -100,8 +102,12 @@ const COMMON_NAME_WORDS = new Set([
   "shop", "store", "butik", "butikken", "outlet", "market", "marked", "house", "huset", "group", "company",
   "cafe", "restaurant", "the", "and", "og",
 ]);
-const nameWords = (name) =>
-  fold(clean(name)).split(/[^a-z0-9]+/).filter(w => w.length >= 4 && !COMMON_NAME_WORDS.has(w));
+// Both spellings of a Danish letter, because a domain writes one of them:
+// fold reads Føtex as "fotex" and the shop's site is foetex.dk. Found by
+// review, 21 Sep 2026, where it blocked a brand on its own page.
+const digraphs = (s) => clean(s).toLowerCase().replace(/æ/g, "ae").replace(/ø/g, "oe").replace(/å/g, "aa");
+const nameWords = (name) => [...new Set([fold(clean(name)), fold(digraphs(name))]
+  .flatMap(n => n.split(/[^a-z0-9]+/)))].filter(w => w.length >= 4 && !COMMON_NAME_WORDS.has(w));
 
 export const isOwnSite = (url, name) => {
   const h = hostOf(url);
@@ -150,6 +156,9 @@ export const shapeGem = (t = {}) => {
     // always does: an app that only works in the country you joined in, a
     // student card that has to be Danish, a club that asks for a Danish number.
     catch: clean(t.catch).slice(0, 240),
+    // What it is FOR, so the page can be filtered by it. Empty is allowed and
+    // is read off the words instead: see gemCategory.
+    category: GEM_CATEGORIES.includes(clean(t.category)) ? clean(t.category) : "",
     desc: clean(t.desc).slice(0, 400),
     source: clean(t.source),
     checkedAt: clean(t.checkedAt).slice(0, 10),
@@ -216,6 +225,54 @@ const inTown = (g, town) => {
   const towns = Array.isArray(g.towns) ? g.towns : [];
   if (!towns.length) return true;
   return towns.some(t => fold(t) === fold(town));
+};
+
+// ── FILTERS ON THE PAGE ─────────────────────────────────────────────
+//
+// Oliver, 21 Sep 2026, going to bed: "Bring some filters in on our new
+// navigations as well." A town filter was all the page had. Now also what a
+// gem is for, whether you have to ask for it, whether it is for students, and
+// a search. Each filter only shows when it would split the page: a pill that
+// matches everything or nothing is a pill nobody needs.
+export const GEM_CATEGORY_LABEL = { food: "Food and drink", shop: "Shops", stay: "Beds", travel: "Getting around", other: "Other" };
+const FOOD_WORDS = /\b(?:restaurant|caf[eé]|bakery|bager(?:i|iet)?|burger|pizza|kebab|shawarma|d[uü]r[uü]m|food|street ?food|mad|madhal|spis(?:ested)?|frokost|lunch|dinner|brunch|breakfast|morgenmad|coffee|kaffe|sm(?:ø|oe)rrebr(?:ø|oe)d|p(?:ø|oe)lse(?:vogn)?|hot ?dog|bar|beer|(?:ø|oe)l|wine|vin|ice ?cream|is(?:bar|hus)|canteen|kantine|grill(?:bar)?|takeaway)\b/i;
+const STAY_WORDS = /\b(?:hostel|hotel|camping|campsite|vandrerhjem|bed and breakfast|b&b|overnat\w*|room|v(?:æ|ae)relse)\b/i;
+const TRAVEL_WORDS = /\b(?:bus|train|tog|ferry|f(?:æ|ae)rge|bike|cykel|metro|rejsekort|rejsebillet|ticket to ride|dsb|flixbus|kombardo|car hire|rental car)\b/i;
+const SHOP_WORDS = /\b(?:shop|store|butik\w*|clothing|clothes|t(?:ø|oe)j|fashion|design|supermarke[dt]|kiosk|outlet|second ?hand|genbrug|chain|k(?:æ|ae)de|books?|boghandel|homeware|interior|souvenir|sko|shoes|retail)\b/i;
+export const gemCategory = (g = {}) => {
+  const said = clean(g.category);
+  if (GEM_CATEGORIES.includes(said)) return said;
+  const text = [g.name, g.what, g.desc, g.how].map(clean).join(" ");
+  if (FOOD_WORDS.test(text)) return "food";
+  if (STAY_WORDS.test(text)) return "stay";
+  if (TRAVEL_WORDS.test(text)) return "travel";
+  if (SHOP_WORDS.test(text)) return "shop";
+  return "other";
+};
+export const isForStudents = (g = {}) => /\bstud(?:ent|erende|ie)\w*/i.test(`${clean(g.who)} ${clean(g.what)} ${clean(g.name)}`);
+
+// `category`, `students` and `q` narrow the rows before gemsView sorts them.
+export const gemMatches = (g = {}, { category = "", students = false, q = "" } = {}) => {
+  if (category && gemCategory(g) !== category) return false;
+  if (students && !isForStudents(g)) return false;
+  const words = fold(clean(q)).split(/\s+/).filter(Boolean);
+  if (!words.length) return true;
+  const hay = fold([g.name, g.what, g.who, g.how, g.desc, g.catch, ...(g.towns || [])].map(clean).join(" "));
+  return words.every(w => hay.includes(w));
+};
+
+// Which filters are worth drawing for these rows.
+export const gemFilterOptions = (rows = [], { today = new Date() } = {}) => {
+  const live = (Array.isArray(rows) ? rows : []).filter(r => gemLive(r, today));
+  const cats = GEM_CATEGORIES.filter(c => live.some(g => gemCategory(g) === c));
+  const kinds = GEM_KINDS.filter(k => live.some(g => g.kind === k));
+  const students = live.filter(isForStudents).length;
+  return {
+    categories: cats.length > 1 ? cats : [],
+    kinds: kinds.length > 1 ? kinds : [],
+    students: students > 0 && students < live.length,
+    search: live.length > 6,
+  };
 };
 
 export const gemsView = (rows = [], { town = "", today = new Date() } = {}) => {
@@ -320,7 +377,7 @@ export const GEMS_PROMPT = (place, results = [], { only = "" } = {}) => {
   return `You are finding cheap gems for travellers in ${where}. Two kinds, and nothing else:\n\n`
     + `"scheme": a discount a shop, café or chain gives to anybody who does one thing first. A student card, joining a club, an app, a card. Only if a result below says so.\n`
     + `"cheap": a place that is cheap without doing anything, and only when a result below says it is.\n\n`
-    + `Respond with ONLY strict JSON: {"gems":[{"name":"","kind":"scheme|cheap","towns":[],"what":"","who":"","how":"","where":"shop|online|both|","catch":"","desc":"","source":0}]}\n\n`
+    + `Respond with ONLY strict JSON: {"gems":[{"name":"","kind":"scheme|cheap","category":"food|shop|stay|travel|other","towns":[],"what":"","who":"","how":"","where":"shop|online|both|","catch":"","desc":"","source":0}]}\n\n`
     + `SOURCE IS THE NUMBER OF THE RESULT that says it. A gem no result states does not come back.\n`
     + `WHEN THE PLACE'S OWN SITE SAYS IT TOO, THAT IS THE SOURCE. Another page only when the own site does not state it.\n`
     + `WHAT IS THE SAVING AS THE BRAND STATES IT. "Up to 20%" stays "up to 20%". Never round up, never add a figure the result does not give.\n`
@@ -345,7 +402,7 @@ export const settleGems = (json, results = [], { today = new Date(), only = "" }
   const at = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
   const out = [];
   const dropped = { noSource: 0, coupon: 0, shape: 0, other: 0 };
-  const seen = new Set();
+  const seen = new Map();
   for (const raw of list) {
     const i = Number(raw?.source);
     const hit = Number.isInteger(i) && i >= 0 && i < results.length ? results[i] : null;
@@ -356,18 +413,20 @@ export const settleGems = (json, results = [], { today = new Date(), only = "" }
     // A name search that comes back with the place next door is a different
     // run's answer, not this one's.
     if (one && !fold(g.name).includes(one) && !one.includes(fold(g.name))) { dropped.other += 1; continue; }
-    const key = `${fold(g.name)}|${g.kind}`;
+    // On a name lookup every row is about the one place, whatever the model
+    // calls it: "Sporvejen" and "Restaurant Sporvejen" are the same row.
+    const key = one ? `${one}|${g.kind}` : `${fold(g.name)}|${g.kind}`;
     const own = isOwnSite(g.source, g.name);
     // THE PLACE'S OWN PAGE WINS. Oliver, 21 Sep 2026: "the pipeline will
     // always prioritise the home website, yes?" It did not: the first row the
     // model listed was kept, whoever's page it was. Now a later row for the
     // same place on its own site takes the earlier one's place.
     if (seen.has(key)) {
-      const at = out.findIndex(x => `${fold(x.name)}|${x.kind}` === key);
-      if (own && at >= 0 && !out[at].own) out[at] = { ...g, own };
+      const at = seen.get(key);
+      if (own && !out[at].own) out[at] = { ...g, own };
       continue;
     }
-    seen.add(key);
+    seen.set(key, out.length);
     out.push({ ...g, own });
   }
   return { gems: out, dropped };

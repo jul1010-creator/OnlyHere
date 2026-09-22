@@ -1,4 +1,5 @@
 import { recordModelCall, recordRequestCall } from "./apiCost";
+import { nominatimJson } from "./nominatim";
 // Shared, parameterized copies of App.jsx's own askClaude/parseClaudeJSON — pure
 // functions (no closures over component state), pulled out so GuidePage.jsx's new
 // "Include more" / "Make it simpler" / "Gemlyx AI" help controls can call Claude the
@@ -343,12 +344,11 @@ export const parseClaudeJSON = async (rawText, maxTokens = 8192) => {
 export const geocodeOne = async (name, town) => {
   try {
     const query = town ? `${name}, ${town}, Denmark` : `${name}, Denmark`;
-    const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=dk`);
+    const data = await nominatimJson(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=dk`);
     // Free, and recorded anyway. A run's call count is part of what it costs to
     // serve, even where the money is zero, and a geocode that is free today is
     // a rate limit tomorrow.
     recordRequestCall("geocode");
-    const data = await res.json();
     if (data?.[0]) return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
   } catch { /* leave unresolved — same graceful degradation as everywhere else */ }
   return null;

@@ -707,7 +707,10 @@ export const stayTextForReader = ({ text = "", mode = null, kmFromTown = null } 
 // ONCE. A traveller told twice that the capital is expensive has been told off
 // rather than helped, so the chat stops asking for it as soon as one of its
 // own earlier replies has said it.
-const CAPITAL_SAID = /(copenhagen|k.benhavn)[\s\S]{0,200}(expensive|pricey|dyr)|(expensive|pricey|dyr)[\s\S]{0,200}(copenhagen|k.benhavn)/i;
+// "dyr" as a WORD: Dyrehaven, Dyrehavsbakken and every dyrepark contain it,
+// and a reply sending someone to the deer park is not a reply about prices.
+// Found by review, 21 Sep 2026.
+const CAPITAL_SAID = /(copenhagen|k.benhavn)[\s\S]{0,200}(expensive|pricey|\bdyr(?:t|e|este)?\b)|(expensive|pricey|\bdyr(?:t|e|este)?\b)[\s\S]{0,200}(copenhagen|k.benhavn)/i;
 export const capitalCostSaid = (priorReplies = []) =>
   (Array.isArray(priorReplies) ? priorReplies : []).some(t => CAPITAL_SAID.test(String(t || "")));
 
@@ -782,8 +785,9 @@ export const nightPriceFrom = ({ kr, says } = {}, context = "") => {
   const quote = squash(says);
   if (!quote || quote.length > 200) return null;
   if (!squash(context).includes(quote)) return null;
-  if (!/\b(?:kr|dkk|kroner)\b|,-/i.test(quote)) return null;
+  // "1200kr" as well as "1.200 kr.": Danish snippets glue the unit on.
+  if (!/(?:\b|(?<=\d))(?:kr|dkk|kroner)\b|,-/i.test(quote)) return null;
   const digits = quote.replace(/(\d)[.,\s](?=\d{3}\b)/g, "$1");
-  if (!new RegExp(`\\b${n}\\b`).test(digits)) return null;
+  if (!new RegExp(`(?<!\\d)${n}(?!\\d)`).test(digits)) return null;
   return { kr: n, says: String(says).replace(/\s+/g, " ").trim() };
 };

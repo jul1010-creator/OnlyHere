@@ -409,6 +409,8 @@ export const routeOrder = (places, { from = null, compare = null } = {}) => {
 // a page whose promise is that nothing is asserted that nobody measured. The band
 // was computed two-argument while overnightMove, written the same night, was given
 // the mode. Absent mode leaves the previous wording exactly as it was.
+const ENDS_AT_AIRPORT = /\b(?:airport|lufthavn(?:en)?)\b/i;
+const plainName = (v) => String(v || "").toLowerCase().replace(/\s+/g, " ").trim();
 export const returnLeg = ({ ordered = [], from = null, days = null, mode = null } = {}) => {
   const start = coordsOf(from);
   if (!start) return null;
@@ -429,7 +431,12 @@ export const returnLeg = ({ ordered = [], from = null, days = null, mode = null 
     mode: travelModeKey(mode),
     // Ending where they started is not a return leg, it is no journey at all,
     // and a card saying "0 km back to Billund Airport" is noise.
-    needed: km > 0,
+    // AND NEITHER IS ENDING AT AN AIRPORT. The live guide z8f8otncrz2 ends at
+    // Copenhagen Airport, whose pin sat at the town centre, and the foot of the
+    // page read "Copenhagen Airport is about 9 km back to Copenhagen Airport".
+    // A trip whose last stop is an airport, or the place they landed by name,
+    // has already got them home. Found 21 Sep 2026.
+    needed: km > 0 && !ENDS_AT_AIRPORT.test(String(last.name || "")) && plainName(last.name) !== plainName(from.name),
   };
 };
 

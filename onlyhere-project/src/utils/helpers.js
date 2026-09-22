@@ -904,6 +904,35 @@ export const trimFillerRuns = (texts, { words = FILLER_WORDS, keep = FILLER_REPE
 //
 // Already-trimmed prior turns are what spend the budget, so no separate tally
 // has to be kept anywhere: the thread carries its own count in its own text.
+// ── AND A GUIDE IS PUBLISHED PROSE TOO ──────────────────────────────
+//
+// Found on the live guide z8f8otncrz2, 21 Sep 2026, during the check Oliver
+// asked for before bed: "Keep the morning genuinely short" on day 7 and
+// "the one North Zealand day you actually want it" in Money. Rows were
+// trimmed at read time and the chat against its thread; a guide, which is
+// the thing a traveller takes on the trip, was trimmed by nothing.
+//
+// Every adverb out, no budget: a guide has no interlocutor to correct, which
+// is the case the comment above gives for removal being safe. Applied when a
+// guide is opened, so guides written before this read clean too, and a save
+// stores the clean text.
+export const guideWithoutFiller = (guide) => {
+  if (!guide || typeof guide !== "object" || !Array.isArray(guide.days)) return guide;
+  const cut = (t) => (typeof t === "string" && t ? trimFillerRuns([t], { keep: 0 })[0] : t);
+  const flat = (o) => (o && typeof o === "object" && !Array.isArray(o)
+    ? Object.fromEntries(Object.entries(o).map(([k, v]) => [k, typeof v === "string" ? cut(v) : v]))
+    : o);
+  return {
+    ...guide,
+    essentials: flat(guide.essentials),
+    days: guide.days.map(d => (d && typeof d === "object" ? {
+      ...d,
+      glance: flat(d.glance),
+      stops: Array.isArray(d.stops) ? d.stops.map(s => (s && typeof s === "object" ? { ...s, note: cut(s.note) } : s)) : d.stops,
+    } : d)),
+  };
+};
+
 export const trimFillerAgainst = (priorTexts, text, opts = {}) => {
   const run = trimFillerRuns([...(Array.isArray(priorTexts) ? priorTexts : []), text], opts);
   return run[run.length - 1];

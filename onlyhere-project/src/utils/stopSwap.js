@@ -257,5 +257,5 @@ export const alreadyRuledOut = (guide) => {
 // trip and not a pick, so nothing near it offers another one. Matched on the
 // whole word, so Nyhavn and Hou Havn are places and Billund Lufthavn is an
 // airport.
-const TRAVEL_POINT = /\b(?:airport|lufthavn|kastrup|hovedbaneg(?:å|aa)rd(?:en)?|baneg(?:å|aa)rd(?:en)?|central station|train station|railway station|bus station|busterminal|rutebilstation|f(?:æ|ae)rgeterminal(?:en)?|f(?:æ|ae)rgehavn(?:en)?|ferry terminal|ferry port|ferry harbour|cruise terminal)\b/i;
+const TRAVEL_POINT = /(?:\s(?:h|st)\.?$)|\b(?:airport|lufthavn(?:en)?|kastrup (?:airport|lufthavn)|hovedbaneg(?:å|aa)rd(?:en)?|baneg(?:å|aa)rd(?:en)?|central station|train station|railway station|bus station|busterminal|rutebilstation|f(?:æ|ae)rgeterminal(?:en)?|f(?:æ|ae)rgehavn(?:en)?|ferry terminal|ferry port|ferry harbour|cruise terminal)\b/i;
 export const isTravelPoint = (stop) => TRAVEL_POINT.test(String(stop?.name || ""));

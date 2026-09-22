@@ -1,4 +1,5 @@
 import { nextWeekdayTimestamp, arrivalRow } from "./helpers";
+import { nominatimJson } from "./nominatim";
 
 // Empirically checks real late-night transit — not the AI's guess — for both a
 // weekday and a weekend night, since Danish night transport genuinely differs
@@ -59,8 +60,7 @@ export const checkNightTransport = async (originLat, originLon, destLat, destLon
 // against the question" — and this is that function's other half.
 export const geocodePlace = async (query) => {
   try {
-    const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query + ", Denmark")}&format=json&limit=1&countrycodes=dk&addressdetails=1&namedetails=1`);
-    const data = await r.json();
+    const data = await nominatimJson(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query + ", Denmark")}&format=json&limit=1&countrycodes=dk&addressdetails=1&namedetails=1`);
     if (!data?.[0]) return null;
     const hit = data[0];
     const lat = parseFloat(hit.lat), lon = parseFloat(hit.lon);
@@ -136,8 +136,7 @@ export const geocodePostcode = async (code) => {
   // is not a postcode and must not be sent as one.
   if (!/^[1-9]\d{3}$/.test(pc)) return null;
   try {
-    const r = await fetch(`https://nominatim.openstreetmap.org/search?postalcode=${pc}&country=Denmark&format=json&limit=1&addressdetails=1&countrycodes=dk`);
-    const data = await r.json();
+    const data = await nominatimJson(`https://nominatim.openstreetmap.org/search?postalcode=${pc}&country=Denmark&format=json&limit=1&addressdetails=1&countrycodes=dk`);
     const hit = data?.[0];
     if (!hit) return null;
     const lat = parseFloat(hit.lat), lon = parseFloat(hit.lon);

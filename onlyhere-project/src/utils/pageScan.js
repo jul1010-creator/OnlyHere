@@ -1647,8 +1647,11 @@ export const MENU_WORDS = /(?:^|[^a-z])(?:menu|menukort|spisekort|frokost|aftens
 
 const scoreImage = (url, alt, cls, fromMeta, index) =>
   (fromMeta ? 100 : 0)
-  + (POSTER_WORDS.test(url) || MENU_WORDS.test(url) ? 8 : 0)
-  + (POSTER_WORDS.test(alt) || MENU_WORDS.test(alt) ? 6 : 0)
+  // A menu word outranks a poster word: only three pictures survive the cut
+  // (MAX_BANNERS), and a page with a header.jpg and a banner.jpg would push
+  // Frokost.jpg out before menuImagesToRead ever saw it. Found by review.
+  + (MENU_WORDS.test(url) ? 12 : POSTER_WORDS.test(url) ? 8 : 0)
+  + (MENU_WORDS.test(alt) ? 9 : POSTER_WORDS.test(alt) ? 6 : 0)
   + (POSTER_WORDS.test(cls) ? 4 : 0)
   // Earlier on the page is more likely to be the announcement, but only as a
   // tiebreak, and it must never outweigh a page naming its own poster.
