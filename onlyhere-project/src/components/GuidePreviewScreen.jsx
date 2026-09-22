@@ -1,3 +1,4 @@
+import { barsIntoStreets } from "../utils/nightlife";
 import { useEffect, useState } from "react";
 import { previewReportRow, travellerTurns, feedbackProblem } from "../utils/articleFeedback";
 import { SUPABASE_URL, SUPABASE_KEY } from "../config";
@@ -286,6 +287,9 @@ export const GuidePreviewScreen = ({
   freeEntrance,
   foodSpots,
   nightlifeSpots,
+  // The published bar streets, so the bars can be shown on the street they
+  // stand on. See barsIntoStreets.
+  nightlifeStreets = [],
   events,
   majorEvents,
   craftItemsFallback,
@@ -540,13 +544,18 @@ export const GuidePreviewScreen = ({
       // consider block in utils/previewMatch.js for why it exists at all.
       const matching = mine.filter(p => !p._notAsked && !p._consider);
       const consider = mine.filter(p => p._consider);
+      // A bar street with its bars under it, not a list of bars. Oliver,
+      // 22 Sep 2026: "Too many bars". See barsIntoStreets.
+      const folded = cat.src === "nightlife" ? barsIntoStreets(matching, nightlifeStreets) : null;
+      const rows = folded ? folded.rows : matching;
+      const cap = folded ? Math.min(MAX_PER_SECTION, folded.shown) : MAX_PER_SECTION;
       return {
         ...cat,
-        items: matching.slice(0, MAX_PER_SECTION),
+        items: rows.slice(0, cap),
         consider,
         // The real number, so the line under the section can be honest about the
         // difference rather than the reader discovering it in the finished guide.
-        itemsTotal: matching.length,
+        itemsTotal: rows.length,
         offered,
         picks: rankOffers(offered, { want: themes, profile: readProfile, limit: OFFER_LIMIT })
           .map(entry => ({ ...entry, reason: offerReason(entry, { said: saidByTraveller }) })),
@@ -576,6 +585,8 @@ export const GuidePreviewScreen = ({
       ? { ...cat, offered: [], picks: [] }
       : cat))
     .filter(cat => cat.items.length > 0 || cat.offered.length > 0 || cat.consider.length > 0);
+  // Which bar streets have their bars open. See barsIntoStreets.
+  const [barsOpen, setBarsOpen] = useState([]);
   const toggleExtra = (name) =>
     setPickedExtras(prev => (prev || []).includes(name) ? (prev || []).filter(n => n !== name) : [...(prev || []), name]);
   // ── THE EVENTS, DATE TESTED AND TICKABLE ──────────────────────────
@@ -958,6 +969,37 @@ export const GuidePreviewScreen = ({
                       entry for that sentence instead. utils/cardLine.js has
                       the whole story and falls back to this exact clip. */}
                   <div style={{ fontSize: 12, color: C.light, lineHeight: 1.5, marginTop: 3 }}>{cardLine(place)}</div>
+                  {/* ── THE BARS ON THIS STREET, BEHIND AN ARROW ─────────
+                      Oliver, 22 Sep 2026: "make a '->' on the bar street. So
+                      when you click it, those 3 pop out." Closed until asked,
+                      so the street reads as one choice and the bars are there
+                      for whoever wants them. See barsIntoStreets. */}
+                  {place._barsHere?.length > 0 && (() => {
+                    const key = `${place._src}-${place.id}`;
+                    const open = barsOpen.includes(key);
+                    return (
+                      <div style={{ marginTop: 5 }} onClick={(e) => e.stopPropagation()}>
+                        <button onClick={() => setBarsOpen(prev => (prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]))}
+                          aria-expanded={open}
+                          style={{ background: "none", border: "none", padding: 0, color: C.gold, fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                          Recommended bars here <span style={{ display: "inline-block", transform: open ? "rotate(90deg)" : "none", transition: "transform 0.15s ease" }}>→</span>
+                        </button>
+                        {open && (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 5 }}>
+                            {place._barsHere.map((b, i) => (
+                              <button key={`${b.id}-${i}`} onClick={() => openStopDetail?.(b)}
+                                style={{ textAlign: "left", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "6px 9px", color: C.text, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                {b.name}
+                              </button>
+                            ))}
+                            {place._barsMore > 0 && (
+                              <div style={{ fontSize: 11, color: C.muted }}>and {place._barsMore} more on this street</div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                   </div>
                 </div>
               ))}

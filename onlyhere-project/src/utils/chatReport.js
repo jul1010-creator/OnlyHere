@@ -48,7 +48,7 @@ import { readBrief, nextAsks, BRIEF_SLOTS } from "./tripBrief";
 import { askedBeforeTurns } from "./directAnswer";
 import { briefConflicts, conflictLabel, conflictSlots } from "./briefConflicts";
 import { isReadyToBuild } from "./helpers";
-import { travelModeKey } from "./routeOrder";
+import { travelModeKey, tickedTravelMode } from "./routeOrder";
 import { travellerBudget } from "./accommodation";
 
 export const CHAT_REPORT_KIND = "gemlyx-chat-report";
@@ -275,7 +275,7 @@ export const buildChatReport = ({
     // Read the same way the preview reads it, so a report and a screen cannot
     // disagree about what mode or budget the trip was planned on.
     read: {
-      mode: travelModeKey((intake.transport || []).join(", ")) || travelModeKey(travellerText) || null,
+      mode: tickedTravelMode(`Getting around: ${(intake.transport || []).join(", ")}`) || travelModeKey((intake.transport || []).join(", ")) || travelModeKey(travellerText) || null,
       budget: travellerBudget([intake.budgetText, travellerText].filter(Boolean).join("\n")) || null,
     },
     intake: intakeReport(intake),

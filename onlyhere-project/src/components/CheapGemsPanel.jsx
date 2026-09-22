@@ -69,11 +69,12 @@ export const CheapGemsPanel = ({ existing = [], onPublish, readPage = null, read
         for (const r of ownPagesIn(results, only)) {
           const page = await readPage(r.url).catch(() => null);
           const text = String(page?.text || "");
-          if (textHasPrice(text)) {
-            const got = pageAsResult({ url: r.url, title: r.title, text });
-            if (got) read.push(got);
-            continue;
-          }
+          // The page's own words go in whatever they are about, so a shop's
+          // discount page counts as much as a restaurant's menu. Then, only
+          // when those words carry no price, its menu pictures.
+          const got = pageAsResult({ url: r.url, title: r.title, text });
+          if (got) read.push(got);
+          if (textHasPrice(text)) continue;
           for (const img of (readImage ? menuImagesToRead({ url: r.url, text, banners: page?.banners }) : [])) {
             const shot = await readImage(img.url, only).catch(() => null);
             if (!shot?.text) continue;

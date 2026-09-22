@@ -172,6 +172,7 @@ import { chipsFor, LOCATE } from "./utils/replyChips";
 import { icsUrlFor, parseIcs, communityRowsFrom, feedProblems, PAGE_ROWS_PROMPT, rowsFromExtract, readerFor, tribeApiFor, rowsFromTribe, rowsFromSimcal } from "./utils/calendarFeed";
 import { locateLabel, locateSentence, townFromReverse, countryFromReverse, isDenmark, reverseUrl } from "./utils/locateMe";
 import { nominatimJson } from "./utils/nominatim";
+import { homeCountryIn, onlyACountry, skyscannerBlock } from "./utils/homeCountry";
 import { directoryLinks, DIRECTORY_PROMPT, rowsFromDirectory, directoryProblems, islandSaysBlock, ISLAND_SAYS, ferryDoorIn } from "./utils/islandDirectory";
 import { readerBody, noticeAsk, sentencesIn, TRANSLATE_NOTICE, translatedNotice, noticeText } from "./utils/noticeVoice";
 import { frozenFrom, factsLost, frozenBlock, lostNote } from "./utils/frozenFacts";
@@ -230,7 +231,7 @@ import { alertKey, describeWeatherChange, unseenAlerts, seenAlerts, markAlertSee
 import { placesNamedIn, cardsByMessage, rejectedIn, correctedTo } from "./utils/chatPlaces";
 import { mapPlaces, railCss, railMapCss, RAIL_CLASS, INLINE_CARDS_CLASS, MAP_CLASS, CHAT_PANEL_HEIGHT, MSG_ROW_CLASS, phoneMapShows, phoneMapOpen, MAP_TOGGLE_CLASS } from "./utils/chatRail";
 import { ChatMiniMap } from "./components/ChatMiniMap";
-import { readMapBeats, beatsDue, beatTarget, MAP_DIRECTION_RULE } from "./utils/mapDirections";
+import { readMapBeats, beatsDue, beatTarget, outHeldByOffer, MAP_DIRECTION_RULE } from "./utils/mapDirections";
 import { briefProgress, progressLine, briefPercent, percentLine } from "./utils/briefPanel";
 import { EXAMPLE_GUIDE, EXAMPLE_GUIDE_PATH, hasExampleGuide } from "./data/exampleGuide";
 import { ChatPlaceCards } from "./components/ChatPlaceCards";
@@ -244,7 +245,7 @@ import { communityEvents } from "./data/events";
 import { fixClock, clockNote, lateDays, lateDayNote } from "./utils/dayClock";
 import { communityOnDay, communityDay, communityBlock, moreOnLine, noticeGroups, rolledHeadline, rolledBody, placesIn } from "./utils/communityEvents";
 import { answerLengthBlock, depthBlock, answerTokens, readAnswerLength, storeAnswerLength, lengthLabel, SHORT as ANSWER_SHORT, LONG as ANSWER_LONG } from "./utils/answerLength";
-import { travelModeKey, withoutNonModes, overnightMove, dayStartsBeforeItCanArrive } from "./utils/routeOrder";
+import { travelModeKey, tickedTravelMode, withoutNonModes, overnightMove, dayStartsBeforeItCanArrive } from "./utils/routeOrder";
 import { buildChatReport, chatReportFilename } from "./utils/chatReport";
 import { openingThread, withTestBrief, withoutTestBrief, loadThread, saveThread, clearThread } from "./utils/chatThread";
 import { downloadReport } from "./utils/previewReport";
@@ -16878,7 +16879,7 @@ THE LIST ABOVE COUNTS AS CONTEXT FOR recommendedStay, and it is the only list th
             // this is the same TDZ shape that has already bitten enrichGuideDays.
             // Their words only, for the reason written at the mode block below: the
       // assistant's own question names three modes and would answer the gate.
-      const gateMode = travelModeKey(saidByTravellerForGuide);
+      const gateMode = tickedTravelMode(saidByTravellerForGuide) || travelModeKey(saidByTravellerForGuide);
       // ── AND WHAT COUNTS AS A NIGHT OUT ────────────────────────────
       // Injected the same way isPublished and hoursFor are. See nightKindOf: it
       // reads isClub off the published row and returns nothing for a name it
@@ -17637,7 +17638,8 @@ If the conversation only covers a single day or a few stops with no explicit day
       // whenever it can, and keeps the old answer for the modes travelModeKey can
       // return that this list has never carried (walk, tent, camper), so nothing
       // downstream meets a mode string it has not seen before.
-      const primaryKey = travelModeKey(saidByTravellerForGuide);
+      // A tick list of modes moves them by the fastest one. See tickedTravelMode.
+      const primaryKey = tickedTravelMode(saidByTravellerForGuide) || travelModeKey(saidByTravellerForGuide);
       const travelMode = mentionedModes.includes(primaryKey) ? primaryKey : (mentionedModes[0] || null);
       const mixedModes = mentionedModes.length > 1 ? mentionedModes : null;
 
@@ -18672,6 +18674,9 @@ If the conversation only covers a single day or a few stops with no explicit day
   // Which reply the counter belongs to. Without this, reply two's first beat is
   // compared against reply one's total and every move in it is skipped.
   const beatOwnerRef = useRef(-1);
+  // Where the reply being read last flew to, so a pull back after an offer
+  // can be held. See outHeldByOffer in utils/mapDirections.js.
+  const lastInRef = useRef(null);
   const focusSeqRef = useRef(0);
   // What the map currently has pins for. See where it is written, far below.
   const pinsRef = useRef([]);
@@ -20814,6 +20819,9 @@ If the conversation only covers a single day or a few stops with no explicit day
       const budgetCapital = budgetCapitalBlock({ level: tightRead, priorReplies: ownReplies });
       // Oliver, 21 Sep 2026: a kebab shop as the cheap meal, when Danish food
       // is not what they came for. See utils/accommodation.js.
+      // Oliver, 22 Sep 2026: a country typed as the starting point is home,
+      // and home is what makes Skyscanner a useful sentence. utils/homeCountry.js.
+      const flyingIn = skyscannerBlock(homeCountryIn(intakeStartPoint));
       const budgetFood = budgetFoodBlock({ level: tightRead, priorReplies: ownReplies, travellerText: travellerTurns.join("\n"), interests: intakeInterest });
       const nightTip = reservedEssential(essentials, { convoText: travellerTurns.join("\n"), interests: intakeInterest });
       const nightBlock = !nightTip ? "" : `\n── AND THE ONE THING A NIGHT OUT HERE NEEDS ──\nThey have said nightlife is part of this trip, so tell them about this once, in your own words, at whatever point in the conversation it is useful rather than all at once. It is a published Gemlyx entry, quoted here as written: state it, never embellish it, and never invent a second app like it.\n\n${essentialsBlock([nightTip])}\n`;
@@ -20889,7 +20897,7 @@ ONE QUESTION PER TURN. Not two, whatever else is missing. Somebody asked two thi
 DO NOT COMPLIMENT THEIR CHOICE. "Great pick", "excellent choice", "you'll love it", "way underrated" said about a place they just named is the banned filler in a different costume: it is a sentence with no information in it, spent on making them feel approved of.
 
 GIVE BEFORE YOU ASK. Every turn puts one real thing on the table before its question: a fact about the place they named, an opinion about it, or a warning worth having. One thing, not three, and off the block below when there is one. A conversation where one side only asks is an intake form, and it puts the whole weight of the trip on somebody who came here so they would not have to carry it. This is also what makes a short answer workable: a traveller who types four words at a time is normal, and a turn that gives something is still a real turn when their half is thin.
-${heldBlock}${nightBlock}${budgetCapital}${budgetFood}${seasonSays ? `\n${seasonSays}\n` : ""}${homeSays ? `\n${homeSays}\n` : ""}${activitySays ? `\n${activitySays}\n` : ""}
+${heldBlock}${nightBlock}${budgetCapital}${budgetFood}${flyingIn}${seasonSays ? `\n${seasonSays}\n` : ""}${homeSays ? `\n${homeSays}\n` : ""}${activitySays ? `\n${activitySays}\n` : ""}
 ── THE TRIP BRIEF, AS MEASURED RATHER THAN AS YOU FEEL IT ──
 This block is computed from what the traveller has typed and from the form they filled in. It is not your impression of the conversation and it overrides your impression of the conversation. Never say you have everything you need unless this block says so, and never say a traveller has already told you something that is not listed as known here.
 
@@ -21851,6 +21859,7 @@ ${languageBlock()}`;
                       if (streaming && beatOwnerRef.current !== m.idx) {
                         beatOwnerRef.current = m.idx;
                         playedBeatsRef.current = 0;
+                        lastInRef.current = null;
                       }
                       // ── AND THE CAMERA MARKERS COME OUT LAST ──────
                       //
@@ -21895,10 +21904,26 @@ ${languageBlock()}`;
                                   // full word count, and replaying its camera
                                   // moves would yank the map away from whatever
                                   // the conversation is about now.
-                                  const { beat, played } = beatsDue(withBeats.beats, n, playedBeatsRef.current);
+                                  const before = playedBeatsRef.current;
+                                  const { beat, played } = beatsDue(withBeats.beats, n, before);
                                   if (!beat) return;
                                   playedBeatsRef.current = played;
-                                  const target = beatTarget(beat, pinsRef.current);
+                                  let target = beatTarget(beat, pinsRef.current);
+                                  // An offer holds the camera to the end of
+                                  // the reply. See outHeldByOffer. Beats that
+                                  // came due in the same tick count too: an IN
+                                  // and the OUT after it, revealed at once,
+                                  // are the same zoom in and straight out.
+                                  if (target?.kind === "out") {
+                                    const inTick = withBeats.beats.slice(before, played).filter(b => b.kind === "in").pop();
+                                    const inTarget = inTick ? beatTarget(inTick, pinsRef.current) : null;
+                                    if (inTarget) lastInRef.current = inTarget;
+                                    if (outHeldByOffer(lastInRef.current, pinsRef.current)) {
+                                      if (!inTarget) return;
+                                      target = inTarget;
+                                    }
+                                  }
+                                  if (target?.kind === "in") lastInRef.current = target;
                                   // No pin, no move. beatTarget declines rather
                                   // than guessing, and a map that confidently
                                   // centres on the wrong town is worse than one
@@ -22191,6 +22216,13 @@ ${languageBlock()}`;
                             // "only when they are in doubt" gate still governs
                             // the pins they have already chosen.
                             ask={askOnMap}
+                            // What a flight down brings onto the map with it:
+                            // the published places near where it lands. See
+                            // placesAround in utils/chatRail.js.
+                            around={withoutExcluded(spotPool, turnedDown).map(p => {
+                              const c = placeCoords(p);
+                              return c ? { name: p.name, lat: c.lat, lon: c.lon, place: p } : null;
+                            }).filter(Boolean)}
                             unsure={unsureWhatTheyWant(liveIntakeBrief)}
                             turnedDown={turnedDown}
                             onRestore={(name) => setTurnedDown(prev => (prev || []).filter(n => n !== name))} />
@@ -29181,7 +29213,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Starting point <span style={{ textTransform: "none", fontWeight: 400 }}>(blank = Copenhagen Airport)</span></div>
                   <div style={{ marginBottom: 14 }}>
                     <input value={intakeStartPoint} onChange={e => setIntakeStartPoint(e.target.value)}
-                      placeholder="e.g. Billund Airport, Aarhus, or leave blank"
+                      placeholder="e.g. Germany, Billund Airport, Aarhus, or leave blank"
                       style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "11px 13px", fontSize: 13, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif", boxSizing: "border-box" }} />
                   </div>
 
@@ -29340,7 +29372,12 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         const days = tripDays(intakeArrival, intakeDeparture);
                         if (days) parts.push(`Exact trip length: ${days} day${days !== 1 ? "s" : ""}`);
                       }
-                      parts.push(intakeStartPoint.trim() ? `Starting point: ${intakeStartPoint.trim()}` : `Starting point: not specified, assume Copenhagen Airport`);
+                      // A country typed here is home, not a place in Denmark.
+                      // Oliver, 22 Sep 2026. See utils/homeCountry.js.
+                      const home = homeCountryIn(intakeStartPoint);
+                      const startIsHome = onlyACountry(intakeStartPoint);
+                      parts.push(intakeStartPoint.trim() && !startIsHome ? `Starting point: ${intakeStartPoint.trim()}` : `Starting point: not specified, assume Copenhagen Airport`);
+                      if (home) parts.push(`Travelling from: ${home.name} (their home country)`);
                       if (intakeBudgetText.trim()) parts.push(`Budget: ${intakeBudgetText.trim()}`);
                       if (intakeInterest.length) parts.push(`Interests: ${intakeInterest.join(", ")}`);
                       if (intakeGemPref) parts.push(`Travel style: ${intakeGemPref}`);
@@ -31340,6 +31377,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           freeEntrance={freeEntrance}
           foodSpots={foodSpots}
           nightlifeSpots={nightlifeSpots}
+          nightlifeStreets={nightlifeStreets}
           events={events}
           majorEvents={majorEvents}
           craftItemsFallback={craftItemsFallback}

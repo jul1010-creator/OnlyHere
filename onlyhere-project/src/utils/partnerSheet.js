@@ -46,12 +46,12 @@ const clean = (v) => String(v == null ? "" : v).replace(/\s+/g, " ").trim();
 // `lines`: the guide's cost lines, the same ones What you pay prices.
 // `tours`: [{ day, url, label }]
 // `bikes`: [{ url, label, days: [2, 3] }]
-export const partnerSections = ({ stays = [], lines = [], tours = [], bikes = [] } = {}) => {
+export const partnerSections = ({ stays = [], lines = [], tours = [], bikes = [], arrival = null } = {}) => {
   const out = [];
 
   const rooms = [];
   for (const s of Array.isArray(stays) ? stays : []) {
-    const when = nightsLabel(s?.nights);
+    const when = nightsLabel(s?.nights, arrival);
     const place = clean(s?.place);
     if (s?.featured?.href) {
       rooms.push({ title: clean(s.featured.merchant), detail: [place, when].filter(Boolean).join(", "), href: s.featured.href, label: "See the hotel" });

@@ -47,7 +47,7 @@ writeFileSync(entry, `
   export { legSteps, journeyFromStored, worthShowingLegs, journeyParts, journeyFigure, NO_TRANSIT_NOTE, WAIT_INSIDE_TOTAL, journeyBlock, vehicleWord, arrivalStop, arrivalGlanceRow, ARRIVAL_WALK_LIMIT, transitProblems, journeyDurations, absenceClaims, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, legMinutesIn, closedButPlanned, storedJourney, journeyReach, journeyChanges, journeyBreakdown, journeyDriving, journeyStamp, journeyAgencies, JOURNEY_SOURCE } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
   export { normaliseDomain, cleanNote, cleanSource, sourcesFor, sourceRulesBlock, cleanPlace, placeMatches, blockCost, directSourceSearches, domainVariants, placeMightMatch, sourcesToSearch, MAX_DIRECT_SEARCHES, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { variantsOf, otherNameFor, samePlaceName, searchNames, PLACE_NAMES, SIGHT_NAMES, containsName, distinctiveWords, GENERIC_PLACE_WORDS, foundAt, matchVariantsOf, GENERIC_ALIASES } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
-  export { NIGHTLIFE_CITIES, townOfLocation, groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList, nightlifeSummaryFor, townOfStreet, streetForSpot, barsOnStreet, nightlifeForTown, nightKindOf, strandedNight } from ${JSON.stringify(join(root, "src/utils/nightlife.js"))};
+  export { NIGHTLIFE_CITIES, townOfLocation, groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList, nightlifeSummaryFor, townOfStreet, streetForSpot, barsOnStreet, nightlifeForTown, nightKindOf, strandedNight, barsIntoStreets, PREVIEW_BARS_PER_STREET, PREVIEW_LOOSE_BARS } from ${JSON.stringify(join(root, "src/utils/nightlife.js"))};
   export { supabaseFailure, studioErrorMessage, refreshIsDead, missingColumn, EXPIRED, REFUSED, MISSING, OUTDATED, OTHER } from ${JSON.stringify(join(root, "src/utils/studioErrors.js"))};
   export { cleanPlaceKind, cleanRelation, cleanIsland, placeIssues, placePatch, hasPlaceChange, duplicateNames } from ${JSON.stringify(join(root, "src/utils/placeEdit.js"))};
   export { dateProbeQueries, danishDay, englishDay, numericDay, parseEventDate, isPastDate, nextEditionYear, eventDateIssues, staleEvents, lastDateInText, looksFinished, splitFinishedCandidates, monthsInText } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
@@ -175,8 +175,9 @@ writeFileSync(entry, `
   export { writeInLanguage } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
   export { guideLanguage, languageOfProse, ruledOutLanguages, briefSentences, languageBarNote, NO_DANISH_NOTE, EN_MARKERS, DA_MARKERS, MARKER_FLOOR, MARKER_MARGIN } from ${JSON.stringify(join(root, "src/utils/travellerLanguage.js"))};
   export { DETOUR_PATH, ME_PATH, LEGAL_PATH, TAB_HASH as TAB_HASH_WORDS } from ${JSON.stringify(join(root, "src/utils/tabUrl.js"))};
-  export { mapPlaces, railCss, railMapCss, RAIL_CLASS, INLINE_CARDS_CLASS, RAIL_BREAKPOINT_PX, MAP_CLASS, POPUP_CLASS, MAP_PIN_CAP, CHAT_PANEL_HEIGHT, MSG_ROW_CLASS, LABEL_CLASS, LABEL_SIDES, LABEL_GAP, labelBox, labelSides, SPOT_PIN_ZOOM, isSpotPin, spotsShowAt, PHONE_MAP_PINS, phoneMapShows } from ${JSON.stringify(join(root, "src/utils/chatRail.js"))};
-  export { readMapBeats, beatsDue, beatTarget, MAP_BEAT_CAP, MAP_DIRECTION_RULE, cameraArrive, cameraLanded, frameFor, SLIDE_HOLD_MS, makeCamera, unplayedBeat } from ${JSON.stringify(join(root, "src/utils/mapDirections.js"))};
+  export { mapPlaces, railCss, railMapCss, RAIL_CLASS, INLINE_CARDS_CLASS, RAIL_BREAKPOINT_PX, MAP_CLASS, POPUP_CLASS, MAP_PIN_CAP, CHAT_PANEL_HEIGHT, MSG_ROW_CLASS, LABEL_CLASS, LABEL_SIDES, LABEL_GAP, labelBox, labelSides, SPOT_PIN_ZOOM, isSpotPin, spotsShowAt, PHONE_MAP_PINS, phoneMapShows, placesAround, AROUND_KM, AROUND_CAP } from ${JSON.stringify(join(root, "src/utils/chatRail.js"))};
+  export { homeCountryIn, onlyACountry, skyscannerBlock } from ${JSON.stringify(join(root, "src/utils/homeCountry.js"))};
+  export { readMapBeats, beatsDue, beatTarget, MAP_BEAT_CAP, MAP_DIRECTION_RULE, cameraArrive, cameraLanded, frameFor, SLIDE_HOLD_MS, makeCamera, unplayedBeat, outHeldByOffer } from ${JSON.stringify(join(root, "src/utils/mapDirections.js"))};
   export { costLines, byUrgency, costAction, linkGaps, readPrice, readableFigure, refuseTicket, REFUSAL, COST_KIND, estimateFrom, describeEstimate, partyOf, partyFrom, describeGroup, stopHasADoor } from ${JSON.stringify(join(root, "src/utils/costLedger.js"))};
   export { freeButPriced, moneyProblems, LODGING_FLOOR_DKK } from ${JSON.stringify(join(root, "src/utils/moneyClaims.js"))};
   export { clampNote, NOTE_SHOW_WHOLE_MAX, NOTE_CLAMP_AT, NOTE_MIN_HIDDEN } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
@@ -287,7 +288,7 @@ writeFileSync(entry, `
   export { guideWithSwap, alreadyRuledOut, isTravelPoint } from ${JSON.stringify(join(root, "src/utils/stopSwap.js"))};
   export { makeNominatim, NOMINATIM_GAP_MS, NOMINATIM_CACHE_DAYS } from ${JSON.stringify(join(root, "src/utils/nominatim.js"))};
   export { factCheckCopy } from ${JSON.stringify(join(root, "src/utils/factCheckCopy.js"))};
-  export { routeOrder, reachBand, haversineKm, coordsOf, kmBetween, REACH_COMFORTABLE, REACH_STRETCH, REACH_FAR, returnLeg, describeReturn, travelModeKey, modeReachKm, MODE_DAY_KM, preferReachable, preferPassing, overnightMove, describeOvernightMove, spokenDuration, beyondModeRange, BEYOND_DAY_FACTOR, sameMode, howForReader, EATS_THE_DAY_MINUTES, dayStartsBeforeItCanArrive, OVERNIGHT_START_HOUR } from ${JSON.stringify(join(root, "src/utils/routeOrder.js"))};
+  export { routeOrder, reachBand, haversineKm, coordsOf, kmBetween, REACH_COMFORTABLE, REACH_STRETCH, REACH_FAR, returnLeg, describeReturn, travelModeKey, tickedTravelMode, modeReachKm, MODE_DAY_KM, preferReachable, preferPassing, overnightMove, describeOvernightMove, spokenDuration, beyondModeRange, BEYOND_DAY_FACTOR, sameMode, howForReader, EATS_THE_DAY_MINUTES, dayStartsBeforeItCanArrive, OVERNIGHT_START_HOUR } from ${JSON.stringify(join(root, "src/utils/routeOrder.js"))};
   export { LANGUAGES, MONTH_INDEX, PARTY_BARE, PARTY_POSSESSIVE, YES_WORDS, NO_WORDS, alt, LETTER } from ${JSON.stringify(join(root, "src/utils/travellerWords.js"))};
   export { auditRow, auditRows, auditLinks, auditSummary, auditNote, programmeState, ticketDestination, tourDestination, linkPatch, TICKET, TOUR } from ${JSON.stringify(join(root, "src/utils/affiliateAudit.js"))};
   export { problemText, problemList, problemHeading, PROBLEM_NOTE } from ${JSON.stringify(join(root, "src/utils/planProblems.js"))};
@@ -337,7 +338,7 @@ writeFileSync(entry, `
   export { DANISH_MARKERS, danishWordsIn, looksUntranslated, looksDanishPage, hasEnglishVersion, languageBarrier } from ${JSON.stringify(join(root, "src/utils/languageBarrier.js"))};
   export { readerLanguage, languageName, answerInLanguage, languageBlock, nativeBlock } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
   export { keepLanguageOf } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
-  export { describeGuide, guideLanguageMix, guideProseOf, proseAt, writeProseAt } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
+  export { describeGuide, guideLanguageMix, MIN_PLAIN_WORDS, guideProseOf, proseAt, writeProseAt } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { usableRuns } from ${JSON.stringify(join(root, "src/utils/runLog.js"))};
   export { alertKey, describeWeatherChange, unseenAlerts, usableSeen, seenAlerts, markAlertSeen, alertCountLine, SEEN_KEY, MAX_SEEN } from ${JSON.stringify(join(root, "src/utils/weatherAlerts.js"))};
   export { preferenceRowState, PREF_NO_ACCOUNT, PREF_NO_INTERESTS, PREF_READY } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
@@ -2199,7 +2200,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     // AND OVER HIS WORDS, NOT BOTH HALVES. 21 Aug: "I said public transport, but
     // it put bike.." Gemlyx's own question names car and bike, and travelModeKey
     // ranks bike above public transport, so the question answered the gate.
-    ok("the mode is read with the folded resolver", /const gateMode = travelModeKey\(saidByTravellerForGuide\)/.test(appG));
+    ok("the mode is read with the folded resolver", /const gateMode = tickedTravelMode\(saidByTravellerForGuide\) \|\| travelModeKey\(saidByTravellerForGuide\)/.test(appG));
     // And what could not be judged reaches the run report, or "we could not check"
     // and "we checked" stay indistinguishable to the only person who can fix it.
     ok("unjudged days are recorded for him to see", /verdict\.unjudged\?\.length/.test(appG));
@@ -8278,7 +8279,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     // those nights, not a button that opens the whole panel.
     ok("and links the area on the night that opens a stay",
        /\{doors\.door && doors\.list\?\.length > 0 && \([\s\S]{0,1400}?stayHere\.door\.area/.test(src));
-    ok("saying how many nights it is", /\{doors\.door && doors\.list\?\.length > 0 && \([\s\S]{0,160}nightsLabel\(doors\.list\)/.test(src));
+    ok("saying how many nights it is", /\{doors\.door && doors\.list\?\.length > 0 && \([\s\S]{0,160}nightsLabel\(doors\.list, guide\?\._arrivalDate \|\| null\)/.test(src));
     ok("one room door per stay, built once for the page", /const partnerStays = staysIn\(days, stayNights\)\.map\(/.test(src));
     // THE STANDING RULE SURVIVES THE CUT, and it is the half that must not
     // break while fixing the other half. Oliver, 7 Aug 2026: "why does the
@@ -25088,7 +25089,7 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // ONE ANSWER FOR "WHICH MODE", shared with the plan gate rather than decided by
   // the order the array literal happens to be typed in.
   ok("and the primary mode agrees with the gate's when it can",
-     /const primaryKey = travelModeKey\(saidByTravellerForGuide\);/.test(appK)
+     /const primaryKey = tickedTravelMode\(saidByTravellerForGuide\) \|\| travelModeKey\(saidByTravellerForGuide\);/.test(appK)
      && /mentionedModes\.includes\(primaryKey\) \? primaryKey/.test(appK));
   // ── AND NONE OF IT READS GEMLYX'S OWN QUESTION ──────────────────
   // "I said public transport, but it put bike.." The ask text at tripBrief.js:70
@@ -41323,7 +41324,10 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       // And the slice is what caps it, so total >= shown holds by construction
       // rather than by hoping the two happen to agree.
       ok("and the cap is the slice on that same array",
-         /matching\.slice\(0, MAX_PER_SECTION\)/.test(prevCode));
+         // rows is `matching` everywhere but nightlife, where the bars are
+         // folded into their streets first (22 Sep 2026), and the cap is
+         // never above MAX_PER_SECTION.
+         /const rows = folded \? folded\.rows : matching;/.test(prevCode) && /const cap = folded \? Math\.min\(MAX_PER_SECTION, folded\.shown\) : MAX_PER_SECTION;/.test(prevCode) && /items: rows\.slice\(0, cap\)/.test(prevCode));
     }
   }
 
@@ -55325,7 +55329,9 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
         ok("the prompt names a recommendation as the reason to zoom",
            /AND A RECOMMENDATION IS A REASON TO ZOOM/.test(rule));
         ok("and says the choice appears on it", /Add to trip and Not interested/.test(rule));
-        ok("and that the map comes back out after", /Then pull back out/.test(rule));
+        // 22 Sep 2026: and not in the same reply. "it should zoom in and then
+        // do a 'is that interesting?'"
+        ok("and that the map comes back out only in a later reply", /Pull back in a later reply, once they have answered/.test(rule));
         // The marker names the place, not its town, or the card lands on the
         // wrong pin.
         ok("and the marker names the place being recommended",
@@ -58531,7 +58537,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("which is decided before the map is looked at",
      /playedSeqRef\.current = next;\s*const map = mapRef\.current;\s*if \(!map \|\| !focus\) return;/.test(chatCode));
   ok("and the effect still watches the seq alone, so two beats on one place are two moves",
-     /cam\.arrive\(\{ kind: "in", lat: focus\.lat, lon: focus\.lon \}\);\s*\}, \[focusSeq\]\);/.test(chatCode));
+     /cam\.arrive\(\{ kind: "in", lat: focus\.lat, lon: focus\.lon \}\);[\s\S]{0,3000}?\}, \[focusSeq\]\);/.test(chatCode));
   // Verified on the same rig after the change: "Clear it" and a new opening
   // line left the map on Denmark with an empty move log; leaving the Detour
   // page and returning did too; and the next reply's OUT then IN still played,
@@ -58730,7 +58736,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // the has-map class on.
   ok("the wide column renders on width alone, and the phone on two pins and a tap",
      /const shown = wide \|\| phoneMapOpen\(list, phoneOpen\);/.test(chatCode));
-  ok("and a phone that has not asked gets no map", /phoneOpen = false, unsure = false \}\) => \{/.test(chatCode));
+  ok("and a phone that has not asked gets no map", /phoneOpen = false, unsure = false, around = \[\] \}\) => \{/.test(chatCode));
   ok("and it mounts on the same condition", /if \(!shown \|\| !holderRef\.current \|\| mapRef\.current\) return;/.test(chatCode));
   ok("a narrow screen still gets no map", /if \(!shown\) return null;/.test(chatCode));
   // No line under an empty map: there is nothing to tap yet, and a sentence
@@ -59008,7 +59014,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("the side is chosen by counting what it would cover",
      /const l = cx - 66, r = cx \+ 66, t = here\.y - 54, b = here\.y \+ 54;\s*const spills[\s\S]{0,120}?return others\.filter\(o => o\.x > l && o\.x < r && o\.y > t && o\.y < b\)\.length \+ spills;/.test(chatCode));
   ok("and recomputed on every open, because the map refits when a place is added",
-     /marker\.on\("mouseover click", \(\) => \{[\s\S]{0,240}?pop\.options\.offset = L\.point\(sideFor\(\)/.test(chatCode));
+     /marker\.on\("mouseover click", \(e\) => \{[\s\S]{0,1200}?pop\.options\.offset = L\.point\(sideFor\(\)/.test(chatCode));
   // ── SPILLING COSTS LESS THAN HIDING, AND THE NUMBER IS THE CLAIM ─
   // At 1 they tied, the tie-break sent Ribe's card right, and Aarhus became
   // unreachable. Off the edge Leaflet pans and everything stays reachable;
@@ -63292,6 +63298,17 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   is("the majority language is named", mix.main, "da");
   ok("and the odd fields are named rather than counted",
      mix.odd.includes("keepInMind") && mix.odd.includes("Pier 5"));
+  // Guide bxrckv735je, 22 Sep 2026: a field made of place names read as
+  // Danish, and a rewrite was spent on "North Zealand".
+  const names = { ...good, days: [...good.days, { day: 3, title: "North Zealand", stops: [{ name: "North Zealand", note: "Rørvig, Nykøbing Sjælland, Hundested Havn." }] }] };
+  is("a field of names is not a language", guideLanguageMix(names, languageOfProse), null);
+  ok("and the floor is written down", M.MIN_PLAIN_WORDS >= 4);
+  // And the same guide's Rørvig Camping note: English, with one Danish
+  // sentence inside it.
+  const inside = { ...good, days: [...good.days, { day: 3, title: "Rørvig and camp life", stops: [{ name: "Rørvig Camping", note: "Your base for the coast, the honest way to make five days work on this budget. Priser afhænger af pladstype/hyttetype, så tjek det aktuelle prisniveau online, før du booker. Cook at the site rather than eating out, and keep warm layers handy." }] }] };
+  const mixIn = guideLanguageMix(inside, languageOfProse);
+  ok("a Danish sentence inside an English field is found", !!mixIn && mixIn.main === "en" && mixIn.odd.includes("Rørvig Camping"));
+  is("and says which language it read as", mixIn?.oddFields?.find(f => f.where === "Rørvig Camping")?.lang, "da");
   ok("the description says so in words", /MIXED LANGUAGE: mostly da/.test(describeGuide(mixed, languageOfProse)));
   // ── AND THE MAJORITY IS COUNTED, NOT MET FIRST ──────────────────
   // Found by mutation: replacing the sort with langs[0] broke nothing, because
@@ -68648,7 +68665,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
        /sayWhatFor=\{unsureWhatTheyWant\(liveIntakeBrief\)\}/.test(app));
     ok("no second test was invented for it", !/enoughToRecommend\(liveIntakeBrief\)/.test(app.slice(app.indexOf("<ChatMiniMap"), app.indexOf("<ChatMiniMap") + 900)));
     ok("the map takes the props and decides which pins ask",
-       /focus = null, ask = null, turnedDown = \[\], onRestore = null, phoneOpen = false, unsure = false \}\) => \{/.test(mini));
+       /focus = null, ask = null, turnedDown = \[\], onRestore = null, phoneOpen = false, unsure = false, around = \[\] \}\) => \{/.test(mini));
     // Every considered place asks, town or not, because that is the only way it
     // can stop being considered. A place already chosen asks only on the old
     // gate: a question over something they decided is asking them twice.
@@ -68671,14 +68688,18 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     // question could not be reached by tapping at all. The pointer's own
     // handler now opens on click as well, Leaflet's toggle is taken off, and
     // the map closes the card when a mouse leaves, never when a finger lifts.
-    ok("inside the pointer's handler, hover and click alike", /marker\.on\("mouseover click", \(\) => \{[\s\S]{0,300}?marker\.openPopup\(\);/.test(mini));
+    ok("inside the pointer's handler, hover and click alike", /marker\.on\("mouseover click", \(e\) => \{[\s\S]{0,1300}?marker\.openPopup\(\);/.test(mini));
     ok("with Leaflet's own click toggle taken off the pin, guarded on its name",
        /if \(typeof marker\._openPopup === "function"\) marker\.off\("click", marker\._openPopup, marker\);/.test(mini));
     ok("and the card shuts when a mouse leaves the map, not when a finger lifts",
        /const shut = \(e\) => \{ if \(e && e\.pointerType === "touch"\) return; map\.closePopup\(\); \};/.test(mini)
        && /addEventListener\("pointerleave", shut\)/.test(mini) && /removeEventListener\("pointerleave", shut\)/.test(mini)
        && !/"mouseleave"/.test(mini));
-    ok("and still nothing opens itself when the flight lands", !/marker\.fire\(/.test(mini));
+    // 22 Sep 2026, and this one moved: "when it has zoomed in, it will ask if
+    // it looks good, while having the picture popping up". So a reply's own
+    // flight opens the card of the place it landed on, once, through the
+    // pointer's own handler; nothing else opens one.
+    is("only a reply's flight opens a card by itself, and only one place does", (mini.match(/marker\.fire\(/g) || []).length, 1);
     // A pin already decided is not asked again: a Yes shows as its state and
     // a No has no pin left to ask on.
     ok("the card is told whether the place is already picked",
@@ -71227,8 +71248,12 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     // that navigation."
     ok("one of them looks for food", G.gemSearches("Aarhus").some(q => /billig mad Aarhus/.test(q)));
     ok("a place to eat needs a stated price for a dish", /A PLACE TO EAT is "cheap" only when a result gives a price/.test(P) && /Never "cheap food" with no figure/.test(P));
-    is("a name search is three searches on the name", G.gemSearchesFor("Restaurant Sporvejen", "Copenhagen"), ["Restaurant Sporvejen Copenhagen priser kr", "Restaurant Sporvejen Copenhagen menu pris", "Restaurant Sporvejen Copenhagen billig"]);
-    is("without a town when none is given", G.gemSearchesFor("Sporvejen", "Denmark")[0], "Sporvejen priser kr");
+    // Oliver, 22 Sep 2026: "it says it cannot find MSCH Copenhagen". A name
+    // search looks for a discount as well as a price.
+    is("a name search covers a discount and a price", G.gemSearchesFor("MSCH Copenhagen", ""), ["MSCH Copenhagen", "MSCH Copenhagen studierabat", "MSCH Copenhagen student discount", "MSCH Copenhagen rabat kundeklub", "MSCH Copenhagen priser kr"]);
+    is("with the town where one is given", G.gemSearchesFor("Sporvejen", "Copenhagen")[0], "Sporvejen Copenhagen");
+    is("without a town when none is given", G.gemSearchesFor("Sporvejen", "Denmark")[0], "Sporvejen");
+    is("a discount page hands on its discount lines", G.pageAsResult({ url: "https://mschcopenhagen.com/pages/student", text: "Welcome\nStudents get 15% off with a valid student card\nFree shipping over 500 kr" }).snippet, "Students get 15% off with a valid student card | Free shipping over 500 kr");
     is("and nothing without a name", G.gemSearchesFor("  "), []);
     ok("the prompt is told to stay on that place", /ONE PLACE ONLY: return rows about Sporvejen/.test(G.GEMS_PROMPT("Copenhagen", [], { only: "Sporvejen" })));
     ok("and not when it is a town search", !/ONE PLACE ONLY/.test(P));
@@ -71286,6 +71311,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
       ok("and a row from it is theirs", settledPic.gems[0]?.own === true);
       const panelK = readFileSync(join(root, "src/components/CheapGemsPanel.jsx"), "utf8");
       ok("the panel reads the own pages on a name lookup", /if \(only && readPage\)/.test(panelK) && /ownPagesIn\(results, only\)/.test(panelK));
+      ok("and hands on the page's own words, not only a price", /const got = pageAsResult\(\{ url: r\.url, title: r\.title, text \}\);\s*if \(got\) read\.push\(got\);\s*if \(textHasPrice\(text\)\) continue;/.test(panelK));
       ok("and transcribes a menu picture when the text has no price", /textHasPrice\(text\)/.test(panelK) && /menuImagesToRead\(\{ url: r\.url, text, banners: page\?\.banners \}\)/.test(panelK));
       ok("and says so, so he checks the figure", /Check the figure against it before publishing/.test(panelK));
       const appM = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
@@ -72391,6 +72417,101 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   is("nor in the shop list", scan("src/data/shop.js"), []);
   const appD = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
   ok("workshops read from craft_items go through the dash rule", /setCraftItems\(data\.map\(d => stripDashesDeep\(/.test(appD));
+}
+
+// ── THE CHAT MAP AND THE PREVIEW, 22 SEP 2026 ───────────────────────
+{
+  // "it should zoom in and then do a 'is that interesting?'"
+  const pins = [{ key: "Dragør", place: { name: "Dragør" }, lat: 55.59, lon: 12.67, confirmed: false }, { key: "Copenhagen", place: { name: "Copenhagen" }, lat: 55.68, lon: 12.57, confirmed: true }];
+  ok("a pull back after flying to an offer is held", M.outHeldByOffer({ kind: "in", name: "Dragør" }, pins));
+  ok("but not after a confirmed place", !M.outHeldByOffer({ kind: "in", name: "Copenhagen" }, pins));
+  ok("nor after one turned down and gone from the map", !M.outHeldByOffer({ kind: "in", name: "Dragør" }, pins.slice(1)));
+  ok("nor when the reply has not flown anywhere", !M.outHeldByOffer(null, pins));
+  ok("the prompt says stay", /STAY THERE for the rest of the reply/.test(M.MAP_DIRECTION_RULE) && !/pull back out in the same reply or the next one/.test(M.MAP_DIRECTION_RULE));
+  const appZ = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+  ok("the chat asks before it pulls back", /if \(outHeldByOffer\(lastInRef\.current, pinsRef\.current\)\)/.test(appZ));
+  ok("and forgets at the start of each reply", /playedBeatsRef\.current = 0;\s*lastInRef\.current = null;/.test(appZ));
+  ok("an IN and OUT revealed in one tick are the same zoom in", /withBeats\.beats\.slice\(before, played\)\.filter\(b => b\.kind === "in"\)\.pop\(\)/.test(appZ));
+  // "It does some jump jump jump when I have my mouse on it"
+  const mapSrc = stripComments(readFileSync(join(root, "src/components/ChatMiniMap.jsx"), "utf8"));
+  ok("hovering a pin whose card is open changes nothing", /if \(e\?\.type === "mouseover" && marker\.isPopupOpen\(\)\) return;/.test(mapSrc));
+  // "Too many bars.. it should be a bar street, and then a -> recommended bars on the bar street."
+  const JAG = { id: 1, name: "Jomfru Ane Gade", town: "Aalborg", isStreet: true };
+  const bar = (id, name, loc) => ({ id, name, location: loc, _src: "nightlife", _byThem: false });
+  const bars = [bar(11, "Rock Bar", "Jomfru Ane Gade 15, Aalborg"), bar(12, "Irish House", "Jomfru Ane Gade 3, Aalborg"), bar(13, "Ølbaren", "Jomfru Ane Gade 7, Aalborg"), bar(14, "Kaffebaren", "Jomfru Ane Gade 9, Aalborg"), bar(15, "Harbour Bar", "Honnørkajen 1, Aalborg"), bar(16, "Loose Two", "Boulevarden 2, Aalborg"), bar(17, "Loose Three", "Vesterbro 5, Aalborg")];
+  const F = M.barsIntoStreets(bars, [JAG]);
+  is("the street is one card and first", F.rows[0].name, "Jomfru Ane Gade");
+  is("with the bars on it under it", F.rows[0]._barsHere.map(b => b.name), ["Rock Bar", "Irish House", "Ølbaren"]);
+  is("and a count of the rest", F.rows[0]._barsMore, 1);
+  is("it opens as a street", F.rows[0]._src, "nightlifeStreet");
+  is("then only a couple of bars on no street are drawn", F.shown, 1 + M.PREVIEW_LOOSE_BARS);
+  is("while the rows still count every card, for the section's own line", F.rows.length, 4);
+  is("no streets published, the bars are still capped", M.barsIntoStreets(bars, []).shown, M.PREVIEW_LOOSE_BARS);
+  ok("a street a traveller's own bar is on is theirs", M.barsIntoStreets([{ ...bars[0], _byThem: true }], [JAG]).rows[0]._byThem);
+  const pv = stripComments(readFileSync(join(root, "src/components/GuidePreviewScreen.jsx"), "utf8"));
+  ok("the preview folds its nightlife", /cat\.src === "nightlife" \? barsIntoStreets\(matching, nightlifeStreets\) : null/.test(pv) && /items: rows\.slice\(0, cap\)/.test(pv));
+  ok("and names the bars under the street, behind an arrow", /Recommended bars here <span/.test(pv));
+  ok("the app hands it the streets", /nightlifeSpots=\{nightlifeSpots\}\s*nightlifeStreets=\{nightlifeStreets\}/.test(appZ));
+}
+
+// ── OLIVER'S FIVE, 22 SEP 2026, SECOND ROUND ────────────────────────
+{
+  // "put the date on instead of '1 night here, night 3'"
+  const ARR = "2026-09-23";
+  is("one night, with its date", M.nightsLabel([3], ARR), "1 night, Fri 25 Sep to Sat 26 Sep");
+  is("two nights, check in to check out", M.nightsLabel([1, 2], ARR), "2 nights, Wed 23 Sep to Fri 25 Sep");
+  is("across a month end", M.nightsLabel([7, 8, 9], "2026-09-24"), "3 nights, Wed 30 Sep to Sat 3 Oct");
+  is("with no arrival date, the night numbers stay", M.nightsLabel([1, 2]), "2 nights here, nights 1 to 2");
+  const PS = M.partnerSections({ stays: [{ place: "Aarhus", nights: [3, 4], door: { href: "https://www.booking.com/x", label: "Hotels in Aarhus" } }], arrival: ARR });
+  ok("the partner panel dates its stays too", PS[0].items.some(i => i.detail === "2 nights, Fri 25 Sep to Sun 27 Sep"));
+  const gpD = stripComments(readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8"));
+  ok("the guide hands both its arrival date", /nightsLabel\(doors\.list, guide\?\._arrivalDate \|\| null\)/.test(gpD) && /arrival: guide\?\._arrivalDate \|\| null \}\)/.test(gpD));
+  // "make a '->' on the bar street. So when you click it, those 3 pop out."
+  const pvB = stripComments(readFileSync(join(root, "src/components/GuidePreviewScreen.jsx"), "utf8"));
+  ok("the bars sit behind an arrow", /Recommended bars here <span[^>]*>→<\/span>/.test(pvB) && /aria-expanded=\{open\}/.test(pvB));
+  ok("and come out when it is pressed", /\{open && \(/.test(pvB) && /setBarsOpen\(prev => \(prev\.includes\(key\)/.test(pvB));
+  // "zoom in, and see the area whole.. picture popping up and all the attractions around it"
+  const pool = [{ name: "Dragør Fort", lat: 55.593, lon: 12.686 }, { name: "Dragør Museum", lat: 55.594, lon: 12.672 }, { name: "Tivoli", lat: 55.673, lon: 12.568 }, { name: "Dragør", lat: 55.593, lon: 12.672 }];
+  is("the places around a flight, nearest first", M.placesAround({ lat: 55.593, lon: 12.672 }, pool, { exclude: ["Dragør"] }).map(p => p.name), ["Dragør Museum", "Dragør Fort"]);
+  ok("Tivoli is not around Dragør", !M.placesAround({ lat: 55.593, lon: 12.672 }, pool).some(p => p.name === "Tivoli") && M.AROUND_KM <= 8);
+  is("and capped", M.placesAround({ lat: 55.6, lon: 12.6 }, Array.from({ length: 30 }, (_, i) => ({ name: `P${i}`, lat: 55.6, lon: 12.6 + i * 0.001 }))).length, M.AROUND_CAP);
+  const mini2 = stripComments(readFileSync(join(root, "src/components/ChatMiniMap.jsx"), "utf8"));
+  ok("a flight down draws the places around it", /const near = placesAround\(\{ lat: focus\.lat, lon: focus\.lon \}, aroundRef\.current, \{ exclude: pinned \}\);/.test(mini2));
+  ok("and opens the place's card when it lands", /landTimerRef\.current = setTimeout\([\s\S]{0,400}?marker\.fire\("click"\)/.test(mini2) && /Math\.round\(IN_SECONDS \* 1000\) \+ 200/.test(mini2));
+  ok("and takes the dots away when the camera moves on", /if \(aroundLayerRef\.current\) \{ aroundLayerRef\.current\.remove\(\); aroundLayerRef\.current = null; \}/.test(mini2));
+  const appA = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+  ok("the app hands the map the published places, minus any turned down", /around=\{withoutExcluded\(spotPool, turnedDown\)\.map\(/.test(appA));
+  // "on the map on PC"
+  ok("on a computer the strip under a reply is hidden", new RegExp(`@media \\(min-width: ${M.RAIL_BREAKPOINT_PX}px\\) \\{\\s*\\.${M.INLINE_CARDS_CLASS} \\{ display: none; \\}`).test(M.railMapCss({})));
+  // "the 'starting point' should be able to include their own country. Then we can recommend skyscanner."
+  is("Germany is a home country", M.homeCountryIn("Germany")?.code, "DE");
+  is("in Danish too", M.homeCountryIn("Tyskland")?.code, "DE");
+  is("and the everyday name", M.homeCountryIn("from the UK")?.code, "GB");
+  is("Denmark is not a home to fly in from", M.homeCountryIn("Aarhus, Denmark"), null);
+  is("a Danish street is not a country", M.homeCountryIn("Englandsvej 5"), null);
+  is("nor is an island", M.homeCountryIn("Island in the south"), null);
+  ok("the country alone keeps the default airport", M.onlyACountry("Germany") && M.onlyACountry("from Germany"));
+  ok("a Danish start with a country is still a start", !M.onlyACountry("Billund Airport, flying from Germany"));
+  const SB = M.skyscannerBlock({ name: "Germany" });
+  ok("the chat is told to name Skyscanner once", /Skyscanner/.test(SB) && /Say it once/.test(SB) && /Never quote a fare/.test(SB));
+  is("and nothing without a country", M.skyscannerBlock(null), "");
+  ok("no dash in it", !/[–—]/.test(SB));
+  ok("the intake says where they fly from", /if \(home\) parts\.push\(`Travelling from: \$\{home\.name\} \(their home country\)`\);/.test(appA));
+  ok("and the chat carries the block", /\$\{budgetFood\}\$\{flyingIn\}/.test(appA));
+}
+
+// ── A TICK LIST MOVES THEM BY ITS FASTEST MODE, 22 SEP 2026 ─────────
+// Guide bxrckv735je: Car, Public transport and Bike ticked, and the build's
+// own check measured Rørvig Camping to Kastrup at a bicycle's 6.3 hours.
+{
+  is("car, transit and bike ticked travel by car", M.tickedTravelMode("Budget: 100 dkk | Getting around: Car, Public transport, Bike"), "car");
+  is("transit and bike by transit", M.tickedTravelMode("Getting around: Public transport, Bike"), "public transport");
+  is("one tick says nothing", M.tickedTravelMode("Getting around: Bike"), null);
+  is("and a sentence is still read slowest first", M.tickedTravelMode("mostly walking, might rent bikes one day"), null);
+  const appT = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+  ok("the guide's primary mode asks the tick list first", /const primaryKey = tickedTravelMode\(saidByTravellerForGuide\) \|\| travelModeKey\(saidByTravellerForGuide\);/.test(appT));
+  ok("and so does the plan gate", /const gateMode = tickedTravelMode\(saidByTravellerForGuide\) \|\| travelModeKey\(saidByTravellerForGuide\);/.test(appT));
+  ok("the brief reads ticks the same way", /mode: tickedTravelMode\(`Getting around: \$\{joined\}`\) \|\| travelModeKey\(joined\)/.test(readFileSync(join(root, "src/utils/tripBrief.js"), "utf8")));
 }
 
 // ── NOMINATIM, AT THE PACE ITS POLICY ASKS FOR ──────────────────────

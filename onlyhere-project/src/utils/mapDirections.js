@@ -173,6 +173,29 @@ export const beatsDue = (beats, shownWords, playedCount) => {
 // should, on a shape neither of them shares with reality. The test below is
 // built by CALLING mapPlaces rather than by writing a pin out by hand, which is
 // the only version of this that can go stale and say so.
+// ── AND AN OFFER HOLDS THE CAMERA UNTIL IT IS ANSWERED ──────────────
+//
+// Oliver, 22 Sep 2026: "it does the zoom in and then just zoom out... it
+// should zoom in and then do a 'is that interesting?'. here it finished the
+// chat, zoomed into dragør and just zoomed out.." The reply ended
+// "[[MAP_IN:Dragør]] ... [[MAP_OUT]]", which the prompt allowed ("pull back
+// out in the same reply or the next one"), and the card with Add to trip and
+// Not interested was on screen for the length of one sentence.
+//
+// So the prompt now says stay, and code holds it whatever the prompt gets:
+// within one reply, a pull back after the camera flew to a place still being
+// OFFERED (a green dot, not yet a Yes) is not played. `lastIn` is the target
+// the reply last flew to, `pins` the map's pins as they are now. A place
+// already confirmed, or turned down and gone from the map, lets it go. The
+// next reply starts with no lastIn, so it pulls back as it likes.
+export const outHeldByOffer = (lastIn, pins) => {
+  if (!lastIn || lastIn.kind !== "in") return false;
+  const name = String(lastIn.name || "").trim().toLowerCase();
+  if (!name) return false;
+  const pin = (Array.isArray(pins) ? pins : []).find(p => String(p?.place?.name || p?.key || "").trim().toLowerCase() === name);
+  return !!pin && !pin.confirmed;
+};
+
 export const beatTarget = (beat, pins) => {
   if (!beat) return null;
   if (beat.kind === "out") return { kind: "out" };
@@ -264,7 +287,7 @@ WHAT THE MAP HOLDS, SO YOU KNOW WHAT A MOVE WILL SHOW. Pulled back, it is a map 
 
 A NAME IS NOT A REASON TO ZOOM. The first time a place comes up, leave the map wide: its pin appears on the country, which already says where it is. Flying down to a town the moment somebody says its name shows one pin on an empty street plan, which is less than they had a second earlier. Fly down when you are about to walk them through the INSIDE of that town, naming two or three of the places inside it from the lists as you go, because those are what a close view has to show. One line about a town and then your question is not that, and the map stays wide.
 
-AND A RECOMMENDATION IS A REASON TO ZOOM. The exception to the rule above, and it is the one move this map is for. When you put one specific place forward and mean it, "if you go to Billund I would send you to X", fly down to THAT place at the word you name it. The traveller gets the picture of where it is, and a card on it with two buttons, Add to trip and Not interested, which is the only way a place you suggested becomes a stop. Then pull back out in the same reply or the next one. Name the place in the marker, not its town: [[MAP_IN:Marselisborg Dyrehave]], because the card belongs on the place you are recommending.
+AND A RECOMMENDATION IS A REASON TO ZOOM. The exception to the rule above, and it is the one move this map is for. When you put one specific place forward and mean it, "if you go to Billund I would send you to X", fly down to THAT place at the word you name it. The traveller gets the picture of where it is, and a card on it with two buttons, Add to trip and Not interested, which is the only way a place you suggested becomes a stop. STAY THERE for the rest of the reply: that card is the question, and the traveller answers it while looking at it, so do not pull back out after it in the same reply. Pull back in a later reply, once they have answered or the conversation has moved on. Name the place in the marker, not its town: [[MAP_IN:Marselisborg Dyrehave]], because the card belongs on the place you are recommending.
 
 THE SHAPE OF A GOOD RUN. Wide is the normal state and not a failure. Close for the town you are walking them through; wide again the moment the subject leaves it, whether you are weighing one town against another, summing up the whole route, or answering something about the trip rather than the town. "Here is how I would spend a day inside Aarhus: [[MAP_IN:Aarhus]] start at ..." lands the camera as you start showing the inside. "Interesting! [[MAP_OUT]] For your taste I would go north instead. [[MAP_IN:Aalborg]] Inside Aalborg, start at ..." pulls back while you think and closes in as you answer. Each marker goes INSIDE its sentence, on the word where the picture should change, and never collected at the end of the reply.
 

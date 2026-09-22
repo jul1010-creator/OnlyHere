@@ -843,7 +843,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
   const partnerBikes = bikeDays.length
     ? [{ url: `https://www.bajabikes.eu/en/${BAJABIKES_RENTAL_SLUG}/`, label: "Bike rental in Copenhagen", days: bikeDays }]
     : [];
-  const partnerGroups = partnerSections({ stays: partnerStays, lines: guideLines, tours: partnerTours, bikes: partnerBikes });
+  const partnerGroups = partnerSections({ stays: partnerStays, lines: guideLines, tours: partnerTours, bikes: partnerBikes, arrival: guide?._arrivalDate || null });
   const partnerTotal = partnerCount(partnerGroups);
   // Oliver's map-vs-plain choice, made before this page ever sees the guide
   // (App.jsx's generateGuide, search "chosenMode") — _lightMode true means
@@ -2545,7 +2545,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                         nowhere else. The panel keeps the full list. */}
                     {doors.door && doors.list?.length > 0 && (
                       <div style={{ fontSize: 12, color: C.text, fontWeight: 700, marginTop: 6 }}>
-                        {nightsLabel(doors.list)}
+                        {nightsLabel(doors.list, guide?._arrivalDate || null)}
                         {/* Only a search IN the area may carry the area's name. A door
                             that goes to Booking's front page does not. */}
                         {stayHere?.door?.href && stayHere.door.area && stayHere.place && (<>

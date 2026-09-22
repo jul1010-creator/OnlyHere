@@ -216,6 +216,29 @@ export const travelModeKey = (mode) => {
   return null;
 };
 
+// ── AND A TICK LIST IS NOT A SENTENCE ───────────────────────────────
+//
+// Slowest first is right for a sentence: "mostly walking, might rent bikes one
+// day" is a walking trip. It is wrong for the intake's tick boxes. Guide
+// bxrckv735je, 22 Sep 2026, ticked Car, Public transport and Bike, and the
+// whole trip was planned at a bicycle's pace: its own check said Rørvig
+// Camping to Kastrup was "about 6.3 hours", which is a day on a bike and under
+// two hours in the car they said they had. Somebody who ticks a car and a bike
+// has a car for the long hops and a bike once they are there, which is what
+// the chat itself told them.
+//
+// So when the intake's "Getting around:" line lists more than one mode, the
+// fastest one it lists moves them between places. One mode ticked, or no tick
+// line at all, and this says nothing: travelModeKey decides as before.
+const FASTEST_FIRST = ["car", "camper", "public transport", "bike", "tent", "walk"];
+export const tickedTravelMode = (text) => {
+  const m = String(text || "").match(/Getting around:\s*([^|\n]+)/i);
+  if (!m) return null;
+  const keys = [...new Set(m[1].split(/,|\bog\b|\band\b/i).map(part => travelModeKey(part)).filter(Boolean))];
+  if (keys.length < 2) return null;
+  return FASTEST_FIRST.find(k => keys.includes(k)) || null;
+};
+
 // How far out a place can sit and still be part of THIS trip. Half the days can
 // go on getting there and getting back, which is already the generous reading.
 export const modeReachKm = (days, mode) => {

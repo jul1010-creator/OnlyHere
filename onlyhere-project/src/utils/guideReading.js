@@ -600,20 +600,40 @@ export const guideClaimNote = (rows) => {
 // The mixed-language finding. `languageOf` is passed in rather than imported so
 // this file stays a leaf: guideReading is imported by the render and by the
 // suite, and travellerLanguage pulls in the marker tables.
+export const MIN_PLAIN_WORDS = 5;
 export const guideLanguageMix = (guide, languageOf) => {
   const fields = guideProseOf(guide);
-  const read = fields.map(f => ({ ...f, lang: languageOf(f.text) })).filter(f => f.lang);
+  // ── A NAME IS NOT A LANGUAGE ──────────────────────────────────────
+  // Guide bxrckv735je, 22 Sep 2026: "MIXED LANGUAGE: mostly en, but 1 field
+  // read as another: North Zealand", and a rewrite call spent on it. A short
+  // field made mostly of Danish place names reads as Danish to any detector.
+  // So a field is only judged when it has enough ordinary words to be
+  // sentences: MIN_PLAIN_WORDS words that are not capitalised names.
+  const plainWords = (t) => String(t || "").split(/\s+/).filter(w => /^[a-zæøåäöüé]/.test(w)).length;
+  const read = fields
+    .filter(f => plainWords(f.text) >= MIN_PLAIN_WORDS)
+    .map(f => ({ ...f, lang: languageOf(f.text) })).filter(f => f.lang);
   if (read.length < 2) return null;
   const counts = read.reduce((a, f) => ({ ...a, [f.lang]: (a[f.lang] || 0) + 1 }), {});
   const langs = Object.keys(counts);
-  if (langs.length < 2) return null;
+  if (!langs.length) return null;
   // The majority is what the guide is; the rest is the mix. The alphabetical
   // second key is not cosmetic: on an even split the count alone leaves the
   // answer to whichever field happened to be read first, and a guide that is
   // half English and half Danish would then describe itself differently
   // depending on the order of its own days.
   const main = langs.sort((a, b) => counts[b] - counts[a] || a.localeCompare(b))[0];
-  const odd = read.filter(f => f.lang !== main);
+  // ── AND A SENTENCE INSIDE A FIELD ───────────────────────────────────
+  // The same guide, bxrckv735je: the Rørvig Camping note is English with one
+  // Danish sentence in the middle of it, "Priser afhænger af pladstype/
+  // hyttetype, så tjek det aktuelle prisniveau online, før du booker." Read
+  // as a whole the field is English, so it passed while "North Zealand" was
+  // flagged. Each sentence long enough to be one is read on its own too.
+  const sentenceOff = (f) => String(f.text || "").split(/(?<=[.!?])\s+/)
+    .filter(x => plainWords(x) >= MIN_PLAIN_WORDS)
+    .map(x => languageOf(x)).find(l => l && l !== main) || null;
+  const odd = read.map(f => (f.lang !== main ? f : (sentenceOff(f) ? { ...f, lang: sentenceOff(f) } : null))).filter(Boolean);
+  if (!odd.length) return null;
   // `odd` stays a list of labels, because describeGuide prints it into a
   // sentence and every reader of that sentence expects names. `oddFields` is
   // the same finding addressed the way a repair needs it: the field, its text

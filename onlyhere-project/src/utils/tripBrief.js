@@ -47,7 +47,7 @@
 import { arrivalDateIn, dateRangeIn, departureDateIn, monthOnlyIn, latestRelativeAnswer, daysBetween, tripDays, daysTheySaidFor, latestSpokenLength, isIntakeTurn, MAX_TRIP_DAYS } from "./tripEvents";
 import { PARTY_BARE, PARTY_POSSESSIVE, PARTY_POSSESSIVES, PARTY_COUNT, TRAVEL_VERBS, FROM_WORDS, TRANSPORT_PREPS, VEHICLE_WORDS, TRANSPORT_VERBS, PUBLIC_TRANSPORT, alt, LETTER, INTEREST_ALL_WORDS, INTEREST_WORD_TERM, NAMES_A_CHILD } from "./travellerWords";
 import { dayStart } from "./calendarDay";
-import { travelModeKey, withoutNonModes } from "./routeOrder";
+import { travelModeKey, withoutNonModes, tickedTravelMode } from "./routeOrder";
 import { directAnswers, isRefusal } from "./directAnswer";
 
 const clean = (v) => String(v ?? "").replace(/\s+/g, " ").trim();
@@ -1212,7 +1212,8 @@ const readTransport = (text, intakeTransport) => {
   const ticked = (Array.isArray(intakeTransport) ? intakeTransport : []).map(clean).filter(Boolean);
   if (ticked.length) {
     const joined = ticked.join(", ");
-    return { value: joined, mode: travelModeKey(joined), source: "intake" };
+    // Ticked boxes move them by the fastest one ticked. See tickedTravelMode.
+    return { value: joined, mode: tickedTravelMode(`Getting around: ${joined}`) || travelModeKey(joined), source: "intake" };
   }
   // ── SCRUBBED FIRST, AND A MODE OR NOTHING ──────────────────────────
   // Found 18 Aug 2026 by an adversarial review. Three sentences filled this

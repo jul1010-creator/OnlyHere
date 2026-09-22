@@ -333,7 +333,12 @@ export const gemSearchesFor = (name = "", place = "") => {
   if (!n) return [];
   const p = clean(place);
   const at = p && !/^(danmark|denmark)$/i.test(p) ? ` ${p}` : "";
-  return [`${n}${at} priser kr`, `${n}${at} menu pris`, `${n}${at} billig`];
+  // BOTH KINDS, not only a place to eat. Oliver, 22 Sep 2026: "it says it
+  // cannot find MSCH Copenhagen". The three searches were a restaurant's,
+  // prices and a menu, and a shop's student discount is on none of those
+  // pages. The name alone, then the words a discount is written in, then
+  // the words a price is.
+  return [`${n}${at}`, `${n} studierabat`, `${n} student discount`, `${n} rabat kundeklub`, `${n}${at} priser kr`];
 };
 
 // ── AND THE PLACE'S OWN PAGE, READ, WHEN THE SNIPPET HAS NO PRICE ───
@@ -354,10 +359,12 @@ export const ownPagesIn = (results = [], name = "") =>
 // price on them, since that is what the search was for; a transcription is
 // marked as one, because a figure read off a picture is weaker than a line of
 // text and the row that cites it should be looked at before it goes up.
+const DISCOUNT_LINE = /\d\s?%|\brabat|\bdiscount|\bstud(?:ent|erende|ie)|\bkundeklub|\bmember|\bmedlem|\bklub\b|\bclub\b/i;
 export const pageAsResult = ({ url = "", title = "", text = "", fromImage = false } = {}) => {
   const body = clean(text);
   if (!body) return null;
-  const lines = String(text || "").split(/\n+/).map(clean).filter(l => l && textHasPrice(l));
+  // The lines worth handing on: a price, or a discount.
+  const lines = String(text || "").split(/\n+/).map(clean).filter(l => l && (textHasPrice(l) || DISCOUNT_LINE.test(l)));
   const snippet = fromImage
     ? `[Transcribed from a menu picture on ${hostOf(url)}] ${body}`.slice(0, 1500)
     : (lines.length ? lines.join(" | ") : body).slice(0, 1500);

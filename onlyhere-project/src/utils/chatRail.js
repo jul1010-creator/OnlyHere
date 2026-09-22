@@ -1,3 +1,4 @@
+import { haversineKm } from "./helpers";
 // ── "THE SIDEPANEL IS PRIMARILY FOR THE MAP" ────────────────────────
 //
 // Oliver, 8 Sep 2026, looking at his own Detour screen: "look the chatbar
@@ -541,6 +542,16 @@ export const railMapCss = (C = {}) => `
            the desktop behaviour it already had. */
         .${MAP_TOGGLE_CLASS} { display: none; }
         .${PHONE_CHOICE_CLASS} { display: none; }
+        /* ── ON A COMPUTER THE PICTURE IS ON THE MAP ──────────────────
+           Oliver, 22 Sep 2026: "I think you should have it at the side of the
+           chat on Phone, and then on the map on PC." Above the breakpoint the
+           map is always beside the chat and its card carries the same picture
+           and the same two buttons, so the strip under the reply was the same
+           place shown twice. Below it the strip stays, since the phone's map
+           is closed until somebody opens it. */
+        @media (min-width: ${RAIL_BREAKPOINT_PX}px) {
+          .${INLINE_CARDS_CLASS} { display: none; }
+        }
         @media (max-width: ${RAIL_BREAKPOINT_PX - 1}px) {
           .${MAP_TOGGLE_CLASS} { display: inline-flex; }
           /* The pin's own card carries these above the breakpoint. Below it the
@@ -732,4 +743,32 @@ export const labelSides = ({ pins = [], size = null, gap = LABEL_GAP } = {}) => 
     placed.push(labelBox(pin, best, gap));
   }
   return out;
+};
+
+
+// ── AND WHAT IS AROUND A PLACE THE MAP FLIES TO ─────────────────────
+//
+// Oliver, 22 Sep 2026: "The zoom in is meant to zoom in, and see the area
+// whole.. then when it has zoomed in, it will ask if it looks good, while
+// having the picture popping up and all the attractions around it as well."
+//
+// So a flight down to a place brings the published places near it onto the
+// map with it: small dots, named on hover, that open their own page. They
+// are context, not the plan, which is why they are not pins and cannot be
+// added from here. Within AROUND_KM, the ones already pinned left out, the
+// nearest first, and a cap so a flight into Copenhagen does not light up
+// every café in the city.
+export const AROUND_KM = 6;
+export const AROUND_CAP = 12;
+export const placesAround = (center, pool = [], { km = AROUND_KM, cap = AROUND_CAP, exclude = [] } = {}) => {
+  const lat = Number(center?.lat), lon = Number(center?.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return [];
+  const skip = new Set((Array.isArray(exclude) ? exclude : []).map(n => String(n || "").trim().toLowerCase()));
+  return (Array.isArray(pool) ? pool : [])
+    .filter(p => Number.isFinite(Number(p?.lat)) && Number.isFinite(Number(p?.lon)) && p?.name)
+    .filter(p => !skip.has(String(p.name).trim().toLowerCase()))
+    .map(p => ({ ...p, km: haversineKm({ lat, lon }, { lat: Number(p.lat), lon: Number(p.lon) }) }))
+    .filter(p => Number.isFinite(p.km) && p.km <= km)
+    .sort((a, b) => a.km - b.km)
+    .slice(0, cap);
 };

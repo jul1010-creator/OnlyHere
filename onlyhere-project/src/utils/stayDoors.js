@@ -42,6 +42,7 @@ import { fold } from "./danishNames";
 import { townKeyFor } from "./guideEnrichment";
 import { TOWN_COORDS } from "../data/towns";
 import { haversineKm } from "./helpers";
+import { dayPlus } from "./calendarDay";
 
 // ── THE TOWN YOU SLEEP IN, NOT THE STREET ───────────────────────────
 //
@@ -92,9 +93,25 @@ export const baseKey = (day) => {
 
 // How long a stay is, in the words a person books in. Printed on the first
 // night of each stay, which is the fact the card was missing.
-export const nightsLabel = (nights = []) => {
+// ── WITH THE DATES, WHEN THE TRIP HAS THEM ──────────────────────────
+// Oliver, 22 Sep 2026: "make this more specific, put the date on instead of
+// '1 night here, night 3'". A booking site asks for a check-in and a
+// check-out date, not a night number, so that is what the card says: the
+// night count, the evening they arrive and the morning they leave. Night N is
+// the arrival date plus N minus one, the same rule tripDayDate uses. Without
+// an arrival date the night numbers stay, since they are all there is.
+const WEEKDAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTH = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const shortDay = (d) => `${WEEKDAY[d.getDay()]} ${d.getDate()} ${MONTH[d.getMonth()]}`;
+export const nightsLabel = (nights = [], arrival = null) => {
   const list = (Array.isArray(nights) ? nights : []).map(Number).filter(n => Number.isFinite(n)).sort((a, b) => a - b);
   if (!list.length) return "";
+  const first = arrival ? dayPlus(arrival, list[0] - 1) : null;
+  if (first && !Number.isNaN(first.getTime())) {
+    const out = dayPlus(first, list[list.length - 1] - list[0] + 1);
+    const count = `${list.length} ${list.length === 1 ? "night" : "nights"}`;
+    return `${count}, ${shortDay(first)} to ${shortDay(out)}`;
+  }
   if (list.length === 1) return `1 night here, night ${list[0]}`;
   return `${list.length} nights here, nights ${list[0]} to ${list[list.length - 1]}`;
 };

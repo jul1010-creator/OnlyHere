@@ -268,6 +268,48 @@ export const barsOnStreet = (street, spots, allStreets = null, cities = NIGHTLIF
   return (Array.isArray(spots) ? spots : []).filter(s => streetForSpot(s, list, cities) === street);
 };
 
+// ── ON THE PREVIEW, A STREET AND THE BARS ON IT ─────────────────────
+//
+// Oliver, 22 Sep 2026, on a preview for a group of friends who ticked
+// Nightlife: "Too many bars.. it should be a bar street, and then a ->
+// recommended bars on the bar street."
+//
+// So the bars the preview would list are folded into the published street
+// they stand on: one card for the street, and under it the bars on it, a few
+// by name. A bar on no published street stays a card of its own, and only a
+// couple of those, because a list of bars is the thing he said was too much.
+// Nothing leaves the trip: the guide is still written from all of them, and
+// the section's own line says so when the screen shows fewer.
+export const PREVIEW_BARS_PER_STREET = 3;
+export const PREVIEW_LOOSE_BARS = 2;
+export const barsIntoStreets = (items, streets, cities = NIGHTLIFE_CITIES) => {
+  const list = Array.isArray(items) ? items : [];
+  const known = (Array.isArray(streets) ? streets : []).filter(s => s?.name);
+  const groups = new Map();
+  const loose = [];
+  for (const bar of list) {
+    const st = known.length ? streetForSpot(bar, known, cities) : null;
+    if (!st) { loose.push(bar); continue; }
+    if (!groups.has(st)) groups.set(st, []);
+    groups.get(st).push(bar);
+  }
+  const cards = [...groups.entries()].map(([st, bars]) => ({
+    ...st,
+    _src: "nightlifeStreet",
+    _barsHere: bars.slice(0, PREVIEW_BARS_PER_STREET),
+    _barsMore: Math.max(0, bars.length - PREVIEW_BARS_PER_STREET),
+    // Theirs if any bar on it was theirs, so the "Gemlyx suggested" mark
+    // does not land on a street they led the conversation to.
+    _byThem: bars.some(b => b?._byThem),
+  }));
+  // `rows` is every card, streets first; `shown` is how many of them the
+  // preview draws, so the section can slice one array and count the same one.
+  return {
+    rows: [...cards, ...loose],
+    shown: cards.length + Math.min(loose.length, PREVIEW_LOOSE_BARS),
+  };
+};
+
 // The town page, as one answer rather than three lookups that can disagree.
 // `streets` carries each street with the venues on it, `loose` is everything in
 // that town on no published street, and a street with nothing on it is still

@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import L from "leaflet";
 import { addTileLayer } from "../utils/mapTiles";
 import { ChatPlaceCards, showablePhoto } from "./ChatPlaceCards";
-import { POPUP_CLASS, RAIL_BREAKPOINT_PX, LABEL_CLASS, CORNER_CLASS, DOT_GREEN, labelSides, isSpotPin, spotsShowAt, phoneMapOpen } from "../utils/chatRail";
+import { POPUP_CLASS, RAIL_BREAKPOINT_PX, LABEL_CLASS, CORNER_CLASS, DOT_GREEN, labelSides, isSpotPin, spotsShowAt, phoneMapOpen, placesAround } from "../utils/chatRail";
 import { distinctThemes, THEME_LABEL } from "../utils/placeThemes";
 import { entryWord } from "../utils/entryWords";
 import { makeCamera, unplayedBeat } from "../utils/mapDirections";
@@ -218,7 +218,12 @@ export const isConsidered = (pin) => !pin?.confirmed;
 // 380px map is a wall. A card that opened itself on the newest pin was
 // considered and rejected for both reasons: it breaks the 12 Sep rule, and
 // choosing WHICH pin to open is the app choosing the trip.
-export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, height = 220, sayWhatFor = false, focus = null, ask = null, turnedDown = [], onRestore = null, phoneOpen = false, unsure = false }) => {
+export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, height = 220, sayWhatFor = false, focus = null, ask = null, turnedDown = [], onRestore = null, phoneOpen = false, unsure = false, around = [] }) => {
+  // The published places a flight down brings with it. See placesAround.
+  const aroundRef = useRef(around);
+  aroundRef.current = around;
+  const aroundLayerRef = useRef(null);
+  const landTimerRef = useRef(null);
   // ── THE READER'S LANGUAGE, ONCE ─────────────────────────────────
   //
   // `lang` is readerLanguage()'s OBJECT, not a two letter code. Handing the
@@ -913,7 +918,16 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
         if (left === right) return here.x < size.x / 2 ? 1 : -1;
         return left < right ? -1 : 1;
       };
-      marker.on("mouseover click", () => {
+      marker.on("mouseover click", (e) => {
+        // ── AND A CARD ALREADY OPEN IS LEFT WHERE IT IS ─────────────
+        // Oliver, 22 Sep 2026: "It does some jump jump jump when I have my
+        // mouse on it." Opening a card pans the map to fit it, the pan slides
+        // the pin back under the pointer, that is a fresh mouseover, and every
+        // mouseover opened the card again with its side counted again from
+        // where the pins had moved to. The side could flip, the map panned the
+        // other way, and so on for as long as the pointer rested there. A
+        // hover on the pin whose card is already open changes nothing now.
+        if (e?.type === "mouseover" && marker.isPopupOpen()) return;
         const pop = marker.getPopup();
         // 54 is half the card's height, which centres it on the pin now that
         // the tip is gone.
@@ -1148,13 +1162,44 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
     if (!map || !focus) return;
     const cam = camRef.current;
     if (!cam) return;
+    // Whatever the last flight brought with it goes when the camera moves on.
+    clearTimeout(landTimerRef.current);
+    if (aroundLayerRef.current) { aroundLayerRef.current.remove(); aroundLayerRef.current = null; }
     if (focus.kind === "out") { cam.arrive({ kind: "out" }); return; }
     if (!Number.isFinite(focus.lat) || !Number.isFinite(focus.lon)) return;
     cam.arrive({ kind: "in", lat: focus.lat, lon: focus.lon });
+    // ── AND THE AREA COMES WITH IT, AND THE CARD ASKS ──────────────
+    // Oliver, 22 Sep 2026: zoom in, "see the area whole", and then "ask if it
+    // looks good, while having the picture popping up and all the attractions
+    // around it as well". The places around go on as small dots, and when the
+    // flight has landed the place's own card opens, which for an offer is the
+    // one carrying Add to trip and Not interested.
+    const pinned = pinsNowRef.current.map(p => p.place?.name || p.key);
+    const near = placesAround({ lat: focus.lat, lon: focus.lon }, aroundRef.current, { exclude: pinned });
+    if (near.length) {
+      const group = L.layerGroup();
+      near.forEach(p => {
+        L.circleMarker([p.lat, p.lon], { radius: 4.5, color: "#0A0F1E", weight: 1.5, fillColor: "#C9A84C", fillOpacity: 0.85 })
+          .bindTooltip(String(p.name), { direction: "top", offset: [0, -4] })
+          .on("click", () => openRef.current?.(p.place || p))
+          .addTo(group);
+      });
+      group.addTo(map);
+      aroundLayerRef.current = group;
+    }
+    const wanted = String(focus.name || "").trim().toLowerCase();
+    landTimerRef.current = setTimeout(() => {
+      for (const [key, marker] of markersRef.current) {
+        const pin = pinsNowRef.current.find(p => p.key === key);
+        const name = String(pin?.place?.name || key || "").trim().toLowerCase();
+        if (name && name === wanted && marker.getPopup()) { marker.fire("click"); break; }
+      }
+    }, Math.round(IN_SECONDS * 1000) + 200);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusSeq]);
 
   useEffect(() => () => {
+    clearTimeout(landTimerRef.current);
     camRef.current?.stop();
     if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
   }, []);
