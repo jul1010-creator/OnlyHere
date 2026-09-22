@@ -349,6 +349,24 @@ export const namedProperty = (text) => {
   return null;
 };
 
+// ── AND A HOTEL NAMED FOR A TIGHT BUDGET IS TAKEN OFF THE CARD ──────
+// A live test, 22 Sep 2026: two budget travellers, and night 1's card named
+// "Tonderhus Hotel" in gold while the build's own check said "They said the
+// budget is tight and this recommends a hotel". The check was right and the
+// card went out anyway. The named place is the part the traveller acts on,
+// so it comes off every night the check flags; the sentence stays, since it
+// also says where to stay, and the check still reports the mismatch.
+export const withoutMismatchedStays = (days, budgetSaid = "") => {
+  const level = travellerBudget(budgetSaid);
+  if (!level || !Array.isArray(days)) return days;
+  return days.map(d => {
+    const m = budgetTierMismatch(level, d?.glance?.accommodation) || budgetTierMismatch(level, d?.glance?.recommendedStay);
+    if (!m || !d?.glance?.recommendedStay) return d;
+    const { recommendedStay, ...glance } = d.glance;
+    return { ...d, glance };
+  });
+};
+
 // ── WHAT IS WRONG WITH THIS TRIP'S BEDS, IN PLAIN WORDS ─────────────
 // Read by the plan check, phrased for a founder, and every line is a fact about
 // the generated text rather than an opinion about where to sleep.

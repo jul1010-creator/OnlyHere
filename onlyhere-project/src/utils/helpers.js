@@ -699,9 +699,19 @@ export const stripReadyMarker = (text) =>
 //
 // Returns both halves: the text to print, and the beats for a caller that has a
 // map to point. A caller with no map takes `.text` and ignores the rest.
+// Two touches after the markers come out, both measured on a live test on
+// 22 Sep 2026, and both leave the word count alone so every camera beat
+// still fires on its word:
+//   a marker on its own line left three blank lines where it stood, so runs
+//   of blank lines close to one;
+//   "a genuine castle village" was in a reply. The adjective cannot be
+//   deleted the way the adverbs are, and "real" is the word he gave for it.
 export const readerView = (text) => {
   const beats = readMapBeats(stripMarkdown(stripReadyMarker(text)));
-  return { text: beats.clean, beats: beats.beats };
+  const clean = beats.clean
+    .replace(/\n[^\S\n]*\n(?:[^\S\n]*\n)+/g, "\n\n")
+    .replace(/\b([Gg])enuine\b/g, (_, g) => (g === "G" ? "Real" : "real"));
+  return { text: clean, beats: beats.beats };
 };
 
 // Common AI-writing tells — surface-level phrases that read as generic AI filler

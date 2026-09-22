@@ -550,7 +550,10 @@ export const railMapCss = (C = {}) => `
            place shown twice. Below it the strip stays, since the phone's map
            is closed until somebody opens it. */
         @media (min-width: ${RAIL_BREAKPOINT_PX}px) {
-          .${INLINE_CARDS_CLASS} { display: none; }
+          /* !important because the strip sets display inline, and an
+             inline style beats any rule without it: the live test on 22 Sep
+             still showed the strip under the reply. */
+          .${INLINE_CARDS_CLASS} { display: none !important; }
         }
         @media (max-width: ${RAIL_BREAKPOINT_PX - 1}px) {
           .${MAP_TOGGLE_CLASS} { display: inline-flex; }

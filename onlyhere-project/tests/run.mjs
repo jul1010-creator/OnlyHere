@@ -199,6 +199,7 @@ writeFileSync(entry, `
   export { outOfBudget, budgetWarning, BUDGET_RULES_OUT, PRICED_KINDS } from ${JSON.stringify(join(root, "src/utils/budgetFit.js"))};
   export { MAX_STOPS_ARRIVAL_DAY, MIN_STOPS_MIDDLE_DAY, MAX_BARS_A_NIGHT, MAX_CLUBS_A_NIGHT, namedIn, ISLAND_KOMMUNE_NAMES } from ${JSON.stringify(join(root, "src/utils/planGate.js"))};
   export { isSameSpot, SAME_SPOT_KM, cityFromLocation, stopTown } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
+  export { withoutMismatchedStays } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
   export { capitalCostSaid, budgetCapitalBlock, BUDGET_CAPITAL_RULE, BUDGET_CAPITAL_GUIDE, wantsDanishFood, kebabSaid, budgetFoodBlock, budgetFoodGuide, BUDGET_FOOD_RULE, BUDGET_FOOD_GUIDE } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
   export { travellerBudget, budgetTierMismatch, dayTripClaim, dayTripHonest, dayTripRadiusKm, withoutDayTripClaim, describeDayTripClaim, DAY_TRIP_FRACTION } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
   export { placedLibrary, nearbyPublished, describeLocation, distanceWords, walkMinutes, nearbyLabel, NEAR_KM, WALK_KMH, SAME_VISIT_KM, SAME_VISIT_LIMIT } from ${JSON.stringify(join(root, "src/utils/nearbyPlaces.js"))};
@@ -338,6 +339,7 @@ writeFileSync(entry, `
   export { DANISH_MARKERS, danishWordsIn, looksUntranslated, looksDanishPage, hasEnglishVersion, languageBarrier } from ${JSON.stringify(join(root, "src/utils/languageBarrier.js"))};
   export { readerLanguage, languageName, answerInLanguage, languageBlock, nativeBlock } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
   export { keepLanguageOf } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
+  export { readerView } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { describeGuide, guideLanguageMix, MIN_PLAIN_WORDS, guideProseOf, proseAt, writeProseAt } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { usableRuns } from ${JSON.stringify(join(root, "src/utils/runLog.js"))};
   export { alertKey, describeWeatherChange, unseenAlerts, usableSeen, seenAlerts, markAlertSeen, alertCountLine, SEEN_KEY, MAX_SEEN } from ${JSON.stringify(join(root, "src/utils/weatherAlerts.js"))};
@@ -55340,7 +55342,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
         ok("and the new rule carries no dash", !DASH3.test(rule.slice(rule.indexOf("AND A RECOMMENDATION"), rule.indexOf("THE SHAPE OF A GOOD RUN"))));
       }
       ok("and counts the rest rather than listing them", /more: Math\.max\(0, dots\.length - 1\)/.test(miniSrc));
-      ok("it is nothing at all when nothing is being considered", /\{corner && \(/.test(miniSrc));
+      ok("it is nothing at all when nothing is being considered", /\{corner && !cardOpen && \(/.test(miniSrc));
       ok("and it sits in the left corner, clear of the zoom control",
          /\.\$\{CORNER_CLASS\} \{\s*position: absolute; top: 8px; left: 8px;/.test(railSrc));
       ok("it cannot take a press meant for the map", /\.\$\{CORNER_CLASS\} \{[\s\S]{0,700}?pointer-events: none;/.test(railSrc));
@@ -72376,7 +72378,8 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   ok("a filter that empties the page offers to clear it", /Nothing published matches that\./.test(pg) && /onClick=\{clearAll\}/.test(pg));
   // Islands.
   const appI = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
-  ok("islands can be narrowed by region", /if \(islandRegion && String\(i\.region \|\| ""\)\.trim\(\) !== islandRegion\) return false;/.test(appI));
+  ok("islands can be narrowed by region, whatever the case", /if \(islandRegion && String\(i\.region \|\| ""\)\.trim\(\)\.toLowerCase\(\) !== islandRegion\.toLowerCase\(\)\) return false;/.test(appI));
+  ok("and a region written as a sentence is not a pill", /if \(!r \|\| r\.length > 28 \|\| \/,\/\.test\(r\) \|\| \/\^the\\s\/i\.test\(r\)\) continue;/.test(appI));
   ok("with the pill only when there are two regions or more", /if \(regions\.length < 2\) return null;/.test(appI));
   ok("and Clear clears it", /setIslandLink\(null\); setIslandRegion\(null\);/.test(appI));
   ok("no box-drawing dash on the bridge pill", !/─ Bridge or causeway/.test(appI));
@@ -72482,7 +72485,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   const appA = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
   ok("the app hands the map the published places, minus any turned down", /around=\{withoutExcluded\(spotPool, turnedDown\)\.map\(/.test(appA));
   // "on the map on PC"
-  ok("on a computer the strip under a reply is hidden", new RegExp(`@media \\(min-width: ${M.RAIL_BREAKPOINT_PX}px\\) \\{\\s*\\.${M.INLINE_CARDS_CLASS} \\{ display: none; \\}`).test(M.railMapCss({})));
+  ok("on a computer the strip under a reply is hidden", new RegExp(`@media \\(min-width: ${M.RAIL_BREAKPOINT_PX}px\\) \\{[\\s\\S]{0,400}?\\.${M.INLINE_CARDS_CLASS} \\{ display: none !important; \\}`).test(M.railMapCss({})));
   // "the 'starting point' should be able to include their own country. Then we can recommend skyscanner."
   is("Germany is a home country", M.homeCountryIn("Germany")?.code, "DE");
   is("in Danish too", M.homeCountryIn("Tyskland")?.code, "DE");
@@ -72512,6 +72515,35 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   ok("the guide's primary mode asks the tick list first", /const primaryKey = tickedTravelMode\(saidByTravellerForGuide\) \|\| travelModeKey\(saidByTravellerForGuide\);/.test(appT));
   ok("and so does the plan gate", /const gateMode = tickedTravelMode\(saidByTravellerForGuide\) \|\| travelModeKey\(saidByTravellerForGuide\);/.test(appT));
   ok("the brief reads ticks the same way", /mode: tickedTravelMode\(`Getting around: \$\{joined\}`\) \|\| travelModeKey\(joined\)/.test(readFileSync(join(root, "src/utils/tripBrief.js"), "utf8")));
+}
+
+// ── THE LIVE TEST OF 22 SEP 2026 ────────────────────────────────────
+// Two friends from Germany, 8 to 12 October, history and beer, a budget.
+{
+  const s1 = "I'd point you at South Jutland rather than Copenhagen, since beds and pints cost noticeably less down there.";
+  const s2 = "This shapes up as a five-day South Jutland trip built around real medieval history, not the postcard Copenhagen version, at a pace that fits.";
+  ok("a place steered away from twice is refused", M.isRejectedPlace(`${s1}\n${s2}`, "Copenhagen"));
+  ok("not the only museum worth it is not a refusal", !M.isRejectedPlace("Rundetaarn is not the only Copenhagen view worth the climb, but it is the easiest.", "Copenhagen"));
+  const rv = M.readerView("Ribe is it.\n\n[[MAP_IN:Ribe]]\n\nHow are you getting around? A genuine question.");
+  ok("blank lines left by a marker close up", !/\n\n\n/.test(rv.text));
+  ok("and the adjective reads as real", /A real question\./.test(rv.text) && !/genuine/i.test(rv.text));
+  const mini3 = stripComments(readFileSync(join(root, "src/components/ChatMiniMap.jsx"), "utf8"));
+  ok("the card waits until the map is over the place", /if \(m\.distance\(m\.getCenter\(\), target\) > 250 && attempt < 10\)/.test(mini3));
+  ok("a card that grew is panned into view", /if \(typeof pop\._adjustPan === "function"\) pop\._adjustPan\(\);/.test(mini3));
+  ok("and the corner line steps aside while a card is open", /\{corner && !cardOpen && \(/.test(mini3) && /map\.on\("popupopen", \(\) => setCardOpen\(true\)\);/.test(mini3));
+}
+
+// ── "THEY SAID THE BUDGET IS TIGHT AND THIS RECOMMENDS A HOTEL" ─────
+{
+  const days = [
+    { day: 1, glance: { accommodation: "Base yourself in Højer; nearby Tønder also offers reliable hotel options.", recommendedStay: "Tonderhus Hotel" } },
+    { day: 3, glance: { accommodation: "Stay in Ribe's old town, where a bed in a friendly local hostel keeps your tight budget comfortable.", recommendedStay: "Danhostel Ribe" } },
+  ];
+  const out = M.withoutMismatchedStays(days, "we're on a budget");
+  ok("a hotel named for a tight budget comes off the card", !("recommendedStay" in out[0].glance));
+  is("while a hostel stays", out[1].glance.recommendedStay, "Danhostel Ribe");
+  is("and with no budget said nothing changes", M.withoutMismatchedStays(days, "")[0].glance.recommendedStay, "Tonderhus Hotel");
+  ok("the build applies it after the check", /stayProblems\(parsed\.days, budgetSays\)\];[\s\S]{0,200}?parsed\.days = withoutMismatchedStays\(parsed\.days, budgetSays\);/.test(stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"))));
 }
 
 // ── NOMINATIM, AT THE PACE ITS POLICY ASKS FOR ──────────────────────

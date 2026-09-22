@@ -224,6 +224,7 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
   aroundRef.current = around;
   const aroundLayerRef = useRef(null);
   const landTimerRef = useRef(null);
+  const [cardOpen, setCardOpen] = useState(false);
   // ── THE READER'S LANGUAGE, ONCE ─────────────────────────────────
   //
   // `lang` is readerLanguage()'s OBJECT, not a two letter code. Handing the
@@ -519,6 +520,8 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
     // puts it on the moment the view is close enough.
     spotLayerRef.current = L.layerGroup();
     mapRef.current = map;
+    map.on("popupopen", () => setCardOpen(true));
+    map.on("popupclose", () => setCardOpen(false));
     camRef.current = makeCamera({ play: (move) => applyMove(map, move), picture: () => pictureOf(map) });
     // Leaflet measures its container the instant L.map() runs, and this one
     // mounts inside a panel whose layout is still settling. Same settle problem
@@ -945,6 +948,10 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
         if (pop && tall > 0 && Math.abs(tall / 2 - 54) > 6) {
           pop.options.offset = L.point(sideFor() * 76, Math.round(tall / 2));
           pop.update();
+          // update() moves the card and does not pan for it, so a card that
+          // grew past the top of the map stayed cut off there. Leaflet's own
+          // pan-to-fit, run again for the card as it now is.
+          if (typeof pop._adjustPan === "function") pop._adjustPan();
         }
       });
       // NOT on the marker's own mouseout: the card sits directly above the pin,
@@ -1188,13 +1195,25 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
       aroundLayerRef.current = group;
     }
     const wanted = String(focus.name || "").trim().toLowerCase();
-    landTimerRef.current = setTimeout(() => {
+    // ON ARRIVAL, not on a guess at it. The camera can hold this move behind
+    // one already playing, and a card opened mid flight was dragged along
+    // by it and came to rest half off the top of the map on the live test.
+    // So the card waits until the map is sitting over the place.
+    const target = L.latLng(focus.lat, focus.lon);
+    const tryOpen = (attempt) => {
+      const m = mapRef.current;
+      if (!m) return;
+      if (m.distance(m.getCenter(), target) > 250 && attempt < 10) {
+        landTimerRef.current = setTimeout(() => tryOpen(attempt + 1), 400);
+        return;
+      }
       for (const [key, marker] of markersRef.current) {
         const pin = pinsNowRef.current.find(p => p.key === key);
         const name = String(pin?.place?.name || key || "").trim().toLowerCase();
         if (name && name === wanted && marker.getPopup()) { marker.fire("click"); break; }
       }
-    }, Math.round(IN_SECONDS * 1000) + 200);
+    };
+    landTimerRef.current = setTimeout(() => tryOpen(0), Math.round(IN_SECONDS * 1000) + 200);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusSeq]);
 
@@ -1255,7 +1274,9 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
             without spending a line each on them.
 
             Nothing at all when nothing is being considered. */}
-        {corner && (
+        {/* Not while a card is open: the card says the same thing, and the
+            two sat on top of each other in the map's top corner. */}
+        {corner && !cardOpen && (
           <div className={CORNER_CLASS}>
             <div className="corner-head">
               <span className="corner-dot" />

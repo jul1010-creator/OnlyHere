@@ -54,7 +54,7 @@ import { tracePrices, describePriceTrace, untracedPriceClaim, readerText, glance
 import { townPointFor, isSameTownWalk, legDistanceKm, resolveLegMode, lookupRealPlace, placeCoords, directionsEndpoint, collapsedRoute, WALK_MAX_MINUTES, WALK_MAX_KM, townKeyFor, coordFitsTown, MAX_TOWN_KM, upgradeWorthIt, onFootMinutes } from "./utils/guideEnrichment";
 import { checkPlan, planProblemsForPrompt, titlePromises, MAX_BARS_A_NIGHT, MAX_CLUBS_A_NIGHT } from "./utils/planGate";
 import { isPremium } from "./utils/premium";
-import { stayProblems, travellerBudget, budgetTierMismatch, budgetCapitalBlock, BUDGET_CAPITAL_GUIDE, budgetFoodBlock, budgetFoodGuide, nightPriceFrom } from "./utils/accommodation";
+import { stayProblems, withoutMismatchedStays, travellerBudget, budgetTierMismatch, budgetCapitalBlock, BUDGET_CAPITAL_GUIDE, budgetFoodBlock, budgetFoodGuide, nightPriceFrom } from "./utils/accommodation";
 import { discoveryFraming, framingForTarget, coverageByTarget, DISCOVERY_TARGETS, targetById, splitAlreadyCovered, splitOffTarget, describeOffTarget, DISCOVERY_MONTHS, monthById, yearForMonth, framingForMonth, splitOffMonth, describeOffMonth } from "./utils/discovery";
 import { swipeAxis, dragOffset, swipeTarget } from "./utils/swipe";
 import { placeSlug, townPath, findBySlug, COUNTRY, kindForSeg, entryUrlPath, isEntryUrl, entryPathForKind, parseEntryUrl } from "./utils/placeUrl";
@@ -17734,6 +17734,9 @@ If the conversation only covers a single day or a few stops with no explicit day
       // stage from the route, one call per day, in parallel, and until now
       // nothing read all of those answers together. See utils/accommodation.js.
       planProblems = [...planProblems, ...stayProblems(parsed.days, budgetSays)];
+      // And the hotel the check just flagged is not printed. See
+      // withoutMismatchedStays.
+      parsed.days = withoutMismatchedStays(parsed.days, budgetSays);
       // ── AND A TICK IS A PROMISE, SO IT IS CHECKED ────────────────
       // Both prompts above were TOLD the chosen events are fixed points, and a
       // request has a failure rate while code does not. This is the check that
@@ -28946,7 +28949,19 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 {/* BY REGION, when the islands published sit in more than one.
                     A pill that matches every island is a pill nobody needs. */}
                 {(() => {
-                  const regions = [...new Set(islands.map(i => String(i.region || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, "da"));
+                  // Seen live, 22 Sep 2026: the region field is free text, so the
+                  // pills read "South Funen Archipelago" and "South Funen
+                  // archipelago" side by side, and "the Baltic Sea, east of the
+                  // rest of Denmark" as a button. Folded on case, and a region
+                  // written as a sentence is not offered as a pill.
+                  const seenRegion = new Map();
+                  for (const i of islands) {
+                    const r = String(i.region || "").trim();
+                    if (!r || r.length > 28 || /,/.test(r) || /^the\s/i.test(r)) continue;
+                    const k = r.toLowerCase();
+                    if (!seenRegion.has(k)) seenRegion.set(k, r.charAt(0).toUpperCase() + r.slice(1));
+                  }
+                  const regions = [...seenRegion.values()].sort((a, b) => a.localeCompare(b, "da"));
                   if (regions.length < 2) return null;
                   return (
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
@@ -28962,7 +28977,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     const hasLink = !!String(i.fixedLink || "").trim();
                     if (islandLink === "bridge" && !hasLink) return false;
                     if (islandLink === "ferry" && hasLink) return false;
-                    if (islandRegion && String(i.region || "").trim() !== islandRegion) return false;
+                    if (islandRegion && String(i.region || "").trim().toLowerCase() !== islandRegion.toLowerCase()) return false;
                     if (!q) return true;
                     return [i.name, i.region, i.tag, i.ferryFrom, i.ferryTo, i.ferryOperator]
                       .some(v => String(v || "").toLowerCase().includes(q));

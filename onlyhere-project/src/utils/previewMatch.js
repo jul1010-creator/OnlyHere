@@ -563,6 +563,20 @@ const NOT_TRAVELLING_BEFORE = /\bnot\s+(?:going|heading|coming|travelling|travel
 // mistake, made while fixing the first.
 const SAY_NO_BEFORE = /\b(?:not|never|n[o']t|cannot)\s+(?:going\s+to\s+|gonna\s+)?say(?:ing|s)?\s+no\s+to\s+(?:the\s+)?$/i;
 
+// ── "NOT THE POSTCARD COPENHAGEN VERSION" ───────────────────────────
+// A live test, 22 Sep 2026: Gemlyx steered two budget travellers to South
+// Jutland "rather than Copenhagen", then summed up "a South Jutland trip ...
+// not the postcard Copenhagen version". The first mention was read as a
+// refusal and the second was not, because an adjective sits between "not the"
+// and the name. Every mention has to be a refusal, so Copenhagen stayed a
+// suggestion and the preview filled with six Copenhagen attractions, three
+// Copenhagen bars and two Copenhagen events for a trip that never goes there.
+// So "not the <a word or two> NAME <version, side, kind...>" is a refusal
+// too. Both halves are required: "not the only Copenhagen museum worth it"
+// has no noun of that kind after the name, and keeps its place.
+const NOT_THE_BEFORE = /\bnot\s+(?:the|a|an|your)\s+(?:[a-z\u00e0-\u00ff'-]+\s+){0,2}$/i;
+const VERSION_AFTER = /^\s*(?:version|side|kind|sort|type|experience|trip|route|trail|circuit|tour|crowd|thing|stuff|scene|postcard)\b/i;
+
 export const isRejectedPlace = (convoText, name) => {
   const text = String(convoText || "");
   let found = 0, rejected = 0;
@@ -576,7 +590,8 @@ export const isRejectedPlace = (convoText, name) => {
       if ((REJECT_BEFORE.test(before) && !SAY_NO_BEFORE.test(before)) || REJECT_AFTER.test(after)
           || (NOT_TRAVELLING_BEFORE.test(before) && !ORDERING_AFTER.test(after))
           || COMPARATIVE_LOSER.test(sentence) || BEATEN_BY.test(sentence)
-          || (SPLIT_VERB_BEFORE.test(before) && SPLIT_PARTICLE_AFTER.test(after))) rejected++;
+          || (SPLIT_VERB_BEFORE.test(before) && SPLIT_PARTICLE_AFTER.test(after))
+          || (NOT_THE_BEFORE.test(before) && VERSION_AFTER.test(after))) rejected++;
     }
   }
   // EVERY mention, not any. One recommendation outweighs one warning, because a
