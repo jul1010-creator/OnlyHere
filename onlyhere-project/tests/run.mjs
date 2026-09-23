@@ -47,6 +47,8 @@ writeFileSync(entry, `
   export { legSteps, journeyFromStored, worthShowingLegs, journeyParts, journeyFigure, NO_TRANSIT_NOTE, WAIT_INSIDE_TOTAL, journeyBlock, vehicleWord, arrivalStop, arrivalGlanceRow, ARRIVAL_WALK_LIMIT, transitProblems, journeyDurations, absenceClaims, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, legMinutesIn, closedButPlanned, storedJourney, journeyReach, journeyChanges, journeyBreakdown, journeyDriving, journeyStamp, journeyAgencies, JOURNEY_SOURCE } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
   export { normaliseDomain, cleanNote, cleanSource, sourcesFor, sourceRulesBlock, cleanPlace, placeMatches, blockCost, directSourceSearches, domainVariants, placeMightMatch, sourcesToSearch, MAX_DIRECT_SEARCHES, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { variantsOf, otherNameFor, samePlaceName, searchNames, PLACE_NAMES, SIGHT_NAMES, containsName, distinctiveWords, GENERIC_PLACE_WORDS, foundAt, matchVariantsOf, GENERIC_ALIASES } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
+  export { SHOP_KINDS, SHOP_KIND_VALUES, SHOP_KIND_RULE, ONLY_HERE_RULE, shopKindOf, shopPlaceFor, shopsInPlace, shoppingForTown, shoppingTownList, shopsIntoPlaces, inShopPlace, worthShowing, PREVIEW_SHOPS_PER_PLACE, PREVIEW_LOOSE_SHOPS } from ${JSON.stringify(join(root, "src/utils/shopping.js"))};
+  export { containerFor, itemsInContainer, splitByContainer, foldIntoContainers, inContainer, bareName, addressIn, spellingVariants as containerVariants } from ${JSON.stringify(join(root, "src/utils/placeContainer.js"))};
   export { NIGHTLIFE_CITIES, townOfLocation, groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList, nightlifeSummaryFor, townOfStreet, onThisStreet, streetForSpot, barsOnStreet, nightlifeForTown, nightKindOf, strandedNight, barsIntoStreets, PREVIEW_BARS_PER_STREET, PREVIEW_LOOSE_BARS } from ${JSON.stringify(join(root, "src/utils/nightlife.js"))};
   export { supabaseFailure, studioErrorMessage, refreshIsDead, missingColumn, EXPIRED, REFUSED, MISSING, OUTDATED, OTHER } from ${JSON.stringify(join(root, "src/utils/studioErrors.js"))};
   export { cleanPlaceKind, cleanRelation, cleanIsland, placeIssues, placePatch, hasPlaceChange, duplicateNames } from ${JSON.stringify(join(root, "src/utils/placeEdit.js"))};
@@ -115,7 +117,7 @@ writeFileSync(entry, `
   export { MEASURED_BY, remeasureFor, pendingRemeasure, describeRemeasure, looksLikeAPlace, REMEASURE, REMEASURE_CLEARS, enforceScope, resolveField, classifyClaim, routeMessage, allowedFieldsFor, isEditRequest, factsIn, factsPreserved, editEntry, EDITABLE_FIELDS, PROSE_FIELDS as CORRECTION_PROSE_FIELDS, VERIFY_PROMPT, settleVerdict, ownSiteFor, OWN_SITE_PROMPT, settleOwnSite, whoseWord, PASTED_MIN, keepMeasured, isPipelineOwned, MEASURED_FIELDS, claimCitation, urlsIn, sourceLinksIn, citationRefusal, claimIsPerishable, CITATION_PROMPT, settleCitation, SPLIT_PROMPT, correctEntry, dropAppliedClaims, CLAIMS_APPLIED, namesField, verifyTransportClaim, asksWhatItCarries } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
   export { FEEDBACK_KINDS, FEEDBACK_TYPE, MIN_REPORT_CHARS, feedbackProblem, feedbackRow } from ${JSON.stringify(join(root, "src/utils/articleFeedback.js"))};
   export { previewReportRow, travellerTurns, PREVIEW_SAID_CAP, PREVIEW_SCREEN_CAP } from ${JSON.stringify(join(root, "src/utils/articleFeedback.js"))};
-  export { trimFillerRuns, trimFillerAgainst, guideWithoutFiller } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
+  export { trimFillerRuns, trimFillerAgainst, trimFillerForChat, guideWithoutFiller } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { withoutRefused, refusedClauses } from ${JSON.stringify(join(root, "src/utils/tripBrief.js"))};
   export { briefConflicts, conflictLabel, conflictSlots, CONFLICTS } from ${JSON.stringify(join(root, "src/utils/briefConflicts.js"))};
   export { clusterPins, clusterBounds, pixelAt, stopBlurb, stopCard, clusterLabel, clusterHint, OVERLAP_PX, BLURB_WORDS } from ${JSON.stringify(join(root, "src/utils/mapStops.js"))};
@@ -3861,7 +3863,8 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     ok("the entry page carries the button", /onToggleBeen/.test(detail));
     // Save is "I want to go" and been is "I have gone", and somewhere can
     // honestly be both, so neither toggle may clear the other.
-    is("and it is a separate toggle from Save", (appHrs.match(/onToggleBeen=\{/g) || []).length, 6);
+    // Seven since the shop page, 22 Sep 2026.
+    is("and it is a separate toggle from Save", (appHrs.match(/onToggleBeen=\{/g) || []).length, 7);
     ok("and the town rule is said on the page rather than left to be discovered",
        /still route you here and still base you here/.test(detail));
     const guideBuildSlice = readFileSync(join(root, "src/App.jsx"), "utf8");
@@ -13492,7 +13495,10 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     is("every type's queries were read", TYPES.filter(t => !(perType[t]?.length >= 3)), []);
     // A street's name is a common noun. Both street types must template on the
     // subject, which carries the town, not on the bare name.
-    ["nightStreet", "foodStreet"].forEach(t => {
+    // shopPlace joined them on 22 Sep 2026 and for the same reason: Vestergade
+    // is a street in twenty Danish towns, so a query on the bare name searches
+    // for all of them.
+    ["nightStreet", "foodStreet", "shopPlace"].forEach(t => {
       is(`every ${t} query is about a street in a named town`,
          perType[t].filter(q => !q.includes("${subject}")), []);
       is(`and every ${t} query says which country`,
@@ -13500,7 +13506,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     });
     // And the subject is only substituted where the name genuinely is not an
     // identity: appending a town to "Ribe" would search for "Ribe Ribe".
-    const others = TYPES.filter(t => !["nightStreet", "foodStreet"].includes(t));
+    const others = TYPES.filter(t => !["nightStreet", "foodStreet", "shopPlace"].includes(t));
     is("no other type has its name replaced",
        others.filter(t => (perType[t] || []).some(q => q.includes("${subject}"))), []);
     ok("and the subject is the street plus its town",
@@ -29632,15 +29638,23 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("no dash in it", !/[–—]/.test(line));
   // ── AND THE PANEL RUNS IT ──────────────────────────────────────
   const appD = readFileSync(join(root, "src/App.jsx"), "utf8");
-  ok("the street is resolved from the published rows, for venues only",
-     /const streetRow = type === "night" && discoverStreet\s*\?\s*nightlifeStreets\.find\(st => st\?\.name === discoverStreet\) \|\| null/.test(appD));
+  // ── AND A SHOPPING STREET IS THE SAME QUESTION, 22 SEP 2026 ─────
+  // Oliver: "put shopping centers with -> 'recommended Denmark-Only Shops'
+  // like with bar streets." A shop is matched to its street by address exactly
+  // as a bar is, so the scope, the framing and the filter are the same three
+  // lines with a different list behind them.
+  ok("the street is resolved from the published rows, for the two types that have them",
+     /type === "night" \? nightlifeStreets\.find\(st => st\?\.name === discoverStreet\)/.test(appD)
+     && /type === "shop" \? shopPlaces\.find\(st => st\?\.name === discoverStreet\)/.test(appD));
+  ok("and the matcher is the one that page already uses, either way",
+     /const onIt = type === "shop" \? inShopPlace : onThisStreet;/.test(appD));
   ok("the framing is appended to the aim", /\+ streetFraming\(streetRow\);/.test(appD));
   ok("and the filter runs after the other four",
-     /splitOffMonth\(inRegion, discoverMonth\);[\s\S]{0,600}?splitOffStreet\(inMonth, streetRow, onThisStreet\)/.test(appD));
+     /splitOffMonth\(inRegion, discoverMonth\);[\s\S]{0,600}?splitOffStreet\(inMonth, streetRow, onIt\)/.test(appD));
   ok("the candidate list is asked for an address it read rather than worked out",
      /Never work an address out from the name of the place/.test(appD) && /"street": "\.\.\."/.test(appD));
   ok("the count on each chip says which street has nothing on it",
-     /const n = barsOnStreet\(st, nightlifeSpots, nightlifeStreets\)\.length;/.test(appD));
+     /const countIn = \(st\) => \(studioType === "shop"\s*\? shopsInPlace\(st, shops, shopPlaces\)\s*: barsOnStreet\(st, nightlifeSpots, nightlifeStreets\)\)\.length;/.test(appD));
   ok("and the empty state does not call the street empty",
      /a street with bars on it that nobody prints an address for is a search problem rather than an empty street/.test(appD));
 }
@@ -40153,7 +40167,11 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // Ane Gade is by far the most popular." A street is ranked like everything
   // else now, which means it falls back like everything else: to nothing, so
   // the publish gate can refuse an unranked one. See utils/streetVibe.js.
-  is("every type that carries a tier still has a fallback there", (sc.match(/tier: t\.tier \|\|/g) || []).length, 4);
+  // ── AND SIX SINCE THE SHOP AND THE STREET IT IS ON ──────────────
+  // Oliver, 22 Sep 2026: a shop is ranked like everything else, and so is the
+  // street or centre that holds it, which means both fall back like everything
+  // else: to nothing, so the publish gate can refuse an unranked one.
+  is("every type that carries a tier still has a fallback there", (sc.match(/tier: t\.tier \|\|/g) || []).length, 6);
   is("and it is the empty string, measured on the output", shapeForLive("town", { name: "X", tier: "" }).tier, "");
 
   const findings = auditEntry({ type: "festival", payload: shaped }).findings || [];
@@ -60406,10 +60424,14 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // lists, one omission, which is not four mistakes. It is one hand-written
   // list copied four times." So the props go on in a single shared prefix.
   const appF = readFileSync(join(root, "src/App.jsx"), "utf8");
+  // Seven since the shop page went in on 22 Sep 2026, which is the whole point
+  // of counting: a seventh DetailPage that did not carry the shared prefix
+  // would be the fifth copy of a hand-written list, and the one with the
+  // omission in it.
   is("every detail page gets the buttons",
-     (appF.match(/<DetailPage windowed=\{entryWindowed\} lang=\{uiLang\} paid=\{hasPaidPlan\(userProfile\)\} signedIn=\{!!userSession\} onNeedAccount=/g) || []).length, 6);
+     (appF.match(/<DetailPage windowed=\{entryWindowed\} lang=\{uiLang\} paid=\{hasPaidPlan\(userProfile\)\} signedIn=\{!!userSession\} onNeedAccount=/g) || []).length, 7);
   is("and none is left without them",
-     (appF.match(/<DetailPage /g) || []).length, 6);
+     (appF.match(/<DetailPage /g) || []).length, 7);
 
   const detail = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
   ok("the buttons render on the page", /<ArticleFeedback itemType=\{kind\} itemName=\{item\.name\}/.test(detail));
@@ -60622,6 +60644,149 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 
 // ── "HOW DOES THE AI DETERMINE THE RATING?" ─────────────────────────
 //
+// ── A SHOPPING STREET HOLDS SHOPS THE WAY A BAR STREET HOLDS BARS ──
+//
+// Oliver, 22 Sep 2026, after I argued that a mall is the one place in Denmark
+// that is not only here: "I'd do it another way then.. put shopping centers
+// with -> 'recommended Denmark-Only Shops' like with bar streets. Unless
+// you've put them onto some islands, of course."
+//
+// Both halves are load-bearing. The arrow is the feature, and the islands
+// sentence is the rule that keeps it honest: a shop with no container is not a
+// gap in the data, it is a shop standing on its own.
+{
+  const { containerFor, itemsInContainer, splitByContainer, foldIntoContainers, inContainer, bareName,
+          shopPlaceFor, shopsInPlace, shoppingForTown, shoppingTownList, shopsIntoPlaces, inShopPlace, worthShowing,
+          shopKindOf, SHOP_KINDS, SHOP_KIND_VALUES, SHOP_KIND_RULE, ONLY_HERE_RULE,
+          PREVIEW_SHOPS_PER_PLACE, PREVIEW_LOOSE_SHOPS, streetForSpot, barsOnStreet, barsIntoStreets, nightlifeForTown } = M;
+
+  // ── ONE ENGINE, BECAUSE IT WAS ABOUT TO BE TWO ──────────────────
+  // nightlife.js held this logic and four bugs' worth of lessons in it: the
+  // longest name wins, the spelling variants, the field the address really
+  // lives in, and the town the Studio staples onto a street's name. Copying it
+  // for shops would have left all four behind the moment either copy moved.
+  const nl = stripComments(readFileSync(join(root, "src/utils/nightlife.js"), "utf8"));
+  ok("nightlife delegates rather than holding its own matcher",
+     /containerFor\(spot, streets, NIGHT_READERS\(cities\)\)/.test(nl)
+     && /itemsInContainer\(street, spots, allStreets, NIGHT_READERS\(cities\)\)/.test(nl)
+     && !/const nameIsIn = /.test(nl));
+  const sh = stripComments(readFileSync(join(root, "src/utils/shopping.js"), "utf8"));
+  ok("and shopping calls the same four functions",
+     /containerFor\(shop, places, READERS\(cities\)\)/.test(sh)
+     && /itemsInContainer\(place, shops, allPlaces, READERS\(cities\)\)/.test(sh)
+     && /splitByContainer\(town, shops, places, READERS\(cities\)\)/.test(sh)
+     && /foldIntoContainers\(items, places, \{/.test(sh));
+  // The behaviour the engine inherited, asserted through the shop side so a
+  // regression in the shared code is caught by both callers.
+  const STROGET = { id: 1, name: "Strøget", isStreet: true, town: "Copenhagen", location: "Strøget, Copenhagen" };
+  const JAEGERS = { id: 2, name: "Jægersborggade", isStreet: true, town: "Copenhagen", location: "Jægersborggade, Nørrebro, Copenhagen" };
+  const SHOPS = [
+    { id: 11, name: "Label One", town: "Copenhagen", location: "Strøget 12, Copenhagen", shopKind: "Danish label" },
+    { id: 12, name: "Ceramics", town: "Copenhagen", location: "Jægersborggade 40, 2200 Copenhagen", shopKind: "Design and homeware" },
+    { id: 13, name: "Genbrug", town: "Copenhagen", location: "Jaegersborggade 8, Copenhagen", shopKind: "Second-hand" },
+    { id: 14, name: "Island Pottery", town: "Svaneke", location: "Svaneke, Bornholm", shopKind: "Made on the premises" },
+  ];
+  const PLACES = [STROGET, JAEGERS];
+  is("a shop is claimed by the street its address is on",
+     shopPlaceFor(SHOPS[1], PLACES)?.name, "Jægersborggade");
+  // "Noerregade 40" and "Nørregade" are the same street, and so are these.
+  is("however the Danish letters were typed", shopPlaceFor(SHOPS[2], PLACES)?.name, "Jægersborggade");
+  is("and a shop on no published street is claimed by none", shopPlaceFor(SHOPS[3], PLACES), null);
+  is("a street lists what stands on it", shopsInPlace(JAEGERS, SHOPS, PLACES).map(s => s.name), ["Ceramics", "Genbrug"]);
+  // The Studio's own placeholder staples the town onto the name, and the
+  // matcher has to see through that or a street lists nothing.
+  is("a street named with its town still matches a bare address",
+     shopsInPlace({ name: "Strøget Copenhagen", town: "Copenhagen" }, SHOPS, null).map(s => s.name), ["Label One"]);
+  is("and bareName is what does it", bareName({ name: "Strøget Copenhagen" }, "Copenhagen"), "Strøget");
+  ok("while a street whose own name ends in the town keeps it", bareName({ name: "Aalborggade" }, "Aalborg") === "Aalborggade");
+
+  // ── THE TOWN PAGE, AND THE ISLAND SENTENCE ──────────────────────
+  const town = shoppingForTown("Copenhagen", SHOPS, PLACES);
+  is("the town page groups by street", town.places.map(g => `${g.place.name}:${g.shops.length}`), ["Jægersborggade:2", "Strøget:1"]);
+  is("and a shop in no street is loose rather than lost", town.loose.map(s => s.name), []);
+  const bornholm = shoppingForTown("Svaneke", SHOPS, PLACES);
+  is("a workshop with no street stands on its own", bornholm.loose.map(s => s.name), ["Island Pottery"]);
+  // ── AND IT IS FILED IN ITS OWN TOWN, NOT ITS ISLAND ─────────────
+  // Found here first: "Svaneke, Bornholm" matches none of the ten cities the
+  // location reader knows, so it fell back to the last comma part and the
+  // pottery came out filed under Bornholm. A shop carries `town` as its own
+  // field for exactly this reason, so that is what is read.
+  is("a shop's own town field wins over parsing its address",
+     shoppingTownList([{ name: "X", town: "Svaneke", location: "Svaneke, Bornholm" }], []), ["Svaneke"]);
+  is("every town with anything in it is listed",
+     shoppingTownList(SHOPS, PLACES).sort(), ["Copenhagen", "Svaneke"]);
+  // A centre with nothing only-here inside it is a mall on a travel guide,
+  // which is the whole argument for letting one in at all.
+  ok("a container earns its row by holding something", worthShowing(JAEGERS, SHOPS, PLACES));
+  ok("and an empty one does not", !worthShowing({ id: 9, name: "Fields", town: "Copenhagen" }, SHOPS, PLACES));
+  const page = stripComments(readFileSync(join(root, "src/components/ShoppingPage.jsx"), "utf8"));
+  ok("the page asks that question rather than counting for itself",
+     /const filled = split\.places\.filter\(g => worthShowing\(g\.place, narrowed, places\)\);/.test(page));
+  ok("and the arrow is the control he asked for", /→/.test(page));
+
+  // ── AND ON THE PREVIEW, THE SAME FOLD AS THE BARS ───────────────
+  const folded = shopsIntoPlaces(SHOPS, PLACES);
+  is("the streets come first, then what is in no street",
+     folded.rows.map(r => r.name), ["Strøget", "Jægersborggade", "Island Pottery"]);
+  is("a folded row opens as a shopping place", folded.rows[0]._src, "shopPlace");
+  is("with the shops under it", folded.rows[1]._barsHere.map(s => s.name), ["Ceramics", "Genbrug"]);
+  is("and the loose ones are capped", folded.shown, 2 + Math.min(1, PREVIEW_LOOSE_SHOPS));
+  is("no streets published, the shops are still capped", shopsIntoPlaces(SHOPS, []).shown, PREVIEW_LOOSE_SHOPS);
+  ok("a street a traveller's own shop is on is theirs",
+     shopsIntoPlaces([{ ...SHOPS[0], _byThem: true }], [STROGET]).rows[0]._byThem);
+  is("the two numbers are the bar street's, because the reason is the same",
+     [PREVIEW_SHOPS_PER_PLACE, PREVIEW_LOOSE_SHOPS], [M.PREVIEW_BARS_PER_STREET, M.PREVIEW_LOOSE_BARS]);
+  // And the nightlife side still behaves, through the shared engine.
+  const JAG = { id: 3, name: "Jomfru Ane Gade", isStreet: true, town: "Aalborg", location: "Jomfru Ane Gade, Aalborg" };
+  is("bars still find their street", streetForSpot({ location: "Jomfru Ane Gade 15, Aalborg" }, [JAG]), JAG);
+  is("and a town still splits into streets and loose bars",
+     nightlifeForTown("Aalborg", [{ name: "Bar", location: "Jomfru Ane Gade 15, Aalborg" }], [JAG]).streets[0].bars.length, 1);
+
+  // ── WHAT KIND OF SHOP, AND THE TEST IT HAS TO PASS ──────────────
+  is("four kinds, and no fifth", SHOP_KIND_VALUES, ["Danish label", "Second-hand", "Design and homeware", "Made on the premises"]);
+  is("read loosely, however they were written",
+     ["Danish label", "vintage", "second hand", "Design and homeware", "Made on the premises"].map(v => shopKindOf(v)?.id),
+     ["label", "secondhand", "secondhand", "design", "maker"]);
+  is("and a fifth is refused rather than guessed at", shopKindOf("Lifestyle"), null);
+  ok("every kind has written criteria", SHOP_KINDS.every(k => k.meaning.length > 80));
+  ok("and the rule is built from the list rather than typed beside it",
+     /\$\{SHOP_KINDS\.map\(k => `- \$\{k\.value\}: \$\{k\.meaning\}`\)\.join/.test(readFileSync(join(root, "src/utils/shopping.js"), "utf8")));
+  // The one sentence this content type exists for, in front of the model that
+  // drafts one. A high street looks local until you read the signs.
+  ok("the only-here test is stated where a draft will read it",
+     /buying this in Denmark has to be different from buying it at home/.test(ONLY_HERE_RULE));
+  ok("and it names the trap by shape rather than by brand",
+     /A Danish-owned chain with stores across Europe fails it/.test(ONLY_HERE_RULE));
+  const prompts = M.studioPrompts("Prag Vintage");
+  ok("both shop prompts carry it", prompts.shop.includes(ONLY_HERE_RULE) && prompts.shopPlace.includes(ONLY_HERE_RULE));
+  ok("and the shop prompt refuses to describe the mall around it",
+     /not the street or centre it stands in/.test(prompts.shop));
+  ok("while the street prompt refuses to list its shops",
+     /DO NOT LIST OR NAME THE INDIVIDUAL SHOPS ON IT/.test(prompts.shopPlace));
+  ok("the kind rule reaches the draft", prompts.shop.includes(SHOP_KIND_RULE));
+  // A word outside the four is dropped on the way in rather than stored.
+  is("a fifth kind never reaches the database",
+     M.shapeForLive("shop", { name: "X", shopKind: "Lifestyle", desc: "d" }).shopKind, "");
+  is("and an unranked shop publishes with no rank rather than an invented one",
+     M.shapeForLive("shop", { name: "X", desc: "d" }).tier, "");
+  const shaped = M.shapeForLive("shop", { name: "Prag Vintage", town: "Copenhagen", shopKind: "Second-hand", tier: "Worth Considering", desc: "d", whatTheySell: "Clothes." });
+  is("a published shop carries its kind", shaped.shopKind, "Second-hand");
+  ok("and its paragraphs reach the body", JSON.stringify(shaped.blogBody).includes("What They Sell"));
+  // ── AND IT REACHES THE READER, NOT ONLY THE DATABASE ────────────
+  const appS = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+  ok("the nav has a Shopping page", /\{ id: "shopping", label: uiT\("nav\.shopping", uiLang\)/.test(appS));
+  ok("which renders the page off the two published arrays",
+     /<ShoppingPage shops=\{shops\} places=\{shopPlaces\}/.test(appS));
+  ok("a shop opens its own detail page rather than borrowing one",
+     /shop: setShopDetail,\s*shopPlace: setShopDetail,/.test(appS));
+  ok("and closing it goes through the one map every entry closes through",
+     /nightlife: setNightlifeDetail, shop: setShopDetail, free: setFreeDetail/.test(appS));
+  ok("the preview pool carries shops", /\.\.\.shops\.map\(p => \(\{ \.\.\.p, _src: "shop" \}\)\)/
+     .test(stripComments(readFileSync(join(root, "src/utils/previewMatch.js"), "utf8"))));
+  ok("and a shopping street is shown under Shopping while opening its own page",
+     /p\?\._src === "shopPlace" \? "shop"/.test(readFileSync(join(root, "src/utils/previewMatch.js"), "utf8")));
+}
+
 // ── WHICH OF THE THREE STREETS, AND WHAT HAPPENS ON IT ─────────────
 //
 // Oliver, 22 Sep 2026: "I think it's unfortunate that on the bar streets,
@@ -61267,12 +61432,40 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // which is the identical bug in a conversation, and it is exactly what he was
   // looking at.
   {
-    // A fresh thread keeps one, and what it keeps is the case the word is for.
-    // In chat that case is stronger than in prose, because there is somebody to
-    // correct: without it this reply reads as if the traveller had not spoken.
-    is("the first use in a conversation survives",
+    // A fresh RUN keeps one, which is the rule a published entry is audited
+    // on: twice in one entry is the signal and once can be doing real work.
+    is("the first use in a run survives",
        trimFillerAgainst([], "It's actually closed on Mondays."),
        "It's actually closed on Mondays.");
+
+    // ── AND THE CHAT KEEPS NONE, 22 SEP 2026 ──────────────────────
+    //
+    // Fifth time he has asked about this word. Measured on the live site the
+    // same night, first reply of a fresh conversation: "driving lets you
+    // actually load up on stuff without worrying about luggage space". The
+    // budget is one per RUN, and a chat is one run of twenty replies that one
+    // person reads end to end, so "one allowed" means one per conversation and
+    // the first reply spends it on a sentence that loses nothing.
+    is("the chat keeps none at all",
+       M.trimFillerForChat([], "It's actually closed on Mondays."),
+       "It's closed on Mondays.");
+    is("including the first reply of a conversation, which is where he read it",
+       M.trimFillerForChat([], "Driving lets you actually load up on stuff."),
+       "Driving lets you load up on stuff.");
+    is("and both of two in one reply",
+       M.trimFillerForChat([], "It is actually free, and it is actually worth it."),
+       "It is free, and it is worth it.");
+    is("every word on the list, not only his first one",
+       M.trimFillerForChat([], "It is truly good and simply the best."),
+       "It is good and the best.");
+    // The published side is untouched: that is what the audit counts on.
+    ok("the entries keep their count-based rule",
+       /export const trimFillerForChat = \(priorTexts, text\) =>\s*trimFillerAgainst\(priorTexts, text, \{ keep: 0 \}\);/
+         .test(readFileSync(join(root, "src/utils/helpers.js"), "utf8")));
+    const appFill = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    is("and every reply the chat shows goes through it",
+       (appFill.match(/trimFillerForChat\(priorReplies/g) || []).length, 3);
+    ok("with none left on the old call", !/trimFillerAgainst\(priorReplies/.test(appFill));
 
     // ── HIS OWN TWO BUBBLES ───────────────────────────────────────
     // Both off the screenshots he sent, from one thread. Under a per-reply
@@ -61348,14 +61541,17 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // response by hand a second time, which is the same shape of hole the
     // max_tokens fix fell into here: two implementations of one call, and only
     // one of them ever taught the new rule.
+    // trimFillerForChat since 22 Sep 2026, which is the same call with the
+    // budget set to zero. The three sites are the point of this assertion and
+    // they have not moved.
     is("every chat path out of the model runs the trim",
-       (chat.match(/trimFillerAgainst\(priorReplies,/g) || []).length, 3);
+       (chat.match(/trimFillerForChat\(priorReplies,/g) || []).length, 3);
     // ── THE STREAMED ONE IS NOT OPTIONAL ──────────────────────────
     // Trimming only the finished reply meant the word typed itself out and then
     // vanished when the reply landed, with the sentence reflowing round the
     // hole. The stream is where a reader meets the text.
     ok("including the bubble that streams, so nothing vanishes as it is read",
-       /const shown = trimFillerAgainst\(priorReplies, holdPartial \?/.test(chat));
+       /const shown = trimFillerForChat\(priorReplies, holdPartial \?/.test(chat));
     // ── AND AN ERROR BUBBLE CANNOT SPEND THE BUDGET ───────────────
     // Same filter baseMessages uses, for the same reason: Gemlyx never said
     // those words, so they are not its prior turns and they cannot make the
@@ -63268,8 +63464,9 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     const navSlice = app.slice(navStart, app.indexOf("];", navStart));
     const navIds = [...navSlice.matchAll(/\{ id: "([a-z]+)", label: uiT\("nav\.([a-z]+)"/g)];
     // Ten since the Islands page went in beside Towns on 16 Sep 2026, eleven
-    // since Cheap gems went in beside Tips on 21 Sep 2026.
-    is("every page in the nav is translated", navIds.length, 11);
+    // since Cheap gems went in beside Tips on 21 Sep 2026, twelve since
+    // Shopping went in beside Nightlife on 22 Sep 2026.
+    is("every page in the nav is translated", navIds.length, 12);
     ok("every nav entry names a key that exists", navIds.every(m => UI_KEYS.includes(`nav.${m[2]}`)));
     ok("and inside NAV_ITEMS the id and the key agree", navIds.every(m => m[1] === m[2]));
     // Across the whole file, every uiT key that is referenced has to exist.
@@ -69828,7 +70025,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     ok("it reads the thread the traveller saw, greeting sliced off, and nothing at all for a composed test brief",
        /readPromises\(\s*overrideConvoText \? \[\] : aiMessages\.slice\(1\),/.test(block));
     ok("through the same published pools the chat map and the preview read",
-       /previewPools\(\{ towns, islands, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents \}\)/.test(block));
+       /previewPools\(\{ towns, islands, freeEntrance, foodSpots, nightlifeSpots, shops, craftItemsFallback, events, majorEvents \}\)/.test(block));
     ok("with the traveller's own words, the tapped Nos and the event ticks, so every void rule has its input",
        /\{ ownWords: saidByTravellerForGuide, tapped: turnedDown, pickedEvents \}/.test(block));
     is("exactly one extra call, never a loop", (block.match(/await askClaude\(/g) || []).length, 1);
@@ -72920,7 +73117,11 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   is("no streets published, the bars are still capped", M.barsIntoStreets(bars, []).shown, M.PREVIEW_LOOSE_BARS);
   ok("a street a traveller's own bar is on is theirs", M.barsIntoStreets([{ ...bars[0], _byThem: true }], [JAG]).rows[0]._byThem);
   const pv = stripComments(readFileSync(join(root, "src/components/GuidePreviewScreen.jsx"), "utf8"));
-  ok("the preview folds its nightlife", /cat\.src === "nightlife" \? barsIntoStreets\(matching, nightlifeStreets\) : null/.test(pv) && /items: rows\.slice\(0, cap\)/.test(pv));
+  ok("the preview folds its nightlife", /cat\.src === "nightlife" \? barsIntoStreets\(matching, nightlifeStreets\)/.test(pv) && /items: rows\.slice\(0, cap\)/.test(pv));
+  // And its shopping, on the same engine and through the same two numbers.
+  // Oliver, 22 Sep 2026: "put shopping centers with -> 'recommended
+  // Denmark-Only Shops' like with bar streets."
+  ok("and its shopping, the same way", /cat\.src === "shop" \? shopsIntoPlaces\(matching, shopPlaces\)/.test(pv));
   ok("and names the bars under the street, behind an arrow", /Recommended bars here <span/.test(pv));
   ok("the app hands it the streets", /nightlifeSpots=\{nightlifeSpots\}\s*nightlifeStreets=\{nightlifeStreets\}/.test(appZ));
 }

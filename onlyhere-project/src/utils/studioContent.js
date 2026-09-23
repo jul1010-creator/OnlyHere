@@ -10,6 +10,9 @@ import { normaliseTicketStatus } from "./tickets";
 // is a closed list and an unknown value is dropped rather than stored. See
 // utils/streetVibe.js.
 import { vibeOf } from "./streetVibe";
+// A shop says what kind it is off a closed list, and an unknown value is
+// dropped rather than stored. See utils/shopping.js.
+import { shopKindOf } from "./shopping";
 import { cleanKind, cleanCategory } from "./essentialKind";
 import { cleanIsland, cleanRelation } from "./placeEdit";
 import { isBookableTicketUrl, ticketUrlSaysElsewhere, ticketUrlIsASubEvent, isTourUrl, cleanTourUrl } from "./ticketLink";
@@ -317,6 +320,27 @@ const shapeForLiveFields = (type, t) => {
     photo: `/nightlife-streets/${slugify(t.name)}.jpg`, desc: t.desc, mapHint: t.mapHint || "", color: t.color || "#5D4037", gemlyxFind: t.gemlyxFind || "",
     blogBody: [
       ...bbData([["Who It's For", t.whoFor], ["Best Nights", t.bestNights], ["Walking It", t.walkIt], ["The Reality Check", t.realityCheck]]),
+      ...bulletsBlock("What to Be Aware Of", t.thingsToKnow),
+    ] };
+  // ── A SHOP, AND THE PLACE IT STANDS IN ──────────────────────────
+  // Oliver, 22 Sep 2026: "put shopping centers with -> 'recommended
+  // Denmark-Only Shops' like with bar streets." Two types, exactly as bars and
+  // bar streets are two, and for the same reason: the shops are not stored on
+  // the container, they are matched to it by address at render time, so
+  // publishing one more shop needs no edit to the street. `town` is its own
+  // field because the page groups on it. See utils/placeContainer.js.
+  if (type === "shop") return { name: t.name, town: t.town || "", location: t.location || "", emoji: t.emoji || "🛍",
+    shopKind: shopKindOf(t.shopKind)?.value || "", tier: t.tier || "", priceNote: t.priceNote || "",
+    photo: `/shops/${slugify(t.name)}.jpg`, desc: t.desc, mapHint: t.mapHint || "", color: t.color || "#7B5E57", gemlyxFind: t.gemlyxFind || "",
+    blogBody: [
+      ...bbData([["What They Sell", t.whatTheySell], ["Being There", t.beingThere], ["Who It's For", t.whoFor], ["The Reality Check", t.realityCheck]]),
+      ...bulletsBlock("What to Be Aware Of", t.thingsToKnow),
+    ] };
+  if (type === "shopPlace") return { name: t.name, isStreet: true, town: t.town || "", location: t.location || "", emoji: t.emoji || "🛍",
+    category: t.category || "Shopping street", tier: t.tier || "", priceNote: t.priceNote || "",
+    photo: `/shop-places/${slugify(t.name)}.jpg`, desc: t.desc, mapHint: t.mapHint || "", color: t.color || "#7B5E57", gemlyxFind: t.gemlyxFind || "",
+    blogBody: [
+      ...bbData([["Who It's For", t.whoFor], ["Walking It", t.walkIt], ["Best Times", t.bestTimes], ["The Reality Check", t.realityCheck]]),
       ...bulletsBlock("What to Be Aware Of", t.thingsToKnow),
     ] };
   if (type === "nightTown") return { name: t.name, emoji: t.emoji || "🌃", photo: `/nightlife-towns/${slugify(t.name)}.jpg`, desc: t.desc, color: t.color || "#5D4037", gemlyxFind: t.gemlyxFind || "",

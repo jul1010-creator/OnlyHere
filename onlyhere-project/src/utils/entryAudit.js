@@ -2284,7 +2284,10 @@ export const PROSE_FIELDS = ["atmosphere", "whoItsFor", "realityCheck", "desc", 
   // the sentence under a bar's name, and `visitorNote` is the sentence the
   // essential prompt marks REQUIRED when a system is resident-gated. None was
   // scanned for banned words, em dashes, filler runs or a generic sentence.
-  "tip", "crowd", "visitorNote"];
+  "tip", "crowd", "visitorNote",
+  // Shops, 22 Sep 2026. Three paragraphs a reader reads, so all three are
+  // scanned for banned words, dashes, filler runs and a price nobody checked.
+  "whatTheySell", "beingThere", "bestTimes"];
 
 // Reader-facing prose that is not a plain string. Flattened rather than listed
 // above, because the shape is the reason it was missed.

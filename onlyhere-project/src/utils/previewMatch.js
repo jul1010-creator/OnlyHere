@@ -65,7 +65,7 @@ export const parentTownOf = (p) => String(p?.city || p?.town || townOfLocation(p
 // quietly left off this screen. Craft keeps its own _src even though it is
 // DISPLAYED under Attractions: openStopDetail routes "Read more" by _src, and
 // renaming it here would send a craft click to the wrong detail page.
-export const previewPools = ({ towns = [], islands = [], freeEntrance = [], foodSpots = [], nightlifeSpots = [], craftItemsFallback = [], events = [], majorEvents = [] } = {}) => [
+export const previewPools = ({ towns = [], islands = [], freeEntrance = [], foodSpots = [], nightlifeSpots = [], shops = [], craftItemsFallback = [], events = [], majorEvents = [] } = {}) => [
   ...towns.map(p => ({ ...p, _src: "town" })),
   // Its own _src, never "town". openStopDetail routes a "Read more" click by
   // _src, so an island filed as a town would open the town detail view with an
@@ -74,6 +74,11 @@ export const previewPools = ({ towns = [], islands = [], freeEntrance = [], food
   ...freeEntrance.map(p => ({ ...p, _src: "free" })),
   ...foodSpots.map(p => ({ ...p, _src: "food" })),
   ...nightlifeSpots.map(p => ({ ...p, _src: "nightlife" })),
+  // Oliver, 22 Sep 2026: "people can add it into their trip". A shop reaches a
+  // trip the same way a bar does, and the containers it stands in are handed
+  // to the preview separately, the way bar streets are, because a street is
+  // not a place somebody is sent to on its own. See utils/shopping.js.
+  ...shops.map(p => ({ ...p, _src: "shop" })),
   ...craftItemsFallback.map(p => ({ ...p, _src: "craft" })),
   ...events.map(p => ({ ...p, _src: "event" })),
   // `_major` so the thinning rule in tripEvents can tell the two arrays apart
@@ -176,7 +181,10 @@ export const tripPoints = (anchor, matched) => {
 // routing, so the display grouping is a second, separate question. It lived in
 // the component and the matcher could not see it, which meant the matcher could
 // not reason about categories at all. One function, both files.
-export const groupKeyOf = (p) => (p?._src === "craft" ? "free" : p?._src);
+// A shopping street is shown under Shopping with the shops on it, the way a
+// bar street is shown under Nightlife, so it groups as a shop and still opens
+// its own page: openStopDetail routes by _src, which this does not touch.
+export const groupKeyOf = (p) => (p?._src === "craft" ? "free" : p?._src === "shopPlace" ? "shop" : p?._src);
 
 // ── "THEY ARE ONLY ASKING FOR EVENTS" ───────────────────────────────
 // Oliver, 15 Aug 2026, on a preview built from this brief:

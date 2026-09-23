@@ -33,6 +33,8 @@ import { freeEntrance } from "./data/freeEntrance";
 import { nightlifeSpots } from "./data/nightlife";
 import { nightlifeTowns } from "./data/nightlifeTowns";
 import { nightlifeStreets } from "./data/nightlifeStreets";
+import { shops } from "./data/shops";
+import { shopPlaces } from "./data/shopPlaces";
 import { repairBody, headingsOf, bodyProblems, priceProblems, auditPublished, describeAudit } from "./utils/publishedRepair";
 import { blockingCoordProblems, coordProblems, coordAudit, describeCoordAudit } from "./utils/coordCheck";
 import { fetchProfile, saveProfile, takeHeldProfile, claimSignupCarry, profileForPrompt, isBlank as profileIsBlank, homeCurrency } from "./utils/profile";
@@ -107,7 +109,7 @@ import {
   getEnclosingJSONStringBounds, nextWeekdayTimestamp,
   getDistance, getDistanceRaw, tiltMove, tiltLeave, arrivalRow, hasArrivalField, departureParam, transitDepartureAnchor,
   daCompare, byName, seasonFit, isConfirmedUpcoming,
-  hostMatchesName, officialSiteFromCandidates, stripDashes, stripDashesDeep, storeKindOf, trimFillerAgainst } from "./utils/helpers";
+  hostMatchesName, officialSiteFromCandidates, stripDashes, stripDashesDeep, storeKindOf, trimFillerForChat } from "./utils/helpers";
 import { checkNightTransport, geocodePlace, geocodeIsASettlement, findRealNearestStation, geocodePostcode } from "./utils/geo";
 import { runOnce } from "./utils/inFlight";
 import { Pill } from "./components/Pill";
@@ -307,6 +309,7 @@ import { echoInDraft, describeEcho, ECHO_RUN } from "./utils/echoCheck";
 import { PhotoPlate } from "./components/PhotoPlate";
 import { AffiliatePanel } from "./components/AffiliatePanel";
 import { CheapGemsPage } from "./components/CheapGemsPage";
+import { ShoppingPage } from "./components/ShoppingPage";
 import { CheapGemsPanel } from "./components/CheapGemsPanel";
 import { GEM_TYPE } from "./utils/cheapGems";
 import { linkPatch } from "./utils/affiliateAudit";
@@ -331,6 +334,7 @@ import { THEME_LABEL, THEME_EMOJI, themesOf, hasTheme, themesPresent, tierLabel,
 // A bar street carries both: the vibe says which street tonight, the tier says
 // whether it is worth travelling for. See utils/streetVibe.js.
 import { STREET_VIBES, STREET_VIBE_VALUES, vibeOf } from "./utils/streetVibe";
+import { shopKindOf, shopsInPlace, inShopPlace, SHOP_KINDS } from "./utils/shopping";
 import { EVENT_TYPE_LABEL, eventTypesOf, hasEventType, eventTypesPresent, eventTypeCounts } from "./utils/eventTypes";
 import { SWEEPS, sweepById, selectRows, applyCap, knownPlacesFor, proposeSweep, applySweepPatch, buildSnapshot, readSnapshot, snapshotFilename, MARKS } from "./utils/sweeps";
 import { classifyFerry, ferryFindings, FERRY } from "./utils/transport";
@@ -1378,6 +1382,10 @@ function GemlyxApp() {
   // Oliver, 21 Sep 2026: "Bring some filters in on our new navigations as well."
   const [islandRegion, setIslandRegion] = useState(null);
   const [nightlifeDetail, setNightlifeDetail] = useState(null);
+  // A shop or the street it stands in. One state for both, because DetailPage
+  // renders them the same way and the only difference is which array the row
+  // came out of. Oliver, 22 Sep 2026. See utils/shopping.js.
+  const [shopDetail, setShopDetail] = useState(null);
   const [freeDetail, setFreeDetail] = useState(null);
   const [foodDetail, setFoodDetail] = useState(null);
   const [realCoords, setRealCoords] = useState(null); // null | "denied" | "requesting" | { lat, lon }
@@ -4220,6 +4228,12 @@ Say which answer came from which source, so a fact from a vouched page and a fac
         // which is the half most pages leave out.
         nightStreet: { queries: [`${subject} Denmark bar street bars clubs guide`, `${subject} Denmark best night to go busy quiet which end`, `${subject} Denmark reddit honest opinion tourist trap or worth it`, `${subject} Denmark nightlife safety closing time reputation`] },
         nightTown: { queries: [`${name} Denmark nightlife scene bars clubs overview`, `${name} nightlife student population crowd reddit r/Denmark`, `${name} nightlife when does it get busy best areas`, `${name} nightlife quora google reviews honest opinion`] },
+        // A SHOP'S QUESTIONS ARE WHAT IS ON THE SHELVES AND WHO OWNS IT.
+        // The second query is the only-here test asked out loud: a chain with
+        // stores in twelve countries answers it in its own About page, and
+        // that is the fact that decides whether the entry should exist.
+        shop: { queries: [`${name} Denmark shop what they sell prices opening hours address`, `${name} Denmark butik brand where else stores countries chain or one shop`, `${name} Denmark reddit r/Denmark worth it locals shop there`, `${name} quora google reviews honest opinion overpriced`] },
+        shopPlace: { queries: [`${subject} Denmark shopping street stores what kind of shops`, `${subject} Denmark butikker gågade hvilke butikker åbningstider`, `${subject} Denmark reddit honest opinion chains or independent tourist trap`, `${subject} Denmark shopping best time busy Sunday closed`] },
         essential: { queries: [`${name} Denmark 2026 how it works price official`, `${name} Danmark priser regler gældende 2026 turist`, `${name} Denmark discontinued replaced changed 2026 what to use instead`, `${name} Denmark reddit r/Denmark tourist visitor does it work without CPR`] },
         booking: { queries: [`${name} Denmark craft workshop what to expect prices booking`, `${name} Denmark reviews how to book opening hours`, `${name} reddit r/Denmark experience worth the money`, `${name} quora google reviews honest opinion`] },
       }[sType];
@@ -4245,6 +4259,8 @@ Say which answer came from which source, so a fact from a vouched page and a fac
         night: "åbningstider entré natteliv anmeldelse",
         nightStreet: "gade barer natteliv udeliv bytur",
         nightTown: "natteliv barer udeliv studerende",
+        shop: "butik sortiment udsalg åbningstider søndagsåbent",
+        shopPlace: "butikker gågade butikscenter åbningstider",
         booking: "værksted booking priser åbningstider",
       }[sType] || "praktisk information åbningstider";
       const allQueries = [...cfg.queries, ...plannedQueries, ...(daName ? [`${daName} ${daWords}`] : [])];
@@ -7221,6 +7237,12 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
       } else if (sType === "nightStreet") {
         const nextId = Math.max(0, ...nightlifeStreets.map(x => x.id)) + 1;
         code = `// 1) Ctrl+F for \`const nightlifeStreets = [\` in src/data/nightlifeStreets.js and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, isStreet: true, town: ${J(t.town)}, location: ${J(t.location)}, emoji: ${J(t.emoji || "🍻")}, category: ${J(t.category || "Bar street")}, tier: ${J(t.tier)}, vibe: ${J(vibeOf(t)?.value || "")}, crowd: ${J(t.crowd)}, priceNote: ${J(t.priceNote)}, photo: "/nightlife-streets/${slug}.jpg",\n  desc: ${J(t.desc)},\n  mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#5D4037")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Who It's For", t.whoFor], ["Best Nights", t.bestNights], ["Walking It", t.walkIt], ["The Reality Check", t.realityCheck]])}\n${bbBullets("What to Be Aware Of", t.thingsToKnow)}\n  ] },\n\n// 2) Add a photo at public/nightlife-streets/${slug}.jpg (or remove the photo field)\n// 3) The bars ON this street are NOT listed here. They are matched from their own published rows by town + street name, so publishing one more bar needs no edit to this entry.`;
+      } else if (sType === "shop") {
+        const nextId = Math.max(0, ...shops.map(x => x.id)) + 1;
+        code = `// 1) Ctrl+F for \`const shops = [\` in src/data/shops.js and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, town: ${J(t.town)}, location: ${J(t.location)}, emoji: ${J(t.emoji || "\ud83d\udecd")}, shopKind: ${J(shopKindOf(t.shopKind)?.value || "")}, tier: ${J(t.tier)}, priceNote: ${J(t.priceNote)}, photo: "/shops/${slug}.jpg",\n  desc: ${J(t.desc)},\n  mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#7B5E57")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["What They Sell", t.whatTheySell], ["Being There", t.beingThere], ["Who It's For", t.whoFor], ["The Reality Check", t.realityCheck]])}\n${bbBullets("What to Be Aware Of", t.thingsToKnow)}\n  ] },\n\n// 2) Add a photo at public/shops/${slug}.jpg (or remove the photo field)\n// 3) The street or centre this shop stands in is NOT named here. It is matched from the address, so publishing the container needs no edit to this entry.\n// 4) VERIFY the only-here test before committing: could somebody buy the same thing in their own city?`;
+      } else if (sType === "shopPlace") {
+        const nextId = Math.max(0, ...shopPlaces.map(x => x.id)) + 1;
+        code = `// 1) Ctrl+F for \`const shopPlaces = [\` in src/data/shopPlaces.js and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, isStreet: true, town: ${J(t.town)}, location: ${J(t.location)}, emoji: ${J(t.emoji || "\ud83d\udecd")}, category: ${J(t.category || "Shopping street")}, tier: ${J(t.tier)}, priceNote: ${J(t.priceNote)}, photo: "/shop-places/${slug}.jpg",\n  desc: ${J(t.desc)},\n  mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#7B5E57")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Who It's For", t.whoFor], ["Walking It", t.walkIt], ["Best Times", t.bestTimes], ["The Reality Check", t.realityCheck]])}\n${bbBullets("What to Be Aware Of", t.thingsToKnow)}\n  ] },\n\n// 2) Add a photo at public/shop-places/${slug}.jpg (or remove the photo field)\n// 3) The shops ON it are NOT listed here. They are matched from their own published rows by town + address, so publishing one more shop needs no edit to this entry, and a centre with no only-here shop inside it never appears at all.`;
       } else if (sType === "nightTown") {
         const nextId = Math.max(0, ...nightlifeTowns.map(x => x.id)) + 1;
         code = `// 1) Ctrl+F for \`const nightlifeTowns = [\` in src/data/nightlifeTowns.js and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, emoji: ${J(t.emoji || "🌃")}, photo: "/nightlife-towns/${slug}.jpg",\n  desc: ${J(t.desc)},\n  color: ${J(t.color || "#5D4037")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Who It's For", t.whoFor], ["After Dark", t.afterDark], ["The Reality Check", t.realityCheck]])}\n${bbBullets("What to Be Aware Of", t.thingsToKnow)}\n  ] },\n\n// 2) Add a photo at public/nightlife-towns/${slug}.jpg (or remove the photo field)\n// 3) VERIFY this matches the town's actual nightlife character before committing.`;
@@ -10701,6 +10723,12 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
     night: "bars or nightlife venues in Denmark",
     nightStreet: "Danish streets known as bar streets or club strips, the ones a whole night gets built around",
     nightTown: "Danish towns with a real, distinct nightlife scene",
+    // Oliver, 22 Sep 2026, after I argued a mall is the one thing in Denmark
+    // that is not only here: "put shopping centers with -> 'recommended
+    // Denmark-Only Shops'". So the search is aimed at the shops, and the
+    // container is the address they share. See utils/shopping.js.
+    shop: "shops in Denmark that you cannot buy from at home: a Danish label's own store or outlet, a vintage or genbrug shop, a workshop that sells what it makes, a design shop carrying Danish makers. Never an international chain and never a Danish-owned chain that stands in every European high street",
+    shopPlace: "Danish shopping streets, quarters or centres that hold several shops worth going to",
     booking: "bookable craft workshops or hands-on experiences in Denmark",
     essential: "practical things a visitor to Denmark has to do or decide, such as ticket systems, payment, SIM cards, adapters and rules worth a fine. Not places",
   };
@@ -10710,7 +10738,7 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
     // publishDraft must refuse one: a festival published under a name that is
     // already waiting is the Bork case, four rows deep.
     town: towns, island: islands, festival: [...events, ...majorEvents, ...vikingEvents, ...undatedEvents], free: freeEntrance,
-    food: foodSpots, foodStreet: foodSpots, night: nightlifeSpots, nightStreet: nightlifeStreets, booking: craftItems, nightTown: nightlifeTowns, essential: essentials,
+    food: foodSpots, foodStreet: foodSpots, night: nightlifeSpots, nightStreet: nightlifeStreets, shop: shops, shopPlace: shopPlaces, booking: craftItems, nightTown: nightlifeTowns, essential: essentials,
   });
 
   const runDiscovery = async (typeOverride, extraFraming) => {
@@ -10737,9 +10765,19 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
       // search that fills it. Only for venues, and only when the street is
       // published, because the filter below folds a candidate's address
       // against the street's OWN row. See utils/discovery.js.
-      const streetRow = type === "night" && discoverStreet
-        ? nightlifeStreets.find(st => st?.name === discoverStreet) || null
+      // ── AND A SHOPPING STREET IS THE SAME QUESTION ──────────────
+      // Oliver, 22 Sep 2026: "put shopping centers with -> 'recommended
+      // Denmark-Only Shops' like with bar streets." A shop is matched to its
+      // street by address exactly as a bar is, so the scope, the framing and
+      // the filter are the same three lines with a different list behind them.
+      const streetRow = discoverStreet
+        ? (type === "night" ? nightlifeStreets.find(st => st?.name === discoverStreet)
+          : type === "shop" ? shopPlaces.find(st => st?.name === discoverStreet)
+          : null) || null
         : null;
+      // Which matcher answers "is this address inside it": the street page's
+      // own, either way, so a search and a page cannot disagree.
+      const onIt = type === "shop" ? inShopPlace : onThisStreet;
       const discoverAim = framingForTarget(discoverTarget, manageItems || [], { typeLabel, town: discoverTown })
         // The month, appended rather than replacing: where and when are separate
         // questions and a brief can carry both.
@@ -10898,7 +10936,7 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
       // street reads as a correct answer. The matcher is nightlife.js's own,
       // injected rather than imported over there, so a street page and this
       // search cannot disagree about what stands on a street.
-      const { kept, elsewhere: offStreet, unstated: noStreet } = splitOffStreet(inMonth, streetRow, onThisStreet);
+      const { kept, elsewhere: offStreet, unstated: noStreet } = splitOffStreet(inMonth, streetRow, onIt);
       setDiscoverOffStreet(describeOffStreet(offStreet, noStreet, streetRow));
       setDiscoverCovered(covered.length);
       setDiscoverDropped(dropped.length);
@@ -16146,7 +16184,10 @@ THE LIST ABOVE COUNTS AS CONTEXT FOR recommendedStay, and it is the only list th
   //
   // WHY A HASH: the site is a static SPA on Vercel with no rewrite rules, so a
   // real path like /town/ribe would 404 on a hard refresh. A hash cannot.
-  const ENTRY_SETTERS = { town: setTownDetail, island: setIslandDetail, event: setEventDetail, food: setFoodDetail, nightlife: setNightlifeDetail, free: setFreeDetail, craft: setCraftDetail };
+  // A shop belongs in here for the reason the comment below gives: this map is
+  // the ONE place every entry closes through, so a kind missing from it stays
+  // open behind the next one. Oliver, 22 Sep 2026.
+  const ENTRY_SETTERS = { town: setTownDetail, island: setIslandDetail, event: setEventDetail, food: setFoodDetail, nightlife: setNightlifeDetail, shop: setShopDetail, free: setFreeDetail, craft: setCraftDetail };
   // ── AND THE WINDOW GOES WITH THEM ────────────────────────────────
   //
   // Found by an adversarial review, 9 Sep 2026. entryWindowed was cleared in
@@ -16177,8 +16218,8 @@ THE LIST ABOVE COUNTS AS CONTEXT FOR recommendedStay, and it is the only list th
   const entryHash = (item, kind) => `#/${kind}/${slugify(item?.name || "")}`;
   const entryPath = (item, kind) => entryPathForKind(kind, item?.name) || entryHash(item, kind);
 
-  const openEntryNow = eventDetail || townDetail || nightlifeDetail || freeDetail || foodDetail || craftDetail || null;
-  const openEntryKind = eventDetail ? "event" : townDetail ? "town" : islandDetail ? "island" : nightlifeDetail ? "nightlife" : freeDetail ? "free" : foodDetail ? "food" : craftDetail ? "craft" : null;
+  const openEntryNow = eventDetail || townDetail || nightlifeDetail || shopDetail || freeDetail || foodDetail || craftDetail || null;
+  const openEntryKind = eventDetail ? "event" : townDetail ? "town" : islandDetail ? "island" : nightlifeDetail ? "nightlife" : shopDetail ? "shop" : freeDetail ? "free" : foodDetail ? "food" : craftDetail ? "craft" : null;
 
   // Push when one opens. Guarded on the address so re-renders cannot stack up
   // duplicate history entries, which would need several presses of back to
@@ -16264,10 +16305,12 @@ THE LIST ABOVE COUNTS AS CONTEXT FOR recommendedStay, and it is the only list th
   const deepLinkDone = useRef(false);
   useEffect(() => {
     if (typeof window === "undefined" || deepLinkDone.current) return;
-    const m = window.location.hash.match(/^#\/(town|island|event|food|nightlife|free|craft)\/([a-z0-9-]+)$/i);
+    const m = window.location.hash.match(/^#\/(town|island|event|food|nightlife|shop|free|craft)\/([a-z0-9-]+)$/i);
     if (!m) return;
     const [, kind, slug] = m;
-    const pools = { town: towns, island: islands, event: [...events, ...majorEvents, ...vikingEvents], food: foodSpots, nightlife: nightlifeSpots, free: freeEntrance, craft: craftItems };
+    // A shop link finds it in either array: a shopping street is a row a
+    // reader can be sent to exactly as a shop is.
+    const pools = { town: towns, island: islands, event: [...events, ...majorEvents, ...vikingEvents], food: foodSpots, nightlife: nightlifeSpots, shop: [...shops, ...shopPlaces], free: freeEntrance, craft: craftItems };
     // Lowercased on both sides: the address may arrive with different casing
     // from a copy-paste or a link shortener, and a shared link that silently
     // opens nothing is worse than one that errors.
@@ -16380,6 +16423,10 @@ THE LIST ABOVE COUNTS AS CONTEXT FOR recommendedStay, and it is the only list th
     food: setFoodDetail,
     nightlife: setNightlifeDetail,
     nightlifeStreet: setNightlifeDetail,
+    // A shop and the street it stands in open the same page, exactly as a bar
+    // and its street do on the line above. Oliver, 22 Sep 2026.
+    shop: setShopDetail,
+    shopPlace: setShopDetail,
     town: setTownDetail,
     island: setIslandDetail,
     event: setEventDetail,
@@ -17448,7 +17495,7 @@ If the conversation only covers a single day or a few stops with no explicit day
       {
         const promised = readPromises(
           overrideConvoText ? [] : aiMessages.slice(1),
-          previewPools({ towns, islands, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents }),
+          previewPools({ towns, islands, freeEntrance, foodSpots, nightlifeSpots, shops, craftItemsFallback, events, majorEvents }),
           { ownWords: saidByTravellerForGuide, tapped: turnedDown, pickedEvents },
         );
         const audit = (g) => brokenPromises(promised, g?.days);
@@ -19862,7 +19909,7 @@ If the conversation only covers a single day or a few stops with no explicit day
     // on off the list, and a line that could still promise it is the same
     // line-versus-list contradiction one option over.
     const matchedForWhy = matchedPlaces(forMatch, previewPools({
-      towns, islands, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents,
+      towns, islands, freeEntrance, foodSpots, nightlifeSpots, shops, craftItemsFallback, events, majorEvents,
     }), { days, wanted, themes, mode: modeForWhy, budget: budgetForWhy, saidByTraveller: saidByTravellerOnly, turnedDown });
     // _notAsked as well as _leaving. A row held back is a row not on the
     // screen, and naming one of those is the same failure as naming one they
@@ -20126,7 +20173,7 @@ If the conversation only covers a single day or a few stops with no explicit day
   // pages and a reader looking for one is often looking for the other. The
   // order here is also the swipe order, so a wrong position is felt as a wrong
   // gesture rather than seen as a wrong list.
-  const TAB_ORDER = ["home", "essentials", "tips", "gems", "attractions", "events", "food", "nightlife", "visits", "islands", "ai"];
+  const TAB_ORDER = ["home", "essentials", "tips", "gems", "attractions", "events", "food", "nightlife", "shopping", "visits", "islands", "ai"];
   // Single source of truth for nav labels — same order as TAB_ORDER, so swipe and nav can never drift apart again.
   // Redesign pass: emoji removed from nav — `ico` names map to the drawn icon
   // set in components/Icon.jsx, rendered next to the plain-text label.
@@ -20151,6 +20198,12 @@ If the conversation only covers a single day or a few stops with no explicit day
     { id: "events", label: uiT("nav.events", uiLang), ico: "calendar" },
     { id: "food", label: uiT("nav.food", uiLang), ico: "utensils" },
     { id: "nightlife", label: uiT("nav.nightlife", uiLang), ico: "beer" },
+    // Oliver, 22 Sep 2026: "put shopping centers with -> 'recommended
+    // Denmark-Only Shops' like with bar streets." Beside Nightlife because it
+    // is the same shape of page, town then street then the places on it, and
+    // because the two are what a visitor does with an afternoon and an evening
+    // in the same town. See utils/shopping.js.
+    { id: "shopping", label: uiT("nav.shopping", uiLang), ico: "tag" },
     { id: "visits", label: uiT("nav.visits", uiLang), ico: "town" },
     { id: "islands", label: uiT("nav.islands", uiLang), ico: "island" },
     { id: "ai", label: uiT("nav.ai", uiLang), ico: null },
@@ -21044,7 +21097,8 @@ ${languageBlock()}`;
       // The budget is per CONVERSATION, so what has already been said is what
       // decides whether this reply may keep one. Error bubbles are excluded for
       // the same reason baseMessages excludes them: Gemlyx never said those, so
-      // they cannot spend its budget. See trimFillerAgainst in utils/helpers.js.
+      // they cannot spend its budget. See trimFillerForChat in utils/helpers.js,
+      // which keeps none of them at all in a reply.
       const priorReplies = aiMessages.filter(m => m.role === "assistant" && !m.isError).map(m => m.text);
 
       // BUG FIX: this was capped at max_tokens: 900, which directly contradicts the
@@ -21206,7 +21260,7 @@ ${languageBlock()}`;
         // It also means the stored thread is clean, and the stored thread is
         // what goes back to the model as its own prior turns. The register was
         // teaching itself.
-        const shown = trimFillerAgainst(priorReplies, holdPartial ? fullText.slice(0, completeUpTo(fullText)) : fullText);
+        const shown = trimFillerForChat(priorReplies, holdPartial ? fullText.slice(0, completeUpTo(fullText)) : fullText);
         if (!shown) return;
         if (msgId === null) {
           msgId = `ai-${Math.random().toString(36).slice(2)}`;
@@ -21301,8 +21355,8 @@ ${languageBlock()}`;
       // read time since August; this chat, which is most of what anybody reads,
       // had nothing. The budget is the thread rather than the reply, so a
       // corrective "actually" survives once and the tic does not. See
-      // trimFillerAgainst in utils/helpers.js.
-      let replyText = trimFillerAgainst(priorReplies, data.content?.filter(b => b.type === "text").map(b => b.text).join("").trim());
+      // trimFillerForChat in utils/helpers.js.
+      let replyText = trimFillerForChat(priorReplies, data.content?.filter(b => b.type === "text").map(b => b.text).join("").trim());
 
       // ── A REPLY WITH TEXT IN IT CAN STILL BE CUT OFF ──────────────
       //
@@ -21368,7 +21422,7 @@ ${languageBlock()}`;
           // rather than transient.
           const retry = await runTurn(baseMessages);
           const retryData = retry.data;
-          replyText = trimFillerAgainst(priorReplies, retryData.content?.filter(b => b.type === "text").map(b => b.text).join("").trim());
+          replyText = trimFillerForChat(priorReplies, retryData.content?.filter(b => b.type === "text").map(b => b.text).join("").trim());
           if (!replyText) {
             console.warn("Gemlyx chat: retry also empty, giving up.", { retryData, stop_reason: retryData?.stop_reason, error: retryData?.error });
             clearStreamedBubble();
@@ -21896,7 +21950,7 @@ ${languageBlock()}`;
                       which is the rule the whole feature turns on. */}
                   {(() => {
                   const pools = withoutBeen(previewPools({
-                    towns, islands, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents,
+                    towns, islands, freeEntrance, foodSpots, nightlifeSpots, shops, craftItemsFallback, events, majorEvents,
                   }), beenList);
                   const theirWords = aiMessages.filter(x => x.role === "user" && !x.isError).map(x => x.text).join("\n");
                   // ── AND EACH PLACE IS INTRODUCED ONCE ─────────────
@@ -24463,7 +24517,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     })()}
 
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
-                      {[["town", "🏘 Town"], ["island", "⛴ Island"], ["festival", "🎪 Events"], ["free", "🎟 Attractions"], ["food", "🍽 Food"], ["foodStreet", "🍜 Food Street"], ["night", "🍺 Nightlife"], ["nightStreet", "🍻 Bar street"], ["nightTown", "🌃 Nightlife (Town)"], ["booking", "🔨 Workshop"], ["essential", "🧭 Essential"]].map(([k, label]) => (
+                      {[["town", "🏘 Town"], ["island", "⛴ Island"], ["festival", "🎪 Events"], ["free", "🎟 Attractions"], ["food", "🍽 Food"], ["foodStreet", "🍜 Food Street"], ["night", "🍺 Nightlife"], ["nightStreet", "🍻 Bar street"], ["nightTown", "🌃 Nightlife (Town)"], ["shop", "🛍 Shop"], ["shopPlace", "🏬 Shopping street"], ["booking", "🔨 Workshop"], ["essential", "🧭 Essential"]].map(([k, label]) => (
                         <button key={k} onClick={() => { setStudioType(k); setStudioResult(null); setStudioError(null); }}
                           style={{ background: studioType === k ? C.gold : "none", border: `1px solid ${studioType === k ? C.gold : C.border}`, borderRadius: 100, padding: "6px 12px", fontSize: 11, fontWeight: 700, color: studioType === k ? "#000" : C.light, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                           {label}
@@ -24472,7 +24526,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     </div>
                     <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
                       <input value={studioTown} onChange={e => setStudioTown(e.target.value)} onKeyDown={e => e.key === "Enter" && generateArea()}
-                        placeholder={{ town: "Town name, e.g. Ringkøbing", island: "Island name, e.g. Sejerø", festival: "Festival name, e.g. Tønder Festival", free: "Place name + city, e.g. Rundetaarn Copenhagen", booking: "Workshop/craft name + city, e.g. Bornholm Ceramics Studio", food: "Place name + city, e.g. Gasoline Grill Copenhagen", foodStreet: "Market or street name + city, e.g. Reffen Copenhagen", night: "Bar name + city, e.g. Mikkeller Bar Viktoriagade", nightStreet: "Street name + city, e.g. Gothersgade Copenhagen", nightTown: "Town name, e.g. Aarhus", essential: "What a visitor has to sort out, e.g. Rejsebillet app or Tax-free shopping" }[studioType] || "Name"}
+                        placeholder={{ town: "Town name, e.g. Ringkøbing", island: "Island name, e.g. Sejerø", festival: "Festival name, e.g. Tønder Festival", free: "Place name + city, e.g. Rundetaarn Copenhagen", booking: "Workshop/craft name + city, e.g. Bornholm Ceramics Studio", food: "Place name + city, e.g. Gasoline Grill Copenhagen", foodStreet: "Market or street name + city, e.g. Reffen Copenhagen", night: "Bar name + city, e.g. Mikkeller Bar Viktoriagade", nightStreet: "Street name + city, e.g. Gothersgade Copenhagen", nightTown: "Town name, e.g. Aarhus", shop: "Shop name + city, e.g. Prag Vintage Copenhagen", shopPlace: "Street or centre + city, e.g. Jægersborggade Copenhagen", essential: "What a visitor has to sort out, e.g. Rejsebillet app or Tax-free shopping" }[studioType] || "Name"}
                         style={{ flex: 1, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 14px", fontSize: 13, outline: "none", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif" }} />
                       <button onClick={() => generateArea()} disabled={studioLoading}
                         style={{ background: C.gold, border: "none", borderRadius: 10, padding: "10px 16px", fontSize: 12, fontWeight: 700, color: C.onGold, cursor: "pointer", fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>
@@ -24792,13 +24846,18 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                               festival, and absent entirely until a street is
                               published, so the panel never shows an empty
                               control. */}
-                          {studioType === "night" && nightlifeStreets.length > 0 && (
+                          {(() => {
+                            const streetList = studioType === "night" ? nightlifeStreets : studioType === "shop" ? shopPlaces : [];
+                            const countIn = (st) => (studioType === "shop"
+                              ? shopsInPlace(st, shops, shopPlaces)
+                              : barsOnStreet(st, nightlifeSpots, nightlifeStreets)).length;
+                            return streetList.length > 0 && (
                             <div style={{ marginTop: 12 }}>
-                              <div style={{ fontSize: 9.5, fontWeight: 700, color: C.muted, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 7 }}>Or one bar street</div>
+                              <div style={{ fontSize: 9.5, fontWeight: 700, color: C.muted, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 7 }}>{studioType === "shop" ? "Or one shopping street" : "Or one bar street"}</div>
                               <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                                {nightlifeStreets.map(st => {
+                                {streetList.map(st => {
                                   const on = discoverStreet === st.name;
-                                  const n = barsOnStreet(st, nightlifeSpots, nightlifeStreets).length;
+                                  const n = countIn(st);
                                   return (
                                     <button key={st.id || st.name} onClick={() => setDiscoverStreet(on ? "" : st.name)}
                                       title={`${st.name}${st.town ? `, ${st.town}` : ""}: ${n} published on it`}
@@ -24811,11 +24870,12 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                               </div>
                               <div style={{ fontSize: 10.5, color: C.muted, marginTop: 6, lineHeight: 1.5 }}>
                                 {discoverStreet
-                                  ? `Every query will hunt for the bars standing on ${discoverStreet}, in Danish too, and anything whose address is on another street is dropped rather than offered.`
-                                  : "A street entry never holds a list of its bars. Each bar is its own row, matched to the street by its address, so a street showing 0 needs the bars found rather than the street rewritten."}
+                                  ? `Every query will hunt for the ${studioType === "shop" ? "shops" : "bars"} standing on ${discoverStreet}, in Danish too, and anything whose address is on another street is dropped rather than offered.`
+                                  : `A street entry never holds a list of its ${studioType === "shop" ? "shops" : "bars"}. Each one is its own row, matched to the street by its address, so a street showing 0 needs the ${studioType === "shop" ? "shops" : "bars"} found rather than the street rewritten.`}
                               </div>
                             </div>
-                          )}
+                            );
+                          })()}
                           {/* ── AND WHEN ──────────────────────────────
                               Only for the dated types, because a bar street does
                               not happen in a month and offering the choice would
@@ -26030,7 +26090,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       const typedNorm = norm(typed);
                       const sourceArrays = {
                         town: towns, island: islands, festival: [...events, ...majorEvents], free: freeEntrance,
-                        food: foodSpots, foodStreet: foodSpots, night: nightlifeSpots, nightStreet: nightlifeStreets, booking: craftItems, nightTown: nightlifeTowns, essential: essentials,
+                        food: foodSpots, foodStreet: foodSpots, night: nightlifeSpots, nightStreet: nightlifeStreets, shop: shops, shopPlace: shopPlaces, booking: craftItems, nightTown: nightlifeTowns, essential: essentials,
                       };
                       const arr = sourceArrays[studioType] || [];
                       const cityWords = ["copenhagen", "aarhus", "aalborg", "odense", "esbjerg", "randers", "kolding", "horsens", "vejle", "roskilde"];
@@ -27814,6 +27874,13 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             // town's own published point first, the hand-checked table after.
             pointFor={(town) => placeCoords(lookupRealPlace(town)) || townPointFor(town)}
             userCoords={isInDenmark(userCoords) ? userCoords : null} />}
+          {/* ── SHOPPING ───────────────────────────────────────────
+              Oliver, 22 Sep 2026: "put shopping centers with -> 'recommended
+              Denmark-Only Shops' like with bar streets." Town, then the street
+              or centre, then the shops on it, matched by address rather than
+              stored on the container. See utils/shopping.js. */}
+          {tab === "shopping" && <ShoppingPage shops={shops} places={shopPlaces} title={uiT("nav.shopping", uiLang)}
+            onOpen={(row) => setShopDetail(row)} />}
           {tab === "attractions" && (() => {
             // ── ONE DEFINITION, SHARED WITH THE FOOD FILTER ──────
             // This was a hardcoded list of ten city names beside a lookalike
@@ -31369,6 +31436,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
       <DetailPage windowed={entryWindowed} lang={uiLang} paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={islandDetail} onClose={closeEntry} kind="island" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={islandDetail && isPlaceSaved("island", islandDetail.id)} onToggleSave={islandDetail ? () => toggleSavePlace("island", islandDetail, islandDetail.region) : null} hasBeen={!!islandDetail && isBeenHere("island", islandDetail.id)} onToggleBeen={islandDetail ? () => toggleBeenHere("island", islandDetail, islandDetail.region) : null} onOpenEvent={(e) => { setIslandDetail(null); setEventDetail(e); }} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
       <DetailPage windowed={entryWindowed} lang={uiLang} paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={townDetail} onClose={closeEntry} kind="town" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={townDetail && isPlaceSaved("town", townDetail.id)} onToggleSave={townDetail ? () => toggleSavePlace("town", townDetail, townDetail.region) : null} hasBeen={!!townDetail && isBeenHere("town", townDetail.id)} onToggleBeen={townDetail ? () => toggleBeenHere("town", townDetail, townDetail.region) : null} onOpenEvent={(e) => { setTownDetail(null); setEventDetail(e); }} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
       <DetailPage windowed={entryWindowed} lang={uiLang} paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={nightlifeDetail} onClose={closeEntry} kind="nightlife" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={nightlifeDetail && isPlaceSaved("nightlife", nightlifeDetail.id)} onToggleSave={nightlifeDetail ? () => toggleSavePlace("nightlife", nightlifeDetail, nightlifeDetail.location) : null} hasBeen={!!nightlifeDetail && isBeenHere("nightlife", nightlifeDetail.id)} onToggleBeen={nightlifeDetail ? () => toggleBeenHere("nightlife", nightlifeDetail, nightlifeDetail.location) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
+      <DetailPage windowed={entryWindowed} lang={uiLang} paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={shopDetail} onClose={closeEntry} kind="shop" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={shopDetail && isPlaceSaved("shop", shopDetail.id)} onToggleSave={shopDetail ? () => toggleSavePlace("shop", shopDetail, shopDetail.town || shopDetail.location) : null} hasBeen={!!shopDetail && isBeenHere("shop", shopDetail.id)} onToggleBeen={shopDetail ? () => toggleBeenHere("shop", shopDetail, shopDetail.town || shopDetail.location) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
       <DetailPage windowed={entryWindowed} lang={uiLang} paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={freeDetail} onClose={closeEntry} kind="free" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={freeDetail && isPlaceSaved("free", freeDetail.id)} onToggleSave={freeDetail ? () => toggleSavePlace("free", freeDetail, freeDetail.city) : null} hasBeen={!!freeDetail && isBeenHere("free", freeDetail.id)} onToggleBeen={freeDetail ? () => toggleBeenHere("free", freeDetail, freeDetail.city) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
       {/* ── The assistant that follows him (Oliver, 6 Aug: "some sort of
           assistant for the admin /#studio guy? That will always be with me?
@@ -31387,8 +31455,8 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           something to be about. General trip questions already have a home in
           Gemlyx Detour. */}
       {(() => {
-        const reading = eventDetail || townDetail || nightlifeDetail || freeDetail || foodDetail || craftDetail;
-        const readingKind = eventDetail ? "event" : townDetail ? "town" : islandDetail ? "island" : nightlifeDetail ? "nightlife" : freeDetail ? "free" : foodDetail ? "food" : craftDetail ? "craft" : null;
+        const reading = eventDetail || townDetail || nightlifeDetail || shopDetail || freeDetail || foodDetail || craftDetail;
+        const readingKind = eventDetail ? "event" : townDetail ? "town" : islandDetail ? "island" : nightlifeDetail ? "nightlife" : shopDetail ? "shop" : freeDetail ? "free" : foodDetail ? "food" : craftDetail ? "craft" : null;
         if (!reading) return null;
         // ── AND THE FOUNDER IS ALREADY SIGNED IN, ELSEWHERE ─────────
         //
@@ -31477,8 +31545,8 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
       })()}
 
       {studioSession && (() => {
-        const openDetail = eventDetail || townDetail || nightlifeDetail || freeDetail || foodDetail;
-        const openKind = eventDetail ? "event" : townDetail ? "town" : islandDetail ? "island" : nightlifeDetail ? "nightlife" : freeDetail ? "free" : foodDetail ? "food" : null;
+        const openDetail = eventDetail || townDetail || nightlifeDetail || shopDetail || freeDetail || foodDetail;
+        const openKind = eventDetail ? "event" : townDetail ? "town" : islandDetail ? "island" : nightlifeDetail ? "nightlife" : shopDetail ? "shop" : freeDetail ? "free" : foodDetail ? "food" : null;
         // ── ONLY OVER AN ENTRY, WHICH IS WHERE IT IS FOR ────────────
         //
         // Oliver, 14 Sep 2026, with a photograph of his own phone: "I got an
@@ -31581,6 +31649,8 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           foodSpots={foodSpots}
           nightlifeSpots={nightlifeSpots}
           nightlifeStreets={nightlifeStreets}
+          shops={shops}
+          shopPlaces={shopPlaces}
           events={events}
           majorEvents={majorEvents}
           craftItemsFallback={craftItemsFallback}

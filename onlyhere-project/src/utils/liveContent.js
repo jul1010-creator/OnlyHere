@@ -51,6 +51,12 @@ import { freeEntrance } from "../data/freeEntrance";
 import { nightlifeSpots } from "../data/nightlife";
 import { nightlifeTowns } from "../data/nightlifeTowns";
 import { nightlifeStreets } from "../data/nightlifeStreets";
+// Oliver, 22 Sep 2026: shops that are only here, and the streets and centres
+// that hold them. Two arrays, exactly as bars and bar streets are two, because
+// a shop is matched to its container by address at render time rather than
+// stored on it. See utils/shopping.js.
+import { shops } from "../data/shops";
+import { shopPlaces } from "../data/shopPlaces";
 import { foodSpots } from "../data/food";
 import { SUPABASE_URL, SUPABASE_KEY } from "../config";
 import { essentials } from "../data/essentials";
@@ -194,6 +200,8 @@ const doLoad = async () => {
       else if (row.type === "night") nightlifeSpots.push({ id, ...item });
       else if (row.type === "nightStreet") nightlifeStreets.push({ id, ...item });
       else if (row.type === "nightTown") nightlifeTowns.push({ id, ...item });
+      else if (row.type === "shop") shops.push({ id, ...item });
+      else if (row.type === "shopPlace") shopPlaces.push({ id, ...item });
       // ── THE ONE TYPE WITH NO MODULE ARRAY, AND WHAT IT COST ────
       // Every other type is pushed into a module-level singleton that any
       // module can import. Booking rows went only into this local cache and
@@ -326,6 +334,8 @@ const ARRAY_FOR = {
   night: nightlifeSpots,
   nightStreet: nightlifeStreets,
   nightTown: nightlifeTowns,
+  shop: shops,
+  shopPlace: shopPlaces,
   essential: essentials,
   // Registered here as well as in doLoad, so editing one in Studio and deleting
   // one both land without a full page reload, exactly like every other type.

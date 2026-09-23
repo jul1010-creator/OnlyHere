@@ -157,84 +157,32 @@ export const nightlifeSummaryFor = (town, { townPages = [], streets = [], cities
 // aware and Danish-letter aware, because "Gothersgade 8B, Copenhagen" and
 // "Gothersgade" are the same street written two ways and neither is wrong.
 
-// LONGEST NAME FIRST, and this is the whole subtlety. "Store Kongensgade" and
-// "Kongensgade" are two different streets in the same country, and a venue on
-// the first contains the name of the second. Testing the longer name first
-// means a bar is claimed by the most specific street that fits it, which is
-// the only answer that can be right for both.
-const byLengthDesc = (a, b) => String(b?.name || "").length - String(a?.name || "").length;
+// ── THE MATCHING MOVED OUT, 22 SEP 2026 ────────────────────────────
+//
+// Oliver: "put shopping centers with -> 'recommended Denmark-Only Shops' like
+// with bar streets." A shopping street holds shops exactly the way this street
+// holds bars, so the matching is now one engine in utils/placeContainer.js and
+// this file is the nightlife vocabulary on top of it: which towns a night out
+// happens in, what a bar is, and the two numbers the preview slices by.
+//
+// Copying it instead would have copied four bugs' worth of lessons and left
+// them behind the moment either copy was touched: the longest name wins, the
+// spelling variants, the field the address really lives in, and the town the
+// Studio staples onto a street's name.
+//
+// spellingVariants is re-exported because it was this file's export before the
+// move, and a caller should not have to know that a helper changed address.
+export { spellingVariants } from "./placeContainer";
+import { containerFor, itemsInContainer, splitByContainer, foldIntoContainers, inContainer } from "./placeContainer";
 
-// ── "Noerregade 40" AND "Nørregade" ARE THE SAME STREET ─────────────
-// fold() maps ø to o, so "Nørregade" becomes norregade, while the ASCII
-// transliteration people and scraped pages actually write, "Noerregade",
-// becomes noerregade. Neither contains the other and the bar falls off its own
-// street in silence, which is the exact shape of miss this project keeps
-// finding on a screenshot weeks later.
-//
-// Deliberately NOT a change to fold(). A lossier global fold would make every
-// comparison in the app slightly more willing to say yes, and the streets are
-// not worth that. This spells the ONE name a few ways and asks containsName
-// about each, which loosens nothing anybody else relies on.
-const SWAPS = [["ø", "oe"], ["æ", "ae"], ["å", "aa"]];
-export const spellingVariants = (name) => {
-  const base = String(name || "").trim();
-  if (!base) return [];
-  const out = new Set([base]);
-  for (const [danish, ascii] of SWAPS) {
-    for (const v of [...out]) {
-      if (v.toLowerCase().includes(danish)) out.add(v.replace(new RegExp(danish, "gi"), ascii));
-      if (v.toLowerCase().includes(ascii)) out.add(v.replace(new RegExp(ascii, "gi"), danish));
-    }
-  }
-  return [...out];
-};
-const nameIsIn = (haystack, name) => spellingVariants(name).some(v => containsName(haystack, v));
-
-// ── AND THE STREET IS NOT IN THE FIELD I FIRST LOOKED IN ────────────
-//
-// Caught reviewing my own work the same day. This read `location`, and the
-// night schema asks for `location` as "Neighbourhood, City": the example in the
-// prompt is literally "Indre By, Copenhagen". A bar filed that way carries no
-// street name at all, so Gothersgade would have listed nothing, for every bar
-// already published, and the whole feature would have looked broken while every
-// test passed.
-//
-// `mapHint` is where the street actually lives, on every type, and it always
-// has: "Train, Toldbodgade 6c, 8000 Aarhus C, Denmark". Reading both means this
-// works on the rows that exist today rather than only on ones drafted after the
-// schema changed, which is the difference between a feature and a plan.
-const whereIsIt = (spot) => [spot?.street, spot?.location, spot?.mapHint]
-  .map(v => String(v || "").trim()).filter(Boolean).join(", ");
-
-// ── AND THE STUDIO ASKS FOR THE NAME THAT BREAKS THIS ───────────────
-//
-// Found by Fable, 3 Sep 2026, auditing the bar-street path. The Studio's own
-// placeholder for a bar street reads "Street name + city, e.g. Gothersgade
-// Copenhagen", the schema pins the typed value as the row's name, and nothing
-// strips the town. So the row publishes as "Gothersgade Copenhagen" — and
-// nameIsIn then looks for that whole phrase inside a venue's address, which no
-// address contains. Probed: a bar at "Jomfru Ane Gade 15, Aalborg" matches the
-// street "Jomfru Ane Gade" and matches NONE of "Jomfru Ane Gade Aalborg",
-// "Jomfru Ane Gade, Aalborg" or "Jomfru Ane Gade (Aalborg)".
-//
-// The result is a street page that says "No individual venues on X are
-// published yet" while its bars sit published one table away — which is the
-// sentence Oliver read as a content gap and it was a naming convention.
-//
-// STRIPPED HERE RATHER THAN AT DRAFT TIME, because the rows are already named
-// this way and a render-time fix repairs all of them at once. The town is not
-// guessed: it is taken from the street's OWN town field, so nothing is removed
-// unless the row itself says that word is where the street is.
-const bareStreetName = (st, cities) => {
-  const name = String(st?.name || "").trim();
-  const town = String(st?.town || "").trim() || townOfLocation(st?.location, cities) || "";
-  if (!name || !town) return name;
-  // ", Aalborg" / " (Aalborg)" / " Aalborg", at the end and nowhere else: a
-  // street genuinely called "Aalborggade" keeps its name.
-  const tail = new RegExp(`[\\s,(]+${town.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\)?\\s*$`, "i");
-  const bare = name.replace(tail, "").trim();
-  return bare && bare.length >= 3 ? bare : name;
-};
+// The two town readers this file hands the engine, named once. `townOfStreet`
+// and `townOfLocation` are what the rest of the file already uses, so a street
+// and a bar are placed by the same rule they always were.
+const NIGHT_READERS = (cities) => ({
+  townOfItem: (spot) => townOfLocation(String(spot?.location || spot?.mapHint || ""), cities) || "",
+  townOfContainer: (st) => townOfStreet(st, cities),
+  sameTown: samePlaceName,
+});
 
 // ── AND THE SAME QUESTION, ASKED OF SOMETHING NOT YET PUBLISHED ─────
 //
@@ -250,30 +198,11 @@ const bareStreetName = (st, cities) => {
 // one street. Exported so the discovery filter asks it here rather than
 // growing a second matcher, which is how a street page and a search start
 // disagreeing about what is on a street.
-export const onThisStreet = (where, street, cities = NIGHTLIFE_CITIES) => {
-  const text = String(where || "").trim();
-  if (!text || !street?.name) return false;
-  if (nameIsIn(text, street.name)) return true;
-  const bare = bareStreetName(street, cities);
-  return bare !== street.name && nameIsIn(text, bare);
-};
+export const onThisStreet = (where, street, cities = NIGHTLIFE_CITIES) =>
+  inContainer(where, street, townOfStreet(street, cities));
 
-export const streetForSpot = (spot, streets, cities = NIGHTLIFE_CITIES) => {
-  const where = whereIsIt(spot);
-  if (!where) return null;
-  const town = townOfLocation(String(spot?.location || spot?.mapHint || ""), cities);
-  const list = (Array.isArray(streets) ? streets : []).filter(s => s?.name).slice().sort(byLengthDesc);
-  for (const st of list) {
-    // A street in another town with the same name is a different street.
-    // Nørregade exists in a dozen Danish towns.
-    const stTown = String(st.town || "").trim() || townOfLocation(st.location, cities);
-    if (stTown && town && !samePlaceName(stTown, town)) continue;
-    // The typed name first, then the same name without the town the row itself
-    // says it is in. Both, so a street named either way finds its venues.
-    if (onThisStreet(where, st, cities)) return st;
-  }
-  return null;
-};
+export const streetForSpot = (spot, streets, cities = NIGHTLIFE_CITIES) =>
+  containerFor(spot, streets, NIGHT_READERS(cities));
 
 // ── AND IT HAS TO BE ASKED AGAINST ALL THE STREETS ──────────────────
 // Fable's catch. This tested each bar against a ONE-street list, so longest-
@@ -283,10 +212,8 @@ export const streetForSpot = (spot, streets, cities = NIGHTLIFE_CITIES) => {
 // on Store Kongensgade appeared on both streets' pages. `allStreets` defaults
 // to the one street for a caller that genuinely has no others, and the page
 // passes the full list.
-export const barsOnStreet = (street, spots, allStreets = null, cities = NIGHTLIFE_CITIES) => {
-  const list = Array.isArray(allStreets) && allStreets.length ? allStreets : [street];
-  return (Array.isArray(spots) ? spots : []).filter(s => streetForSpot(s, list, cities) === street);
-};
+export const barsOnStreet = (street, spots, allStreets = null, cities = NIGHTLIFE_CITIES) =>
+  itemsInContainer(street, spots, allStreets, NIGHT_READERS(cities));
 
 // ── ON THE PREVIEW, A STREET AND THE BARS ON IT ─────────────────────
 //
@@ -302,33 +229,13 @@ export const barsOnStreet = (street, spots, allStreets = null, cities = NIGHTLIF
 // the section's own line says so when the screen shows fewer.
 export const PREVIEW_BARS_PER_STREET = 3;
 export const PREVIEW_LOOSE_BARS = 2;
-export const barsIntoStreets = (items, streets, cities = NIGHTLIFE_CITIES) => {
-  const list = Array.isArray(items) ? items : [];
-  const known = (Array.isArray(streets) ? streets : []).filter(s => s?.name);
-  const groups = new Map();
-  const loose = [];
-  for (const bar of list) {
-    const st = known.length ? streetForSpot(bar, known, cities) : null;
-    if (!st) { loose.push(bar); continue; }
-    if (!groups.has(st)) groups.set(st, []);
-    groups.get(st).push(bar);
-  }
-  const cards = [...groups.entries()].map(([st, bars]) => ({
-    ...st,
-    _src: "nightlifeStreet",
-    _barsHere: bars.slice(0, PREVIEW_BARS_PER_STREET),
-    _barsMore: Math.max(0, bars.length - PREVIEW_BARS_PER_STREET),
-    // Theirs if any bar on it was theirs, so the "Gemlyx suggested" mark
-    // does not land on a street they led the conversation to.
-    _byThem: bars.some(b => b?._byThem),
-  }));
-  // `rows` is every card, streets first; `shown` is how many of them the
-  // preview draws, so the section can slice one array and count the same one.
-  return {
-    rows: [...cards, ...loose],
-    shown: cards.length + Math.min(loose.length, PREVIEW_LOOSE_BARS),
-  };
-};
+export const barsIntoStreets = (items, streets, cities = NIGHTLIFE_CITIES) =>
+  foldIntoContainers(items, streets, {
+    ...NIGHT_READERS(cities),
+    perContainer: PREVIEW_BARS_PER_STREET,
+    looseCap: PREVIEW_LOOSE_BARS,
+    src: "nightlifeStreet",
+  });
 
 // The town page, as one answer rather than three lookups that can disagree.
 // `streets` carries each street with the venues on it, `loose` is everything in
@@ -336,28 +243,11 @@ export const barsIntoStreets = (items, streets, cities = NIGHTLIFE_CITIES) => {
 // returned: it has its own writing and its own page, and hiding it the moment
 // its bars are unpublished would make it flicker in and out of existence.
 export const nightlifeForTown = (town, spots, streets, cities = NIGHTLIFE_CITIES) => {
-  const inTown = (Array.isArray(spots) ? spots : []).filter(s => {
-    const t = townOfLocation(s?.location || s?.mapHint, cities);
-    return t && town && samePlaceName(t, town);
-  });
-  const townStreets = (Array.isArray(streets) ? streets : []).filter(st => {
-    const t = townOfStreet(st, cities);
-    return t && town && samePlaceName(t, town);
-  }).slice().sort(byLengthDesc);
-  const claimed = new Set();
-  const withBars = townStreets.map(st => {
-    const bars = inTown.filter(s => {
-      if (claimed.has(s)) return false;
-      // Asked against the FULL street list, not just this one, so a bar on
-      // Store Kongensgade is claimed by Store Kongensgade even while the
-      // shorter street is the one being filled.
-      const owner = streetForSpot(s, townStreets, cities);
-      return owner === st;
-    });
-    bars.forEach(b => claimed.add(b));
-    return { street: st, bars };
-  });
-  return { streets: withBars, loose: inTown.filter(s => !claimed.has(s)) };
+  const split = splitByContainer(town, spots, streets, NIGHT_READERS(cities));
+  // Named for what they are on a nightlife page. The engine speaks of
+  // containers and the page speaks of streets and bars, and this line is where
+  // the two vocabularies meet, once.
+  return { streets: split.containers.map(g => ({ street: g.container, bars: g.inside })), loose: split.loose };
 };
 
 // ── BAR, CLUB, OR NOT A NIGHT OUT AT ALL ────────────────────────────

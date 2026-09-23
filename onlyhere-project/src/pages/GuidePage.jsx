@@ -45,6 +45,7 @@ import { islands } from "../data/islands";
 import { freeEntrance } from "../data/freeEntrance";
 import { foodSpots } from "../data/food";
 import { nightlifeSpots } from "../data/nightlife";
+import { shops } from "../data/shops";
 import { craftItemsFallback } from "../data/craft";
 import { events, majorEvents } from "../data/events";
 import { lookupRealPlace, placeCoords, resolveStopCoords, resolveStopCoordsDetailed, townKeyFor, townFallbackFor, townPointFor, resolveLegMode, kmBetween, estimateDurationText, isSameTownWalk, legDistanceKm, isSameSpot, WALK_MAX_MINUTES, walkEstimateTooFar, stopTown } from "../utils/guideEnrichment";
@@ -697,7 +698,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
 
   const mapLibrary = useMemo(
     () => placedLibrary(previewPools({
-      towns, islands, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents,
+      towns, islands, freeEntrance, foodSpots, nightlifeSpots, shops, craftItemsFallback, events, majorEvents,
     })),
     [libraryTick],
   );

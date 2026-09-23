@@ -1785,6 +1785,9 @@ export const EDITABLE_FIELDS = new Set([
   "atmosphere", "whatToDo", "gettingThereReality", "characterAndFit",
   "howItsMade", "vibeLocation", "afterDark", "beforeDark", "bestTime",
   "bestNights", "walkIt",
+  // A shop's three, so "tighten what they sell" resolves to the paragraph it
+  // names rather than failing the gate and rewriting another one.
+  "whatTheySell", "beingThere", "bestTimes",
   // Reader-facing prose on a card rather than in a body: an essentials tip, a
   // bar's crowd line, and the visitor note the essential prompt marks REQUIRED
   // when a system is resident-gated. All three could be read and none could be

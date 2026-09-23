@@ -1,4 +1,5 @@
 import { barsIntoStreets } from "../utils/nightlife";
+import { shopsIntoPlaces } from "../utils/shopping";
 import { useEffect, useState } from "react";
 import { previewReportRow, travellerTurns, feedbackProblem } from "../utils/articleFeedback";
 import { SUPABASE_URL, SUPABASE_KEY } from "../config";
@@ -111,6 +112,10 @@ const CATEGORY_SECTIONS = [
   { src: "free", label: "Attractions" },
   { src: "food", label: "Food & Drink" },
   { src: "nightlife", label: "Nightlife" },
+  // Oliver, 22 Sep 2026. Last, because shopping is what somebody does with the
+  // gap between the things they came for, and a section's position on this
+  // screen is the order it is offered in.
+  { src: "shop", label: "Shopping" },
 ];
 // groupKeyOf lives in utils/previewMatch.js now, because the MATCHER has to
 // reason about categories too (see wantedCategories) and two copies of "craft
@@ -290,6 +295,11 @@ export const GuidePreviewScreen = ({
   // The published bar streets, so the bars can be shown on the street they
   // stand on. See barsIntoStreets.
   nightlifeStreets = [],
+  // The shops, and the streets and centres they stand in, handed in the same
+  // shape and for the same reason. Oliver, 22 Sep 2026: "put shopping centers
+  // with -> 'recommended Denmark-Only Shops' like with bar streets."
+  shops = [],
+  shopPlaces = [],
   events,
   majorEvents,
   craftItemsFallback,
@@ -480,7 +490,7 @@ export const GuidePreviewScreen = ({
   // pass opening on a region GEMLYX named. See matchedPlaces: his Aalborg brief
   // named no region at all, and Ribe arrived through the word "Jutland" in the
   // app's own reply.
-  const matched = matchedPlaces(convoText, previewPools({ towns, islands, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents }), { days: win?.days ?? null, wanted, themes, mode, budget, saidByTraveller, turnedDown });
+  const matched = matchedPlaces(convoText, previewPools({ towns, islands, freeEntrance, foodSpots, nightlifeSpots, shops, craftItemsFallback, events, majorEvents }), { days: win?.days ?? null, wanted, themes, mode, budget, saidByTraveller, turnedDown });
   // ── AND WHAT WAS LEFT OUT IS SAID, NOT SWALLOWED ──────────────────
   //
   // previewMatch.js has claimed since 26 Aug that "the guide says out loud
@@ -546,7 +556,9 @@ export const GuidePreviewScreen = ({
       const consider = mine.filter(p => p._consider);
       // A bar street with its bars under it, not a list of bars. Oliver,
       // 22 Sep 2026: "Too many bars". See barsIntoStreets.
-      const folded = cat.src === "nightlife" ? barsIntoStreets(matching, nightlifeStreets) : null;
+      const folded = cat.src === "nightlife" ? barsIntoStreets(matching, nightlifeStreets)
+        : cat.src === "shop" ? shopsIntoPlaces(matching, shopPlaces)
+        : null;
       const rows = folded ? folded.rows : matching;
       const cap = folded ? Math.min(MAX_PER_SECTION, folded.shown) : MAX_PER_SECTION;
       return {

@@ -68,6 +68,9 @@ export const BODY_FIELDS = [
   "special", "whoFor", "whoItsFor", "atmosphere",
   "beforeDark", "afterDark", "bestTime", "whenEnter",
   "bestNights", "walkIt", "howTo",
+  // Shops, 22 Sep 2026: three more paragraphs that sit beside bullets, which
+  // is the whole set of types the restatement check exists for.
+  "whatTheySell", "beingThere", "bestTimes",
 ];
 
 export const sentencesOf = (text) =>

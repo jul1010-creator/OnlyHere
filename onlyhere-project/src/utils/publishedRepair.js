@@ -57,6 +57,10 @@ export const CURRENT_HEADINGS = [
   // Food streets, 3 Sep 2026. A market is not a kitchen and its second
   // paragraph never was about one. See madeHeading in studioContent.js.
   "What's There",
+  // Shops, 22 Sep 2026. What is on the shelves is not "Being There", and when
+  // half the street is shut is not "Best Nights": a Danish shop closes on
+  // Sunday and early on Saturday, which is the fact a visitor plans around.
+  "What They Sell", "Best Times",
 ];
 
 // A town's first heading carries the town's name, so it can never be a fixed

@@ -104,6 +104,11 @@ export const CHARACTERISATION_FIELDS = [
   // says report is "the safe direction" for an unclassified field. That is true
   // of a value and it is exactly backwards for a paragraph.
   "characterAndFit", "whatToDo", "gettingThereReality",
+  // A shop's three, on the same reasoning as whatToDo directly above: they are
+  // paragraphs a reader reads, so CONTRADICTED still fires on a page that
+  // disagrees and silence stops being grounds for deleting a sentence. What is
+  // on the shelves this week is the most perishable prose in the app.
+  "whatTheySell", "beingThere", "bestTimes",
 ];
 
 export const REPORT_FIELDS = [

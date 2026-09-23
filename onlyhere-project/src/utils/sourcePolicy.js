@@ -135,10 +135,14 @@ export const cleanNote = (v) => clean(v).replace(/\s+/g, " ").slice(0, 160);
 // keyed rather than ordered, but three test anchors read the FIRST literal of a
 // block, so appending is the one position that cannot move somebody else's
 // anchor.
-export const CONTENT_TYPES = ["town", "festival", "free", "food", "foodStreet", "night", "nightStreet", "nightTown", "booking", "essential", "island"];
+export const CONTENT_TYPES = ["town", "festival", "free", "food", "foodStreet", "night", "nightStreet", "nightTown", "shop", "shopPlace", "booking", "essential", "island"];
 export const TYPE_LABEL = {
   "": "Everything", town: "Towns", festival: "Events", free: "Attractions", food: "Food",
-  foodStreet: "Food streets", night: "Nightlife", nightStreet: "Bar streets", nightTown: "Nightlife towns", booking: "Workshops", essential: "Essentials",
+  foodStreet: "Food streets", night: "Nightlife", nightStreet: "Bar streets", nightTown: "Nightlife towns",
+  // Oliver, 22 Sep 2026: shops that are only here, and the streets and centres
+  // that hold them. See utils/shopping.js.
+  shop: "Shops", shopPlace: "Shopping streets",
+  booking: "Workshops", essential: "Essentials",
   island: "Islands",
   // ── A LABEL FOR A TYPE THAT IS DELIBERATELY NOT DRAFTABLE ─────────
   // "undated" is a real row type in gemlyx_content and is deliberately NOT in
@@ -530,6 +534,15 @@ export const SRC_FOR_TYPE = {
   nightStreet: "nightlife",
   nightTown: "nightlife",
   booking: "craft",
+  // ── AND A SHOP IS ITS OWN SOURCE ────────────────────────────────
+  // Oliver, 22 Sep 2026. The temptation is to borrow "free" or "food" and it
+  // is the mistake nightTown and island each had to be fixed for: a shop filed
+  // as one of those is filed under that heading in global search, counted as
+  // one in the guide pools and measured the way one is measured. A shopping
+  // street opens the shop page that holds the shops on it, so it is shop all
+  // the way down, exactly as a bar street is nightlife all the way down.
+  shop: "shop",
+  shopPlace: "shop",
   essential: null,
   // Its own render source rather than borrowing "town". An island that rendered
   // as a town would be filed under Towns in global search, counted as a town in
@@ -537,7 +550,7 @@ export const SRC_FOR_TYPE = {
   // those is a wrong answer, and each would have been found separately.
   island: "island",
 };
-export const PLACE_SOURCES = ["town", "event", "food", "nightlife", "free", "craft", "island"];
+export const PLACE_SOURCES = ["town", "event", "food", "nightlife", "free", "craft", "island", "shop"];
 export const srcForType = (type) => (Object.prototype.hasOwnProperty.call(SRC_FOR_TYPE, type) ? SRC_FOR_TYPE[type] : null);
 
 // ── "VISITCOPENHAGEN IS A GOOD SOURCE BUT PROBABLY NOT FOR AARHUS" ──
@@ -845,6 +858,12 @@ export const QUERY_WORDS = {
   festival: "billetter datoer program tickets dates programme",
   free: "åbningstider gratis adgang opening hours free entry",
   food: "menukort priser åbningstider menu prices opening hours",
+  // A shop's questions are what is on the shelves, what it costs and when it
+  // is shut, in a country where Sunday closing is the rule outside the big
+  // cities. Every word has to be one a page about a SHOP would use: "butik"
+  // and "sortiment" are, "quality" and "style" are on every page there is.
+  shop: "butik sortiment udsalg åbningstider søndagsåbent shop stockists sale opening hours",
+  shopPlace: "butikker i gaden butikscenter gågade åbningstider shopping street centre stores opening hours",
   foodStreet: "boder madmarked åbningstider stalls market opening hours",
   night: "åbningstider entré opening hours entry",
   // A street's questions are which nights, which end, and closing time. A
@@ -1207,6 +1226,13 @@ export const DISCOVER_WORDS = {
   // already published. The type could not discover anything it was for.
   nightStreet: "bargade barer i samme gade udeliv gågade med barer bar street nightlife strip",
   nightTown: "natteliv udeliv nightlife towns",
+  // ── AND THE SEARCH THAT HAS TO FIND WHAT IS ONLY HERE ───────────
+  // Oliver, 22 Sep 2026: "put shopping centers with -> 'recommended
+  // Denmark-Only Shops'". A search for "shopping Denmark" returns the malls
+  // and the airport, so this one names what actually passes the test:
+  // genbrug, vintage, the label's own store, the workshop.
+  shop: "genbrug vintage butik dansk mærke brandstore outlet kunsthåndværk danish brand store second hand shop",
+  shopPlace: "shoppinggade butikker gågade butikscenter kvarter med butikker shopping street quarter",
   booking: "værksteder kurser oplevelser workshops courses experiences",
   essential: "praktisk information turist gældende priser practical visitor information",
   island: "øer småøerne danske øer øhop besøg en ø danish islands island hopping",

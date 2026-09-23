@@ -92,6 +92,10 @@ export const UI_STRINGS = {
   "nav.events":      { en: "Events",          da: "Begivenheder",   de: "Veranstaltungen" },
   "nav.food":        { en: "Food",            da: "Mad",            de: "Essen" },
   "nav.nightlife":   { en: "Nightlife",       da: "Natteliv",       de: "Nachtleben" },
+  // Oliver, 22 Sep 2026. Danes do say "shopping", but a nav label in English
+  // in the Danish column is the thing this file exists to prevent, and
+  // "Butikker" is what the page is: the shops, not the activity.
+  "nav.shopping":    { en: "Shopping",        da: "Butikker",       de: "Einkaufen" },
   "nav.visits":      { en: "Towns",           da: "Byer",           de: "Städte" },
   // Øer, not Øerne. The definite form would name a specific set of islands and
   // this page is the general one.

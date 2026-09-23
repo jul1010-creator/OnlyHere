@@ -59,6 +59,10 @@ const HEADINGS = {
   "Before Dark":          { da: "Om dagen",               de: "Bei Tag" },
   "After Dark":           { da: "Om aftenen",             de: "Bei Nacht" },
   "Best Nights":          { da: "De bedste aftener",      de: "Die besten Abende" },
+  // Shops, 22 Sep 2026. "Best Times" is not "Best Time to Go" above: that one
+  // is a season, this one is which days of the week the doors are open.
+  "What They Sell":       { da: "Hvad de sælger",         de: "Was sie verkaufen" },
+  "Best Times":           { da: "Hvornår du skal komme",  de: "Wann du kommen solltest" },
   "Best Time to Go":      { da: "Bedste tidspunkt",       de: "Beste Reisezeit" },
   "How It's Made":        { da: "Sådan bliver det lavet", de: "Wie es entsteht" },
   "Walking It":           { da: "Til fods",               de: "Zu Fuß" },

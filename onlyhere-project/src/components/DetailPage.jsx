@@ -458,7 +458,9 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
       <PhotoCredit photo={hasShot ? item.photo : ""} credit={item.__photoCredit} style={{ padding: "6px 20px 0", maxWidth: 620, margin: "0 auto" }} />
       <div style={{ padding: "14px 20px 40px", maxWidth: 620, margin: "0 auto" }}>
         <div style={{ fontSize: 10, fontWeight: 700, color: ink, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>
-          {kind === "event" ? `${item.town}` : kind === "nightlife" ? item.location : kind === "free" ? item.city : kind === "food" ? item.location : item.region}
+          {/* A shop and a shopping street both say where they are, which is
+              what `location` holds on them. Oliver, 22 Sep 2026. */}
+          {kind === "event" ? `${item.town}` : kind === "nightlife" ? item.location : kind === "free" ? item.city : kind === "food" ? item.location : kind === "shop" ? (item.location || item.town) : item.region}
         </div>
         <div style={{ fontSize: 30, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.1, marginBottom: 8 }}>{item.name}</div>
 
@@ -552,7 +554,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
           </div>
         )}
 
-        {(kind === "event" || kind === "town" || kind === "island") && item.tier && (
+        {(kind === "event" || kind === "town" || kind === "island" || kind === "shop") && item.tier && (
           <div style={{ marginBottom: 12 }}>
             {(() => {
               const t = item.tier.toLowerCase();

@@ -974,6 +974,30 @@ export const trimFillerAgainst = (priorTexts, text, opts = {}) => {
   return run[run.length - 1];
 };
 
+// ── AND IN THE CHAT, NONE SURVIVES ──────────────────────────────────
+//
+// Oliver has asked about this word five times now: 8 Aug ("it's such a nerd
+// word to be using so much"), 3 Sep ("tell the AI to stop using the term
+// 'actually' so much.. fk me.."), 5 Sep ("Is it really impossible to get the
+// AI to stop saying 'actually' so much?"), 10 Sep, and 21 Aug of copy I had
+// just written ("what is your obsession with 'actually'").
+//
+// Measured tonight, 22 Sep 2026, on the live site, first reply of a fresh
+// conversation: "driving lets you actually load up on stuff without worrying
+// about luggage space". Deleting the word changes nothing about that sentence,
+// which is the test this file states for it.
+//
+// WHY IT SURVIVED. The budget is one per run, because FILLER_REPEAT says twice
+// in one entry is the signal and once can be doing real work. That is the
+// right rule for a PUBLISHED ENTRY, which a reader meets alone. A chat is a
+// run of twenty replies that one person reads end to end, so "one allowed"
+// means one in every conversation, and the first reply spends it.
+//
+// So the chat keeps none. The entries keep their count-based rule, which is
+// what the audit is built on, and this is the one caller that asks for zero.
+export const trimFillerForChat = (priorTexts, text) =>
+  trimFillerAgainst(priorTexts, text, { keep: 0 });
+
 
 export const scanForAITells = (text, extraPhrases = []) => {
   if (!text) return [];
