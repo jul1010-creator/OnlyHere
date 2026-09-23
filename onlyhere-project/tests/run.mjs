@@ -73773,7 +73773,16 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   // "Say it as yourself" and "never state it as checked" read as a
   // contradiction until the block says what the second one sounds like.
   ok("an unbacked line is still said plainly", /A LINE NO PAGE BACKS IS STILL SAID PLAINLY/.test(BLOCK));
-  ok("in the voice of somebody who was there", /last I was there/.test(BLOCK));
+  // ── AND NOT AS A MEMORY ──────────────────────────────────────────
+  //
+  // Measured 23 Sep 2026 by running this block through a writer twice: the
+  // old wording, which offered "last I was there it was about 40 kroner" as
+  // the voice to copy, produced "last time I did that crossing the coach came
+  // in well under the walk up train fare". No such crossing, no such fare.
+  ok("and never as an occasion that never happened", /NEVER AS A MEMORY OR AN OCCASION/.test(BLOCK));
+  ok("with the inventions named", /"Last time I was there"/.test(BLOCK) && /"I paid"/.test(BLOCK));
+  ok("and no figure the line does not carry", /never a number the line does not contain/.test(BLOCK));
+  ok("the block no longer offers a remembered price as the voice to copy", !/last I was there it was about 40 kroner/.test(BLOCK));
   ok("and never in the voice used for something looked up", /no figure stated the way a price off a page is stated/.test(BLOCK));
   ok("with money the one place it says to check", /worth checking when they get there/.test(BLOCK));
   ok("it carries his sentence word for word", BLOCK.includes(DSB.said));

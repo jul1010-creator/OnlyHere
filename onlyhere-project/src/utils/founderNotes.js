@@ -368,7 +368,22 @@ export const notesBlock = (notes = [], { daysAhead = null } = {}) => {
     // does not cite a page either: they say it the way they know it, and the
     // hedge is the tell. So the resolution is written out rather than left to
     // be worked out, with both halves shown.
-    + `A LINE NO PAGE BACKS IS STILL SAID PLAINLY, in the voice of somebody who has been there rather than somebody quoting: "last I was there it was about 40 kroner", "they were doing 20 percent for students, worth asking at the bar". That is what a local sounds like about a thing they know and cannot prove, and it is not the same as a hedge that takes the sentence back.\n`
+    // ── AND THE EXAMPLES USED TO INVITE THE THING THEY FORBID ───────
+    //
+    // Measured 23 Sep 2026, running this block through a writer twice. The
+    // rule here said "in the voice of somebody who has been there" and gave
+    // "last I was there it was about 40 kroner" as the model to copy, and the
+    // guide came back with "last time I did that crossing the coach came in
+    // well under the walk up train fare". Nobody made that crossing and no
+    // such fare was ever recorded. The voice instruction had turned a thing
+    // he knows into a first-person anecdote with a number attached, which is
+    // an invented fact wearing a local's clothes: worse than the cautious
+    // phrasing it was written to replace.
+    //
+    // So the rule now separates the two halves that were confused: say the
+    // thing plainly, and never tell a story about how you came to know it.
+    + `A LINE NO PAGE BACKS IS STILL SAID PLAINLY, as a thing you know about this country: "the coach is the cheaper way to do that crossing when you are booking this late". Plainly means without the hedging you would use for something you were unsure of.\n`
+    + `AND NEVER AS A MEMORY OR AN OCCASION. "Last time I was there", "when I did that crossing", "I paid", "it was about 40 kroner last time" are inventions: there was no such visit and no such figure, and a line above gives you none. Say the thing, never a story about how you learned it, and never a number the line does not contain.\n`
     + `WHAT YOU MAY NOT DO with one is give it the voice you use for something you looked up: no opening hours phrasing, no "they offer", no figure stated the way a price off a page is stated. If the traveller is about to spend money on it, say it is worth checking when they get there.\n`
     // ── AND THE ONE PHRASE THAT IS OUT ──────────────────────────────
     //
