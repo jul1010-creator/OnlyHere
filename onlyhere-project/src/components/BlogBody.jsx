@@ -26,9 +26,12 @@
 // Gemlyx Find, and stopped. Roughly four fifths of what the pipeline researched,
 // drafted, fact-checked and published for that type reached nobody.
 import React from "react";
+import { withLiveReels } from "../utils/reelGate";
 
 export default function BlogBody({ blocks, C, name = "", InstagramEmbed = null, style = null }) {
-  const list = Array.isArray(blocks) ? blocks : [];
+  // A REEL IS OFF UNTIL HE ACTIVATES IT, and it comes out here rather than
+  // being drawn as nothing further down. See utils/reelGate.js.
+  const list = withLiveReels(blocks);
   if (!list.length) return null;
   return (
     <div style={style || { marginBottom: 24 }}>

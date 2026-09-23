@@ -272,6 +272,7 @@ writeFileSync(entry, `
   export { SECTIONS as DIR_SECTIONS, ROW_KINDS, kindOf as dirKindOf, directoryLinks, pathWord, ferryDoorIn, DIRECTORY_PROMPT, rowsFromDirectory, directoryProblems, staysIn, eatsIn, islandSaysBlock, ISLAND_SAYS } from ${JSON.stringify(join(root, "src/utils/islandDirectory.js"))};
   export { GEM_TYPE, GEM_KINDS, GEM_SECTION, WHERE_LABEL, RECHECK_DAYS, STALE_DAYS, isCouponSite, isOwnSite, shapeGem, gemProblems, gemLive, gemsView, checkedLabel, checkedAgo, isDataSite, gemWhere, gemCategory, isForStudents, gemMatches, gemFilterOptions, GEM_CATEGORIES, GEM_CATEGORY_LABEL, gemSearches, gemSearchesFor, ownPagesIn, pageAsResult, MAX_OWN_PAGES, GEMS_PROMPT, settleGems, gemRunNotes, gemsForGuide, gemHeading, SAID_CHECKS, saidLine, saidWords } from ${JSON.stringify(join(root, "src/utils/cheapGems.js"))};
   export { NOTE_TYPE, NOTE_KINDS, NOTE_KIND_LABEL, NOTE_KIND_MEANING, NOTE_CHECKS, NOTE_LIFE, NOTE_RECHECK, shapeNote, noteProblems, noteLive, noteAgo, noteSubjects, notesFor, notesForGuide, notesBlock, NOTE_LINE, MAX_NOTES, noteSearches, NOTE_PROMPT, settleNote, noteRunNotes, namesPublished } from ${JSON.stringify(join(root, "src/utils/founderNotes.js"))};
+  export { reelLive, withLiveReels, reelCount } from ${JSON.stringify(join(root, "src/utils/reelGate.js"))};
   export { sentencesIn, readerBody, noticeAsk, noticeText, TRANSLATE_NOTICE, translatedNotice, DEAD_ENDS } from ${JSON.stringify(join(root, "src/utils/noticeVoice.js"))};
   export { guideClaims, guideClaimNote } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { resolveStopCoords } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
@@ -73847,6 +73848,12 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     is("and reaches no car trip", M.notesForGuide([DSB], { ...PLAN, mode: "car" }).length, 0);
     is("a note about one town reaches a route through it",
       M.notesForGuide([howAgainst], { ...PLAN, mode: "transit" }).length, 1);
+    // The planner picks places the conversation never named, and a note about
+    // one of those belongs in the guide that stands on it.
+    is("a note about a place reaches the guide that stops there, off the plan alone",
+      M.notesForGuide([howAgainst], { travellerText: "three nights", towns: ["Aalborg"], stops: ["Jomfru Ane Gade"], mode: "transit", today: DAY }).length, 1);
+    is("and not the guide that stops somewhere else",
+      M.notesForGuide([howAgainst], { travellerText: "three nights", towns: ["Ribe"], stops: ["Ribe Domkirke"], mode: "car", today: DAY }).length, 0);
     is("and stays out of a route that misses it",
       M.notesForGuide([howAgainst], { ...PLAN, towns: ["Ribe"], mode: "transit" }).length, 0);
     is("nothing matching is nothing handed over", M.notesForGuide([], { ...PLAN, mode: "transit" }), []);
@@ -73876,6 +73883,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
 
     const appG = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
     ok("the guide picks its notes off the plan it just made", /notesForGuide\(founderNotes, \{[\s\S]{0,200}towns: plannerTowns/.test(appG));
+    ok("stops and all", /stops: plannerStopNames/.test(appG));
     ok("with the way they are getting around, read the way the plan gate reads it",
       /mode: tickedTravelMode\(saidByTravellerForGuide\) \|\| travelModeKey\(saidByTravellerForGuide\)/.test(appG)
       && /const gateMode = tickedTravelMode\(saidByTravellerForGuide\) \|\| travelModeKey\(saidByTravellerForGuide\)/.test(appG));
@@ -73927,6 +73935,64 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     /Number\(a\.live\) - Number\(b\.live\)/.test(panelN));
   const noteSrc = readFileSync(join(root, "src/utils/founderNotes.js"), "utf8");
   ok("no dash of any kind reaches a traveller through this file", !/[\u2013\u2014]/.test(noteSrc));
+}
+
+// ── A REEL IS OFF UNTIL HE ACTIVATES IT ─────────────────────────────
+//
+// Oliver, 23 Sep 2026: "I'm getting nervous with the instagram reels.. I'm not
+// sure it's legally permitted to just use bars' instagram. But I have so many
+// setup.. remove every individual will take forever.. and some of them have
+// actually allowed me to use it.." Then his own answer: "make an 'activate'
+// next to the reel paste. And keep it as inactive as default. Then they all
+// get removed until I activate them."
+{
+  const URL = "https://www.instagram.com/reel/ABC123/";
+  const off = { type: "instagram", url: URL };
+  const on = { type: "instagram", url: URL, active: true };
+
+  // THE DEFAULT IS THE WHOLE FEATURE. Every reel already in the table has no
+  // flag on it, so every one of them reads as off the day this ships.
+  ok("a reel published before today is off", !M.reelLive(off));
+  ok("and one he has ticked is on", M.reelLive(on));
+  ok("a flag that is not the boolean true is off", !M.reelLive({ ...off, active: "true" }));
+  ok("so is one that is merely not false", !M.reelLive({ ...off, active: 1 }));
+  ok("a reel with no address is off however it is flagged", !M.reelLive({ type: "instagram", active: true }));
+  ok("and nothing at all is off", !M.reelLive(null) && !M.reelLive(undefined));
+  ok("an image is not a reel", !M.reelLive({ type: "image", src: "/x.jpg", active: true }));
+
+  // It comes OUT of the body, rather than being drawn as nothing.
+  const body = [{ type: "text", content: "a" }, off, on, { type: "image", src: "/x.jpg" }];
+  is("an inactive one is taken out of the body", M.withLiveReels(body).length, 3);
+  is("and the active one is kept", M.withLiveReels(body).filter(b => b.type === "instagram").length, 1);
+  is("everything that is not a reel is untouched", M.withLiveReels(body).filter(b => b.type !== "instagram").length, 2);
+  is("a body with no reels comes back as it went in", M.withLiveReels([{ type: "text" }]).length, 1);
+  is("and nothing comes back as nothing", M.withLiveReels(null), []);
+  is("he is told how many are showing", M.reelCount(body), { held: 2, live: 1 });
+  is("and a row with none says nothing", M.reelCount([{ type: "text" }]), { held: 0, live: 0 });
+
+  // ── AND NOTHING DRAWS ONE WITHOUT ASKING ───────────────────────────
+  const blogSrc = readFileSync(join(root, "src/components/BlogBody.jsx"), "utf8");
+  const detailSrc = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
+  ok("the nightlife-town body reads the gate", /const list = withLiveReels\(blocks\);/.test(blogSrc));
+  // BEFORE layoutBody, not after: layoutBody alternates figure sides, so a
+  // block left in and drawn as nothing still takes a side.
+  ok("and the entry page strips them before it lays the page out",
+    /layoutBody\(withLiveReels\(item\.blogBody\)\)/.test(detailSrc));
+  const everyRenderer = [blogSrc, detailSrc].join("\n");
+  is("and those are the only two places a reel is drawn",
+    (everyRenderer.match(/type === "instagram"/g) || []).length, 2);
+
+  const appR = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+  ok("the Studio has the tick beside the paste", /checked=\{studioReelActive\}/.test(appR));
+  ok("a fresh draft opens with it off", /useState\(false\);/.test(appR.split("const [studioReelActive, setStudioReelActive] = ")[1]?.slice(0, 30) || ""));
+  ok("publishing writes what the tick says, and only the boolean",
+    /\{ type: "instagram", url: studioInstagramUrl\.trim\(\), active: studioReelActive === true \}/.test(appR));
+  ok("a reel pasted in the Media panel arrives off", /\{ type: "instagram", url, active: false \}/.test(appR));
+  ok("opening a row reads the flag through the same gate as the page", /setStudioReelActive\(reelLive\(reelBlock\)\)/.test(appR));
+  ok("a published one can be turned on and off without redrafting",
+    /setReelActive\(row, b\._idx, !reelLive\(b\)\)/.test(appR) && /i === blockIdx && b\?\.type === "instagram" \? \{ \.\.\.b, active: on === true \}/.test(appR));
+  ok("and turning one off never touches its address", !/active: on === true, url:/.test(appR));
+  ok("he can see how many are showing", /\{reels\.live\} of \{reels\.held\}/.test(appR));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

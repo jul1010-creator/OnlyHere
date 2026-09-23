@@ -4,6 +4,7 @@ import { getEventDate, travelLabel, isUpcoming, isCurrentlyLive, arrivalRow, ext
 import { byEventDate } from "../utils/eventDates";
 import { relationLine, kindLabel, areasInside } from "../utils/placeKind";
 import { pricedLine } from "../utils/provenance";
+import { withLiveReels } from "../utils/reelGate";
 import { ticketLabelLine, ticketProvenance } from "../utils/tickets";
 // ── "ATTRACTIONS ALL SAY FREE" ────────────────────────────────────
 // Oliver, 27 Aug 2026. The badge below appended a literal "· FREE" to every
@@ -1242,7 +1243,11 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
         `}</style>
         {item.blogBody && item.blogBody.length > 0 && (
           <div className="gx-body" style={{ marginBottom: 24 }}>
-            {layoutBody(item.blogBody).map((block, i) => (
+            {/* withLiveReels BEFORE layoutBody, not after: layoutBody counts
+                figures and alternates their sides, so a reel left in the list
+                and drawn as nothing would still take a side and leave a hole
+                in the text. See utils/reelGate.js. */}
+            {layoutBody(withLiveReels(item.blogBody)).map((block, i) => (
               block.type === "bullets" ? (
                 <ul key={i} style={{ margin: "0 0 16px", paddingLeft: 20, color: C.light, fontSize: 14, lineHeight: 1.75 }}>
                   {block.items.map((it, j) => <li key={j} style={{ marginBottom: 4 }}>{it}</li>)}

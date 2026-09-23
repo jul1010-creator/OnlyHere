@@ -314,6 +314,7 @@ import { CheapGemsPanel } from "./components/CheapGemsPanel";
 import { FounderNotesPanel } from "./components/FounderNotesPanel";
 import { GEM_TYPE } from "./utils/cheapGems";
 import { NOTE_TYPE, notesFor, notesForGuide, notesBlock } from "./utils/founderNotes";
+import { reelLive, reelCount } from "./utils/reelGate";
 import { founderNotes } from "./data/founderNotes";
 import { linkPatch } from "./utils/affiliateAudit";
 import { EntryLink } from "./components/EntryLink";
@@ -2671,7 +2672,11 @@ function GemlyxApp() {
     // carries rather than an empty box that would clear it on save.
     setStudioOfferText(row.payload?.__offer?.text || "");
     setStudioOfferUntil(row.payload?.__offer?.until || "");
-    setStudioInstagramUrl(row.payload?.blogBody?.find(b => b.type === "instagram")?.url || "");
+    const reelBlock = row.payload?.blogBody?.find(b => b.type === "instagram") || null;
+    setStudioInstagramUrl(reelBlock?.url || "");
+    // Read through the same gate the page reads, so what the tick says here is
+    // what a visitor gets, and a legacy block with no flag opens unticked.
+    setStudioReelActive(reelLive(reelBlock));
     setManageOpen(false);
   };
 
@@ -3071,7 +3076,9 @@ function GemlyxApp() {
     setMediaBusy(true); setMediaError(null);
     try {
       const p = row.payload || {};
-      await patchContentPayload(row, { ...p, blogBody: [...(Array.isArray(p.blogBody) ? p.blogBody : []), { type: "instagram", url }] });
+      // OFF, like every other way a reel gets onto a row. The list underneath
+      // has the tick that turns it on.
+      await patchContentPayload(row, { ...p, blogBody: [...(Array.isArray(p.blogBody) ? p.blogBody : []), { type: "instagram", url, active: false }] });
       setMediaReelInput("");
     } catch (e) { setMediaError(String(e?.message || e)); }
     setMediaBusy(false);
@@ -3085,6 +3092,24 @@ function GemlyxApp() {
     } catch (e) { setMediaError(String(e?.message || e)); }
     setMediaBusy(false);
   };
+  // ── AND THE TICK ITSELF, ON A ROW ALREADY PUBLISHED ─────────────
+  //
+  // The permalink is never touched. Turning one off leaves it on the row, so
+  // putting it back is a tick rather than finding the post on Instagram again,
+  // which is the half of his ask that made this better than deleting them.
+  const setReelActive = async (row, blockIdx, on) => {
+    if (mediaBusy) return;
+    setMediaBusy(true); setMediaError(null);
+    try {
+      const p = row.payload || {};
+      const blocks = (Array.isArray(p.blogBody) ? p.blogBody : []).map((b, i) => (
+        i === blockIdx && b?.type === "instagram" ? { ...b, active: on === true } : b
+      ));
+      await patchContentPayload(row, { ...p, blogBody: blocks });
+    } catch (e) { setMediaError(String(e?.message || e)); }
+    setMediaBusy(false);
+  };
+
   const setHeroFromBlock = async (row, src) => {
     if (mediaBusy) return;
     setMediaBusy(true); setMediaError(null);
@@ -3746,6 +3771,13 @@ Say which answer came from which source, so a fact from a vouched page and a fac
   const [studioOfferText, setStudioOfferText] = useState("");
   const [studioOfferUntil, setStudioOfferUntil] = useState("");
   const [studioInstagramUrl, setStudioInstagramUrl] = useState("");
+  // ── AND WHETHER THAT REEL MAY BE SHOWN ──────────────────────────
+  //
+  // Oliver, 23 Sep 2026: "make an 'activate' next to the reel paste. And keep
+  // it as inactive as default. Then they all get removed until I activate
+  // them." False on every fresh draft and on every row that has no flag yet,
+  // which is all of them. See utils/reelGate.js.
+  const [studioReelActive, setStudioReelActive] = useState(false);
   const [studioFrozenGeo, setStudioFrozenGeo] = useState(null); // { lat, lon, station, stopKind } — real, computed once, never touched by OpenAI
   // { lat, lon, precise, via, region, kommune } — the maps answer, found BEFORE
   // the research so the searches and the founder sources know which corner of
@@ -14173,7 +14205,7 @@ ${researchRules("festival", ev)}`
           return;
         }
         if (!Array.isArray(shaped.blogBody)) shaped.blogBody = [];
-        shaped.blogBody.push({ type: "instagram", url: studioInstagramUrl.trim() });
+        shaped.blogBody.push({ type: "instagram", url: studioInstagramUrl.trim(), active: studioReelActive === true });
       }
       // NO INVENTED PHOTO PATHS (Oliver's call, Aug 5 2026: "stop inventing").
       //
@@ -17389,6 +17421,10 @@ THE LIST ABOVE COUNTS AS CONTEXT FOR recommendedStay, and it is the only list th
         notesForGuide(founderNotes, {
           travellerText: saidByTravellerForGuide,
           towns: plannerTowns,
+          // The stops by name, because the planner picks places the
+          // conversation never named and a note about one of those belongs in
+          // the guide that stands on it.
+          stops: plannerStopNames,
           // READ AGAIN RATHER THAN REUSED. gateMode a few hundred lines up
           // answers the same question off the same text, and it is declared
           // inside the planner's own block: its indentation says otherwise,
@@ -24382,6 +24418,16 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                         Add reel
                                       </button>
                                     </div>
+                                    {(() => {
+                                      // THE NUMBER, rather than a hunt through rows. Drawn only
+                                      // where a row holds one, so a row with no reel says nothing.
+                                      const reels = reelCount(p.blogBody);
+                                      return reels.held > 0 ? (
+                                        <div style={{ fontSize: 10.5, color: reels.live ? C.gold : C.muted, marginTop: 8, fontWeight: 700 }}>
+                                          {reels.live} of {reels.held} {reels.held === 1 ? "reel" : "reels"} showing
+                                        </div>
+                                      ) : null;
+                                    })()}
                                     {mediaBlocks.length > 0 && (
                                       <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
                                         {mediaBlocks.map(b => (
@@ -24393,6 +24439,12 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                               <span style={{ fontSize: 16, flexShrink: 0 }}>🎬</span>
                                             )}
                                             <span style={{ flex: 1, minWidth: 0, fontSize: 10.5, color: C.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.type === "image" ? (b.src || "").split("/").pop() : b.url}</span>
+                                            {b.type === "instagram" && (
+                                              <button onClick={() => setReelActive(row, b._idx, !reelLive(b))} disabled={mediaBusy}
+                                                style={{ background: reelLive(b) ? C.gold : "none", border: `1px solid ${reelLive(b) ? C.gold : C.border}`, color: reelLive(b) ? C.onGold : C.muted, borderRadius: 100, padding: "3px 9px", fontSize: 10, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>
+                                                {reelLive(b) ? "Active" : "Activate"}
+                                              </button>
+                                            )}
                                             {b.type === "image" && p.photo !== b.src && (
                                               <button onClick={() => setHeroFromBlock(row, b.src)} disabled={mediaBusy} title="Use as the hero photo"
                                                 style={{ background: "none", border: `1px solid ${C.gold}55`, color: C.gold, borderRadius: 100, padding: "3px 9px", fontSize: 10, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>
@@ -26808,6 +26860,16 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           <input value={studioInstagramUrl} onChange={e => setStudioInstagramUrl(e.target.value)}
                             placeholder="https://www.instagram.com/reel/XXXXXXXXX/"
                             style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", fontSize: 12, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif", boxSizing: "border-box" }} />
+                          {/* ── ACTIVATE, AND IT IS OFF UNTIL HE SAYS ──────
+                              Oliver, 23 Sep 2026: "make an 'activate' next to
+                              the reel paste. And keep it as inactive as
+                              default. Then they all get removed until I
+                              activate them." See utils/reelGate.js. */}
+                          <label style={{ display: "inline-flex", alignItems: "center", gap: 7, marginTop: 7, fontSize: 11.5, fontWeight: 700, color: studioReelActive ? C.gold : C.muted, cursor: "pointer" }}>
+                            <input type="checkbox" checked={studioReelActive} onChange={e => setStudioReelActive(e.target.checked)}
+                              style={{ accentColor: C.gold, cursor: "pointer" }} />
+                            Activate
+                          </label>
                           <div style={{ fontSize: 10, color: C.muted, marginTop: 4 }}>Added automatically on Publish — no JSON editing needed. Clear this field and re-publish to remove it later.</div>
                         </div>
 

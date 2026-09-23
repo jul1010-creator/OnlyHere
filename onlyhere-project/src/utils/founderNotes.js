@@ -311,13 +311,19 @@ export const NOTE_LINE = (n) => {
 // before the writer is called, and a note about fares belongs in a public
 // transport guide whether or not the word train was ever typed. So the guide
 // matches against its own plan as well as their words.
-export const notesForGuide = (rows = [], { travellerText = "", towns = [], mode = "", today = new Date(), max = MAX_NOTES } = {}) => {
+export const notesForGuide = (rows = [], { travellerText = "", towns = [], stops = [], mode = "", today = new Date(), max = MAX_NOTES } = {}) => {
   const where = (Array.isArray(towns) ? towns : []).map(clean).filter(Boolean);
+  // THE STOPS THEMSELVES, not only the towns they are in. A note about
+  // Jomfru Ane Gade belongs in a guide that stands on Jomfru Ane Gade, and
+  // the conversation that produced the plan often never names it: the planner
+  // chose it. Measured on his own three test notes, this is what the town
+  // list alone could not reach.
+  const named = (Array.isArray(stops) ? stops : []).map(clean).filter(Boolean).slice(0, 40);
   // The plan, written out as the sentence a traveller would have typed if
   // they had said all of it. MODE_WORDS is what makes a fare note reach a
   // public transport trip: the guide knows they are on trains, so the note
   // about trains is about their trip.
-  const plan = [travellerText, where.join(" "), MODE_WORDS[clean(mode)] || ""].filter(Boolean).join(" ");
+  const plan = [travellerText, where.join(" "), named.join(" "), MODE_WORDS[clean(mode)] || ""].filter(Boolean).join(" ");
   const seen = new Set();
   const out = [];
   // Each town on the route asked separately, so a note scoped to Aalborg
