@@ -27,6 +27,7 @@ import { placeCoords } from "./guideEnrichment";
 import { PRICE_UNKNOWN } from "./entryAudit";
 import { isOperatorSite } from "./ferryDoor";
 import { GEM_TYPE, shapeGem } from "./cheapGems";
+import { NOTE_TYPE, shapeNote } from "./founderNotes";
 
 // ── THE THIRD SCALE, 19 SEP 2026 ────────────────────────────────────
 //
@@ -169,6 +170,10 @@ const shapeForLiveFields = (type, t) => {
   // than listed a second time here, because a second list of the same fields
   // is how this function has eaten a feature seven times.
   if (type === GEM_TYPE) return shapeGem(t);
+  // A note, the same way and for the same reason: shapeNote names its fields
+  // once, so a field added there reaches the table without a second list here
+  // having to be remembered. See utils/founderNotes.js.
+  if (type === NOTE_TYPE) return shapeNote(t);
   // ── THE ISLAND, WHICH IS A TOWN'S FIELDS PLUS THE DOOR ──────────
   //
   // Deliberately the same field names as the town branch below wherever the two

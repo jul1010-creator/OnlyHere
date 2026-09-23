@@ -31,7 +31,7 @@ import { claimConflicts, implausibleWalks } from "./claimCheck";
 import { coordProblems } from "./coordCheck";
 // fold, because a Danish word ending in é, ø, æ or å cannot carry a \b word
 // boundary in JavaScript. See TICKET_WORD.
-import { fold, variantsOf, GENERIC_PLACE_WORDS } from "./danishNames";
+import { fold, variantsOf, containsName, GENERIC_PLACE_WORDS } from "./danishNames";
 import { isReferenceHost } from "./pageScan";
 import { tierOf, TIERS } from "./placeThemes";
 import { QUERY_WORDS } from "./sourcePolicy";
@@ -1335,11 +1335,47 @@ export const pricesAdmission = (found) => !!found && !NOT_ADMISSION.has(found.ki
 //
 // `blob` stays the fallback for a caller with no pages to hand, so every
 // existing call behaves exactly as it did and simply cannot name a host.
-const readPages = (pages, blob) => {
+// ── AND A PRICE ON A PAGE ABOUT SOMETHING ELSE ──────────────────────
+//
+// Oliver's batch of 23 Sep 2026. Three of the six free places he drafted were
+// flagged for a missing ticket price, and all three are free:
+//
+//   Hindsgavl Dyrehave      175 DKK, from bridgewalking-danmark.dk
+//   H. C. Andersen Trail     15 EUR, from caliglobetrotter.com
+//   Den Uendelige Bro     20-30 DKK, from evendo.com
+//
+// Bridgewalking is a different attraction in the same town: you walk on the Old
+// Little Belt Bridge, and 175 DKK is what THAT costs. A deer park you can walk
+// into was asked to justify it, twice per run, and the run said so on its most
+// actionable line.
+//
+// The rule that prevents this is already written down in this project and was
+// applied to Google listings only: "A listing is only usable when its own name
+// is the name of the thing being drafted. A search for a street returns a
+// business on it." The price read never got it, so any page fetched during a
+// run could price the entry.
+//
+// THE OPERATOR'S OWN PAGES ARE EXEMT, and that is not a loophole: those pages
+// were established as the operator's earlier in the run, which is a stronger
+// statement than a name appearing in text. A listing, a calendar or a blog has
+// to name the place it is pricing.
+//
+// AND A PAGE THAT NAMES NOTHING IS NOT USED. The old behaviour was to take the
+// first admission price on any page read, so the fallback here is no price
+// rather than the old guess: a figure nobody tied to this place is the
+// confident-and-wrong answer this file exists to avoid.
+const namesIt = (text, name) => {
+  const wanted = String(name || "").trim();
+  if (!wanted) return true;   // no name handed in: every existing caller behaves as before
+  return containsName(String(text || ""), wanted);
+};
+
+const readPages = (pages, blob, { name = "", trusted = false } = {}) => {
   const list = (Array.isArray(pages) ? pages : []).filter(x => String(x?.text || "").trim());
   if (!list.length) return { got: ticketPriceOn(blob), host: "" };
   let fallback = null;
   for (const x of list) {
+    if (!trusted && !namesIt(x.text, name)) continue;
     const got = ticketPriceOn(String(x.text));
     const host = String(x.host || "").trim();
     if (pricesAdmission(got)) return { got, host };
@@ -1350,11 +1386,13 @@ const readPages = (pages, blob) => {
   return fallback || { got: null, host: "" };
 };
 
-export const findTicketPrice = ({ siteText = "", listingText = "", siteHosts = [], listingHosts = [], sitePages = null, listingPages = null } = {}) => {
+export const findTicketPrice = ({ siteText = "", listingText = "", siteHosts = [], listingHosts = [], sitePages = null, listingPages = null, name = "" } = {}) => {
   const hosts = { siteHosts, listingHosts };
-  const site = readPages(sitePages, siteText);
+  // The operator's own pages are trusted to be about the operator. A listing
+  // has to name the place it is pricing. See namesIt above.
+  const site = readPages(sitePages, siteText, { name, trusted: true });
   if (pricesAdmission(site.got)) return { ...site.got, ...hosts, host: site.host, from: "official-site", why: "the operator's own page states it" };
-  const listing = readPages(listingPages, listingText);
+  const listing = readPages(listingPages, listingText, { name });
   if (pricesAdmission(listing.got)) return { ...listing.got, ...hosts, host: listing.host, from: "listing", why: "a ticket shop or calendar states it and the operator's own page does not" };
   // ── AND THIS IS THE ORDER THAT FIXES THE FOOD FESTIVAL CASE ──────
   // The operator's page carried ONLY the IDA-members rate, so it no longer wins

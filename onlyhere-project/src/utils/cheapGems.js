@@ -147,6 +147,11 @@ export const checkedAgo = (payload, today = new Date()) => {
   return Math.round((startOf(today).getTime() - startOf(d).getTime()) / 86400000);
 };
 
+// What the confirming pass may come back with about a sentence he wrote.
+// Three answers and no fourth: the page says it, the page says something
+// else, or no page says anything either way.
+export const SAID_CHECKS = ["confirmed", "contradicted", "notfound"];
+
 // ── THE ONE INSERT SHAPE ────────────────────────────────────────────
 //
 // Called from shapeForLive in studioContent.js, which is the only insert path
@@ -177,7 +182,48 @@ export const shapeGem = (t = {}) => {
     desc: clean(t.desc).slice(0, 400),
     source: clean(t.source),
     checkedAt: clean(t.checkedAt).slice(0, 10),
+    // ── WHAT HE SAID, IN HIS WORDS ──────────────────────────────────
+    //
+    // Oliver, 23 Sep 2026: "If I write something, then also let me be able to
+    // write the discount. Then the AI can research exactly what I'm refering
+    // to, and then confirm it into a draft."
+    //
+    // He is from here and has stood in the bar. The pass was built to
+    // DISCOVER a saving off a page, and discovery is the wrong instrument for
+    // a thing he already knows: it went looking for Barkowski and came back
+    // with a board game cafe. So when this field carries a sentence, the pass
+    // stops discovering and CONFIRMS that sentence instead.
+    said: clean(t.said).slice(0, 240),
+    // What the confirming came to. Empty when he said nothing.
+    saidCheck: SAID_CHECKS.includes(clean(t.saidCheck)) ? clean(t.saidCheck) : "",
+    // The page's own words, when they disagree with his. See saidLine: on
+    // what a thing COSTS the page wins, and this is what it wins with. It
+    // exists only where there is a disagreement, so a row that agrees with
+    // its page carries none of this whatever it was handed.
+    saidPage: clean(t.saidCheck) === "contradicted" ? clean(t.saidPage).slice(0, 240) : "",
   };
+};
+
+// ── WHOSE SENTENCE A CARD IS PRINTING ───────────────────────────────
+//
+// THE RULE, agreed with him on 23 Sep 2026: on how a thing IS, he wins. On
+// what it COSTS, the page wins. He has been in these places and the page has
+// not, so his sentence carries a card that no page states. A figure is the
+// other way round: a price he remembers from March is a price that moved, and
+// when a page states a different one the card prints the page's and says so.
+//
+// A reader is never shown a saving without being told who said it.
+export const saidLine = (g = {}) => {
+  const said = clean(g?.said);
+  if (!said) return "";
+  if (g.saidCheck === "confirmed") return "Told to us by a local, and their own page states it too.";
+  if (g.saidCheck === "contradicted") {
+    const page = clean(g.saidPage);
+    return page
+      ? `A local told us "${said}". Their page says ${page}, so the page is what stands here.`
+      : `A local told us "${said}". Their page says otherwise, so the page is what stands here.`;
+  }
+  return "Told to us by a local. No page of theirs states it, so ask when you are there.";
 };
 
 // ── WHAT A ROW STILL OWES BEFORE IT MAY GO UP ───────────────────────
@@ -191,7 +237,19 @@ export const gemProblems = (payload = {}, today = new Date()) => {
   let blocks = false;
   if (!g.name) { out.push("No name."); blocks = true; }
   if (!g.kind) { out.push("Not marked as a discount scheme or as cheap anyway."); blocks = true; }
-  if (!/^https:\/\//i.test(g.source)) {
+  // ── A SENTENCE OF HIS IS A SOURCE, AND SAYS SO ON THE CARD ────────
+  //
+  // Everything below this holds a row to a page, for the reason the header
+  // gives: a saving nobody can check is a rumour. A local who has stood in
+  // the bar is not a rumour, and Barkowski and Leanowski give their discount
+  // off a blackboard that is on no page anywhere. So a row he wrote may go up
+  // with no page behind it, and the card then says a local told us, rather
+  // than letting his word pass for the brand's. The check stays: what the
+  // pass found is what decides which of the two the card prints.
+  const onHisWord = !!g.said && g.saidCheck !== "confirmed" && !/^https:\/\//i.test(g.source);
+  if (onHisWord) {
+    out.push("No page of theirs states this, so the card says a local told us rather than showing it as theirs.");
+  } else if (!/^https:\/\//i.test(g.source)) {
     out.push("No https page behind it. A saving nobody can check is a rumour.");
     blocks = true;
   } else if (isCouponSite(g.source)) {
@@ -214,13 +272,22 @@ export const gemProblems = (payload = {}, today = new Date()) => {
       out.push(`${hostOf(g.source)} is not ${g.name || "the place"}'s own site, so the card names that site rather than calling it theirs.`);
     }
   }
+  if (g.said && g.saidCheck === "contradicted") {
+    out.push(`Their page does not say what you said. ${clean(g.saidPage) || "It states something else"}, and that is what the card prints.`);
+  }
   if (g.kind === "scheme" && !g.what) { out.push("A discount with no saving named."); blocks = true; }
   if (g.kind === "scheme" && !g.who) out.push("Nobody named as who gets it.");
   if (g.kind === "scheme" && !g.how) out.push("Nothing on how to get it, which is the half a visitor is missing.");
   if (!g.where) out.push("Not known whether it works in the shop, online or both, so the page says nothing about it.");
   const ago = checkedAgo(g, today);
   if (ago == null) { out.push("No date it was checked."); blocks = true; }
-  else if (ago > STALE_DAYS) { out.push(`Checked ${ago} days ago, so the page no longer shows it. Check it again.`); }
+  else if (ago > STALE_DAYS) {
+    // A row standing on his word has no page to have moved, so it is told
+    // the other way round: what he saw is old and the place should be asked.
+    out.push(onHisWord
+      ? `Checked ${ago} days ago, and it is standing on what you were told. Ask them again before it stays up.`
+      : `Checked ${ago} days ago, so the page no longer shows it. Check it again.`);
+  }
   else if (ago > RECHECK_DAYS) out.push(`Checked ${ago} days ago. Worth a look before somebody travels on it.`);
   return { problems: out, blocks };
 };
@@ -366,11 +433,35 @@ export const gemSearches = (place = "") => {
 // For when he already knows the place, as he knew Sporvejen. The same pass as
 // a town search, run on the name instead, so a place he names still goes up
 // only on a page that states it: knowing a place is cheap is not a source.
-export const gemSearchesFor = (name = "", place = "") => {
+// The words worth searching out of a sentence he wrote. What the pass needs
+// is the part of "students get 20% off before ten" that would be printed on
+// a page, so the small words and the figures with a percent on them go and
+// what is left is the shape of the deal. Three at most: a search of eleven
+// words matches nothing.
+const SAID_SKIP = /^(a|an|and|the|at|on|in|for|to|of|is|are|you|your|get|gets|give|gives|giving|with|when|if|they|their|them|it|its|there|here|has|have|off|from|but|so|all|any|every|per|som|og|er|det|den|de|du|man|kan|til|med|for|på|i|en|et)$/i;
+export const saidWords = (said = "") =>
+  clean(said)
+    .replace(/[^\p{L}\p{N}\s]+/gu, " ")
+    .split(/\s+/)
+    .filter(w => w && w.length > 2 && !/^\d+$/.test(w) && !SAID_SKIP.test(w))
+    .slice(0, 3);
+
+export const gemSearchesFor = (name = "", place = "", said = "") => {
   const n = clean(name);
   if (!n) return [];
   const p = clean(place);
   const at = p && !/^(danmark|denmark)$/i.test(p) ? ` ${p}` : "";
+  // ── CONFIRMING SEARCHES THE SENTENCE, NOT THE CATEGORY ────────────
+  //
+  // Oliver, 23 Sep 2026, of trying it by hand: "It did look up the place, but
+  // it talked about some board-free shit." Five searches for student
+  // discounts and menu prices are five chances to come back with the wrong
+  // business. When he has written what the deal is, the searches are the
+  // place's own page and the words of his sentence, and nothing else.
+  const heard = saidWords(said);
+  if (heard.length) {
+    return [`${n}${at}`, `${n} ${heard.join(" ")}`, `${n}${at} ${heard[0]}`, `${n} rabat tilbud`];
+  }
   // BOTH KINDS, not only a place to eat. Oliver, 22 Sep 2026: "it says it
   // cannot find MSCH Copenhagen". The three searches were a restaurant's,
   // prices and a menu, and a shop's student discount is on none of those
@@ -415,14 +506,15 @@ export const pageAsResult = ({ url = "", title = "", text = "", fromImage = fals
 // that invents a page has nothing to invent it with: an index that is not in
 // the list is a row that does not come back. Same principle as islandDirectory
 // keeping the island's own words, one level down.
-export const GEMS_PROMPT = (place, results = [], { only = "" } = {}) => {
+export const GEMS_PROMPT = (place, results = [], { only = "", said = "" } = {}) => {
   const where = clean(place) || "Denmark";
   const one = clean(only);
+  const heard = clean(said);
   const list = results.map((r, i) => `[${i}] ${clean(r.title)}\n${clean(r.url)}\n${clean(r.snippet)}`).join("\n\n");
   return `You are finding cheap gems for travellers in ${where}. Two kinds, and nothing else:\n\n`
     + `"scheme": a discount a shop, café or chain gives to anybody who does one thing first. A student card, joining a club, an app, a card. Only if a result below says so.\n`
     + `"cheap": a place that is cheap without doing anything, and only when a result below says it is.\n\n`
-    + `Respond with ONLY strict JSON: {"gems":[{"name":"","kind":"scheme|cheap","category":"food|shop|stay|travel|other","towns":[],"what":"","who":"","how":"","where":"shop|online|both|","catch":"","desc":"","source":0}]}\n\n`
+    + `Respond with ONLY strict JSON: {"gems":[{"name":"","kind":"scheme|cheap","category":"food|shop|stay|travel|other","towns":[],"what":"","who":"","how":"","where":"shop|online|both|","catch":"","desc":"","source":0${heard ? `,"check":"confirmed|contradicted|notfound","pageSays":""` : ""}}]}\n\n`
     + `SOURCE IS THE NUMBER OF THE RESULT that says it. A gem no result states does not come back.\n`
     + `WHEN THE PLACE'S OWN SITE SAYS IT TOO, THAT IS THE SOURCE. Another page only when the own site does not state it.\n`
     + `WHAT IS THE SAVING AS THE BRAND STATES IT. "Up to 20%" stays "up to 20%". Never round up, never add a figure the result does not give.\n`
@@ -434,6 +526,24 @@ export const GEMS_PROMPT = (place, results = [], { only = "" } = {}) => {
     + `LEAVE OUT: coupon code sites and anything they list, one-off sales, campaign codes with an end date, and anything that is not a shop, café, restaurant or chain a visitor can walk into or order from.\n`
     + `A PLACE TO EAT is "cheap" only when a result gives a price for something on its menu, and WHAT is that price as the result states it, with the dish: "a burger under 100 kr at lunch". Never "cheap food" with no figure.\n`
     + (one ? `ONE PLACE ONLY: return rows about ${one} and nothing else.\n` : "")
+    // ── CONFIRMING, WHICH IS NOT DISCOVERING ────────────────────────
+    //
+    // A discovery prompt asked about Barkowski came back with a board game
+    // cafe, because discovery answers "what saving is on these pages" and he
+    // was asking "is the saving I know about on these pages". Those are
+    // different questions and this is the second one. The answer is one row
+    // and a verdict, and a verdict of notfound is a correct answer that still
+    // returns the row: gemProblems lets it up on his word and the card says
+    // whose word that is.
+    + (heard
+      ? `\nSOMEBODY WHO HAS BEEN THERE SAYS THIS ABOUT ${one || where}: "${heard}"\n`
+        + `YOUR JOB IS THAT SENTENCE AND NOTHING ELSE. Do not go looking for other savings. Return exactly one row, about ${one || "the place named in it"}, and add "check" to it: "confirmed" when a result states the same thing, "contradicted" when a result states something different about the same saving, "notfound" when no result says either way.\n`
+        + `ON "confirmed": WHAT is the saving in the result's own words, and source is that result.\n`
+        + `ON "contradicted": WHAT is what the RESULT says, not what the sentence says, and "pageSays" is the result's wording of it in under twenty words. The source is that result.\n`
+        + `ON "notfound": WHAT is the sentence itself, tidied into a saving, and source is -1. A result about a different business is not a result about this one, and being unable to find a page is not a contradiction.\n`
+        + `A RESULT LISTING THE PLACE WITH NO MENTION OF THE SAVING IS notfound, not contradicted. Only a result that states a different saving of the same sort contradicts.\n`
+        + `Fill who, how, where, catch, towns, category and desc from the results where they say it, and leave them empty where they do not.\n`
+      : "")
     + `Write plain English. No dashes of any kind. An empty list is a normal answer.\n\n${list}`;
 };
 
@@ -441,8 +551,9 @@ export const GEMS_PROMPT = (place, results = [], { only = "" } = {}) => {
 //
 // Every rule the prompt states that can be enforced is enforced here, so a
 // model that ignores one is caught by code rather than trusted.
-export const settleGems = (json, results = [], { today = new Date(), only = "" } = {}) => {
+export const settleGems = (json, results = [], { today = new Date(), only = "", said = "" } = {}) => {
   const one = fold(only);
+  const heard = clean(said);
   const list = Array.isArray(json?.gems) ? json.gems : [];
   const at = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
   const out = [];
@@ -451,9 +562,23 @@ export const settleGems = (json, results = [], { today = new Date(), only = "" }
   for (const raw of list) {
     const i = Number(raw?.source);
     const hit = Number.isInteger(i) && i >= 0 && i < results.length ? results[i] : null;
-    if (!hit || !/^https?:\/\//i.test(clean(hit.url))) { dropped.noSource += 1; continue; }
-    if (isCouponSite(hit.url) || isDataSite(hit.url)) { dropped.coupon += 1; continue; }
-    const g = shapeGem({ ...raw, source: clean(hit.url), checkedAt: at });
+    // WHAT THE PASS MADE OF HIS SENTENCE. Read before the source gate,
+    // because notfound is the one verdict that comes back with no page and
+    // is still an answer. A model that returns notfound while pointing at a
+    // page is taken at its word on the verdict and keeps the page.
+    const check = heard && SAID_CHECKS.includes(clean(raw?.check)) ? clean(raw.check) : (heard ? "notfound" : "");
+    const saidBits = heard
+      ? { said: heard, saidCheck: check, saidPage: check === "contradicted" ? clean(raw?.pageSays) : "" }
+      : {};
+    if (!hit || !/^https?:\/\//i.test(clean(hit.url))) {
+      if (!heard || check !== "notfound") { dropped.noSource += 1; continue; }
+    } else if (isCouponSite(hit.url) || isDataSite(hit.url)) { dropped.coupon += 1; continue; }
+    const from = check === "notfound" ? "" : clean(hit?.url);
+    const g = shapeGem({ ...raw, ...saidBits, source: from, checkedAt: at });
+    // HIS SENTENCE IS THE SAVING when no page states one. The row is about a
+    // thing he watched happen, and a row that came back with the verdict and
+    // an empty WHAT would be dropped for having no saving named.
+    if (heard && check === "notfound" && g.kind === "scheme" && !g.what) g.what = heard;
     if (!g.name || !g.kind || (g.kind === "scheme" && !g.what)) { dropped.shape += 1; continue; }
     // A name search that comes back with the place next door is a different
     // run's answer, not this one's.
@@ -461,7 +586,7 @@ export const settleGems = (json, results = [], { today = new Date(), only = "" }
     // On a name lookup every row is about the one place, whatever the model
     // calls it: "Sporvejen" and "Restaurant Sporvejen" are the same row.
     const key = one ? `${one}|${g.kind}` : `${fold(g.name)}|${g.kind}`;
-    const own = isOwnSite(g.source, g.name);
+    const own = !!g.source && isOwnSite(g.source, g.name);
     // THE PLACE'S OWN PAGE WINS. Oliver, 21 Sep 2026: "the pipeline will
     // always prioritise the home website, yes?" It did not: the first row the
     // model listed was kept, whoever's page it was. Now a later row for the
@@ -485,7 +610,13 @@ export const gemRunNotes = ({ gems = [], dropped = {} } = {}) => {
   if (dropped.noSource) out.push(`${dropped.noSource} left out for pointing at no result.`);
   if (dropped.other) out.push(`${dropped.other} left out for being about a different place than the one you named.`);
   if (dropped.shape) out.push(`${dropped.shape} left out for having no name, no kind, or a discount with no saving.`);
-  const notOwn = gems.filter(g => !g.own).length;
+  const confirmed = gems.filter(g => g.saidCheck === "confirmed").length;
+  if (confirmed) out.push(`${confirmed} ${confirmed === 1 ? "matches" : "match"} what you wrote, on their own page.`);
+  const against = gems.filter(g => g.saidCheck === "contradicted").length;
+  if (against) out.push(`${against} ${against === 1 ? "has" : "have"} a page saying something else, and the page is what the card prints.`);
+  const onWord = gems.filter(g => g.saidCheck === "notfound").length;
+  if (onWord) out.push(`${onWord} ${onWord === 1 ? "stands" : "stand"} on your word alone. No page states it, and the card will say a local told us.`);
+  const notOwn = gems.filter(g => !g.own && !g.said).length;
   if (notOwn) out.push(`${notOwn} ${notOwn === 1 ? "comes" : "come"} from a page that is not the brand's own, unticked until you have looked.`);
   return out;
 };

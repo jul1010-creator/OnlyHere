@@ -46,7 +46,9 @@ import { events, majorEvents, undatedEvents, communityEvents } from "../data/eve
 import { towns, TOWN_COORDS } from "../data/towns";
 import { islands } from "../data/islands";
 import { gems } from "../data/gems";
+import { founderNotes } from "../data/founderNotes";
 import { GEM_TYPE } from "./cheapGems";
+import { NOTE_TYPE } from "./founderNotes";
 import { freeEntrance } from "../data/freeEntrance";
 import { nightlifeSpots } from "../data/nightlife";
 import { nightlifeTowns } from "../data/nightlifeTowns";
@@ -186,6 +188,11 @@ const doLoad = async () => {
       // place in any of the other pools, and a guide that asked for towns or
       // food must never be handed a student discount. See utils/cheapGems.js.
       else if (row.type === GEM_TYPE) gems.push({ id, ...item });
+      // A note is its own array for the same reason, and a stronger one: it
+      // is not a place at all. It is a sentence Oliver wrote, and the only
+      // thing that ever reads it is the chat prompt builder, which picks the
+      // few that match what a traveller asked. See utils/founderNotes.js.
+      else if (row.type === NOTE_TYPE) founderNotes.push({ id, ...item });
       // ── THREE SCALES, AND ONE OF THEM DOES NOT PUBLISH ────────
       // Major and Local are the two that reach a reader through a page, a chip,
       // the front page line and the chat. Community is Oliver's third, added
@@ -328,6 +335,7 @@ const ARRAY_FOR = {
   town: towns,
   island: islands,
   [GEM_TYPE]: gems,
+  [NOTE_TYPE]: founderNotes,
   free: freeEntrance,
   food: foodSpots,
   foodStreet: foodSpots,

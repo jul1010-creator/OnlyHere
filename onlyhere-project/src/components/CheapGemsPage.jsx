@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { C } from "../utils/theme";
 import { Pill } from "./Pill";
-import { gemsView, GEM_SECTION, WHERE_LABEL, checkedLabel, isOwnSite, gemMatches, gemFilterOptions, gemWhere, GEM_CATEGORY_LABEL } from "../utils/cheapGems";
+import { gemsView, GEM_SECTION, WHERE_LABEL, checkedLabel, isOwnSite, gemMatches, gemFilterOptions, gemWhere, GEM_CATEGORY_LABEL, saidLine } from "../utils/cheapGems";
 
 // ── THE CHEAP GEMS PAGE ─────────────────────────────────────────────
 //
@@ -47,14 +47,28 @@ const GemCard = ({ g, point, me }) => (
         <b>The catch:</b> {g.catch}
       </div>
     )}
+    {/* ── WHOSE WORD THIS IS ON ─────────────────────────────────────
+        A saving that came off a page shows the page and says nothing more.
+        One that came from somebody who has been there says so in as many
+        words, because a reader who walks in and asks for it deserves to know
+        who told us. See saidLine. */}
+    {saidLine(g) && (
+      <div style={{ fontSize: 11.5, color: C.light, lineHeight: 1.6, marginTop: 9, background: `${C.border}44`, borderRadius: 9, padding: "7px 10px" }}>
+        {saidLine(g)}
+      </div>
+    )}
     <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginTop: 10, fontSize: 11, color: C.muted }}>
       <span>{checkedLabel(g)}</span>
       {/* "Their page" only when it is theirs. A cheap place can be vouched for
           by a page that is not the place's own, and the link says whose it is
-          rather than letting a third site pass for the brand. */}
-      <a href={g.source} target="_blank" rel="noreferrer" style={{ color: C.gold, fontWeight: 700, textDecoration: "none" }}>
-        {isOwnSite(g.source, g.name) ? "Their page" : sourceHost(g.source)} ↗
-      </a>
+          rather than letting a third site pass for the brand. A row standing
+          on a local's word has no page at all, and shows no link rather than
+          a link to nowhere. */}
+      {g.source && (
+        <a href={g.source} target="_blank" rel="noreferrer" style={{ color: C.gold, fontWeight: 700, textDecoration: "none" }}>
+          {isOwnSite(g.source, g.name) ? "Their page" : sourceHost(g.source)} ↗
+        </a>
+      )}
     </div>
   </div>
 );

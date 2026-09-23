@@ -995,8 +995,33 @@ export const trimFillerAgainst = (priorTexts, text, opts = {}) => {
 //
 // So the chat keeps none. The entries keep their count-based rule, which is
 // what the audit is built on, and this is the one caller that asks for zero.
+// ── AND THE ADJECTIVE, IN THE CHAT AND NOWHERE ELSE ─────────────────
+//
+// Oliver, 23 Sep 2026, choosing between cutting it everywhere and cutting it
+// here: "Cut it in the chat only."
+//
+// The reply that prompted it carried both forms in one paragraph, and only the
+// adverb was removed: "driving lets you actually load up on stuff" and "actual
+// Danish design pieces rather than souvenir shop stuff".
+//
+// WHY IT IS NOT ON THE OTHER LISTS. FILLER_ADJECTIVES exists because an
+// adjective cannot be deleted blind: his own Essentials page read "For food and
+// a more genuine feel", and cutting the word there leaves "a more feel". So
+// that one is counted and surfaced rather than removed.
+//
+// "actual" does not behave that way. It stands in front of a noun that holds
+// the sentence up on its own, so it comes out clean: "actual Danish design
+// pieces" is "Danish design pieces", "the actual route" is "the route". The one
+// place it works is correcting an expectation the reader already has, and even
+// there the sentence survives the cut and stays true.
+//
+// CHAT ONLY, which is his call and the right one: the published entries are
+// audited on a count of these words, and adding one to that list changes what
+// the audit measures. This list is read by nothing else.
+export const CHAT_FILLER_WORDS = [...FILLER_TRIMMED, "actual"];
+
 export const trimFillerForChat = (priorTexts, text) =>
-  trimFillerAgainst(priorTexts, text, { keep: 0 });
+  trimFillerAgainst(priorTexts, text, { keep: 0, words: CHAT_FILLER_WORDS });
 
 
 export const scanForAITells = (text, extraPhrases = []) => {

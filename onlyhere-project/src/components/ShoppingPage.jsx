@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { C } from "../utils/theme";
 import { readableOn } from "../utils/readableColor";
-import { tierBadge, tierOf } from "../utils/placeThemes";
+import { tierBadge, tierOf, TIERS } from "../utils/placeThemes";
 import { shoppingTownList, shoppingForTown, shopsInPlace, shopPlaceFor, worthShowing, shopKindOf, SHOP_KINDS } from "../utils/shopping";
 
 // ── SHOPPING: TOWN, THEN THE STREET, THEN THE SHOPS ─────────────────
@@ -23,6 +23,24 @@ import { shoppingTownList, shoppingForTown, shopsInPlace, shopPlaceFor, worthSho
 // them onto some islands" is the other half: a workshop on Bornholm has no
 // container and never should, so it stands on its own in the loose list.
 const byName = (a, b) => String(a?.name || "").localeCompare(String(b?.name || ""), "da");
+
+// ── AND THE ONE WORTH CROSSING THE STREET FOR GOES FIRST ────────────
+//
+// Seen in a browser, 23 Sep 2026, on a street of four: the Can't Miss Out shop
+// was third, under two Worth Considering ones, because the list was sorted by
+// name. This page's whole job is answering which of these is worth an
+// afternoon, and the field that answers it was not being read.
+//
+// Off TIERS, in the order that list is written, so a fifth tier cannot land
+// here with no position. A row with no tier sorts last rather than first: an
+// unranked shop is one nobody has judged, and putting it above a judged one
+// would be the page inventing a verdict.
+const TIER_ORDER = Object.fromEntries(TIERS.map((t, i) => [t.id, i]));
+const byWorth = (a, b) => {
+  const ra = TIER_ORDER[tierOf(a)?.id] ?? TIERS.length;
+  const rb = TIER_ORDER[tierOf(b)?.id] ?? TIERS.length;
+  return ra !== rb ? ra - rb : byName(a, b);
+};
 
 const KindChip = ({ shop }) => {
   const k = shopKindOf(shop);
@@ -81,7 +99,7 @@ export const ShoppingPage = ({ shops = [], places = [], title = "Shopping", onOp
 
   // ── LEVEL 3: ONE STREET OR CENTRE, AND THE SHOPS IN IT ───────────
   if (placeView) {
-    const inside = shopsInPlace(placeView, narrowed, places).slice().sort(byName);
+    const inside = shopsInPlace(placeView, narrowed, places).slice().sort(byWorth);
     const badge = tierBadge(placeView);
     return (
       <div style={{ padding: 16, maxWidth: 900, margin: "0 auto", width: "100%" }}>
@@ -108,6 +126,18 @@ export const ShoppingPage = ({ shops = [], places = [], title = "Shopping", onOp
           <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px 14px", marginBottom: 16, fontSize: 13, color: C.text, lineHeight: 1.6 }}>
             ◆ <b>Gemlyx Find:</b> {placeView.gemlyxFind}
           </div>
+        )}
+        {/* ── AND THE STREET'S OWN WRITING, WHICH NOTHING COULD REACH ──
+            Seen in a browser, 23 Sep 2026. The draft writes three hundred words
+            about a street (who it suits, which end to start at, when half of it
+            is shut, the honest verdict) and this page showed the two-sentence
+            desc and nothing else. The nightlife street page has had this door
+            since August; the shopping one was published without it. */}
+        {Array.isArray(placeView.blogBody) && placeView.blogBody.length > 0 && onOpen && (
+          <button onClick={() => onOpen(placeView)}
+            style={{ background: "none", border: `1px solid ${C.gold}55`, color: C.gold, borderRadius: 100, padding: "7px 14px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 18 }}>
+            Read the full street guide
+          </button>
         )}
         <div style={{ fontSize: 22, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif", marginBottom: 4 }}>Shops on {placeView.name}</div>
         {/* An empty container is a real state and not a broken page, exactly as
@@ -197,7 +227,7 @@ export const ShoppingPage = ({ shops = [], places = [], title = "Shopping", onOp
                 container claims its address, and shopPlaceFor is the same
                 reader that claimed the others, so this list cannot quietly
                 hold a shop that belongs on a street. */}
-            {split.loose.filter(sp => !shopPlaceFor(sp, places)).slice().sort(byName)
+            {split.loose.filter(sp => !shopPlaceFor(sp, places)).slice().sort(byWorth)
               .map(sp => <ShopRow key={sp.id || sp.name} shop={sp} onOpen={onOpen} />)}
           </div>
         )}

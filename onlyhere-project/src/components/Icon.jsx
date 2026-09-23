@@ -33,6 +33,12 @@ const ICONS = {
   calendar: P("M5 6h14a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1z M8 3v5 M16 3v5 M4 11h16"),
   pin: P("M12 21s-7-6.1-7-11a7 7 0 0 1 14 0c0 4.9-7 11-7 11z", <circle cx="12" cy="10" r="2.6" />),
   tag: P("M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9z", <circle cx="7.5" cy="7.5" r="1.5" />),
+  // ── AND SHOPPING IS NOT CHEAP GEMS ──────────────────────────────
+  // Both pages took `tag` when Shopping went into the nav on 22 Sep 2026, so
+  // two entries side by side carried the same drawing and the icon stopped
+  // telling them apart. Seen in a browser rather than in an assertion. A bag
+  // with a handle is what a shop hands you, and nothing else here uses it.
+  bag: P("M6 8h12l-1 12H7z M9 8V6a3 3 0 0 1 6 0v2"),
   bulb: P("M9 18h6 M10 21h4 M12 3a6 6 0 0 1 4 10.5c-.8.7-1 1.5-1 2.5H9c0-1-.2-1.8-1-2.5A6 6 0 0 1 12 3z"),
   user: P("M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M4.5 21a7.5 7.5 0 0 1 15 0"),
   // A door with an arrow leaving it. Added 14 Sep 2026 for the menu's Log out

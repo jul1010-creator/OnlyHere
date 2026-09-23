@@ -117,7 +117,7 @@ writeFileSync(entry, `
   export { MEASURED_BY, remeasureFor, pendingRemeasure, describeRemeasure, looksLikeAPlace, REMEASURE, REMEASURE_CLEARS, enforceScope, resolveField, classifyClaim, routeMessage, allowedFieldsFor, isEditRequest, factsIn, factsPreserved, editEntry, EDITABLE_FIELDS, PROSE_FIELDS as CORRECTION_PROSE_FIELDS, VERIFY_PROMPT, settleVerdict, ownSiteFor, OWN_SITE_PROMPT, settleOwnSite, whoseWord, PASTED_MIN, keepMeasured, isPipelineOwned, MEASURED_FIELDS, claimCitation, urlsIn, sourceLinksIn, citationRefusal, claimIsPerishable, CITATION_PROMPT, settleCitation, SPLIT_PROMPT, correctEntry, dropAppliedClaims, CLAIMS_APPLIED, namesField, verifyTransportClaim, asksWhatItCarries } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
   export { FEEDBACK_KINDS, FEEDBACK_TYPE, MIN_REPORT_CHARS, feedbackProblem, feedbackRow } from ${JSON.stringify(join(root, "src/utils/articleFeedback.js"))};
   export { previewReportRow, travellerTurns, PREVIEW_SAID_CAP, PREVIEW_SCREEN_CAP } from ${JSON.stringify(join(root, "src/utils/articleFeedback.js"))};
-  export { trimFillerRuns, trimFillerAgainst, trimFillerForChat, guideWithoutFiller } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
+  export { trimFillerRuns, trimFillerAgainst, trimFillerForChat, CHAT_FILLER_WORDS, guideWithoutFiller } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { withoutRefused, refusedClauses } from ${JSON.stringify(join(root, "src/utils/tripBrief.js"))};
   export { briefConflicts, conflictLabel, conflictSlots, CONFLICTS } from ${JSON.stringify(join(root, "src/utils/briefConflicts.js"))};
   export { clusterPins, clusterBounds, pixelAt, stopBlurb, stopCard, clusterLabel, clusterHint, OVERLAP_PX, BLURB_WORDS } from ${JSON.stringify(join(root, "src/utils/mapStops.js"))};
@@ -270,7 +270,8 @@ writeFileSync(entry, `
   export { PARTNER_OPENER, PARTNER_INTRO, partnerSections, partnerCount } from ${JSON.stringify(join(root, "src/utils/partnerSheet.js"))};
   export { baseKey, staysIn as stayRunsIn, doorsFor, doorOn, sameBaseLine, nightsLabel } from ${JSON.stringify(join(root, "src/utils/stayDoors.js"))};
   export { SECTIONS as DIR_SECTIONS, ROW_KINDS, kindOf as dirKindOf, directoryLinks, pathWord, ferryDoorIn, DIRECTORY_PROMPT, rowsFromDirectory, directoryProblems, staysIn, eatsIn, islandSaysBlock, ISLAND_SAYS } from ${JSON.stringify(join(root, "src/utils/islandDirectory.js"))};
-  export { GEM_TYPE, GEM_KINDS, GEM_SECTION, WHERE_LABEL, RECHECK_DAYS, STALE_DAYS, isCouponSite, isOwnSite, shapeGem, gemProblems, gemLive, gemsView, checkedLabel, checkedAgo, isDataSite, gemWhere, gemCategory, isForStudents, gemMatches, gemFilterOptions, GEM_CATEGORIES, GEM_CATEGORY_LABEL, gemSearches, gemSearchesFor, ownPagesIn, pageAsResult, MAX_OWN_PAGES, GEMS_PROMPT, settleGems, gemRunNotes, gemsForGuide, gemHeading } from ${JSON.stringify(join(root, "src/utils/cheapGems.js"))};
+  export { GEM_TYPE, GEM_KINDS, GEM_SECTION, WHERE_LABEL, RECHECK_DAYS, STALE_DAYS, isCouponSite, isOwnSite, shapeGem, gemProblems, gemLive, gemsView, checkedLabel, checkedAgo, isDataSite, gemWhere, gemCategory, isForStudents, gemMatches, gemFilterOptions, GEM_CATEGORIES, GEM_CATEGORY_LABEL, gemSearches, gemSearchesFor, ownPagesIn, pageAsResult, MAX_OWN_PAGES, GEMS_PROMPT, settleGems, gemRunNotes, gemsForGuide, gemHeading, SAID_CHECKS, saidLine, saidWords } from ${JSON.stringify(join(root, "src/utils/cheapGems.js"))};
+  export { NOTE_TYPE, NOTE_KINDS, NOTE_KIND_LABEL, NOTE_KIND_MEANING, NOTE_CHECKS, NOTE_LIFE, NOTE_RECHECK, shapeNote, noteProblems, noteLive, noteAgo, noteSubjects, notesFor, notesBlock, NOTE_LINE, MAX_NOTES, noteSearches, NOTE_PROMPT, settleNote, noteRunNotes } from ${JSON.stringify(join(root, "src/utils/founderNotes.js"))};
   export { sentencesIn, readerBody, noticeAsk, noticeText, TRANSLATE_NOTICE, translatedNotice, DEAD_ENDS } from ${JSON.stringify(join(root, "src/utils/noticeVoice.js"))};
   export { guideClaims, guideClaimNote } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { resolveStopCoords } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
@@ -15232,6 +15233,49 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("and it is redrawn on every zoom and pan", /map\.on\("zoomend moveend", drawPhotos\);/.test(photoMap));
   ok("the layer goes with the map when it unmounts",
      /map\.off\("zoomend moveend", drawPhotos\);/.test(photoMap) && /photoLayerRef\.current\?\.remove\(\);/.test(photoMap));
+  // ── AND THE BOX IT TESTS IS THE CARD IT DRAWS ────────────────
+  //
+  // Found 23 Sep 2026 by driving this map in a browser instead of asserting
+  // about it. Every card was tested as 84 pixels tall, which is what one
+  // without a credit line measures. A CC BY photograph carries the
+  // photographer's name under the title and that card is 99, so the boxes the
+  // collision test compared were fifteen pixels shorter than the cards being
+  // placed. On the live guide BOTH cards carry a credit, which is the case it
+  // got wrong.
+  //
+  // The arithmetic is only true because the CSS states the three heights, so
+  // both halves are pinned here: a line-height edited without the constant, or
+  // the reverse, fails this.
+  ok("a card's height is added up rather than assumed",
+     /const CARD_IMG = 60, CARD_NAME = 22, CARD_CREDIT = 15, CARD_EDGE = 2;/.test(photoMap)
+     && /const cardHeight = \(credit\) => CARD_IMG \+ CARD_NAME \+ \(credit \? CARD_CREDIT : 0\) \+ CARD_EDGE;/.test(photoMap));
+  ok("and the stylesheet states the heights it adds up",
+     /\.town-photo-card img\{display:block;width:100%;height:60px/.test(map)
+     && /\.town-photo-name\{font:700 10\.5px\/13px/.test(map)
+     && /\.town-photo-credit\{font:400 8px\/10px/.test(map));
+  ok("the box, the icon and the anchor all use that one number",
+     /const b = \{ l: cx - PHOTO_W \/ 2, r: cx \+ PHOTO_W \/ 2, t: cy - tall \/ 2, b: cy \+ tall \/ 2, dir \};/.test(photoMap)
+     && /iconSize: \[PHOTO_W, tall\]/.test(photoMap)
+     && /iconAnchor: \[box\.dir > 0 \? -16 : PHOTO_W \+ 16, tall\]/.test(photoMap));
+  // ── AND THE LABEL THAT WAS ALREADY THERE ─────────────────────
+  //
+  // Same browser run: on a route of six or fewer stops every pin carries a
+  // PERMANENT name label, the label stands above the pin and the card sits
+  // beside it, so "Day 2 · Roskilde Cathedral" printed straight across the
+  // Roskilde photograph. No pin was covered and no two cards touched, and the
+  // map still looked like a pile.
+  ok("what is already drawn on the map is measured, not guessed",
+     /querySelectorAll\("\.gemlyx-map-label, \.leaflet-control"\)/.test(photoMap));
+  ok("and a card is refused where it would land on one",
+     /const hitsDrawn = drawnOn\.some\(o => \(o\.owner === null \|\| !cl\.indexes\.includes\(o\.owner\)\)/.test(photoMap));
+  // Treating every label as an obstacle was right and too strict on its own:
+  // five labels left exactly one card standing. A card names the town in bold
+  // already, so it takes its own label's place rather than dodging it.
+  ok("a card replaces the label it repeats",
+     /drawnOn\[k\]\.el\.style\.display = "none";/.test(photoMap));
+  ok("which is why every label says which stop it belongs to",
+     /className: `gemlyx-map-label gmx-lbl-\$\{i\}`/.test(photoMap)
+     && /className: `gemlyx-map-label gmx-lbl-\$\{first\}`/.test(photoMap));
   // The picture is the town's OWN published photograph, under the same licence
   // check the cards use, so a map never shows a picture nobody chose for that
   // town and never shows a CC BY one without its line.
@@ -21953,6 +21997,63 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   is("a shop answers when the operator does not",
      findTicketPrice({ siteText: "Velkommen til festivalen", listingText: "Pris: Entré: 400 kr." })?.from, "listing");
   is("and nothing answers when neither says", findTicketPrice({ siteText: "hej", listingText: "hej" }), null);
+
+  // ── AND WHAT THE PAGE HAS TO BE ABOUT, 23 SEP 2026 ──────────────
+  //
+  // Oliver's batch of twelve drafts. Three of the six free places came back
+  // flagged for a missing ticket price, and all three are free to walk into:
+  //
+  //   Hindsgavl Dyrehave      175 DKK, from bridgewalking-danmark.dk
+  //   H. C. Andersen Trail     15 EUR, from caliglobetrotter.com
+  //   Den Uendelige Bro     20-30 DKK, from evendo.com
+  //
+  // Bridgewalking is a different attraction in the same town: you walk on the
+  // Old Little Belt Bridge and 175 DKK is what THAT costs. The run put it on
+  // its most actionable line, twice, and asked a deer park to justify it.
+  //
+  // The rule already existed for Google listings and this read never got it:
+  // "A listing is only usable when its own name is the name of the thing being
+  // drafted."
+  {
+    const deerPark = [
+      { host: "bridgewalking-danmark.dk", text: "Bridgewalking Lillebælt. Billet 175 DKK per person for turen på Den Gamle Lillebæltsbro." },
+      { host: "visitmiddelfart.dk", text: "Hindsgavl Dyrehave er åben hele året. Gratis adgang til dyrehaven." },
+    ];
+    is("a listing may not price a place it never names",
+       findTicketPrice({ listingPages: deerPark, name: "Hindsgavl Dyrehave" })?.host, "visitmiddelfart.dk");
+    ok("so the free page is the one that answers",
+       findTicketPrice({ listingPages: deerPark, name: "Hindsgavl Dyrehave" })?.free === true);
+    // Which is the whole finding: the demand for 175 DKK goes away, because the
+    // run stops reading another business's price as this one's. What is left is
+    // the honest note that the page says free and the draft does not, which is
+    // worth having and is what he would have wanted on that line all along.
+    const left = priceMisses("A deer park you can walk into.", { listingPages: deerPark, name: "Hindsgavl Dyrehave" });
+    ok("the demand for another attraction's price is gone",
+       !left.some(m => /175/.test(m.detail)));
+    ok("and what is left is that the page says free",
+       left.length === 1 && /says entry is free and this draft does not say so/.test(left[0].detail));
+    // "Free entry" rather than "free to walk into": saysFreeIn holds a bare
+    // "free" to the same bar a figure is held to, so the phrase that names
+    // entry itself is the one that counts. That rule is tested on its own
+    // further up; this fixture just has to satisfy it.
+    is("and a draft that does say so is clean",
+       priceMisses("Free entry, all year.", { listingPages: deerPark, name: "Hindsgavl Dyrehave" }).length, 0);
+    // A listing that IS about the place still prices it, which is the case the
+    // whole step exists for.
+    is("a listing that names it still answers",
+       findTicketPrice({ listingPages: [{ host: "evendo.com", text: "Tivoli Gardens entry ticket 145 DKK." }], name: "Tivoli Gardens" })?.lo, 145);
+    // The operator's own pages are exempt, and that is not a loophole: they
+    // were established as the operator's earlier in the run, which is a
+    // stronger statement than a name appearing in text.
+    is("the operator's own page needs no name in it",
+       findTicketPrice({ sitePages: [{ host: "tivoli.dk", text: "Entré 145 kr." }], name: "Tivoli Gardens" })?.from, "official-site");
+    // Every existing caller hands no name and behaves exactly as before.
+    is("and a caller with no name to give is unchanged",
+       findTicketPrice({ listingPages: deerPark })?.lo, 175);
+    // Wired, with the draft's own name.
+    ok("the run hands the read the name it is drafting",
+       /name: t\.name \|\| name,/.test(readFileSync(join(root, "src/App.jsx"), "utf8")));
+  }
 
   // ── WHICH PAGE ACTUALLY SAID IT, 6 SEP 2026 ─────────────────────
   //
@@ -61458,9 +61559,35 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     is("every word on the list, not only his first one",
        M.trimFillerForChat([], "It is truly good and simply the best."),
        "It is good and the best.");
+    // ── AND THE ADJECTIVE, IN THE CHAT AND NOWHERE ELSE ──────────
+    //
+    // Oliver, 23 Sep 2026: "Cut it in the chat only." The reply that prompted
+    // it carried both forms in one paragraph and only the adverb went:
+    // "driving lets you actually load up on stuff" and "actual Danish design
+    // pieces rather than souvenir shop stuff".
+    is("the chat loses the adjective too",
+       M.trimFillerForChat([], "Driving lets you actually load up on actual Danish design pieces."),
+       "Driving lets you load up on Danish design pieces.");
+    // The one place it does work is correcting an expectation, and the
+    // sentence survives the cut and stays true.
+    is("including where it was correcting an expectation",
+       M.trimFillerForChat([], "The actual price is 200 kr."), "The price is 200 kr.");
+    // \b on both ends, so the adverb is not half-eaten by the adjective's rule
+    // whichever order they are processed in.
+    is("and the two words do not eat each other",
+       M.trimFillerForChat([], "Actually, the actual answer is simpler."), "The answer is simpler.");
+    // NOWHERE ELSE. A published entry is audited on a COUNT of these words, so
+    // adding one to the shared list changes what the audit measures. FILLER_
+    // ADJECTIVES says why an adjective is counted rather than cut: "a more
+    // genuine feel" becomes "a more feel".
+    is("a published entry keeps it", M.trimFillerRuns(["An actual bakery, actually open."])[0],
+       "An actual bakery, actually open.");
+    ok("because the wider list is the chat's own",
+       M.CHAT_FILLER_WORDS.includes("actual") && !M.FILLER_TRIMMED.includes("actual")
+       && !M.FILLER_WORDS.includes("actual") && !M.FILLER_COUNTED.includes("actual"));
     // The published side is untouched: that is what the audit counts on.
     ok("the entries keep their count-based rule",
-       /export const trimFillerForChat = \(priorTexts, text\) =>\s*trimFillerAgainst\(priorTexts, text, \{ keep: 0 \}\);/
+       /export const trimFillerForChat = \(priorTexts, text\) =>\s*trimFillerAgainst\(priorTexts, text, \{ keep: 0, words: CHAT_FILLER_WORDS \}\);/
          .test(readFileSync(join(root, "src/utils/helpers.js"), "utf8")));
     const appFill = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
     is("and every reply the chat shows goes through it",
@@ -68138,7 +68265,18 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
     ok("it builds the app rather than testing the source", /vite", "build"/.test(br));
     ok("and drives it in a real browser", /chromium\.launch/.test(br));
-    ok("clicking every page in the nav", /const NAV = \["Explore"/.test(br));
+    // ── AND THE LIST IS READ OFF THE NAV, 23 SEP 2026 ───────────
+    // It was a hand-written array of eight labels and it had drifted twice
+    // without anybody noticing, because the harness was skipping itself for an
+    // unrelated reason. A page added to the nav is tested on the day it is
+    // added now, and this pins that it is derived rather than typed.
+    ok("clicking every page in the nav", /const NAV = await page\.evaluate\(/.test(br));
+    ok("and the list comes off the rendered nav rather than a copy of it",
+       /the nav was read off the page rather than typed into this file/.test(br));
+    // It also has to be able to RUN. It reported "not installed" on a machine
+    // that had Playwright globally, and every assertion in it silently did not
+    // run, which is the shape of failure this harness exists to catch.
+    ok("and it finds a Playwright installed anywhere", /npm", \["root", "-g"\]/.test(br));
     // Asserting the INDEX is what makes it able to fail: the broken build showed
     // page one for every click, and a test that only checked "something is on
     // screen" would have passed.
@@ -71988,7 +72126,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
       ok("and marks it as a menu in the draft text", /\[Read off a \$\{menuShots\.length \? "menu" : "poster"\} image on/.test(appM));
     }
     const panelSrc = readFileSync(join(root, "src/components/CheapGemsPanel.jsx"), "utf8");
-    ok("the Studio panel can look one up by name", /gemSearchesFor\(only, place\)/.test(panelSrc) && /find\(named\.trim\(\)\)/.test(panelSrc));
+    ok("the Studio panel can look one up by name", /gemSearchesFor\(only, place, said\)/.test(panelSrc) && /find\(named\.trim\(\), deal\.trim\(\)\)/.test(panelSrc));
     ok("in Danish where the thing is Danish", G.gemSearches("Aarhus").some(q => /studierabat/.test(q)));
     ok("and the country gets its own four", G.gemSearches("").every(q => !/undefined/.test(q)) && G.gemSearches("Denmark")[0] === G.gemSearches("")[0]);
 
@@ -72011,6 +72149,87 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     is("the coupon one, the invented one and the two malformed ones are counted", got.dropped, { noSource: 1, coupon: 1, shape: 2, other: 0 });
     ok("and he is told about each", G.gemRunNotes(got).length === 3);
 
+    // ── HIS OWN SENTENCE, CONFIRMED RATHER THAN DISCOVERED ──────────
+    //
+    // Oliver, 23 Sep 2026: "No, they are normal discounts. I tried putting
+    // them in myself to cheap. It did look up the place, but it talked about
+    // some board-free shit. If I write something, then also let me be able to
+    // write the discount. Then the AI can research exactly what I'm refering
+    // to, and then confirm it into a draft."
+    {
+      const SAID = "Students get 20 percent off beer before ten";
+      is("the deal's own words are what gets searched", G.saidWords(SAID), ["Students", "percent", "beer"]);
+      is("and a sentence of small words leaves nothing to search", G.saidWords("you get it if they have it"), []);
+      const qs = G.gemSearchesFor("Barkowski", "Aalborg", SAID);
+      ok("a confirming run searches the place and the sentence", qs[0] === "Barkowski Aalborg" && qs.some(q => /Students percent beer/.test(q)));
+      ok("and drops the category searches it used to run", !qs.some(q => /studierabat|student discount|priser kr/.test(q)));
+      is("with nothing written, the five it always ran", G.gemSearchesFor("Barkowski", "Aalborg").length, 5);
+
+      const PR = G.GEMS_PROMPT("Aalborg", [], { only: "Barkowski", said: SAID });
+      ok("the prompt is handed the sentence", PR.includes(`"${SAID}"`));
+      ok("and told that is the whole job", /YOUR JOB IS THAT SENTENCE AND NOTHING ELSE/.test(PR));
+      ok("with three answers and no fourth", /"check":"confirmed\|contradicted\|notfound"/.test(PR));
+      ok("a page that lists the place without the saving is not a contradiction", /WITH NO MENTION OF THE SAVING IS notfound/.test(PR));
+      ok("and the ordinary run is never asked for a verdict", !/"check"/.test(G.GEMS_PROMPT("Aalborg", [], { only: "Barkowski" })));
+
+      const BR = [{ title: "Barkowski", url: "https://barkowski.dk/", snippet: "20% til studerende" }];
+      const conf = G.settleGems({ gems: [
+        { name: "Barkowski", kind: "scheme", what: "20% off for students", how: "Show a student card", check: "confirmed", source: 0 },
+      ] }, BR, { today: DAY, only: "Barkowski", said: SAID });
+      is("confirmed keeps the page and the page's wording", [conf.gems[0].source, conf.gems[0].what], ["https://barkowski.dk/", "20% off for students"]);
+      is("and the card says both said it", G.saidLine(conf.gems[0]), "Told to us by a local, and their own page states it too.");
+
+      const against = G.settleGems({ gems: [
+        { name: "Barkowski", kind: "scheme", what: "10% off for students", how: "Show a student card", check: "contradicted", pageSays: "10% for students, all night", source: 0 },
+      ] }, BR, { today: DAY, only: "Barkowski", said: SAID });
+      is("contradicted prints the page's figure, not his", against.gems[0].what, "10% off for students");
+      ok("and the card names the difference", /A local told us "Students get 20 percent off beer before ten"\. Their page says 10% for students, all night, so the page is what stands here\./.test(G.saidLine(against.gems[0])));
+      ok("it still goes up, with that difference in front of him", !G.gemProblems(against.gems[0], DAY).blocks
+        && G.gemProblems(against.gems[0], DAY).problems.some(p => /does not say what you said/.test(p)));
+
+      const none = G.settleGems({ gems: [
+        { name: "Leanowski", kind: "scheme", what: "", how: "Ask at the bar", check: "notfound", source: -1 },
+      ] }, BR, { today: DAY, only: "Leanowski", said: SAID });
+      is("not found comes back anyway, on his word", none.gems.length, 1);
+      is("with no page behind it", none.gems[0].source, "");
+      is("and his sentence as the saving", none.gems[0].what, SAID);
+      is("the card says whose word it is", G.saidLine(none.gems[0]), "Told to us by a local. No page of theirs states it, so ask when you are there.");
+      ok("a saving nobody published is not blocked, and says why", !G.gemProblems(none.gems[0], DAY).blocks
+        && G.gemProblems(none.gems[0], DAY).problems.some(p => /says a local told us/.test(p)));
+      ok("and it shows to a reader", G.gemLive(none.gems[0], DAY));
+      ok("but a row with no page and nobody behind it is still a rumour",
+        G.gemProblems({ ...none.gems[0], said: "", saidCheck: "" }, DAY).blocks);
+      ok("and its stale note asks him rather than the page",
+        G.gemProblems(none.gems[0], new Date(2027, 5, 1)).problems.some(p => /Ask them again/.test(p)));
+      is("he is told what the run made of it", G.gemRunNotes(none).filter(n => /stands on your word alone/.test(n)).length, 1);
+      ok("a sentence he wrote is never counted as a lead off somebody else's page",
+        !G.gemRunNotes(none).some(n => /unticked until you have looked/.test(n)));
+
+      // A verdict is the model's to give and nobody else's to invent: a run
+      // with a sentence and no verdict is read as the weakest of the three,
+      // never as a page confirming him.
+      const mum = G.settleGems({ gems: [{ name: "Barkowski", kind: "scheme", what: "20% off", source: 0 }] },
+        BR, { today: DAY, only: "Barkowski", said: SAID });
+      is("silence about the verdict is not a confirmation", mum.gems[0].saidCheck, "notfound");
+      is("an ordinary run carries no sentence at all", got.gems[0].said, "");
+      is("and no verdict either", got.gems[0].saidCheck, "");
+      ok("a row with no sentence says nothing about who told us", G.saidLine(got.gems[0]) === "");
+      is("the three answers are named once", G.SAID_CHECKS, ["confirmed", "contradicted", "notfound"]);
+      ok("the shape carries them into the table", (() => {
+        const sh = G.shapeGem({ name: "x", kind: "cheap", said: SAID, saidCheck: "confirmed", saidPage: "p" });
+        return sh.said === SAID && sh.saidCheck === "confirmed" && sh.saidPage === "";
+      })());
+      ok("and a verdict it does not know is dropped", G.shapeGem({ saidCheck: "maybe" }).saidCheck === "");
+
+      const pageSrc = readFileSync(join(root, "src/components/CheapGemsPage.jsx"), "utf8");
+      ok("the reader is told whose word a saving is on", /saidLine\(g\)/.test(pageSrc));
+      ok("and a row with no page shows no link to one", /\{g\.source && \(/.test(pageSrc));
+      ok("the Studio panel has a box for the deal", /placeholder="The deal, in your words, if you know it"/.test(panelSrc));
+      ok("and the button says what it will do with it", /deal\.trim\(\) \? "Confirm it" : "Look it up"/.test(panelSrc));
+      ok("a sentence with no place to put it is not run", /const said = only \? String\(told\)\.trim\(\) : ""/.test(panelSrc));
+      ok("a row he wrote the deal for is ticked for him", /\(g\.own \|\| !!g\.said\) && !statusOf\(g\)\.blocks/.test(panelSrc));
+    }
+
     // ── THE PAGE, THE NAV AND THE STUDIO ────────────────────────
     const appG = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
     const pageG = stripComments(readFileSync(join(root, "src/components/CheapGemsPage.jsx"), "utf8"));
@@ -72023,7 +72242,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     ok("and only calls a page theirs when it is", /isOwnSite\(g\.source, g\.name\) \? "Their page"/.test(pageG));
     ok("the Studio panel publishes through shapeForLive", /payload: shapeForLive\(GEM_TYPE, g\)/.test(appG));
     ok("a blocked row cannot be ticked", /disabled=\{st\.blocks\}/.test(panelG));
-    ok("and a lead from somebody else's page starts unticked", /g\.own && !statusOf\(g\)\.blocks/.test(panelG));
+    ok("and a lead from somebody else's page starts unticked", /\(g\.own \|\| !!g\.said\) && !statusOf\(g\)\.blocks/.test(panelG));
     ok("coupon and company-database results never reach the model", /isCouponSite\(url\) \|\| isDataSite\(url\)\) continue/.test(panelG));
     ok("a name already published is not offered twice", /Already published under this name/.test(panelG));
     const liveG = readFileSync(join(root, "src/utils/liveContent.js"), "utf8");
@@ -73477,6 +73696,122 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   is("no search calls Nominatim with a bare fetch", (every.match(/fetch\(`https:\/\/nominatim\.openstreetmap\.org\/search/g) || []).length, 0);
   ok("and they call the shared door", (every.match(/nominatimJson\(`https:\/\/nominatim\.openstreetmap\.org\/search/g) || []).length >= 6);
   ok("the 250 ms waits are gone", !/setTimeout\(r, 250\)\); \/\/ be a polite/.test(every));
+}
+
+// ── WHAT A LOCAL TOLD US ────────────────────────────────────────────
+//
+// Oliver, 23 Sep 2026: "I want it to learn from me... I want Gemlyx AI to
+// actually be as close to a local as possible." And, on the shape of it the
+// same day: "With the Flixbus, Kombardo, and Orange billet.. it really
+// depends on how far ahead you order it."
+{
+  const DAY = new Date(2026, 8, 23);
+  const DSB = {
+    said: "Kombardo Ekspressen and Flixbus are budget alternatives to DSB",
+    kind: "cost",
+    when: "if you are booking within a week or two",
+    about: "trains, buses, fares",
+    check: "depends",
+    found: "DSB Orange tickets go on sale about two months before the day and undercut the bus",
+    source: "https://www.dsb.dk/find-produkter-og-services/orange/",
+    checkedAt: "2026-09-23",
+  };
+
+  // ── THE CONDITION IS THE POINT ────────────────────────────────────
+  ok("his own first note is publishable", !M.noteProblems(DSB, DAY).blocks && M.noteLive(DSB, DAY));
+  ok("a price note with no when is told to say what it depends on",
+    M.noteProblems({ ...DSB, when: "" , check: "holds", found: "" }, DAY).problems.some(p => /A price with no when/.test(p)));
+  ok("and a note the pass narrowed cannot go up without one",
+    M.noteProblems({ ...DSB, when: "" }, DAY).blocks);
+  ok("an unchecked note reaches nobody", !M.noteLive({ ...DSB, check: "" }, DAY));
+  ok("nor does one with no date", M.noteProblems({ ...DSB, checkedAt: "" }, DAY).blocks);
+
+  // ── HIS RULE: ON HOW IT IS HE WINS, ON WHAT IT COSTS THE PAGE ────
+  const costAgainst = { ...DSB, check: "against", found: "the bus is dearer than an Orange ticket on that route" };
+  ok("a price a page disagrees with does not go out in his words", M.noteProblems(costAgainst, DAY).blocks);
+  ok("and he is told to reword it to the page's figure",
+    M.noteProblems(costAgainst, DAY).problems.some(p => /the page wins, so reword this/.test(p)));
+  const howAgainst = { said: "Jomfru Ane Gade is quiet before eleven", kind: "how", about: "nightlife Aalborg", towns: ["Aalborg"], check: "against", found: "a listing calls it busy from nine", checkedAt: "2026-09-23" };
+  ok("how a thing is goes up anyway, with the page noted", !M.noteProblems(howAgainst, DAY).blocks);
+  ok("and the chat is told to give them both", /Say his and say the page's/.test(M.NOTE_LINE(M.shapeNote(howAgainst))));
+
+  // ── ADVICE IS NOT A CLAIM ABOUT THE WORLD ────────────────────────
+  const soft = { said: "It is worth getting to know a local while you are here", kind: "advice", about: "locals, meeting people", checkedAt: "2026-09-23" };
+  ok("advice needs no page and no check", M.noteLive(soft, DAY) && !M.noteProblems(soft, DAY).blocks);
+  ok("and never goes stale", M.noteLive(soft, new Date(2030, 0, 1)));
+  ok("it is handed over as advice rather than as a fact", /THIS IS ADVICE, not a fact to check/.test(M.NOTE_LINE(M.shapeNote(soft))));
+  ok("a price does go stale", !M.noteLive(DSB, new Date(2027, 6, 1)));
+  ok("how a thing is lasts longer than what it costs", M.NOTE_LIFE.how > M.NOTE_LIFE.cost);
+
+  // ── PICKED BY CODE, BEFORE THE CALL ──────────────────────────────
+  const ROWS = [DSB, soft, howAgainst];
+  is("a question about the train finds the fare note",
+    M.notesFor("how do I get to Aalborg cheaply, is the train expensive", ROWS, { today: DAY }).map(n => n.kind).sort(), ["cost", "how"]);
+  is("a plural and a singular are the same subject",
+    M.notesFor("is the train expensive", [DSB], { today: DAY }).length, 1);
+  is("a question about lunch finds nothing", M.notesFor("where should I eat in Ribe", ROWS, { today: DAY }), []);
+  is("and an empty conversation finds nothing", M.notesFor("", ROWS, { today: DAY }), []);
+  is("a note scoped to a town stays out of another town's trip",
+    M.notesFor("what is the nightlife like in Odense", [howAgainst], { today: DAY, town: "Odense" }), []);
+  is("and reaches its own", M.notesFor("what is the nightlife like in Aalborg", [howAgainst], { today: DAY, town: "Aalborg" }).length, 1);
+  ok("never more than three, whatever matches", M.MAX_NOTES === 3
+    && M.notesFor("train train train", Array.from({ length: 9 }, (_, i) => ({ ...DSB, said: `${DSB.said} ${i}` })), { today: DAY }).length === 3);
+  is("nothing matching is no block at all", M.notesBlock([]), "");
+
+  const BLOCK = M.notesBlock(M.notesFor("is the train expensive", ROWS, { today: DAY }));
+  ok("the block says whose words these are", /WHAT A LOCAL TOLD US/.test(BLOCK));
+  ok("and that the condition travels with the claim", /THE CONDITION IS PART OF THE CLAIM/.test(BLOCK));
+  ok("and that an unbacked one is never stated as checked", /NEVER STATE ONE AS CHECKED/.test(BLOCK));
+  ok("it carries his sentence word for word", BLOCK.includes(DSB.said));
+  ok("and what the page narrowed it to", BLOCK.includes("undercut the bus"));
+  ok("the chat is not told to credit a founder", /never crediting a founder or a website/.test(BLOCK));
+
+  // ── THE PASS LOOKS FOR WHAT NARROWS IT ───────────────────────────
+  const PR = M.NOTE_PROMPT(DSB, []);
+  ok("the pass is told it is not marking him right or wrong", /YOU ARE NOT MARKING THEM RIGHT OR WRONG/.test(PR));
+  ok("and that a condition is the best answer it can bring back", /A condition you find is the most useful thing/.test(PR));
+  ok("silence is not a denial", /A PAGE NOT MENTIONING SOMETHING HAS NOT DENIED IT/.test(PR));
+  ok("it is handed his sentence and his condition", PR.includes(DSB.said) && PR.includes(DSB.when));
+  ok("the searches lead with the sentence", M.noteSearches(DSB)[0].startsWith("Kombardo Ekspressen"));
+  is("and nothing is searched for an empty note", M.noteSearches({ said: "" }), []);
+
+  const RES = [{ title: "DSB", url: "https://www.dsb.dk/find-produkter-og-services/orange/", snippet: "to måneder før" }];
+  const dep = M.settleNote({ check: "depends", found: "Orange tickets appear about two months ahead", when: "if you book in the same week", source: 0 }, { ...DSB, check: "", found: "", source: "", checkedAt: "" }, RES, { today: DAY });
+  is("a narrowing keeps the page", dep.source, RES[0].url);
+  is("and is stamped with the day it was read", dep.checkedAt, "2026-09-23");
+  is("his own condition is never written over", M.settleNote({ check: "depends", when: "something else entirely", source: 0 }, DSB, RES, { today: DAY }).when, DSB.when);
+  is("and one he left empty is filled by what it found",
+    M.settleNote({ check: "depends", when: "if you book in the same week", source: 0 }, { ...DSB, when: "" }, RES, { today: DAY }).when, "if you book in the same week");
+  is("a verdict with no page behind it is no verdict", M.settleNote({ check: "holds", source: -1 }, DSB, RES, { today: DAY }).check, "notfound");
+  is("and it keeps no page either", M.settleNote({ check: "holds", source: -1 }, DSB, RES, { today: DAY }).source, "");
+  is("an answer that is not one of the four is read as the weakest", M.settleNote({ check: "obviously true", source: 0 }, DSB, RES, { today: DAY }).check, "notfound");
+  is("nothing at all is read the same way", M.settleNote({}, DSB, RES, { today: DAY }).check, "notfound");
+  ok("a note nobody can check still goes up, and says so",
+    M.noteLive(M.settleNote({}, { ...DSB, when: "if you are booking within a week or two" }, RES, { today: DAY }), DAY)
+    && /No page says either way/.test(M.NOTE_LINE(M.settleNote({}, DSB, RES, { today: DAY }))));
+  is("the shape drops a page's words when nothing disagreed", M.shapeNote({ said: "x", kind: "how", check: "holds", found: "something" }).found, "");
+  is("the four verdicts are named once", M.NOTE_CHECKS, ["holds", "depends", "against", "notfound"]);
+  is("and the three sorts of thing he can say", M.NOTE_KINDS, ["how", "cost", "advice"]);
+  is("he is told what the run made of it", M.noteRunNotes(dep).length, 2);
+  ok("and that advice was never checked", /nothing was checked/.test(M.noteRunNotes(M.shapeNote(soft))[0]));
+
+  // ── AND THE WIRING ───────────────────────────────────────────────
+  const appN = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+  ok("the chat picks its notes before the call, off the traveller's own turns",
+    /notesBlock\(notesFor\(travellerTurns\.join\("\\n"\), founderNotes/.test(appN));
+  ok("and the block reaches the prompt", /\$\{kindsRuledOut\}\$\{localSays\}/.test(appN));
+  ok("the Studio can write one", /<FounderNotesPanel onPublish=\{publishNotes\} \/>/.test(appN));
+  ok("and it is published through the one insert door", /type: NOTE_TYPE, payload: shapeForLive\(NOTE_TYPE, n\)/.test(appN));
+  const liveN = stripComments(readFileSync(join(root, "src/utils/liveContent.js"), "utf8"));
+  ok("a published note lands in its own array", /row\.type === NOTE_TYPE\) founderNotes\.push/.test(liveN));
+  ok("and nowhere a guide can reach it", !/founderNotes\.push/.test(liveN.replace(/row\.type === NOTE_TYPE\) founderNotes\.push\(\{ id, \.\.\.item \}\);/, "")));
+  const shapeN = stripComments(readFileSync(join(root, "src/utils/studioContent.js"), "utf8"));
+  ok("the insert shape names its fields once", /if \(type === NOTE_TYPE\) return shapeNote\(t\);/.test(shapeN));
+  const panelN = readFileSync(join(root, "src/components/FounderNotesPanel.jsx"), "utf8");
+  ok("he sees the line the chat will be handed before he can publish it", /NOTE_LINE\(row\)/.test(panelN));
+  ok("and advice skips the search entirely", /if \(kind === "advice"\)/.test(panelN));
+  const noteSrc = readFileSync(join(root, "src/utils/founderNotes.js"), "utf8");
+  ok("no dash of any kind reaches a traveller through this file", !/[\u2013\u2014]/.test(noteSrc));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

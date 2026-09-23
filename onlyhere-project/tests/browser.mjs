@@ -48,7 +48,7 @@ const MIME = { ".html": "text/html", ".js": "text/javascript", ".mjs": "text/jav
   ".woff": "font/woff", ".woff2": "font/woff2", ".ico": "image/x-icon" };
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 let passed = 0, failed = 0; const fails = [];
@@ -61,9 +61,36 @@ const CHROME = ["/opt/pw-browsers/chromium-1194/chrome-linux/chrome", "/opt/pw-b
   .find(p => existsSync(p));
 if (!CHROME) skip("no Chromium found. Set PLAYWRIGHT_BROWSERS_PATH or install one.");
 
-let chromium;
-try { ({ chromium } = await import("playwright")); }
-catch { skip("playwright is not installed here (npm i -D playwright)."); }
+// ── AND IT IS ALLOWED TO BE INSTALLED ANYWHERE ─────────────────────
+//
+// 23 Sep 2026: this file skipped itself on a machine that HAS Playwright,
+// because it was installed globally and a bare ESM import only searches
+// node_modules from the importing file upwards. The harness reported "not
+// installed here" and every assertion in it silently did not run, which is the
+// shape of failure this whole file exists to catch, one level up.
+//
+// So: the bare specifier first, because that is the normal case, then the
+// global root that `npm root -g` reports. Still a real skip when there is no
+// Playwright at all, which is the honest answer on a machine without one.
+const importPlaywright = async () => {
+  try { return await import("playwright"); } catch { /* not local, try global */ }
+  try {
+    const root = execFileSync("npm", ["root", "-g"], { encoding: "utf8" }).trim();
+    const entry = join(root, "playwright", "index.js");
+    // A CommonJS package imported by absolute path arrives as { default: ... },
+    // so the named export is not there and `chromium` came back undefined. The
+    // bare import above is interop-wrapped by the resolver and does have it,
+    // which is why this only showed up on the global path.
+    if (existsSync(entry)) {
+      const mod = await import(pathToFileURL(entry).href);
+      return mod.chromium ? mod : mod.default;
+    }
+  } catch { /* no global either */ }
+  return null;
+};
+const pw = await importPlaywright();
+if (!pw) skip("playwright is not installed here (npm i -D playwright).");
+const { chromium } = pw;
 
 // ── THE BUILD IS THE THING UNDER TEST ───────────────────────────────
 // Not the dev server: the pager bug was in how React and an effect shared a
@@ -140,9 +167,36 @@ const slotInView = () => page.evaluate(() => {
     text: (slots[i]?.innerText || "").trim().split("\n").filter(Boolean)[0] || "(EMPTY)" };
 });
 
-// Every page, by the name a reader clicks. The pager bug showed page one for
-// all of them, so asserting the INDEX is what makes this test able to fail.
-const NAV = ["Explore", "Essentials", "Tips", "Attractions", "Events", "Food", "Nightlife", "Towns"];
+// ── EVERY PAGE, BY THE NAME A READER CLICKS ─────────────────────────
+//
+// The pager bug showed page one for all of them, so asserting the INDEX is
+// what makes this test able to fail.
+//
+// ── AND THE LIST IS READ OFF THE NAV, NOT TYPED HERE ────────────────
+//
+// 23 Sep 2026. This was a hand-written array of eight labels, and it had
+// drifted twice without anybody noticing: Cheap gems went into the nav on 21
+// September and Shopping on 22, both of them BETWEEN entries in this list, so
+// every label after the insertion asserted the wrong slot. Five failures, none
+// of them a bug in the app.
+//
+// It survived because the file skipped itself on this machine for a different
+// reason, so nobody ran it. A hand-written copy of a list the app owns is the
+// mistake this repository has a standing rule about, and the test that exists
+// to catch drift was drifting.
+//
+// So the nav is read from the rendered page, in its own order, and each label
+// is asserted against ITS OWN position. A page added to the nav is now tested
+// on the day it is added, and no number here needs updating again.
+const NAV = await page.evaluate(() => {
+  const home = [...document.querySelectorAll("button")].find(b => /^Explore$/.test(b.textContent.trim()));
+  if (!home) return [];
+  return [...home.parentElement.children]
+    .map(el => (el.textContent || "").trim())
+    .filter(Boolean)
+    .map(t => t.replace(/^✦\s*/, ""));
+});
+ok("the nav was read off the page rather than typed into this file", NAV.length >= 8);
 const first = await slotInView();
 ok("the pager is on the page", !first.error);
 is("it opens on the first page", first.index, 0);

@@ -311,7 +311,10 @@ import { AffiliatePanel } from "./components/AffiliatePanel";
 import { CheapGemsPage } from "./components/CheapGemsPage";
 import { ShoppingPage } from "./components/ShoppingPage";
 import { CheapGemsPanel } from "./components/CheapGemsPanel";
+import { FounderNotesPanel } from "./components/FounderNotesPanel";
 import { GEM_TYPE } from "./utils/cheapGems";
+import { NOTE_TYPE, notesFor, notesBlock } from "./utils/founderNotes";
+import { founderNotes } from "./data/founderNotes";
 import { linkPatch } from "./utils/affiliateAudit";
 import { EntryLink } from "./components/EntryLink";
 import { AuthSheet } from "./components/AuthSheet";
@@ -7935,6 +7938,12 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
           // The pages themselves, so the finding can name the one that carried
           // the figure rather than the first host in the list.
           sitePages, listingPages,
+          // ── AND WHAT THE PAGE HAS TO BE ABOUT ─────────────────
+          // Oliver's batch of 23 Sep 2026: a free deer park was flagged for a
+          // missing 175 DKK, from bridgewalking-danmark.dk, which is a
+          // different attraction in the same town. A listing may only price
+          // the thing it names. See readPages in utils/entryAudit.js.
+          name: t.name || name,
         };
         // ── AND A FOOD HALL HAS NO DOOR ─────────────────────────
         //
@@ -10266,6 +10275,28 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
       }
     } catch (err) {
       return { ok: false, done, why: `${done} published, then ${String(err?.message || err).slice(0, 160)}` };
+    }
+    loadManageItems();
+    return { ok: true, done };
+  };
+
+  // ── AND PUBLISHING WHAT HE TOLD IT ──────────────────────────────
+  // Through shapeForLive like every other insert. One at a time, because a
+  // note is written one at a time.
+  const publishNotes = async (chosen = []) => {
+    let done = 0;
+    try {
+      for (const n of chosen) {
+        const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
+          body: JSON.stringify({ type: NOTE_TYPE, payload: shapeForLive(NOTE_TYPE, n), published: true }),
+        });
+        if (!res.ok) return { ok: false, done, why: `${done} saved, then ${res.status}: ${(await res.text()).slice(0, 160)}` };
+        done += 1;
+      }
+    } catch (err) {
+      return { ok: false, done, why: `${done} saved, then ${String(err?.message || err).slice(0, 160)}` };
     }
     loadManageItems();
     return { ok: true, done };
@@ -20203,7 +20234,7 @@ If the conversation only covers a single day or a few stops with no explicit day
     // is the same shape of page, town then street then the places on it, and
     // because the two are what a visitor does with an afternoon and an evening
     // in the same town. See utils/shopping.js.
-    { id: "shopping", label: uiT("nav.shopping", uiLang), ico: "tag" },
+    { id: "shopping", label: uiT("nav.shopping", uiLang), ico: "bag" },
     { id: "visits", label: uiT("nav.visits", uiLang), ico: "town" },
     { id: "islands", label: uiT("nav.islands", uiLang), ico: "island" },
     { id: "ai", label: uiT("nav.ai", uiLang), ico: null },
@@ -20965,6 +20996,18 @@ If the conversation only covers a single day or a few stops with no explicit day
       // offered. Their own turns, because Gemlyx's replies name museums
       // constantly. See utils/kindRefusal.js.
       const kindsRuledOut = refusedKindsBlock(ruledOutKinds(travellerTurns.join("\n")));
+      // ── WHAT A LOCAL TOLD US, PICKED BEFORE THE CALL ──────────────
+      //
+      // Oliver, 23 Sep 2026: "Is that how the AI will work? That it will look
+      // through it while chatting with the person?" No. The model never
+      // queries the store: code picks the few notes whose subject the
+      // traveller has raised, here, the same way every other block on this
+      // prompt is built. Nothing matches, nothing goes in, and a conversation
+      // about food never sees a note about fares. See utils/founderNotes.js.
+      // The town is the first one they named, which is the one namedByThem
+      // was already computed for a few lines above. A note scoped to a town
+      // reaches a conversation that has said the town, and no other.
+      const localSays = notesBlock(notesFor(travellerTurns.join("\n"), founderNotes, { town: namedByThem[0]?.name || "" }));
       const nightTip = reservedEssential(essentials, { convoText: travellerTurns.join("\n"), interests: intakeInterest });
       const nightBlock = !nightTip ? "" : `\n── AND THE ONE THING A NIGHT OUT HERE NEEDS ──\nThey have said nightlife is part of this trip, so tell them about this once, in your own words, at whatever point in the conversation it is useful rather than all at once. It is a published Gemlyx entry, quoted here as written: state it, never embellish it, and never invent a second app like it.\n\n${essentialsBlock([nightTip])}\n`;
 
@@ -21039,7 +21082,7 @@ ONE QUESTION PER TURN. Not two, whatever else is missing. Somebody asked two thi
 DO NOT COMPLIMENT THEIR CHOICE. "Great pick", "excellent choice", "you'll love it", "way underrated" said about a place they just named is the banned filler in a different costume: it is a sentence with no information in it, spent on making them feel approved of.
 
 GIVE BEFORE YOU ASK. Every turn puts one real thing on the table before its question: a fact about the place they named, an opinion about it, or a warning worth having. One thing, not three, and off the block below when there is one. A conversation where one side only asks is an intake form, and it puts the whole weight of the trip on somebody who came here so they would not have to carry it. This is also what makes a short answer workable: a traveller who types four words at a time is normal, and a turn that gives something is still a real turn when their half is thin.
-${heldBlock}${nightBlock}${budgetCapital}${budgetFood}${flyingIn}${kindsRuledOut}${seasonSays ? `\n${seasonSays}\n` : ""}${homeSays ? `\n${homeSays}\n` : ""}${activitySays ? `\n${activitySays}\n` : ""}
+${heldBlock}${nightBlock}${budgetCapital}${budgetFood}${flyingIn}${kindsRuledOut}${localSays}${seasonSays ? `\n${seasonSays}\n` : ""}${homeSays ? `\n${homeSays}\n` : ""}${activitySays ? `\n${activitySays}\n` : ""}
 ── THE TRIP BRIEF, AS MEASURED RATHER THAN AS YOU FEEL IT ──
 This block is computed from what the traveller has typed and from the form they filled in. It is not your impression of the conversation and it overrides your impression of the conversation. Never say you have everything you need unless this block says so, and never say a traveller has already told you something that is not listed as known here.
 
@@ -25052,6 +25095,15 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         readPage={readSourcePage}
                         readImage={readPosterText} />
                     )}
+
+                    {/* ── AND THE ONE THING NO PAGE CAN TELL IT ──────
+                        Oliver, 23 Sep 2026, wanting Gemlyx to be "as close
+                        to a local as possible". Everything else in
+                        this Studio publishes a page. This publishes a
+                        sentence into the chat's prompt, which is why the
+                        panel shows him the line word for word before he can
+                        press the button. See utils/founderNotes.js. */}
+                    <FounderNotesPanel onPublish={publishNotes} />
 
                     {/* ── THE TOUR SWEEP ─────────────────────────────
                         Oliver, 9 Sep 2026: "So that will be a sweep that

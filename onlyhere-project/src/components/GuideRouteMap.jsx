@@ -76,10 +76,14 @@ const MAP_CSS = `
 .gemlyx-town-photo{pointer-events:auto}
 .town-photo-card{width:112px;border-radius:10px;overflow:hidden;background:${C.surface};
   border:1px solid ${C.border};box-shadow:0 6px 18px rgba(0,0,0,.5);cursor:pointer}
+/* The three heights the layout adds up. Stated rather than left to the font,
+   because the collision test places a card by arithmetic and a line that
+   measures differently from the number is a card drawn where nothing was
+   reserved for it. See cardHeight below. */
 .town-photo-card img{display:block;width:100%;height:60px;object-fit:cover}
-.town-photo-name{font:700 10.5px 'Inter',sans-serif;color:${C.text};padding:4px 7px 5px;
+.town-photo-name{font:700 10.5px/13px 'Inter',sans-serif;color:${C.text};padding:4px 7px 5px;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.town-photo-credit{font:400 8px 'Inter',sans-serif;color:${C.muted};padding:0 7px 5px;
+.town-photo-credit{font:400 8px/10px 'Inter',sans-serif;color:${C.muted};padding:0 7px 5px;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 `;
 
@@ -261,7 +265,7 @@ export const GuideRouteMap = ({ points, legs, nearby = [], onSelect = null, sele
               iconSize: [30, 30],
               iconAnchor: [15, 15],
             }),
-          }).bindTooltip(clusterLabel(n), { direction: "top", offset: [0, -17], className: "gemlyx-map-label" }).addTo(layer);
+          }).bindTooltip(clusterLabel(n), { direction: "top", offset: [0, -17], className: `gemlyx-map-label gmx-lbl-${first}` }).addTo(layer);
           cluster.on("click", () => {
             // Down to the box that holds them, not to a zoom number: two stops
             // 200 m apart and two 2 km apart need different answers and only the
@@ -344,7 +348,10 @@ export const GuideRouteMap = ({ points, legs, nearby = [], onSelect = null, sele
             // it. `above` is what the pin itself reports standing above the
             // point it marks.
             offset: [0, -(pin.above + 4)],
-            className: "gemlyx-map-label",
+            // ── AND IT SAYS WHICH STOP IT BELONGS TO ──────────────
+            // So the photo layer can tell a label that names the card it is
+            // about to draw from one that names somebody else. See drawPhotos.
+            className: `gemlyx-map-label gmx-lbl-${i}`,
           })
           .addTo(layer);
         // ── CLICK A PIN AND FLY DOWN TO IT ──────────────────────
@@ -395,7 +402,25 @@ export const GuideRouteMap = ({ points, legs, nearby = [], onSelect = null, sele
     // share a town, and two identical photographs of Aarhus side by side would
     // be the mess this rule exists to prevent. The town is also what the
     // picture is OF, which is the other half of his sentence.
-    const PHOTO_W = 112, PHOTO_H = 84, PHOTO_GAP = 10, EDGE = 8;
+    // ── AND THE HEIGHT IT TESTS HAS TO BE THE HEIGHT IT DRAWS ──
+    //
+    // Found 23 Sep 2026 by driving this map in a browser rather than asserting
+    // about it. The layout tested every card as 84 pixels tall, which is what a
+    // card without a credit line measures. A CC BY photograph carries the
+    // photographer's name under its title, and that card is 99. So the boxes
+    // the collision test compared were fifteen pixels shorter than the cards it
+    // was placing, and two of them could be found not overlapping and then
+    // drawn overlapping. On the live guide both cards carry a credit, which is
+    // the case it got wrong.
+    //
+    // Arithmetic rather than a measurement, and the CSS above is written to
+    // make the arithmetic true: the picture, the name line and the credit line
+    // all have stated heights, so this adds up rather than estimates. The two
+    // have to move together, which is why the numbers are named here and used
+    // in both places.
+    const PHOTO_W = 112, PHOTO_GAP = 10, EDGE = 8;
+    const CARD_IMG = 60, CARD_NAME = 22, CARD_CREDIT = 15, CARD_EDGE = 2;
+    const cardHeight = (credit) => CARD_IMG + CARD_NAME + (credit ? CARD_CREDIT : 0) + CARD_EDGE;
     const drawPhotos = () => {
       photoLayerRef.current?.remove();
       photoLayerRef.current = null;
@@ -405,6 +430,41 @@ export const GuideRouteMap = ({ points, legs, nearby = [], onSelect = null, sele
       // Every pin on the map, cards included or not: a card may not cover any
       // of them, because a covered pin cannot be pressed at all.
       const pinAt = points.filter(p => Number.isFinite(p?.lat) && Number.isFinite(p?.lon)).map(at);
+      // ── AND THE THINGS ALREADY DRAWN ON TOP OF THE MAP ──────────
+      //
+      // Seen in a browser, 23 Sep 2026, and it is the same mess this rule
+      // exists to prevent wearing different clothes: on a route of six or
+      // fewer stops every pin carries a PERMANENT name label, and the label
+      // stands above the pin while the card sits beside it, so "Day 2 ·
+      // Roskilde Cathedral" was printed straight across the Roskilde
+      // photograph. The pins were not covered and the cards did not touch each
+      // other, and the map still looked like a pile.
+      //
+      // Measured rather than computed, because a label's width is its text and
+      // nothing here knows the font metrics. The tooltips exist by now:
+      // drawPins runs before this in the same tick. The zoom buttons and the
+      // attribution are in the same list for the same reason, and both are
+      // corners a card has no business sitting on.
+      //
+      // ── AND A CARD REPLACES THE LABEL IT DUPLICATES ─────────────
+      //
+      // Treating every label as an obstacle was right and, on its own, too
+      // strict: a five stop route carries five permanent labels and exactly
+      // one card survived them. The fix is not a looser test, it is noticing
+      // that a card NAMES THE TOWN IN BOLD ALREADY, so the label above that
+      // pin is saying the same word twice. A card takes its own label's place
+      // and leaves everybody else's alone, which is why each label carries the
+      // index of the stop it belongs to.
+      const mapBox = map.getContainer().getBoundingClientRect();
+      const drawnOn = [...map.getContainer().querySelectorAll(".gemlyx-map-label, .leaflet-control")]
+        .map(el => {
+          const r = el.getBoundingClientRect();
+          const owner = (String(el.className || "").match(/gmx-lbl-(\d+)/) || [])[1];
+          return { el, owner: owner === undefined ? null : Number(owner),
+            box: { l: r.left - mapBox.left, r: r.right - mapBox.left, t: r.top - mapBox.top, b: r.bottom - mapBox.top },
+            w: r.width, h: r.height };
+        })
+        .filter(o => o.w > 0 && o.h > 0);
       const taken = [];
       const layer = L.layerGroup();
       const seen = new Set();
@@ -415,31 +475,44 @@ export const GuideRouteMap = ({ points, legs, nearby = [], onSelect = null, sele
         const key = String(shot.town || shot.name || "").toLowerCase();
         if (!key || seen.has(key)) continue;
         const here = at(p);
-        // Right first, then left. A tie is broken by the first one that fits,
-        // which keeps the layout stable as the map moves rather than flipping
-        // a card from side to side on a one pixel pan.
-        let box = null;
-        for (const dir of [1, -1]) {
-          const cx = here.x + dir * (PHOTO_W / 2 + 16);
-          const cy = here.y - PHOTO_H / 2;
-          const b = { l: cx - PHOTO_W / 2, r: cx + PHOTO_W / 2, t: cy - PHOTO_H / 2, b: cy + PHOTO_H / 2, dir };
-          if (b.l < EDGE || b.r > size.x - EDGE || b.t < EDGE || b.b > size.y - EDGE) continue;
-          const hitsCard = taken.some(o => !(b.r + PHOTO_GAP < o.l || b.l - PHOTO_GAP > o.r || b.b + PHOTO_GAP < o.t || b.t - PHOTO_GAP > o.b));
-          if (hitsCard) continue;
-          const hitsPin = pinAt.some(q => q.x > b.l - 6 && q.x < b.r + 6 && q.y > b.t - 6 && q.y < b.b + 6);
-          if (hitsPin) continue;
-          box = b;
-          break;
-        }
-        if (!box) continue;
-        taken.push(box);
-        seen.add(key);
         // Escaped, because this is built as HTML rather than as elements. The
         // values are the founder's own published rows, so this is not a
         // sanitiser so much as the habit that keeps one from being needed.
         const esc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
         const name = esc(shot.town || shot.name || "");
         const credit = esc(shot.credit || "");
+        const tall = cardHeight(!!credit);
+        // Right first, then left. A tie is broken by the first one that fits,
+        // which keeps the layout stable as the map moves rather than flipping
+        // a card from side to side on a one pixel pan.
+        let box = null;
+        for (const dir of [1, -1]) {
+          const cx = here.x + dir * (PHOTO_W / 2 + 16);
+          const cy = here.y - tall / 2;
+          const b = { l: cx - PHOTO_W / 2, r: cx + PHOTO_W / 2, t: cy - tall / 2, b: cy + tall / 2, dir };
+          if (b.l < EDGE || b.r > size.x - EDGE || b.t < EDGE || b.b > size.y - EDGE) continue;
+          const hitsCard = taken.some(o => !(b.r + PHOTO_GAP < o.l || b.l - PHOTO_GAP > o.r || b.b + PHOTO_GAP < o.t || b.t - PHOTO_GAP > o.b));
+          if (hitsCard) continue;
+          const hitsPin = pinAt.some(q => q.x > b.l - 6 && q.x < b.r + 6 && q.y > b.t - 6 && q.y < b.b + 6);
+          if (hitsPin) continue;
+          const hitsDrawn = drawnOn.some(o => (o.owner === null || !cl.indexes.includes(o.owner))
+            && !(b.r < o.box.l || b.l > o.box.r || b.b < o.box.t || b.t > o.box.b));
+          if (hitsDrawn) continue;
+          box = b;
+          break;
+        }
+        if (!box) continue;
+        taken.push(box);
+        seen.add(key);
+        // The card is up, so the label it repeats comes down, and it stops
+        // blocking the next card as well. Redrawn from scratch on every zoom
+        // and pan, so nothing stays hidden once its card is gone.
+        for (let k = drawnOn.length - 1; k >= 0; k -= 1) {
+          if (drawnOn[k].owner !== null && cl.indexes.includes(drawnOn[k].owner)) {
+            drawnOn[k].el.style.display = "none";
+            drawnOn.splice(k, 1);
+          }
+        }
         const marker = L.marker([p.lat, p.lon], {
           icon: L.divIcon({
             className: "gemlyx-town-photo",
@@ -447,9 +520,9 @@ export const GuideRouteMap = ({ points, legs, nearby = [], onSelect = null, sele
                 + `<div class="town-photo-name">${name}</div>`
                 + (credit ? `<div class="town-photo-credit">${credit}</div>` : "")
                 + `</div>`,
-            iconSize: [PHOTO_W, PHOTO_H],
+            iconSize: [PHOTO_W, tall],
             // Beside the pin, on the side that was measured to fit.
-            iconAnchor: [box.dir > 0 ? -16 : PHOTO_W + 16, PHOTO_H],
+            iconAnchor: [box.dir > 0 ? -16 : PHOTO_W + 16, tall],
           }),
           keyboard: false,
           // Under the pins in the stacking order: a picture is something to
