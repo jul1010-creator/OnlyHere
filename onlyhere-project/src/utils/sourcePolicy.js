@@ -155,6 +155,9 @@ export const TYPE_LABEL = {
   // Another row type that is deliberately not draftable: a cheap gem is only
   // made by its own research pass. Labelled so Manage heads its group in words.
   gem: "Cheap gems",
+  // And a third: a note is a sentence Oliver wrote, made nowhere but the
+  // panel he writes it in. See utils/founderNotes.js.
+  note: "What you know from living here",
 };
 
 // ── A VENUE CALLED "TRAIN" POISONS ITS OWN RESEARCH ─────────────────

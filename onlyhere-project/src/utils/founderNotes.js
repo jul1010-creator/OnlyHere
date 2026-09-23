@@ -12,7 +12,7 @@
 // what makes it safe and it is also what makes it a search engine with a
 // friendly voice: the one thing it cannot say is the thing a local would say
 // first. This file is the other source. He writes a sentence, it is checked,
-// and what survives reaches the prompt as what a local told us.
+// and what survives reaches the prompt as something Gemlyx knows.
 //
 // ── THE RULE THAT DECIDES WHO WINS ──────────────────────────────────
 //
@@ -91,18 +91,54 @@ export const noteAgo = (note, today = new Date()) => {
   return Math.round((startOf(today).getTime() - startOf(d).getTime()) / 86400000);
 };
 
+// NARROW ON PURPOSE. "when the weather is good" and "works best in summer"
+// are answers, not labels, and an eager version of this ate the first word of
+// both. So the label has to be the label: the phrase off the placeholder, or
+// a bare "holds" carrying a colon or running straight into the condition.
+const WHEN_LABEL = /^\s*(?:when\s+it\s+(?:holds|applies|counts|works)|it\s+(?:holds|applies)|holds|applies)\s*(?:[:,]\s*|\s+(?=if\b|when\b|unless\b|provided\b|as long\b)|$)/i;
+const stripLabel = (v) => {
+  let out = String(v || "");
+  // Twice, because "When it holds: holds if" is what a second paste looks
+  // like. Never more, so a sentence that opens with the word when survives.
+  for (let i = 0; i < 2; i += 1) {
+    const next = out.replace(WHEN_LABEL, "");
+    if (next === out) break;
+    out = next;
+  }
+  return out.trim();
+};
+
 // ── THE ONE INSERT SHAPE ────────────────────────────────────────────
 export const shapeNote = (t = {}) => {
   const kind = NOTE_KINDS.includes(clean(t.kind)) ? clean(t.kind) : "";
+  const said = clean(t.said).slice(0, 300);
   return {
+    // ── A NOTE IS NAMED BY WHAT IT SAYS ─────────────────────────────
+    //
+    // Not decoration. liveContent's loader drops any published row with no
+    // name before it reaches an array (`if (!item || !item.name) return;`),
+    // so a nameless note would be written to the table, look published in the
+    // Studio, and reach no conversation ever. The sentence is the name, which
+    // also makes the row searchable in Manage Published, sortable beside
+    // everything else, and claims its own key, so the same sentence published
+    // twice is caught the way a duplicate town is.
+    name: said,
     // HIS SENTENCE, IN HIS WORDS. Never rewritten by the pass and never
     // rewritten by the chat: the prompt quotes it, so a model that improves
     // it is improving something he said.
-    said: clean(t.said).slice(0, 300),
+    said,
     kind,
     // WHEN IT HOLDS. Empty means always, which is a real answer for "the walk
     // from Aalborg station takes ten minutes" and a wrong one for most prices.
-    when: clean(t.when).slice(0, 200),
+    //
+    // THE LABEL COMES OFF IF HE TYPED IT. Oliver, 23 Sep 2026, of a line
+    // reading "HOLDS: When it holds: if booked within a week or two": the
+    // placeholder showed the label as part of the example, so he wrote the
+    // label as part of the answer, and the prompt said it twice. Both halves
+    // fixed: the placeholder lost the label, and a leading one is taken off
+    // here, because the box will be typed into by somebody reading the old
+    // screenshot for the next year.
+    when: stripLabel(clean(t.when)).slice(0, 200),
     // What the sentence is about, for the matcher. Written by him or filled
     // from his own words: see noteSubjects.
     about: clean(t.about).slice(0, 160),
@@ -258,20 +294,116 @@ export const NOTE_LINE = (n) => {
   else if (n.check === "holds") bits.push(`A page says the same${n.source ? ` (${hostOf(n.source)})` : ""}`);
   else if (n.check === "depends") bits.push(`BUT a page narrows it: ${n.found}. Say that part too`);
   else if (n.check === "against") bits.push(`A page says ${n.found}. Say his and say the page's, and let them choose`);
-  else bits.push("No page says either way, so say it as something a local told us");
+  else bits.push("No page says either way, so say it as your own knowledge of the place");
   if (n.towns.length) bits.push(`ONLY FOR: ${n.towns.join(", ")}`);
   return `- ${bits.join(". ")}`;
 };
 
-export const notesBlock = (notes = []) => {
+// ── A GUIDE IS NOT A CHAT, AND KNOWS TWO THINGS A CHAT DOES NOT ─────
+//
+// Oliver, 23 Sep 2026: "the point of the guide is to follow what the Gemlyx
+// AI says.. so if the guide is made tomorrow, and they pick public transport,
+// then obviously a DSB ticket is ridiculous when it was just confirmed that
+// Flixbus / Kombardo would be a budget alternative".
+//
+// The chat matches a note against what the traveller typed, because that is
+// all it has. A guide has a ROUTE and a WAY OF GETTING AROUND, both settled
+// before the writer is called, and a note about fares belongs in a public
+// transport guide whether or not the word train was ever typed. So the guide
+// matches against its own plan as well as their words.
+export const notesForGuide = (rows = [], { travellerText = "", towns = [], mode = "", today = new Date(), max = MAX_NOTES } = {}) => {
+  const where = (Array.isArray(towns) ? towns : []).map(clean).filter(Boolean);
+  // The plan, written out as the sentence a traveller would have typed if
+  // they had said all of it. MODE_WORDS is what makes a fare note reach a
+  // public transport trip: the guide knows they are on trains, so the note
+  // about trains is about their trip.
+  const plan = [travellerText, where.join(" "), MODE_WORDS[clean(mode)] || ""].filter(Boolean).join(" ");
+  const seen = new Set();
+  const out = [];
+  // Each town on the route asked separately, so a note scoped to Aalborg
+  // reaches a trip that passes through Aalborg. Then the whole plan once, for
+  // the notes that belong to no town.
+  for (const town of [...where, ""]) {
+    for (const n of notesFor(plan, rows, { town, today, max })) {
+      const key = `${n.said}|${n.kind}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(n);
+      if (out.length >= max) return out;
+    }
+  }
+  return out;
+};
+
+// What each way of getting around is called, in the words a note would use.
+// Read by notesForGuide only: the chat has the traveller's own words and
+// needs no translation of them.
+const MODE_WORDS = {
+  transit: "public transport train trains bus buses fare fares ticket tickets station",
+  train: "public transport train trains bus buses fare fares ticket tickets station",
+  bus: "public transport bus buses train trains fare fares ticket tickets",
+  car: "car driving parking petrol motorway toll bridge",
+  camper: "camper van driving parking campsite motorway toll bridge",
+  bike: "bike cycling cycle route ferry",
+  walk: "walking on foot",
+};
+
+export const notesBlock = (notes = [], { daysAhead = null } = {}) => {
   const list = (Array.isArray(notes) ? notes : []).filter(Boolean);
   if (!list.length) return "";
-  return `\n── WHAT A LOCAL TOLD US, WHICH IS NOT ON ANY PAGE ──\n`
-    + `These are from the Dane who built Gemlyx, about the thing this traveller is asking about. They are the half a search cannot give them, so use the ones that fit and leave the rest.\n`
+  return `\n── WHAT YOU KNOW FROM LIVING HERE, WHICH IS ON NO PAGE ──\n`
+    + `These are the half a search cannot give this traveller, about the thing they are asking about. Use the ones that fit and leave the rest.\n`
     + `SAY IT IN YOUR OWN WORDS, never as a quotation and never crediting a founder or a website: you are the local here, so this is something you know.\n`
+    // ── AND THE TWO INSTRUCTIONS THAT PULL AGAINST EACH OTHER ─────
+    //
+    // "Say it as yourself" and "never state it as checked" are a contradiction
+    // until the model is told what the second one sounds like. A person who
+    // knows a thing without being able to prove it does not stop saying it and
+    // does not cite a page either: they say it the way they know it, and the
+    // hedge is the tell. So the resolution is written out rather than left to
+    // be worked out, with both halves shown.
+    + `A LINE NO PAGE BACKS IS STILL SAID PLAINLY, in the voice of somebody who has been there rather than somebody quoting: "last I was there it was about 40 kroner", "they were doing 20 percent for students, worth asking at the bar". That is what a local sounds like about a thing they know and cannot prove, and it is not the same as a hedge that takes the sentence back.\n`
+    + `WHAT YOU MAY NOT DO with one is give it the voice you use for something you looked up: no opening hours phrasing, no "they offer", no figure stated the way a price off a page is stated. If the traveller is about to spend money on it, say it is worth checking when they get there.\n`
+    // ── AND THE ONE PHRASE THAT IS OUT ──────────────────────────────
+    //
+    // Oliver, 23 Sep 2026: "it doesn't say 'according to what a local says',
+    // correct? I don't mind it saying 'According to locals..' but don't give
+    // 'a told said..'". One unnamed person is a rumour with a source
+    // attached. Locals, plural, is a place's own reputation, and that is what
+    // this is. The heading above lost the phrase for the same reason: a model
+    // reading "what a local told us" at the top of a block will say it back.
+    + `NEVER ATTRIBUTE ONE TO "a local", "someone local", "a local told us" or any single unnamed person. You are the local. Where the sentence needs attribution at all, it is "locals" in the plural: "locals mostly take the bus for that one". Most of the time it needs none, because you are the one saying it.\n`
     + `THE CONDITION IS PART OF THE CLAIM. A line that holds only when something is true is wrong without that something, and stating it bare is worse than not stating it: "the bus is cheaper than the train" is a lie to somebody booking six weeks out.\n`
     + `NEVER STATE ONE AS CHECKED when the line says no page backs it. It is a local's word, it is worth having, and it is not a timetable.\n\n`
-    + `${list.map(NOTE_LINE).join("\n")}\n`;
+    // ── AND A GUIDE CAN SETTLE A CONDITION THE READER CANNOT ────────
+    //
+    // His own example is the argument: "Kombardo and Flixbus are cheaper than
+    // DSB" holds day to day and fails six weeks out, and a chat usually has
+    // no idea which one the traveller is in. A guide does. It is built on a
+    // date, so the lead time is a fact about this trip, and handing a reader
+    // both halves of a condition the guide could have settled is work pushed
+    // back onto them.
+    + (Number.isFinite(daysAhead) && daysAhead >= 0
+      ? `\nTHIS GUIDE IS BEING BUILT ${daysAhead} ${daysAhead === 1 ? "DAY" : "DAYS"} BEFORE THEY TRAVEL. Where a line holds only under a condition about how far ahead something is booked, you know which side of it they are on. Settle it and give them the one that applies, with what to do about it, rather than both halves and a choice.\n`
+        // ── AND THE ONE THING A NOTE MAY NOT MOVE ─────────────────
+        //
+        // Oliver, 23 Sep 2026: "Of course, this does make it akward for the
+        // 'maps' part". He is right and the answer is a boundary rather than
+        // a map change. Every leg on a guide is MEASURED: the line is
+        // Google's own geometry for that leg and the duration is Google's
+        // answer for it, and the two are the same journey by construction,
+        // which is the whole fix the map got in August. A coach a local
+        // recommends is not in that measurement, so a note that restated a
+        // duration or a departure off itself would put the prose and the
+        // drawn line into the disagreement this app has already had once.
+        //
+        // WHAT A NOTE CHANGES IS WHAT THEY BUY, NOT WHERE THE LINE GOES. The
+        // leg is the same leg either way: same two towns, same direction, and
+        // for a coach against a train, near enough the same road. So it is
+        // said beside the measured leg and never in place of it.
+        + `THE MAP AND EVERY LEG TIME ON THIS GUIDE ARE MEASURED, and a line above is not. A line may change WHAT THEY BUY for a leg and never what the route shows: never restate a duration, a departure time, a frequency or a route from one, and never say a measured leg is wrong. Where a cheaper operator runs a leg the plan already has, name it beside that leg as the cheaper way to do it, with what it depends on, and leave the timing to the measurement.\n`
+      : "")
+    + `\n${list.map(NOTE_LINE).join("\n")}\n`;
 };
 
 // ── THE PASS THAT LOOKS FOR WHAT NARROWS IT ─────────────────────────
@@ -349,4 +481,26 @@ export const noteRunNotes = (note = {}) => {
       : [`A page says ${n.found}. On how a thing is you win, so it goes up with that noted beside it.`];
   }
   return ["No page says either way. It goes up as a local's word, and the chat will say so rather than stating it as checked."];
+};
+
+// ── AND WHETHER GEMLYX ALREADY SAYS SOMETHING ABOUT IT ──────────────
+//
+// A note and a published entry can disagree without either knowing about the
+// other: the note is a sentence in a prompt, the entry is a page, and nothing
+// reads both. This is the cheapest useful half of closing that, a name match,
+// run when a note is written. It decides nothing and blocks nothing. It puts
+// the entry's name in front of him at the one moment he is in a position to
+// notice the two do not agree.
+export const namesPublished = (said = "", names = []) => {
+  const text = ` ${fold(clean(said))} `;
+  if (!clean(said)) return [];
+  const out = [];
+  for (const raw of Array.isArray(names) ? names : []) {
+    const name = clean(raw);
+    // Short names match half of Denmark. Four letters is Fanø and Ribe, and
+    // below that a name is a word before it is a place.
+    if (name.length < 4) continue;
+    if (text.includes(` ${fold(name)} `) || text.includes(`${fold(name)} `)) out.push(name);
+  }
+  return [...new Set(out)].slice(0, 4);
 };

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { C } from "../utils/theme";
 import { askOpenAI } from "../utils/aiClient";
-import { NOTE_KINDS, NOTE_KIND_LABEL, NOTE_KIND_MEANING, noteSearches, NOTE_PROMPT, settleNote, noteProblems, noteRunNotes, NOTE_LINE } from "../utils/founderNotes";
+import { NOTE_KINDS, NOTE_KIND_LABEL, NOTE_KIND_MEANING, noteSearches, NOTE_PROMPT, settleNote, noteProblems, noteRunNotes, NOTE_LINE, noteLive, shapeNote, namesPublished } from "../utils/founderNotes";
 
 // ── TELLING GEMLYX SOMETHING IT COULD NOT LOOK UP ───────────────────
 //
@@ -25,7 +25,7 @@ const field = {
   borderRadius: 8, padding: "7px 10px", fontSize: 11.5, fontFamily: "'Inter', sans-serif",
 };
 
-export const FounderNotesPanel = ({ onPublish }) => {
+export const FounderNotesPanel = ({ onPublish, onSave = null, existing = [], library = [], onRemove = null }) => {
   const [said, setSaid] = useState("");
   const [kind, setKind] = useState("how");
   const [when, setWhen] = useState("");
@@ -36,6 +36,14 @@ export const FounderNotesPanel = ({ onPublish }) => {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [added, setAdded] = useState("");
+  // ── EDITING ONE IT ALREADY KNOWS ──────────────────────────────────
+  //
+  // The id of the published row the boxes are holding, or null for a new
+  // sentence. Set by Change on a listed note, cleared by saving it or by
+  // Leave it. The check button reads it too: a reworded sentence is a
+  // different claim and goes through the pass again, so the row it saves is
+  // the one that came back, not the one he opened.
+  const [editing, setEditing] = useState(null);
 
   const draft = () => ({
     said: said.trim(),
@@ -85,24 +93,52 @@ export const FounderNotesPanel = ({ onPublish }) => {
     setBusy("");
   };
 
+  const clear = () => {
+    setRow(null); setNotes([]); setSaid(""); setWhen(""); setAbout(""); setTowns(""); setEditing(null);
+  };
+
   const publish = async () => {
-    if (!row || !onPublish) return;
+    if (!row) return;
+    // A row he opened for a change goes back to where it came from. A new one
+    // is inserted. Nothing else about the two paths differs, which is why the
+    // button says the same thing in both.
+    const write = editing != null && onSave ? () => onSave(editing, row) : onPublish ? () => onPublish([row]) : null;
+    if (!write) return;
     setBusy("saving"); setError(""); setAdded("");
-    const got = await onPublish([row]);
+    const got = await write();
     if (got?.ok) {
-      setAdded("Saved. Gemlyx knows it from the next conversation on.");
-      setRow(null); setNotes([]); setSaid(""); setWhen(""); setAbout(""); setTowns("");
+      setAdded(editing != null ? "Changed. The next conversation has the new words." : "Saved. Gemlyx knows it from the next conversation on.");
+      clear();
     } else {
       setError(got?.why || "Could not save it.");
     }
     setBusy("");
   };
 
+  const openNote = ({ id, note }) => {
+    setSaid(note.said); setKind(note.kind || "how"); setWhen(note.when);
+    setAbout(note.about); setTowns(note.towns.join(", "));
+    setEditing(id); setRow(null); setNotes([]); setError(""); setAdded("");
+  };
+
   const st = row ? noteProblems(row) : { problems: [], blocks: true };
+  const alsoPublished = row ? namesPublished(row.said, library) : [];
+  const published = (Array.isArray(existing) ? existing : [])
+    .map(r => ({ id: r?.id, note: shapeNote(r?.payload || {}), live: noteLive(r?.payload || {}) }))
+    .filter(r => r.id != null && r.note.said && r.id !== editing)
+    .sort((a, b) => Number(a.live) - Number(b.live) || a.note.said.localeCompare(b.note.said));
   const box = { background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "11px 13px", marginTop: 12 };
   return (
     <div style={box}>
-      <div style={{ fontSize: 12.5, fontWeight: 700, color: C.text, marginBottom: 8 }}>Tell Gemlyx something</div>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: C.text }}>{editing != null ? "Changing what it knows" : "Tell Gemlyx something"}</div>
+        {editing != null && (
+          <button onClick={clear}
+            style={{ background: "none", border: "none", padding: 0, fontSize: 10.5, fontWeight: 700, color: C.muted, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+            Leave it
+          </button>
+        )}
+      </div>
       <textarea value={said} onChange={e => setSaid(e.target.value)} rows={2}
         placeholder="Both Kombardo Ekspressen and Flixbus are budget alternatives to DSB"
         style={{ ...field, resize: "vertical" }} />
@@ -120,7 +156,7 @@ export const FounderNotesPanel = ({ onPublish }) => {
       </div>
       {kind !== "advice" && (
         <input value={when} onChange={e => setWhen(e.target.value)} style={{ ...field, marginTop: 7 }}
-          placeholder="When it holds: if you are booking within a week or two" />
+          placeholder="if you are booking within a week or two" />
       )}
       <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginTop: 7 }}>
         <input value={about} onChange={e => setAbout(e.target.value)} style={{ ...field, flex: "1 1 200px", width: "auto" }}
@@ -141,6 +177,42 @@ export const FounderNotesPanel = ({ onPublish }) => {
           {notes.map((n, i) => <li key={i}>{n}</li>)}
         </ul>
       )}
+      {/* ── WHAT IT HAS BEEN TOLD ALREADY ──────────────────────────
+          A sentence published into a prompt is the one thing in this Studio
+          with no page to go and look at, so the list of them lives where they
+          are written. Empty until the published rows are loaded, and saying
+          nothing rather than saying none. */}
+      {published.length > 0 && (
+        <div style={{ marginTop: 11, paddingTop: 9, borderTop: `1px solid ${C.border}` }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.1, textTransform: "uppercase", marginBottom: 6 }}>
+            It knows {published.length}
+          </div>
+          {published.map(({ id, note, live }) => (
+            <div key={id} style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "6px 0", borderBottom: `1px solid ${C.border}` }}>
+              <div style={{ flex: 1, minWidth: 0, fontSize: 11, color: live ? C.light : C.muted, lineHeight: 1.5 }}>
+                <span style={{ fontSize: 9.5, fontWeight: 700, color: C.muted, border: `1px solid ${C.border}`, borderRadius: 100, padding: "1px 7px", marginRight: 6 }}>
+                  {NOTE_KIND_LABEL[note.kind] || note.kind}
+                </span>
+                {note.said}
+                {note.when && <div style={{ color: C.muted }}>Holds {note.when}</div>}
+                {!live && <div style={{ color: "#FFB347" }}>Too old to be told to anybody. Say it again or take it down.</div>}
+              </div>
+              {onSave && (
+                <button onClick={() => openNote({ id, note })}
+                  style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 100, padding: "4px 10px", fontSize: 10, fontWeight: 700, color: C.muted, cursor: "pointer", fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>
+                  Change
+                </button>
+              )}
+              {onRemove && (
+                <button onClick={() => onRemove(id)}
+                  style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 100, padding: "4px 10px", fontSize: 10, fontWeight: 700, color: C.muted, cursor: "pointer", fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>
+                  Take it down
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
       {row && (
         <div style={{ marginTop: 9, paddingTop: 9, borderTop: `1px solid ${C.border}` }}>
           {/* WHAT THE CHAT WILL BE HANDED, word for word. He is publishing a
@@ -149,6 +221,14 @@ export const FounderNotesPanel = ({ onPublish }) => {
           <div style={{ fontSize: 10.5, color: C.light, lineHeight: 1.6, fontFamily: "ui-monospace, monospace", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px" }}>
             {NOTE_LINE(row)}
           </div>
+          {/* ── AND WHAT GEMLYX ALREADY PUBLISHES ABOUT IT ───────
+              A note and an entry can disagree with nobody reading both. This
+              is the moment he can see it. */}
+          {alsoPublished.length > 0 && (
+            <div style={{ fontSize: 10.5, color: C.muted, marginTop: 5 }}>
+              Gemlyx already publishes {alsoPublished.join(", ")}
+            </div>
+          )}
           {row.source && (
             <div style={{ fontSize: 10.5, marginTop: 5 }}>
               <a href={row.source} target="_blank" rel="noreferrer" style={{ color: C.gold, fontWeight: 700, textDecoration: "none" }}>The page it found ↗</a>
@@ -161,7 +241,7 @@ export const FounderNotesPanel = ({ onPublish }) => {
           )}
           <button onClick={publish} disabled={!!busy || st.blocks}
             style={{ marginTop: 8, background: C.gold, border: "none", borderRadius: 100, padding: "8px 15px", fontSize: 11.5, fontWeight: 700, color: C.onGold, cursor: busy || st.blocks ? "default" : "pointer", opacity: busy || st.blocks ? 0.5 : 1, fontFamily: "'Inter', sans-serif" }}>
-            {busy === "saving" ? "Saving…" : "Teach it this"}
+            {busy === "saving" ? "Saving…" : editing != null ? "Change it" : "Teach it this"}
           </button>
         </div>
       )}

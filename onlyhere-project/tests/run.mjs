@@ -271,7 +271,7 @@ writeFileSync(entry, `
   export { baseKey, staysIn as stayRunsIn, doorsFor, doorOn, sameBaseLine, nightsLabel } from ${JSON.stringify(join(root, "src/utils/stayDoors.js"))};
   export { SECTIONS as DIR_SECTIONS, ROW_KINDS, kindOf as dirKindOf, directoryLinks, pathWord, ferryDoorIn, DIRECTORY_PROMPT, rowsFromDirectory, directoryProblems, staysIn, eatsIn, islandSaysBlock, ISLAND_SAYS } from ${JSON.stringify(join(root, "src/utils/islandDirectory.js"))};
   export { GEM_TYPE, GEM_KINDS, GEM_SECTION, WHERE_LABEL, RECHECK_DAYS, STALE_DAYS, isCouponSite, isOwnSite, shapeGem, gemProblems, gemLive, gemsView, checkedLabel, checkedAgo, isDataSite, gemWhere, gemCategory, isForStudents, gemMatches, gemFilterOptions, GEM_CATEGORIES, GEM_CATEGORY_LABEL, gemSearches, gemSearchesFor, ownPagesIn, pageAsResult, MAX_OWN_PAGES, GEMS_PROMPT, settleGems, gemRunNotes, gemsForGuide, gemHeading, SAID_CHECKS, saidLine, saidWords } from ${JSON.stringify(join(root, "src/utils/cheapGems.js"))};
-  export { NOTE_TYPE, NOTE_KINDS, NOTE_KIND_LABEL, NOTE_KIND_MEANING, NOTE_CHECKS, NOTE_LIFE, NOTE_RECHECK, shapeNote, noteProblems, noteLive, noteAgo, noteSubjects, notesFor, notesBlock, NOTE_LINE, MAX_NOTES, noteSearches, NOTE_PROMPT, settleNote, noteRunNotes } from ${JSON.stringify(join(root, "src/utils/founderNotes.js"))};
+  export { NOTE_TYPE, NOTE_KINDS, NOTE_KIND_LABEL, NOTE_KIND_MEANING, NOTE_CHECKS, NOTE_LIFE, NOTE_RECHECK, shapeNote, noteProblems, noteLive, noteAgo, noteSubjects, notesFor, notesForGuide, notesBlock, NOTE_LINE, MAX_NOTES, noteSearches, NOTE_PROMPT, settleNote, noteRunNotes, namesPublished } from ${JSON.stringify(join(root, "src/utils/founderNotes.js"))};
   export { sentencesIn, readerBody, noticeAsk, noticeText, TRANSLATE_NOTICE, translatedNotice, DEAD_ENDS } from ${JSON.stringify(join(root, "src/utils/noticeVoice.js"))};
   export { guideClaims, guideClaimNote } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { resolveStopCoords } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
@@ -72177,13 +72177,13 @@ SOURCE: https://www.tripadvisor.com/whatever`;
         { name: "Barkowski", kind: "scheme", what: "20% off for students", how: "Show a student card", check: "confirmed", source: 0 },
       ] }, BR, { today: DAY, only: "Barkowski", said: SAID });
       is("confirmed keeps the page and the page's wording", [conf.gems[0].source, conf.gems[0].what], ["https://barkowski.dk/", "20% off for students"]);
-      is("and the card says both said it", G.saidLine(conf.gems[0]), "Told to us by a local, and their own page states it too.");
+      is("and the card says both said it", G.saidLine(conf.gems[0]), "Known to locals, and their own page states it too.");
 
       const against = G.settleGems({ gems: [
         { name: "Barkowski", kind: "scheme", what: "10% off for students", how: "Show a student card", check: "contradicted", pageSays: "10% for students, all night", source: 0 },
       ] }, BR, { today: DAY, only: "Barkowski", said: SAID });
       is("contradicted prints the page's figure, not his", against.gems[0].what, "10% off for students");
-      ok("and the card names the difference", /A local told us "Students get 20 percent off beer before ten"\. Their page says 10% for students, all night, so the page is what stands here\./.test(G.saidLine(against.gems[0])));
+      ok("and the card names the difference", /Locals say "Students get 20 percent off beer before ten"\. Their page says 10% for students, all night, so the page is what stands here\./.test(G.saidLine(against.gems[0])));
       ok("it still goes up, with that difference in front of him", !G.gemProblems(against.gems[0], DAY).blocks
         && G.gemProblems(against.gems[0], DAY).problems.some(p => /does not say what you said/.test(p)));
 
@@ -72193,9 +72193,9 @@ SOURCE: https://www.tripadvisor.com/whatever`;
       is("not found comes back anyway, on his word", none.gems.length, 1);
       is("with no page behind it", none.gems[0].source, "");
       is("and his sentence as the saving", none.gems[0].what, SAID);
-      is("the card says whose word it is", G.saidLine(none.gems[0]), "Told to us by a local. No page of theirs states it, so ask when you are there.");
+      is("the card says whose word it is", G.saidLine(none.gems[0]), "According to locals. No page of theirs states it, so ask when you are there.");
       ok("a saving nobody published is not blocked, and says why", !G.gemProblems(none.gems[0], DAY).blocks
-        && G.gemProblems(none.gems[0], DAY).problems.some(p => /says a local told us/.test(p)));
+        && G.gemProblems(none.gems[0], DAY).problems.some(p => /according to locals/i.test(p)));
       ok("and it shows to a reader", G.gemLive(none.gems[0], DAY));
       ok("but a row with no page and nobody behind it is still a rumour",
         G.gemProblems({ ...none.gems[0], said: "", saidCheck: "" }, DAY).blocks);
@@ -73698,7 +73698,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   ok("the 250 ms waits are gone", !/setTimeout\(r, 250\)\); \/\/ be a polite/.test(every));
 }
 
-// ── WHAT A LOCAL TOLD US ────────────────────────────────────────────
+// ── WHAT HE KNOWS FROM LIVING HERE ──────────────────────────────────
 //
 // Oliver, 23 Sep 2026: "I want it to learn from me... I want Gemlyx AI to
 // actually be as close to a local as possible." And, on the shape of it the
@@ -73759,12 +73759,38 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   is("nothing matching is no block at all", M.notesBlock([]), "");
 
   const BLOCK = M.notesBlock(M.notesFor("is the train expensive", ROWS, { today: DAY }));
-  ok("the block says whose words these are", /WHAT A LOCAL TOLD US/.test(BLOCK));
+  ok("the block says whose words these are", /WHAT YOU KNOW FROM LIVING HERE/.test(BLOCK));
+  // Oliver, 23 Sep 2026: "I don't mind it saying 'According to locals..' but
+  // don't give 'a told said..'". One unnamed person is a rumour with a source
+  // attached; locals in the plural is a place's own reputation.
+  ok("one unnamed person is never who it came from", /NEVER ATTRIBUTE ONE TO "a local"/.test(BLOCK));
+  ok("and the plural is what attribution looks like", /it is "locals" in the plural/.test(BLOCK));
+  ok("the phrase is nowhere else for the model to read back",
+    !/a local told us/.test(BLOCK.replace(/NEVER ATTRIBUTE[^\n]*\n/, "")));
   ok("and that the condition travels with the claim", /THE CONDITION IS PART OF THE CLAIM/.test(BLOCK));
   ok("and that an unbacked one is never stated as checked", /NEVER STATE ONE AS CHECKED/.test(BLOCK));
+  // "Say it as yourself" and "never state it as checked" read as a
+  // contradiction until the block says what the second one sounds like.
+  ok("an unbacked line is still said plainly", /A LINE NO PAGE BACKS IS STILL SAID PLAINLY/.test(BLOCK));
+  ok("in the voice of somebody who was there", /last I was there/.test(BLOCK));
+  ok("and never in the voice used for something looked up", /no figure stated the way a price off a page is stated/.test(BLOCK));
+  ok("with money the one place it says to check", /worth checking when they get there/.test(BLOCK));
   ok("it carries his sentence word for word", BLOCK.includes(DSB.said));
   ok("and what the page narrowed it to", BLOCK.includes("undercut the bus"));
   ok("the chat is not told to credit a founder", /never crediting a founder or a website/.test(BLOCK));
+
+  // ── AND THE LABEL HE TYPED INTO THE BOX COMES OFF ────────────────
+  //
+  // Oliver, 23 Sep 2026, reading his own line back: "HOLDS: When it holds: if
+  // booked within a week or two". The placeholder showed the label as part of
+  // the example, so it was typed as part of the answer.
+  is("the label off the placeholder is stripped", M.shapeNote({ said: "x", kind: "cost", when: "When it holds: if booked within a week or two" }).when, "if booked within a week or two");
+  is("with no colon either", M.shapeNote({ said: "x", kind: "cost", when: "When it holds if you book ahead" }).when, "if you book ahead");
+  is("and a second paste of it", M.shapeNote({ said: "x", kind: "cost", when: "When it holds: holds if booked ahead" }).when, "if booked ahead");
+  is("an answer opening with when is left alone", M.shapeNote({ said: "x", kind: "cost", when: "when the weather is good" }).when, "when the weather is good");
+  is("and one opening with works", M.shapeNote({ said: "x", kind: "cost", when: "works best in summer" }).when, "works best in summer");
+  ok("the placeholder no longer shows the label",
+    !/placeholder="When it holds/.test(readFileSync(join(root, "src/components/FounderNotesPanel.jsx"), "utf8")));
 
   // ── THE PASS LOOKS FOR WHAT NARROWS IT ───────────────────────────
   const PR = M.NOTE_PROMPT(DSB, []);
@@ -73795,12 +73821,76 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   is("he is told what the run made of it", M.noteRunNotes(dep).length, 2);
   ok("and that advice was never checked", /nothing was checked/.test(M.noteRunNotes(M.shapeNote(soft))[0]));
 
+  // ── A NOTE WITH NO NAME REACHES NOBODY ───────────────────────────
+  //
+  // liveContent's loader drops a published row with no name before it lands
+  // in any array, so the first version of this shipped a panel that wrote to
+  // the table and a chat that could never be handed what it wrote. The
+  // sentence is the name.
+  is("a note is named by what it says", M.shapeNote(DSB).name, DSB.said);
+  ok("so the loader's name gate lets it through", !!M.shapeNote(DSB).name);
+  const liveGate = stripComments(readFileSync(join(root, "src/utils/liveContent.js"), "utf8"));
+  ok("and that gate is still the one this depends on", /if \(!item \|\| !item\.name\) return;/.test(liveGate));
+  is("an empty sentence names nothing, and is blocked anyway", M.shapeNote({ kind: "how" }).name, "");
+  ok("Manage Published heads the group in words", M.TYPE_LABEL.note === "What you know from living here");
+
+  // ── AND INTO THE GUIDE, WHICH KNOWS TWO THINGS THE CHAT DOES NOT ─
+  //
+  // Oliver, 23 Sep 2026: "the point of the guide is to follow what the Gemlyx
+  // AI says.. so if the guide is made tomorrow, and they pick public
+  // transport, then obviously a DSB ticket is ridiculous when it was just
+  // confirmed that Flixbus / Kombardo would be a budget alternative".
+  {
+    const PLAN = { travellerText: "five days in Denmark, we like food", towns: ["Copenhagen", "Aalborg"], today: DAY };
+    is("a fare note reaches a public transport trip with the word train never typed",
+      M.notesForGuide([DSB], { ...PLAN, mode: "transit" }).length, 1);
+    is("and reaches no car trip", M.notesForGuide([DSB], { ...PLAN, mode: "car" }).length, 0);
+    is("a note about one town reaches a route through it",
+      M.notesForGuide([howAgainst], { ...PLAN, mode: "transit" }).length, 1);
+    is("and stays out of a route that misses it",
+      M.notesForGuide([howAgainst], { ...PLAN, towns: ["Ribe"], mode: "transit" }).length, 0);
+    is("nothing matching is nothing handed over", M.notesForGuide([], { ...PLAN, mode: "transit" }), []);
+    is("and the same note is never handed over twice",
+      M.notesForGuide([howAgainst], { ...PLAN, towns: ["Aalborg", "Aalborg"], mode: "transit" }).length, 1);
+    ok("never more than three, whatever the route",
+      M.notesForGuide(Array.from({ length: 9 }, (_, i) => ({ ...DSB, said: `${DSB.said} ${i}` })), { ...PLAN, mode: "transit" }).length === 3);
+
+    // The lead time is what makes his own example answerable rather than a
+    // choice handed back to the reader.
+    const near = M.notesBlock(M.notesForGuide([DSB], { ...PLAN, mode: "transit" }), { daysAhead: 1 });
+    ok("a guide built the day before says so", /THIS GUIDE IS BEING BUILT 1 DAY BEFORE THEY TRAVEL/.test(near));
+    ok("and is told to settle the condition rather than hand over both halves", /Settle it and give them the one that applies/.test(near));
+    // Oliver, 23 Sep 2026: "Of course, this does make it akward for the
+    // 'maps' part". A leg is measured and a note is not, so a note may change
+    // what they buy and never what the drawn line or the leg time says.
+    ok("a note may never move the map or a leg time", /THE MAP AND EVERY LEG TIME ON THIS GUIDE ARE MEASURED/.test(near));
+    ok("nor restate a duration off itself", /never restate a duration, a departure time, a frequency or a route from one/.test(near));
+    ok("a cheaper operator is named beside the measured leg, not instead of it", /name it beside that leg as the cheaper way to do it/.test(near));
+    ok("and the chat, which draws no legs, is never told any of that",
+      !/THE MAP AND EVERY LEG TIME/.test(M.notesBlock(M.notesFor("is the train expensive", [DSB], { today: DAY }))));
+    ok("the plural is right further out", /BUILT 40 DAYS BEFORE/.test(M.notesBlock(M.notesForGuide([DSB], { ...PLAN, mode: "transit" }), { daysAhead: 40 })));
+    ok("a guide with no date claims no lead time",
+      !/THIS GUIDE IS BEING BUILT/.test(M.notesBlock(M.notesForGuide([DSB], { ...PLAN, mode: "transit" }))));
+    ok("and the chat, which usually has none, says nothing either",
+      !/THIS GUIDE IS BEING BUILT/.test(M.notesBlock(M.notesFor("is the train expensive", [DSB], { today: DAY }))));
+
+    const appG = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("the guide picks its notes off the plan it just made", /notesForGuide\(founderNotes, \{[\s\S]{0,200}towns: plannerTowns/.test(appG));
+    ok("with the way they are getting around, read the way the plan gate reads it",
+      /mode: tickedTravelMode\(saidByTravellerForGuide\) \|\| travelModeKey\(saidByTravellerForGuide\)/.test(appG)
+      && /const gateMode = tickedTravelMode\(saidByTravellerForGuide\) \|\| travelModeKey\(saidByTravellerForGuide\)/.test(appG));
+    ok("and the days between building it and travelling", /daysAhead: arrivalDate \? daysUntil\(arrivalDate, nowForDates\) : null/.test(appG));
+    ok("the towns come off the planner's own stops", /plannerTowns = \[\.\.\.new Set\(planDays\.flatMap\(d => \(d\.stops \|\| \[\]\)\.map\(s => s\?\.town\)\)/.test(appG));
+    ok("and the block reaches the writer, not the structure pass", /\$\{kindsOutBlock\}\$\{localSaysGuide\}\$\{bookedStayBlock\}/.test(appG)
+      && !/\$\{kindsOutBlock\}\$\{localSaysGuide\}\\n\\nConversation/.test(appG));
+  }
+
   // ── AND THE WIRING ───────────────────────────────────────────────
   const appN = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
   ok("the chat picks its notes before the call, off the traveller's own turns",
     /notesBlock\(notesFor\(travellerTurns\.join\("\\n"\), founderNotes/.test(appN));
   ok("and the block reaches the prompt", /\$\{kindsRuledOut\}\$\{localSays\}/.test(appN));
-  ok("the Studio can write one", /<FounderNotesPanel onPublish=\{publishNotes\} \/>/.test(appN));
+  ok("the Studio can write one", /<FounderNotesPanel\s+onPublish=\{publishNotes\}/.test(appN));
   ok("and it is published through the one insert door", /type: NOTE_TYPE, payload: shapeForLive\(NOTE_TYPE, n\)/.test(appN));
   const liveN = stripComments(readFileSync(join(root, "src/utils/liveContent.js"), "utf8"));
   ok("a published note lands in its own array", /row\.type === NOTE_TYPE\) founderNotes\.push/.test(liveN));
@@ -73810,6 +73900,31 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   const panelN = readFileSync(join(root, "src/components/FounderNotesPanel.jsx"), "utf8");
   ok("he sees the line the chat will be handed before he can publish it", /NOTE_LINE\(row\)/.test(panelN));
   ok("and advice skips the search entirely", /if \(kind === "advice"\)/.test(panelN));
+  // A sentence published into a prompt has no page to go and look at, so the
+  // only place it can be seen again is where it was written.
+  ok("what it has been told already is listed where it was written", /It knows \{published\.length\}/.test(panelN));
+  ok("a note too old to be told to anybody is marked as such", /Too old to be told to anybody/.test(panelN));
+  ok("and every one can be taken down", /Take it down/.test(panelN)
+    && /onRemove=\{\(id\) => deleteContentItem\(id, NOTE_TYPE\)\}/.test(appN));
+  // ── AND CHANGING ONE, RATHER THAN REWRITING IT ───────────────────
+  ok("a published note can be opened back into the boxes", /onClick=\{\(\) => openNote\(\{ id, note \}\)\}/.test(panelN));
+  ok("and saved back to the row it came from", /onSave\(editing, row\)/.test(panelN)
+    && /onSave=\{saveNote\}/.test(appN));
+  ok("through the one insert shape, so a change cannot drop a field", /shapeForLive\(NOTE_TYPE, note\)/.test(appN));
+  ok("and the loaded array is swapped, so the next conversation has the new words",
+    /applyEditedRow\(Number\(id\), NOTE_TYPE, shaped\)/.test(appN));
+  ok("a reworded sentence is checked again before it can be saved", /const write = editing != null && onSave/.test(panelN));
+  ok("and the one being changed is not listed underneath itself", /r\.id !== editing/.test(panelN));
+
+  // ── A NOTE AND AN ENTRY CAN DISAGREE WITH NOBODY READING BOTH ────
+  is("a note naming a published entry says so", M.namesPublished(howAgainst.said, ["Jomfru Ane Gade", "Ribe"]), ["Jomfru Ane Gade"]);
+  is("one naming nothing published says nothing", M.namesPublished("the train is expensive", ["Aalborg"]), []);
+  is("and a name too short to be a name is never matched", M.namesPublished("it is by the sea", ["sea"]), []);
+  ok("the panel puts it in front of him where he can see it", /Gemlyx already publishes \{alsoPublished\.join/.test(panelN));
+  ok("and never counts another note as an entry", /filter\(r => r\?\.type !== NOTE_TYPE\)\.map\(r => r\?\.payload\?\.name\)/.test(appN));
+
+  ok("the stale ones sort to the top, where he will see them",
+    /Number\(a\.live\) - Number\(b\.live\)/.test(panelN));
   const noteSrc = readFileSync(join(root, "src/utils/founderNotes.js"), "utf8");
   ok("no dash of any kind reaches a traveller through this file", !/[\u2013\u2014]/.test(noteSrc));
 }

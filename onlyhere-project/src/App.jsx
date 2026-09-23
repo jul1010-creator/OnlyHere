@@ -313,7 +313,7 @@ import { ShoppingPage } from "./components/ShoppingPage";
 import { CheapGemsPanel } from "./components/CheapGemsPanel";
 import { FounderNotesPanel } from "./components/FounderNotesPanel";
 import { GEM_TYPE } from "./utils/cheapGems";
-import { NOTE_TYPE, notesFor, notesBlock } from "./utils/founderNotes";
+import { NOTE_TYPE, notesFor, notesForGuide, notesBlock } from "./utils/founderNotes";
 import { founderNotes } from "./data/founderNotes";
 import { linkPatch } from "./utils/affiliateAudit";
 import { EntryLink } from "./components/EntryLink";
@@ -10302,6 +10302,24 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
     return { ok: true, done };
   };
 
+  // ── AND CHANGING ONE HE ALREADY TOLD IT ─────────────────────────
+  //
+  // A note's condition is the field most likely to need a tweak six months
+  // out, and taking the whole sentence down to change four words loses the
+  // date it was checked and the page behind it. So the panel patches the row
+  // in place, the same way every other single-row write in this Studio does,
+  // and applyEditedRow swaps it inside the loaded array so the next
+  // conversation has the new words without a reload. A rename is the case
+  // that matters here, because a note is named by its own sentence: that is
+  // exactly what applyEditedRow's mergedKeys branch exists for.
+  const saveNote = async (id, note) => {
+    const shaped = shapeForLive(NOTE_TYPE, note);
+    const got = await patchRowPayload(id, shaped);
+    if (!got?.ok) return { ok: false, why: got?.why || "Could not save it." };
+    if (applyEditedRow(Number(id), NOTE_TYPE, shaped)) bumpLiveContent(v => v + 1);
+    return { ok: true };
+  };
+
   const addDirectoryRows = async () => {
     const picked = dirRows.filter((_, i) => dirPicked[i]);
     if (!picked.length) return;
@@ -16972,6 +16990,11 @@ THE LIST ABOVE COUNTS AS CONTEXT FOR recommendedStay, and it is the only list th
       // reach an island, which is most of them.
       let crossingsForGuide = "";
       let plannerStopNames = [];
+      // The towns the plan actually stands in, for the local-knowledge block
+      // below. A note scoped to Aalborg belongs in a guide that goes to
+      // Aalborg, and the conversation does not always name the town a stop is
+      // in. See notesForGuide in utils/founderNotes.js.
+      let plannerTowns = [];
       let planProblems = [];
       try {
         const plannerRes = await askOpenAI(
@@ -17114,6 +17137,7 @@ THE LIST ABOVE COUNTS AS CONTEXT FOR recommendedStay, and it is the only list th
             });
             plannerSkeleton = JSON.stringify({ days: planDays });
             plannerStopNames = planDays.flatMap(d => (d.stops || []).map(s => s?.name)).filter(Boolean);
+            plannerTowns = [...new Set(planDays.flatMap(d => (d.stops || []).map(s => s?.town)).filter(Boolean))];
             // ── AND WHAT IS ON IN THE PLACES THEMSELVES ───────────
             //
             // Oliver, 19 Sep 2026, on the island calendars: "if it puts you
@@ -17344,6 +17368,39 @@ THE LIST ABOVE COUNTS AS CONTEXT FOR recommendedStay, and it is the only list th
       // Oliver, 21 Sep 2026: a budget traveller is told the capital is the
       // expensive part. Read off their own words here, before the template,
       // so the template stays a template. See utils/accommodation.js.
+      // ── AND WHAT A LOCAL KNOWS, INTO THE GUIDE ITSELF ────────────
+      //
+      // Oliver, 23 Sep 2026: "the point of the guide is to follow what the
+      // Gemlyx AI says.. so if the guide is made tomorrow, and they pick
+      // public transport, then obviously a DSB ticket is ridiculous when it
+      // was just confirmed that Flixbus / Kombardo would be a budget
+      // alternative". The chat had this and the guide did not, and the guide
+      // is the thing people travel on.
+      //
+      // TWO THINGS THE CHAT NEVER HAS, both settled by now: the towns the
+      // plan stands in, and how they are getting around. A note about fares
+      // reaches a public transport trip whether or not the word train was
+      // typed, and reaches no car trip at all.
+      //
+      // AND THE LEAD TIME, which is what makes his own example answerable
+      // rather than a choice handed back to the reader: a guide built on a
+      // date knows how far ahead they are booking.
+      const localSaysGuide = notesBlock(
+        notesForGuide(founderNotes, {
+          travellerText: saidByTravellerForGuide,
+          towns: plannerTowns,
+          // READ AGAIN RATHER THAN REUSED. gateMode a few hundred lines up
+          // answers the same question off the same text, and it is declared
+          // inside the planner's own block: its indentation says otherwise,
+          // which is how it looked reusable. Two readers of one sentence is
+          // the thing this file is warned about everywhere, so the shape that
+          // matters is that both call the same two functions in the same
+          // order, and neither has a rule the other does not.
+          mode: tickedTravelMode(saidByTravellerForGuide) || travelModeKey(saidByTravellerForGuide),
+          today: nowForDates,
+        }),
+        { daysAhead: arrivalDate ? daysUntil(arrivalDate, nowForDates) : null },
+      );
       const writerSaid = (aiMessages || []).filter(m => m.role === "user").map(m => m.text || "").join("\n");
       const writerLevel = travellerBudget(intakeBudgetText) || travellerBudget(writerSaid);
       // And the kebab tip beside it, the same day: see budgetFoodGuide.
@@ -17367,7 +17424,7 @@ CRITICAL — GEOGRAPHIC GROUPING AND SEQUENCING: within a single day, group stop
 CRITICAL — SEQUENCE THE DAYS THEMSELVES ALONG ONE ROUTE, NOT JUST EACH DAY INTERNALLY: this applies across the whole trip, not just within one day — Copenhagen/Zealand and Jutland are different regions connected only by a long bridge/ferry crossing or a flight, never a short hop. Don't send the trip deeper into one region for several days and then jump straight to the other with no bridging day (e.g. Day 1-2 further into Jutland, Day 3 suddenly Copenhagen). If a planning skeleton is provided below, its day-to-day order already accounts for this — follow it. If you're structuring the trip yourself (no skeleton, or it's missing this), order the days to move in one general direction across the country and minimize total region-crossings over the whole trip.
 CRITICAL — REALISTIC ARRIVAL-DAY TIMING: on the actual arrival day, never schedule the first real activity at or right after the exact landing time — leave a real buffer for immigration/baggage claim, then getting from the airport to accommodation and checking in, roughly 60-90 minutes depending on distance, before anything else starts. Someone landing at 12:00 realistically reaches their hotel/hostel around 13:00-13:30, not before — the first stop's arrivalTime should reflect that reality, not the literal landing timestamp.
 CRITICAL — REALISTIC DEPARTURE-DAY TIMING: on the actual departure day, never schedule an activity (a museum visit, a meal, anything) that runs right up against the flight's departure time — leave a real buffer BEFORE it for getting to the airport, checking in, and security, same logic as the arrival buffer but in reverse. People commonly arrive at the airport 2-3 hours before a flight, so if departure is at 14:00, the last real activity should wrap up by roughly 11:00-11:30 at the latest, not 13:30. If the departure time is early enough that there's no realistic room for any activity that day at all, say so plainly rather than forcing one in anyway — a half-day or single relaxed stop near the accommodation is the honest call, not a full itinerary crammed against the clock. If "Traveling with kids" is mentioned, adjust the plan for it — shorter, less-packed days (2-3 stops, not 4-5), avoid late-night-only venues and anything inappropriate for children, favor stops with real breaks (parks, casual food) between bigger activities, and mention if something specific is a poor fit for kids rather than including it anyway.
-If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day.${requestedDays ? ` CRITICAL — the traveler explicitly said they have ${requestedDays} day${requestedDays > 1 ? "s" : ""} for this trip: the "days" array MUST contain exactly ${requestedDays} entries, one per day, even if the conversation text itself didn't spell out "Day 1:", "Day 2:" etc. for each one — split ALL the places discussed across those ${requestedDays} days yourself, in a sensible geographic/logical order (don't cram everything into day 1 and leave later days empty). If too few distinct places were discussed to fill every day with something real, it's fine for a day to have fewer stops or repeat a base town for a slower day — but never invent a place that wasn't mentioned just to fill a day.` : ""} Use only real place names mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.${CURRENCY_RULE}${budgetCapitalGuide}${chosenEventsBlock}${chosenExtrasBlock}${ruledOutBlock}${kindsOutBlock}${bookedStayBlock}${homeStartsHere}${beenBlock}${essentialsFacts}${communityFound ? `\n${communityFound}` : ""}${activitySaysForGuide ? `\n${activitySaysForGuide}` : ""}${crossingsForGuide ? `\n${crossingsForGuide}` : ""}${plannerSkeleton ? `\nA planning pass already worked out a day-by-day structure (which places, which day, what order) — follow this exact breakdown unless it's missing something the conversation clearly mentioned; your job is to write the full essentials and every stop's note yourself, this only gives you the skeleton: ${plannerSkeleton}` : ""}${tavilyGrounding ? `\nWEB RESEARCH (Tavily, real current results — weigh alongside the conversation for prices, hours, and current details): ${tavilyGrounding}` : ""}${guideGrounding ? `\nGOOGLE AI CROSS-CHECK (weigh this alongside the conversation — if it reveals a mentioned place doesn't seem to exist, prefer the nearest real equivalent rather than inventing): ${guideGrounding}` : ""}${guideLangBlock}`;
+If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day.${requestedDays ? ` CRITICAL — the traveler explicitly said they have ${requestedDays} day${requestedDays > 1 ? "s" : ""} for this trip: the "days" array MUST contain exactly ${requestedDays} entries, one per day, even if the conversation text itself didn't spell out "Day 1:", "Day 2:" etc. for each one — split ALL the places discussed across those ${requestedDays} days yourself, in a sensible geographic/logical order (don't cram everything into day 1 and leave later days empty). If too few distinct places were discussed to fill every day with something real, it's fine for a day to have fewer stops or repeat a base town for a slower day — but never invent a place that wasn't mentioned just to fill a day.` : ""} Use only real place names mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.${CURRENCY_RULE}${budgetCapitalGuide}${chosenEventsBlock}${chosenExtrasBlock}${ruledOutBlock}${kindsOutBlock}${localSaysGuide}${bookedStayBlock}${homeStartsHere}${beenBlock}${essentialsFacts}${communityFound ? `\n${communityFound}` : ""}${activitySaysForGuide ? `\n${activitySaysForGuide}` : ""}${crossingsForGuide ? `\n${crossingsForGuide}` : ""}${plannerSkeleton ? `\nA planning pass already worked out a day-by-day structure (which places, which day, what order) — follow this exact breakdown unless it's missing something the conversation clearly mentioned; your job is to write the full essentials and every stop's note yourself, this only gives you the skeleton: ${plannerSkeleton}` : ""}${tavilyGrounding ? `\nWEB RESEARCH (Tavily, real current results — weigh alongside the conversation for prices, hours, and current details): ${tavilyGrounding}` : ""}${guideGrounding ? `\nGOOGLE AI CROSS-CHECK (weigh this alongside the conversation — if it reveals a mentioned place doesn't seem to exist, prefer the nearest real equivalent rather than inventing): ${guideGrounding}` : ""}${guideLangBlock}`;
       // Guide-building is genuine multi-step reasoning (timing, geography, avoiding
       // duplicates, family-mode adjustments) — this is the one call in Detour worth
       // Opus's extra reasoning depth, and it already has a loading screen the person
@@ -25103,7 +25160,12 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         sentence into the chat's prompt, which is why the
                         panel shows him the line word for word before he can
                         press the button. See utils/founderNotes.js. */}
-                    <FounderNotesPanel onPublish={publishNotes} />
+                    <FounderNotesPanel
+                      onPublish={publishNotes}
+                      existing={(manageItems || []).filter(r => r?.type === NOTE_TYPE)}
+                      onSave={saveNote}
+                      library={(manageItems || []).filter(r => r?.type !== NOTE_TYPE).map(r => r?.payload?.name).filter(Boolean)}
+                      onRemove={(id) => deleteContentItem(id, NOTE_TYPE)} />
 
                     {/* ── THE TOUR SWEEP ─────────────────────────────
                         Oliver, 9 Sep 2026: "So that will be a sweep that

@@ -216,14 +216,20 @@ export const shapeGem = (t = {}) => {
 export const saidLine = (g = {}) => {
   const said = clean(g?.said);
   if (!said) return "";
-  if (g.saidCheck === "confirmed") return "Told to us by a local, and their own page states it too.";
+  // ── AND IT IS "LOCALS", NEVER "A LOCAL" ─────────────────────────
+  //
+  // Oliver, 23 Sep 2026: "I don't mind it saying 'According to locals..' but
+  // don't give 'a told said..'". One unnamed person is a rumour with a source
+  // attached to it, and a reader has no way to weigh it. Locals in the plural
+  // is a place's own reputation, which is what this is and what it is worth.
+  if (g.saidCheck === "confirmed") return "Known to locals, and their own page states it too.";
   if (g.saidCheck === "contradicted") {
     const page = clean(g.saidPage);
     return page
-      ? `A local told us "${said}". Their page says ${page}, so the page is what stands here.`
-      : `A local told us "${said}". Their page says otherwise, so the page is what stands here.`;
+      ? `Locals say "${said}". Their page says ${page}, so the page is what stands here.`
+      : `Locals say "${said}". Their page says otherwise, so the page is what stands here.`;
   }
-  return "Told to us by a local. No page of theirs states it, so ask when you are there.";
+  return "According to locals. No page of theirs states it, so ask when you are there.";
 };
 
 // ── WHAT A ROW STILL OWES BEFORE IT MAY GO UP ───────────────────────
@@ -243,12 +249,12 @@ export const gemProblems = (payload = {}, today = new Date()) => {
   // gives: a saving nobody can check is a rumour. A local who has stood in
   // the bar is not a rumour, and Barkowski and Leanowski give their discount
   // off a blackboard that is on no page anywhere. So a row he wrote may go up
-  // with no page behind it, and the card then says a local told us, rather
+  // with no page behind it, and the card then credits locals, rather
   // than letting his word pass for the brand's. The check stays: what the
   // pass found is what decides which of the two the card prints.
   const onHisWord = !!g.said && g.saidCheck !== "confirmed" && !/^https:\/\//i.test(g.source);
   if (onHisWord) {
-    out.push("No page of theirs states this, so the card says a local told us rather than showing it as theirs.");
+    out.push("No page of theirs states this, so the card says it is according to locals rather than showing it as theirs.");
   } else if (!/^https:\/\//i.test(g.source)) {
     out.push("No https page behind it. A saving nobody can check is a rumour.");
     blocks = true;
@@ -615,7 +621,7 @@ export const gemRunNotes = ({ gems = [], dropped = {} } = {}) => {
   const against = gems.filter(g => g.saidCheck === "contradicted").length;
   if (against) out.push(`${against} ${against === 1 ? "has" : "have"} a page saying something else, and the page is what the card prints.`);
   const onWord = gems.filter(g => g.saidCheck === "notfound").length;
-  if (onWord) out.push(`${onWord} ${onWord === 1 ? "stands" : "stand"} on your word alone. No page states it, and the card will say a local told us.`);
+  if (onWord) out.push(`${onWord} ${onWord === 1 ? "stands" : "stand"} on your word alone. No page states it, and the card will credit locals.`);
   const notOwn = gems.filter(g => !g.own && !g.said).length;
   if (notOwn) out.push(`${notOwn} ${notOwn === 1 ? "comes" : "come"} from a page that is not the brand's own, unticked until you have looked.`);
   return out;
