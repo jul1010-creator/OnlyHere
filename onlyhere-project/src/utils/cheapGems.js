@@ -124,9 +124,37 @@ const digraphs = (s) => clean(s).toLowerCase().replace(/æ/g, "ae").replace(/ø/
 const nameWords = (name) => [...new Set([fold(clean(name)), fold(digraphs(name))]
   .flatMap(n => n.split(/[^a-z0-9]+/)))].filter(w => w.length >= 4 && !COMMON_NAME_WORDS.has(w));
 
+// ── AND THE SAME BRAND IN ANOTHER COUNTRY IS ANOTHER SHOP ───────────
+//
+// Oliver, 24 Sep 2026, on his own Flying Tiger run: "NO.. IT SAYS 20%!!!"
+// He was right. He wrote "20% velkomstrabat", and the pass came back with
+// "their page says 10% off your first purchase, so the page is what stands
+// here", off https://flyingtiger.id/en/pages/first-purchase. That is Flying
+// Tiger INDONESIA. Their Danish club page says members get "op til 20% rabat"
+// in store, and the 10% is a separate newsletter offer somewhere else
+// entirely. So a correct local was overruled by the wrong country's shop.
+//
+// A chain runs different offers in every market it trades in, so a page on
+// another country's storefront is not evidence about a Danish one whatever
+// the brand name on it. Judged by the domain ending, which is what a country
+// storefront is: .dk is here, .com and the other global endings are the
+// brand, and any other country code is somebody else's market.
+//
+// The generic ones are the trap in the other direction: .io, .co, .me, .ai,
+// .tv and .fm are country codes nobody uses as one, and refusing those would
+// throw away real brand sites.
+const GENERIC_CC = new Set(["io", "co", "me", "ai", "tv", "fm", "app", "dev", "shop", "store"]);
+export const isForeignStore = (url) => {
+  const h = hostOf(url);
+  if (!h) return false;
+  const end = h.split(".").pop();
+  if (!/^[a-z]{2}$/.test(end)) return false;
+  return end !== "dk" && !GENERIC_CC.has(end);
+};
+
 export const isOwnSite = (url, name) => {
   const h = hostOf(url);
-  if (!h || isNeverOwnSite(url) || isCouponSite(url)) return false;
+  if (!h || isNeverOwnSite(url) || isCouponSite(url) || isForeignStore(url)) return false;
   const words = nameWords(name);
   if (!words.length) return false;
   const label = fold(h.split(".").slice(0, -1).join("."));
@@ -145,6 +173,24 @@ export const checkedAgo = (payload, today = new Date()) => {
   const d = dayOf(payload?.checkedAt);
   if (!d) return null;
   return Math.round((startOf(today).getTime() - startOf(d).getTime()) / 86400000);
+};
+
+// Who a shop sells to, when it sells to one group only. Empty is everybody.
+export const AUDIENCES = ["women", "men", "kids"];
+export const AUDIENCE_LABEL = { women: "Womenswear", men: "Menswear", kids: "Children's" };
+const AUDIENCE_WORDS = [
+  ["women", /\b(?:dame(?:t(?:ø|oe)j|mode|sko)?|damer|women'?s?wear|women'?s|ladies|kvinde\w*)\b/i],
+  ["men", /\b(?:herre(?:t(?:ø|oe)j|mode|sko)?|herrer|men'?s?wear|men'?s|mands\w*)\b/i],
+  ["kids", /\b(?:b(?:ø|oe)rn\w*|kids?|childre\w*|child'?s?wear|baby|babies)\b/i],
+];
+
+// One group or none. A shop that names two is a shop for both, and a guess
+// between them would be worse than saying nothing.
+export const audienceIn = (text) => {
+  const t = clean(text);
+  if (!t) return "";
+  const hits = AUDIENCE_WORDS.filter(([, re]) => re.test(t)).map(([k]) => k);
+  return hits.length === 1 ? hits[0] : "";
 };
 
 // What the confirming pass may come back with about a sentence he wrote.
@@ -176,6 +222,18 @@ export const shapeGem = (t = {}) => {
     // always does: an app that only works in the country you joined in, a
     // student card that has to be Danish, a club that asks for a Danish number.
     catch: clean(t.catch).slice(0, 240),
+    // ── AND WHO THE SHOP IS ACTUALLY FOR ────────────────────────────
+    //
+    // Oliver, 24 Sep 2026, of a gem he had published himself: "i just realised
+    // this is Women-only.." Checked the same day: mschcopenhagen.dk sells
+    // "elegant og moderne dametøj" and nothing else.
+    //
+    // A 15% student discount is a real saving and useless to half the people
+    // it reaches, and nothing in this row could say so: `who` answers who gets
+    // the DISCOUNT, and the answer there is students. This answers who the
+    // SHOP is for, which decides whether a recommendation is worth making at
+    // all. Empty means everybody, which is most shops.
+    audience: AUDIENCES.includes(clean(t.audience)) ? clean(t.audience) : "",
     // What it is FOR, so the page can be filtered by it. Empty is allowed and
     // is read off the words instead: see gemCategory.
     category: GEM_CATEGORIES.includes(clean(t.category)) ? clean(t.category) : "",
@@ -264,6 +322,11 @@ export const gemProblems = (payload = {}, today = new Date()) => {
   } else if (isDataSite(g.source)) {
     out.push(`${hostOf(g.source)} is a company database, not the shop. It sells contact data and says nothing about what anything costs.`);
     blocks = true;
+  } else if (isForeignStore(g.source)) {
+    // Named rather than folded into "not their own site", because the fix is
+    // different: find the Danish page, do not go looking for a better source.
+    out.push(`${hostOf(g.source)} is ${g.name || "this brand"} in another country, and a chain runs a different offer in every market. Find their Danish page.`);
+    blocks = true;
   } else if (!isOwnSite(g.source, g.name)) {
     // A DISCOUNT'S TERMS ARE THE BRAND'S TO STATE. A list of student discounts
     // on somebody else's site was right the day it was written, and the one
@@ -284,6 +347,9 @@ export const gemProblems = (payload = {}, today = new Date()) => {
   if (g.kind === "scheme" && !g.what) { out.push("A discount with no saving named."); blocks = true; }
   if (g.kind === "scheme" && !g.who) out.push("Nobody named as who gets it.");
   if (g.kind === "scheme" && !g.how) out.push("Nothing on how to get it, which is the half a visitor is missing.");
+  if (g.audience) {
+    out.push(`Read as ${AUDIENCE_LABEL[g.audience].toLowerCase()} only. Every card and every reply will say so, so check that is right before it goes up.`);
+  }
   if (!g.where) out.push("Not known whether it works in the shop, online or both, so the page says nothing about it.");
   const ago = checkedAgo(g, today);
   if (ago == null) { out.push("No date it was checked."); blocks = true; }
@@ -578,9 +644,16 @@ export const settleGems = (json, results = [], { today = new Date(), only = "", 
       : {};
     if (!hit || !/^https?:\/\//i.test(clean(hit.url))) {
       if (!heard || check !== "notfound") { dropped.noSource += 1; continue; }
-    } else if (isCouponSite(hit.url) || isDataSite(hit.url)) { dropped.coupon += 1; continue; }
+    } else if (isCouponSite(hit.url) || isDataSite(hit.url) || isForeignStore(hit.url)) { dropped.coupon += 1; continue; }
     const from = check === "notfound" ? "" : clean(hit?.url);
     const g = shapeGem({ ...raw, ...saidBits, source: from, checkedAt: at });
+    // WHO THE SHOP IS FOR, off the page it was read from, when the model did
+    // not say. The row's own words first, because they describe the shop; the
+    // result's snippet second, because that is where "dametøj" usually sits.
+    if (!g.audience) {
+      g.audience = audienceIn([g.name, g.what, g.desc].map(clean).join(" "))
+        || audienceIn(clean(hit?.snippet));
+    }
     // HIS SENTENCE IS THE SAVING when no page states one. The row is about a
     // thing he watched happen, and a row that came back with the verdict and
     // an empty WHAT would be dropped for having no saving named.
@@ -588,7 +661,13 @@ export const settleGems = (json, results = [], { today = new Date(), only = "", 
     if (!g.name || !g.kind || (g.kind === "scheme" && !g.what)) { dropped.shape += 1; continue; }
     // A name search that comes back with the place next door is a different
     // run's answer, not this one's.
-    if (one && !fold(g.name).includes(one) && !one.includes(fold(g.name))) { dropped.other += 1; continue; }
+    // SPACING IS NOT A DIFFERENT PLACE. `only` comes off the host he pasted
+    // ("flyingtiger"), and the row comes back named "Flying Tiger Copenhagen",
+    // so the two never matched and the only row was dropped as being about
+    // somewhere else. Watched on his own run, 24 Sep 2026.
+    const tight = (v) => fold(v).replace(/\s+/g, "");
+    if (one && !fold(g.name).includes(one) && !one.includes(fold(g.name))
+      && !tight(g.name).includes(tight(one)) && !tight(one).includes(tight(g.name))) { dropped.other += 1; continue; }
     // On a name lookup every row is about the one place, whatever the model
     // calls it: "Sporvejen" and "Restaurant Sporvejen" are the same row.
     const key = one ? `${one}|${g.kind}` : `${fold(g.name)}|${g.kind}`;
@@ -745,6 +824,8 @@ export const gemsChatBlock = (list = []) => {
     const bits = [`${g.name}: ${g.what || "cheaper than it looks"}`];
     if (g.who) bits.push(`for ${g.who}`);
     if (g.how) bits.push(`to get it: ${g.how}`);
+    // BEFORE THE CATCH, because this one decides whether the rest matters.
+    if (g.audience) bits.push(`${AUDIENCE_LABEL[g.audience]} only, so say that before you recommend it`);
     if (g.where === "shop") bits.push("in the shop only, never online");
     if (g.catch) bits.push(`THE CATCH: ${g.catch}`);
     if (g.towns?.length) bits.push(`only in ${g.towns.join(", ")}`);

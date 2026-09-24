@@ -66,7 +66,7 @@ import { accessOf, accessNote } from "../utils/eventAccess";
 import { newFinds, findsLine, findDetail, withFind, withoutFind, wasTurnedDown } from "../utils/guideFinds";
 import { communityEvents } from "../data/events";
 import { gems } from "../data/gems";
-import { gemsForGuide, gemHeading, checkedLabel, isOwnSite } from "../utils/cheapGems";
+import { gemsForGuide, gemHeading, checkedLabel, isOwnSite, AUDIENCE_LABEL } from "../utils/cheapGems";
 import { namedIslandOf } from "../utils/geography";
 import { BOOKING_AFFILIATE_ID } from "../config";
 import { tiqetsBrowseUrl, partnerDisclosure, supportNote, partnerLinkCount, isPartnerLink, carRentalFits, stayDoorUrl, tripcomStayUrl, stayDisclosure, STAY_DISCLOSURE, outboundLink, featuredStayFor, tourMerchant } from "../utils/affiliates";
@@ -2535,6 +2535,12 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
               return (
                 <div style={{ background: C.surface, border: `1px solid ${C.gold}33`, borderRadius: 12, padding: "12px 14px", marginTop: 16, fontSize: 12.5, color: C.light, lineHeight: 1.6 }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 3 }}>{gemHeading(gemByDay[dayIdx])}</div>
+                  {/* WHO THE SHOP IS FOR, first and in its own line. Oliver,
+                      24 Sep 2026, of a gem he had published: "i just realised
+                      this is Women-only". A saving is worth nothing to
+                      somebody the shop does not sell to, and that belongs
+                      above the saving rather than in a sentence about it. */}
+                  {g.audience && <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: 0.6 }}>{AUDIENCE_LABEL[g.audience]} only</div>}
                   <div><b style={{ color: C.text }}>{g.name}</b>{g.what ? `: ${g.what}` : ""}{g.who ? `, for ${g.who.charAt(0).toLowerCase()}${g.who.slice(1)}` : ""}.</div>
                   {g.how && <div>{g.how}</div>}
                   {g.catch && <div style={{ color: C.text }}><b>The catch:</b> {g.catch}</div>}

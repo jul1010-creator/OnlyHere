@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { C } from "../utils/theme";
 import { Pill } from "./Pill";
-import { gemsView, GEM_SECTION, WHERE_LABEL, checkedLabel, isOwnSite, gemMatches, gemFilterOptions, gemWhere, GEM_CATEGORY_LABEL, saidLine } from "../utils/cheapGems";
+import { gemsView, GEM_SECTION, WHERE_LABEL, checkedLabel, isOwnSite, gemMatches, gemFilterOptions, gemWhere, GEM_CATEGORY_LABEL, saidLine, AUDIENCE_LABEL } from "../utils/cheapGems";
 
 // ── THE CHEAP GEMS PAGE ─────────────────────────────────────────────
 //
@@ -29,6 +29,14 @@ const GemCard = ({ g, point, me }) => (
       {gemWhere(g, { point, me })}
     </div>
     <div style={{ fontSize: 18, fontWeight: 600, color: C.text, fontFamily: "'Fraunces', serif", lineHeight: 1.15 }}>{g.name}</div>
+    {/* A saving is worth nothing to somebody the shop does not sell to, so
+        this sits with the name rather than inside the description. See
+        audienceIn in utils/cheapGems.js. */}
+    {g.audience && (
+      <div style={{ fontSize: 10.5, fontWeight: 700, color: C.muted, letterSpacing: 0.7, textTransform: "uppercase", marginTop: 4 }}>
+        {AUDIENCE_LABEL[g.audience]} only
+      </div>
+    )}
     {g.what && <div style={{ fontSize: 13.5, color: C.gold, fontWeight: 700, marginTop: 6 }}>{g.what}</div>}
     {g.desc && <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.65, marginTop: 6 }}>{g.desc}</div>}
     {(g.who || g.how || (g.where && g.kind === "scheme")) && (

@@ -270,7 +270,7 @@ writeFileSync(entry, `
   export { PARTNER_OPENER, PARTNER_INTRO, partnerSections, partnerCount } from ${JSON.stringify(join(root, "src/utils/partnerSheet.js"))};
   export { baseKey, staysIn as stayRunsIn, doorsFor, doorOn, sameBaseLine, nightsLabel } from ${JSON.stringify(join(root, "src/utils/stayDoors.js"))};
   export { SECTIONS as DIR_SECTIONS, ROW_KINDS, kindOf as dirKindOf, directoryLinks, pathWord, ferryDoorIn, DIRECTORY_PROMPT, rowsFromDirectory, directoryProblems, staysIn, eatsIn, islandSaysBlock, ISLAND_SAYS } from ${JSON.stringify(join(root, "src/utils/islandDirectory.js"))};
-  export { GEM_TYPE, GEM_KINDS, GEM_SECTION, WHERE_LABEL, RECHECK_DAYS, STALE_DAYS, isCouponSite, isOwnSite, shapeGem, gemProblems, gemLive, gemsView, checkedLabel, checkedAgo, isDataSite, gemWhere, gemCategory, isForStudents, gemMatches, gemFilterOptions, GEM_CATEGORIES, GEM_CATEGORY_LABEL, gemSearches, gemSearchesFor, ownPagesIn, pageAsResult, MAX_OWN_PAGES, GEMS_PROMPT, settleGems, gemRunNotes, gemsForGuide, gemHeading, SAID_CHECKS, saidLine, saidWords, gemsForChat, gemsChatBlock, MAX_CHAT_GEMS } from ${JSON.stringify(join(root, "src/utils/cheapGems.js"))};
+  export { GEM_TYPE, GEM_KINDS, GEM_SECTION, WHERE_LABEL, RECHECK_DAYS, STALE_DAYS, isCouponSite, isOwnSite, shapeGem, gemProblems, gemLive, gemsView, checkedLabel, checkedAgo, isDataSite, gemWhere, gemCategory, isForStudents, gemMatches, gemFilterOptions, GEM_CATEGORIES, GEM_CATEGORY_LABEL, gemSearches, gemSearchesFor, ownPagesIn, pageAsResult, MAX_OWN_PAGES, GEMS_PROMPT, settleGems, gemRunNotes, gemsForGuide, gemHeading, SAID_CHECKS, saidLine, saidWords, gemsForChat, gemsChatBlock, MAX_CHAT_GEMS, isForeignStore, AUDIENCES, AUDIENCE_LABEL, audienceIn } from ${JSON.stringify(join(root, "src/utils/cheapGems.js"))};
   export { NOTE_TYPE, NOTE_KINDS, NOTE_KIND_LABEL, NOTE_KIND_MEANING, NOTE_CHECKS, NOTE_LIFE, NOTE_RECHECK, shapeNote, noteProblems, noteLive, noteAgo, noteSubjects, notesFor, notesForGuide, notesBlock, NOTE_LINE, MAX_NOTES, noteSearches, NOTE_PROMPT, settleNote, noteRunNotes, namesPublished, ALREADY_SAID, alreadySaid, aboutWords, MODES_WITH_WORDS, MODES_THE_APP_HAS } from ${JSON.stringify(join(root, "src/utils/founderNotes.js"))};
   export { toolUsesIn, toolResultsFor, queriesIn, NO_ANSWER, nothingToSearch } from ${JSON.stringify(join(root, "src/utils/toolTurn.js"))};
   export { reelLive, withLiveReels, reelCount } from ${JSON.stringify(join(root, "src/utils/reelGate.js"))};
@@ -74253,6 +74253,106 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     /gemsChatBlock\(gemsForChat\(travellerTurns\.join\("\\n"\), gems, \{ town: namedByThem\[0\]\?\.name \|\| "" \}\)\)/.test(appG));
   ok("and the block reaches the prompt beside the local notes",
     /\$\{kindsRuledOut\}\$\{localSays\}\$\{gemsSay\}/.test(appG));
+}
+
+// ── THE SAME BRAND IN ANOTHER COUNTRY IS ANOTHER SHOP ───────────────
+//
+// Oliver, 24 Sep 2026, on his own Flying Tiger run: "NO.. IT SAYS 20%!!!"
+// He wrote "20% velkomstrabat" and the pass answered "their page says 10% off
+// your first purchase, so the page is what stands here", off
+// https://flyingtiger.id/en/pages/first-purchase, which is Flying Tiger
+// INDONESIA. Checked against their Danish club page the same day: members get
+// "op til 20% rabat" in store, and the 10% is a separate newsletter offer. A
+// correct local was overruled by the wrong country's shop.
+{
+  const DAY = new Date(2026, 8, 24);
+  const NAME = "Flying Tiger Copenhagen";
+
+  ok("another country's storefront is not the brand's own site", !M.isOwnSite("https://flyingtiger.id/en/pages/first-purchase", NAME));
+  ok("the global one is", M.isOwnSite("https://flyingtiger.com/da-dk/pages/customer-club-app", NAME));
+  ok("and a Danish one is", M.isOwnSite("https://barkowski.dk/", "Barkowski"));
+  ok("a Swedish storefront is another country", M.isForeignStore("https://flyingtiger.se/x"));
+  ok("so is a German one", M.isForeignStore("https://example.de/x"));
+  ok("a country code nobody uses as one is not", !M.isForeignStore("https://brand.io/x") && !M.isForeignStore("https://brand.co/x"));
+  ok("nor is .com", !M.isForeignStore("https://flyingtiger.com/da-dk/x"));
+  ok("nor is .dk itself", !M.isForeignStore("https://barkowski.dk/"));
+
+  // The research pass drops it the way it drops a coupon site, so a
+  // contradiction can never be built on it.
+  const ID = [{ title: "id", url: "https://flyingtiger.id/en/pages/first-purchase", snippet: "10%" }];
+  const against = M.settleGems({ gems: [{ name: NAME, kind: "scheme", what: "10% off first purchase", check: "contradicted", pageSays: "10% off", source: 0 }] },
+    ID, { today: DAY, only: "flying tiger", said: "20% velkomstrabat" });
+  is("a contradiction off another country's page does not come back", against.gems, []);
+  is("and is counted as a page that should not have been read", against.dropped.coupon, 1);
+
+  // And the Studio says which country it was, because the fix is to find the
+  // Danish page rather than to go looking for a better source.
+  const flagged = M.gemProblems({ name: NAME, kind: "scheme", what: "10% off", who: "everyone", how: "Subscribe", where: "online", source: "https://flyingtiger.id/en/pages/first-purchase", checkedAt: "2026-09-24" }, DAY);
+  ok("a foreign storefront blocks the row", flagged.blocks);
+  ok("and says so in those words", flagged.problems.some(p => /in another country, and a chain runs a different offer in every market/.test(p)));
+
+  // ── AND SPACING IS NOT A DIFFERENT PLACE ──────────────────────────
+  //
+  // `only` comes off the host he pasted, "flyingtiger", and the row comes
+  // back named "Flying Tiger Copenhagen", so the two never matched and his
+  // only row was dropped as being about somewhere else.
+  const DK = [{ title: "dk", url: "https://flyingtiger.com/da-dk/pages/customer-club-app", snippet: "op til 20% rabat" }];
+  const row = { name: NAME, kind: "scheme", what: "up to 20% off in store", who: "club members", how: "Join the free club app", source: 0 };
+  is("a host with no spaces still matches a name with them",
+    M.settleGems({ gems: [row] }, DK, { today: DAY, only: "flyingtiger" }).gems.map(g => g.name), [NAME]);
+  is("and nothing is counted as being about somewhere else",
+    M.settleGems({ gems: [row] }, DK, { today: DAY, only: "flyingtiger" }).dropped.other, 0);
+  is("a name that really is somewhere else is still dropped",
+    M.settleGems({ gems: [{ ...row, name: "Normal" }] }, DK, { today: DAY, only: "flyingtiger" }).dropped.other, 1);
+}
+
+// ── WHO THE SHOP IS ACTUALLY FOR ────────────────────────────────────
+//
+// Oliver, 24 Sep 2026, of a gem he had published himself: "i just realised
+// this is Women-only.." Checked the same day: mschcopenhagen.dk sells
+// "elegant og moderne dametøj" and nothing else. A 15% student discount is a
+// real saving and useless to half the people it reaches, and nothing in the
+// row could say so: `who` answers who gets the DISCOUNT, and the answer there
+// is students.
+{
+  const DAY = new Date(2026, 8, 24);
+  is("Danish womenswear reads as women", M.audienceIn("elegant og moderne dametøj"), "women");
+  is("and English does", M.audienceIn("Scandinavian womenswear brand"), "women");
+  is("menswear reads as men", M.audienceIn("Danish menswear chain with thirteen shops"), "men");
+  is("and herretøj does", M.audienceIn("herretøj til gode priser"), "men");
+  is("børnetøj reads as kids", M.audienceIn("børnetøj og legetøj"), "kids");
+  // A shop that names two is a shop for both, and a guess between them would
+  // be worse than saying nothing.
+  is("a shop for both is a shop for everybody", M.audienceIn("clothes for women and men"), "");
+  is("and a shop that names nobody is too", M.audienceIn("a Danish variety store chain"), "");
+  is("nothing written is nothing read", M.audienceIn(""), "");
+
+  is("the shape carries it", M.shapeGem({ name: "x", audience: "women" }).audience, "women");
+  is("and drops anything that is not one of the three", M.shapeGem({ name: "x", audience: "everyone" }).audience, "");
+  is("three and no fourth", M.AUDIENCES, ["women", "men", "kids"]);
+
+  // The pass fills it off the page it read, when the model did not say.
+  const R = [{ title: "MSCH", url: "https://www.mschcopenhagen.dk/", snippet: "elegant og moderne dametøj til kvinder" }];
+  const got = M.settleGems({ gems: [{ name: "MSCH Copenhagen", kind: "scheme", what: "15% off for students", who: "students", how: "Email a photo of your student card", source: 0 }] },
+    R, { today: DAY, only: "MSCH Copenhagen" });
+  is("the pass reads it off the page", got.gems[0].audience, "women");
+  is("and leaves a shop for everybody alone",
+    M.settleGems({ gems: [{ name: "Normal", kind: "cheap", what: "cheap basics", source: 0 }] },
+      [{ title: "n", url: "https://normal.dk/", snippet: "en dansk kæde med lave priser" }], { today: DAY }).gems[0].audience, "");
+
+  // And it is said before the saving, wherever the gem is handed over.
+  ok("the chat is told to say it before recommending",
+    /Womenswear only, so say that before you recommend it/.test(M.gemsChatBlock(got.gems)));
+  ok("the Studio says what it read, so he can check it",
+    M.gemProblems(got.gems[0], DAY).problems.some(p => /Read as womenswear only/.test(p)));
+  ok("and it does not block, because most of these are right",
+    !M.gemProblems(got.gems[0], DAY).blocks);
+  is("the labels are written once", M.AUDIENCE_LABEL.women, "Womenswear");
+
+  const page = readFileSync(join(root, "src/components/CheapGemsPage.jsx"), "utf8");
+  const guide = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+  ok("the card says it under the name", /\{AUDIENCE_LABEL\[g\.audience\]\} only/.test(page));
+  ok("and the guide says it above the saving", /\{AUDIENCE_LABEL\[g\.audience\]\} only/.test(guide));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
