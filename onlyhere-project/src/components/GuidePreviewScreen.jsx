@@ -599,6 +599,9 @@ export const GuidePreviewScreen = ({
     .filter(cat => cat.items.length > 0 || cat.offered.length > 0 || cat.consider.length > 0);
   // Which bar streets have their bars open. See barsIntoStreets.
   const [barsOpen, setBarsOpen] = useState([]);
+  // The bar a reader tapped to look at without leaving this screen. See the
+  // peek card at the foot of this component.
+  const [barPeek, setBarPeek] = useState(null);
   const toggleExtra = (name) =>
     setPickedExtras(prev => (prev || []).includes(name) ? (prev || []).filter(n => n !== name) : [...(prev || []), name]);
   // ── THE EVENTS, DATE TESTED AND TICKABLE ──────────────────────────
@@ -998,8 +1001,18 @@ export const GuidePreviewScreen = ({
                         </button>
                         {open && (
                           <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 5 }}>
+                            {/* ── AND IT STAYS ON THE PREVIEW ──────────
+                                Oliver, 24 Sep 2026: "clicking one of those two
+                                should bring up a small, not cut onto the blog."
+
+                                openStopDetail routes to the full entry page,
+                                which closes this screen. A reader opening a bar
+                                to see whether they want it has to be able to
+                                shut it again and still be standing where they
+                                were: the preview is a decision screen and every
+                                other control on it decides in place. */}
                             {place._barsHere.map((b, i) => (
-                              <button key={`${b.id}-${i}`} onClick={() => openStopDetail?.(b)}
+                              <button key={`${b.id}-${i}`} onClick={() => setBarPeek(b)}
                                 style={{ textAlign: "left", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "6px 9px", color: C.text, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                                 {b.name}
                               </button>
@@ -1275,6 +1288,53 @@ export const GuidePreviewScreen = ({
         <div onClick={e => e.stopPropagation()}>
           <AskGemlyx key={askItem.name} item={askItem} session={session} onSignIn={onSignIn}
             startOpen onClose={() => setAskItem(null)} />
+        </div>
+      )}
+      {/* ── A LOOK AT ONE BAR, WITHOUT LEAVING ───────────────────────
+          Oliver, 24 Sep 2026: "clicking one of those two should bring up a
+          small, not cut onto the blog."
+
+          SMALL ON PURPOSE. The entry page exists and is one tap further on;
+          what this answers is "is this the kind of place I want", which is the
+          name, what it is, what it costs and a line of description. Anything
+          more and it becomes the blog it was written to avoid, in a smaller
+          box.
+
+          Its own overlay above the preview rather than a card inside it: the
+          preview scrolls, and a panel that opened halfway down a long list
+          would land wherever the reader happened to be. */}
+      {barPeek && (
+        <div onClick={(e) => { e.stopPropagation(); setBarPeek(null); }}
+          style={{ position: "fixed", inset: 0, zIndex: 952, background: "rgba(5,8,16,0.72)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div onClick={(e) => e.stopPropagation()}
+            style={{ background: C.surface, border: `1px solid ${C.gold}55`, borderRadius: 16, padding: "16px 18px", maxWidth: 380, width: "100%", boxShadow: "0 20px 60px rgba(0,0,0,0.6)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+              <div>
+                {barPeek.location && (
+                  <div style={{ fontSize: 9.5, fontWeight: 700, color: C.muted, letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 3 }}>{barPeek.location}</div>
+                )}
+                <div style={{ fontSize: 18, fontWeight: 600, color: C.text, fontFamily: "'Fraunces', serif", lineHeight: 1.15 }}>{barPeek.name}</div>
+              </div>
+              <button onClick={() => setBarPeek(null)} aria-label="Close"
+                style={{ background: "none", border: "none", color: C.muted, fontSize: 16, cursor: "pointer", lineHeight: 1, padding: 2, flexShrink: 0 }}>✕</button>
+            </div>
+            {(barPeek.type || barPeek.crowd || barPeek.priceNote) && (
+              <div style={{ fontSize: 11.5, color: C.gold, fontWeight: 700, marginTop: 6 }}>
+                {[barPeek.type, barPeek.crowd, barPeek.priceNote].filter(Boolean).join(" · ")}
+              </div>
+            )}
+            {barPeek.desc && (
+              <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.65, marginTop: 8 }}>{barPeek.desc}</div>
+            )}
+            {/* The full entry is still one tap on, for whoever wants it. Named
+                as what it opens, so nobody presses it expecting to stay. */}
+            {openStopDetail && (
+              <button onClick={() => { const b = barPeek; setBarPeek(null); openStopDetail(b); }}
+                style={{ marginTop: 12, background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                Open the full page ↗
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>

@@ -134,8 +134,38 @@ const readers = ({ townOfItem = null, townOfContainer = null, sameTown = null } 
   sameTown: typeof sameTown === "function" ? sameTown : EQ,
 });
 
+// ── AND WHEN THE ADDRESS AND THE STREET ARE TWO DIFFERENT NAMES ──
+//
+// Oliver, 24 Sep 2026: "And Heidi's is literally on Jomfru Ane Gade -.-.."
+//
+// He is right and the matcher was right too, which is the whole problem.
+// Heidi's Bier Bar's registered address is Jomfru Anes Gård 5: a courtyard that
+// opens off Jomfru Ane Gade, confirmed on its own listing and on a bar-walk
+// page whose headline places the bar in Jomfru Ane Gade. Two names, one stem,
+// not one word. So the bar stands on the busiest bar street in the country and
+// matched none of it, because the post office and the person walking down the
+// street do not agree about where it is.
+//
+// NOT FIXED BY LOOSENING THE MATCH. "Gård" is not "Gade". A rule that handed a
+// courtyard to a street whenever the names rhymed would claim every unrelated
+// X Gård in Denmark, and nothing downstream would ever correct it: the same
+// silent miss this file already carries three comments about.
+//
+// So a row can SAY which street it stands on, and a row that says it is not
+// then argued with. The stated street is the answer and the address fields are
+// not read at all. That second half matters on a corner, where the postal
+// address names one street and the door faces another: a statement is not one
+// candidate among several, and a value somebody typed does not deserve to lose
+// a length contest to one nobody checked.
+//
+// A stated street matching NO published container leaves the place loose,
+// which is the honest outcome: he said which street, and that street has no
+// entry yet.
+export const statedContainer = (item) => String(item?.street || "").trim();
+
 export const containerFor = (item, containers, opts = {}) => {
-  const where = addressIn(item);
+  const said = statedContainer(item);
+  const where = said || addressIn(item);
   if (!where) return null;
   const r = readers(opts);
   const town = r.townOfItem(item);

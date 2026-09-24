@@ -48,7 +48,7 @@ writeFileSync(entry, `
   export { normaliseDomain, cleanNote, cleanSource, sourcesFor, sourceRulesBlock, cleanPlace, placeMatches, blockCost, directSourceSearches, domainVariants, placeMightMatch, sourcesToSearch, MAX_DIRECT_SEARCHES, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { variantsOf, otherNameFor, samePlaceName, searchNames, PLACE_NAMES, SIGHT_NAMES, containsName, distinctiveWords, GENERIC_PLACE_WORDS, foundAt, matchVariantsOf, GENERIC_ALIASES } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
   export { SHOP_KINDS, SHOP_KIND_VALUES, SHOP_KIND_RULE, ONLY_HERE_RULE, shopKindOf, shopPlaceFor, shopsInPlace, shoppingForTown, shoppingTownList, shopsIntoPlaces, inShopPlace, worthShowing, PREVIEW_SHOPS_PER_PLACE, PREVIEW_LOOSE_SHOPS } from ${JSON.stringify(join(root, "src/utils/shopping.js"))};
-  export { containerFor, itemsInContainer, splitByContainer, foldIntoContainers, inContainer, bareName, addressIn, spellingVariants as containerVariants } from ${JSON.stringify(join(root, "src/utils/placeContainer.js"))};
+  export { containerFor, itemsInContainer, splitByContainer, foldIntoContainers, inContainer, bareName, addressIn, statedContainer, spellingVariants as containerVariants } from ${JSON.stringify(join(root, "src/utils/placeContainer.js"))};
   export { NIGHTLIFE_CITIES, townOfLocation, groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList, nightlifeSummaryFor, townOfStreet, onThisStreet, streetForSpot, barsOnStreet, nightlifeForTown, nightKindOf, strandedNight, barsIntoStreets, PREVIEW_BARS_PER_STREET, PREVIEW_LOOSE_BARS } from ${JSON.stringify(join(root, "src/utils/nightlife.js"))};
   export { supabaseFailure, studioErrorMessage, refreshIsDead, missingColumn, EXPIRED, REFUSED, MISSING, OUTDATED, OTHER } from ${JSON.stringify(join(root, "src/utils/studioErrors.js"))};
   export { cleanPlaceKind, cleanRelation, cleanIsland, placeIssues, placePatch, hasPlaceChange, duplicateNames } from ${JSON.stringify(join(root, "src/utils/placeEdit.js"))};
@@ -11338,6 +11338,68 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     /THE SCREEN THIS SENTENCE SITS ON SHOWS EXACTLY THESE PAGES AND NOTHING ELSE/.test(appSrc));
   ok("and told not to promise an interest the list does not serve",
     /Do not name an interest of theirs that nothing on the list serves/.test(appSrc));
+
+  // ── AND HOW LONG THE TRIP IS, WHICH IT WAS GUESSING ───────────────
+  //
+  // Oliver, 24 Sep 2026, on a preview for eight days out of Aalborg: "so I put
+  // it as starting in Aalborg.. and then that is the whole trip? Just eating
+  // here?" The line read "centers on Aalborg's easy, laid-back food scene" and
+  // closed "fitting nicely with having the kids along FOR THE DAY".
+  //
+  // He had filled the intake in twice, one day then eight, and the brief took
+  // the second correctly. But an intake turn is HIDDEN and `convo` filters
+  // hidden turns out, so the only trip length left in the text this sentence
+  // is written from was Gemlyx's own echo of the FIRST intake, still standing
+  // four turns later: "Applied: Aalborg for one day". The model read the
+  // transcript correctly. The transcript was wrong.
+  //
+  // `days` was already computed in this effect, off the intake, and never
+  // passed. Same fix as the list, the mode, the budget and the departure town:
+  // the sentence answers to something settled rather than to prose.
+  ok("the sentence is told how long the trip is",
+    /THIS TRIP IS \$\{days\} \$\{days === 1 \? "DAY" : "DAYS"\} LONG/.test(appSrc));
+  // An intake filled in twice leaves the first echo standing, and it is not a
+  // correction of anything.
+  ok("and that the form beats anything either side said earlier",
+    /it beats any other length in the conversation, including one Gemlyx itself stated earlier/.test(appSrc));
+  ok("and the exact phrase that went wrong is named",
+    /never write "for the day" or "your day" about a trip of more than one/.test(appSrc));
+  // Built off the figure this effect already computes, not off a second read.
+  ok("it uses the day count the effect already worked out",
+    /const lengthForWhy = Number\.isFinite\(days\) && days > 0/.test(appSrc));
+  // No length, no claim: a trip with no readable dates gets silence rather
+  // than a guess, the same way the empty-screen branch names no place.
+  ok("and says nothing when there is no length to state",
+    /const lengthForWhy = [\s\S]{0,900}?: "";/.test(appSrc));
+  ok("the block reaches the prompt", /\}\$\{lengthForWhy\} Respond with only the sentence/.test(appSrc));
+
+  // ── AND A BAR OPENS WITHOUT LEAVING THE SCREEN ────────────────────
+  //
+  // Oliver, 24 Sep 2026: "clicking one of those two should bring up a small,
+  // not cut onto the blog." The bars under a street called openStopDetail,
+  // which routes to the full entry page and closes the preview. A reader
+  // opening a bar to decide whether they want it has to be able to shut it
+  // again and still be standing where they were.
+  {
+    const prevSrc = readFileSync(join(root, "src/components/GuidePreviewScreen.jsx"), "utf8");
+    ok("a bar in the street list opens a peek", /onClick=\{\(\) => setBarPeek\(b\)\}/.test(prevSrc));
+    ok("and no longer routes straight to the entry page",
+       !/\{place\._barsHere\.map\([\s\S]{0,400}?openStopDetail\?\.\(b\)/.test(prevSrc));
+    // Its own overlay, because the preview scrolls and a panel opened halfway
+    // down a long list would land wherever the reader happened to be.
+    ok("the peek is an overlay above the preview rather than a card inside it",
+       /barPeek && \([\s\S]{0,300}?position: "fixed", inset: 0, zIndex: 952/.test(prevSrc));
+    // SMALL ON PURPOSE: the name, what it is, what it costs, a line of
+    // description. Anything more is the blog in a smaller box.
+    ok("it shows what a reader decides on and no more",
+       /barPeek\.type, barPeek\.crowd, barPeek\.priceNote/.test(prevSrc) && /barPeek\.desc/.test(prevSrc));
+    ok("and closes both by the cross and by the backdrop",
+       (prevSrc.match(/setBarPeek\(null\)/g) || []).length >= 3);
+    // The full entry is still one tap on, named as what it opens so nobody
+    // presses it expecting to stay.
+    ok("the full page is still reachable and says so",
+       /Open the full page/.test(prevSrc) && /setBarPeek\(null\); openStopDetail\(b\);/.test(prevSrc));
+  }
 
   // ── AND THE TICKS ARE NOT ONE CONVERSATION BEHIND ─────────────────
   // The reset may NOT sit in the guideModal !== "preview" branch: continuing
@@ -23555,6 +23617,30 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   is("an unresearched price is empty, not invented", (shapeForLive("night", { name: "X", desc: "d" }) || {}).priceNote, "");
   const detail = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
   ok("and a reader sees it", /label: "What it costs", value: item\.priceNote/.test(detail));
+
+  // ── AND THE FIELD THAT OVERRULES AN ADDRESS HAS TO SURVIVE PUBLISH ─
+  // Oliver, 24 Sep 2026: "And Heidi's is literally on Jomfru Ane Gade -.-.."
+  // `street` is the row saying which published street it stands on, and it is
+  // worth nothing if the publish gate drops it, which is the exact failure
+  // nearestStation already had on three types. Both halves are asserted here:
+  // the schema asks for it and this shape carries it.
+  ok("a bar is asked which street it stands on", /"street"/.test(String(prompts.night || "")));
+  ok("and told to leave it empty unless the address names a different one",
+    /EMPTY STRING unless the research states the other street outright/.test(String(prompts.night || "")));
+  is("and it survives publish",
+    (shapeForLive("night", { name: "Heidi's Bier Bar", desc: "d", street: "Jomfru Ane Gade" }) || {}).street, "Jomfru Ane Gade");
+  is("empty on a row that did not say", (shapeForLive("night", { name: "X", desc: "d" }) || {}).street, "");
+  // The same engine places shops inside streets and centres, so the same field
+  // exists on the same terms rather than only on the type that found the bug.
+  ok("a shop is asked the same question", /"street"/.test(String(prompts.shop || "")));
+  is("and its answer survives publish too",
+    (shapeForLive("shop", { name: "S", desc: "d", town: "Aarhus", street: "Mejlgade" }) || {}).street, "Mejlgade");
+  is("empty on a shop that did not say", (shapeForLive("shop", { name: "S", desc: "d", town: "Aarhus" }) || {}).street, "");
+  // AND THE OTHER PUBLISH PATH. The code generator writes a row straight into a
+  // data file, and a field missing THERE is dropped just as silently.
+  const appStreet = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the bar code generator carries it", /location: \$\{J\(t\.location\)\}, street: \$\{J\(t\.street\)\}, isClub:/.test(appStreet));
+  ok("and the shop one does too", /const shops = \[[\s\S]{0,200}?street: \$\{J\(t\.street\)\}/.test(appStreet));
 }
 
 // ── TWO STRINGS A READER SEES, BOTH READ AS UNFINISHED ─────────────
@@ -24903,6 +24989,56 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
     (streetForSpot({ name: "X", location: "Indre By, Copenhagen", mapHint: "X, Nørregade 2, 1165 Copenhagen, Denmark" }, [NOR_CPH, NOR_ODE]) || {}).town, "Copenhagen");
   is("an explicit street field wins when a row has one",
     (streetForSpot({ name: "X", street: "Gothersgade", location: "Indre By, Copenhagen" }, STREETS) || {}).name, "Gothersgade");
+
+  // ── AND THE ROW WHOSE ADDRESS IS NOT ITS STREET ───────────────
+  // Oliver, 24 Sep 2026: "And Heidi's is literally on Jomfru Ane Gade -.-.."
+  // Heidi's Bier Bar's registered address is Jomfru Anes Gård 5, a courtyard
+  // that opens off Jomfru Ane Gade. Two names, one stem, not one word, so the
+  // busiest bar street in Denmark listed none of it and the matcher was right
+  // by its own rule the whole time.
+  {
+    const HEIDIS = { name: "Heidi's Bier Bar", location: "Jomfru Anes Gård, Aalborg",
+      mapHint: "Heidi's, Jomfru Anes Gård 5, 9000 Aalborg, Denmark" };
+    // THE STATE THAT WAS WRONG ON HIS SCREEN, kept as a test so the reason is
+    // recorded: no loosening was applied, so the address alone still places it
+    // nowhere. "Gård" is not "Gade" and a matcher that pretended otherwise
+    // would claim every unrelated X Gård in the country.
+    ok("a courtyard address alone still matches no street", !streetForSpot(HEIDIS, STREETS));
+    is("and the row saying which street it is on puts it there",
+      (streetForSpot({ ...HEIDIS, street: "Jomfru Ane Gade" }, STREETS) || {}).name, "Jomfru Ane Gade");
+    is("the town still comes from the row's own fields",
+      (streetForSpot({ ...HEIDIS, street: "Jomfru Ane Gade" }, STREETS) || {}).town, "Aalborg");
+    // AND THE PAGE AND THE ROW COUNT AGREE, which is the pair that broke the
+    // last time a bar was placed by a second rule.
+    const WITH = [{ ...HEIDIS, street: "Jomfru Ane Gade" }];
+    is("opening the street lists it", barsOnStreet(JOMFRU, WITH, STREETS).map(b => b.name), ["Heidi's Bier Bar"]);
+    const aal = nightlifeForTown("Aalborg", WITH, STREETS);
+    is("and the town page puts it under the street, not loose",
+      aal.streets.filter(x => x.bars.length).map(x => x.street.name), ["Jomfru Ane Gade"]);
+    is("with nothing left over", aal.loose.map(b => b.name), []);
+  }
+
+  // ── AND A STATEMENT IS NOT ONE CANDIDATE AMONG SEVERAL ─────────
+  // The half that would have been missed by adding `street` to the joined
+  // address instead of reading it instead of one. A corner venue's postal
+  // address names one street and its door faces another, and both names are
+  // then in the same string: longest-wins would hand it to whichever name is
+  // longer, which is a length contest deciding a question somebody already
+  // answered. The stated street is read INSTEAD of the address, so the typed
+  // value cannot lose to an untyped one.
+  is("a stated street beats a different street in the same row's address",
+    (streetForSpot({ name: "Corner", street: "Nørregade",
+      mapHint: "Corner, Gothersgade 1, 1123 Copenhagen, Denmark" }, [GOTHERSGADE, NOR_CPH]) || {}).name, "Nørregade");
+  // AND A STATED STREET WITH NO ENTRY BEHIND IT LEAVES THE PLACE LOOSE rather
+  // than falling back to the address. He said which street; that street is not
+  // published. Falling back would put the venue somewhere he did not say.
+  ok("a stated street nobody has published leaves the venue loose",
+    !streetForSpot({ name: "X", street: "Vestergade",
+      mapHint: "X, Gothersgade 8B, 1123 Copenhagen, Denmark" }, STREETS));
+  // Whitespace is not a statement.
+  is("a blank street field falls back to the address",
+    (streetForSpot({ name: "X", street: "   ",
+      mapHint: "X, Gothersgade 8B, 1123 Copenhagen, Denmark" }, STREETS) || {}).name, "Gothersgade");
   ok("and a bar on no named street is still on no street",
     !streetForSpot({ name: "X", location: "Vesterbro, Copenhagen", mapHint: "X, Istedgade 44, 1650 Copenhagen, Denmark" }, STREETS));
   // A row with NO location at all still has to be placeable, because mapHint is
@@ -61266,7 +61402,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 // sentence is the rule that keeps it honest: a shop with no container is not a
 // gap in the data, it is a shop standing on its own.
 {
-  const { containerFor, itemsInContainer, splitByContainer, foldIntoContainers, inContainer, bareName,
+  const { containerFor, itemsInContainer, splitByContainer, foldIntoContainers, inContainer, bareName, statedContainer,
           shopPlaceFor, shopsInPlace, shoppingForTown, shoppingTownList, shopsIntoPlaces, inShopPlace, worthShowing,
           shopKindOf, SHOP_KINDS, SHOP_KIND_VALUES, SHOP_KIND_RULE, ONLY_HERE_RULE,
           PREVIEW_SHOPS_PER_PLACE, PREVIEW_LOOSE_SHOPS, streetForSpot, barsOnStreet, barsIntoStreets, nightlifeForTown } = M;
@@ -61281,6 +61417,20 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
      /containerFor\(spot, streets, NIGHT_READERS\(cities\)\)/.test(nl)
      && /itemsInContainer\(street, spots, allStreets, NIGHT_READERS\(cities\)\)/.test(nl)
      && !/const nameIsIn = /.test(nl));
+  // ── AND THE STATED CONTAINER IS THE ENGINE'S, NOT NIGHTLIFE'S ───
+  // The Heidi's fix went in here rather than in nightlife.js for the reason
+  // the engine exists at all: a shop in a courtyard off a shopping street is
+  // the same sentence with a different noun, and a fix that lived on one side
+  // would be missing from the other the day somebody looked.
+  is("a stated container is read off the row", statedContainer({ street: " Mejlgade " }), "Mejlgade");
+  is("and a row that said nothing states nothing", statedContainer({ location: "Mejlgade 20, Aarhus" }), "");
+  {
+    const PLACE = { name: "Mejlgade", isStreet: true, town: "Aarhus", location: "Mejlgade, Aarhus" };
+    const ARCADE = { name: "Arkaden", town: "Aarhus", location: "Arkaden 3, Aarhus", mapHint: "Arkaden 3, 8000 Aarhus C, Denmark" };
+    ok("an arcade address alone matches no street", !containerFor(ARCADE, [PLACE], {}));
+    is("and the shop saying which street puts it there",
+      (containerFor({ ...ARCADE, street: "Mejlgade" }, [PLACE], {}) || {}).name, "Mejlgade");
+  }
   const sh = stripComments(readFileSync(join(root, "src/utils/shopping.js"), "utf8"));
   ok("and shopping calls the same four functions",
      /containerFor\(shop, places, READERS\(cities\)\)/.test(sh)

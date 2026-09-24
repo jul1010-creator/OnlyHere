@@ -299,7 +299,15 @@ const shapeForLiveFields = (type, t) => {
   // That already happened once — nearestStation was asked of restaurants, food
   // streets and bars, and dropped for all three. "" is the honest empty, and
   // venueStyleOf reads it as "nobody has said" rather than guessing.
-  if (type === "night") { const isClub = !!t.isClub; return { name: t.name, type: t.type || "Local", crowd: t.crowd || "", emoji: t.emoji || "🍺", category: t.category || "", venueStyle: t.venueStyle || "", priceNote: t.priceNote || "", location: t.location || "", isClub, desc: t.desc, mapHint: t.mapHint || "", color: t.color || "#5D4037", gemlyxFind: t.gemlyxFind || "",
+  // ── AND ONE FIELD THAT EXISTS TO OVERRULE THE ADDRESS ──────────
+  // Oliver, 24 Sep 2026: "And Heidi's is literally on Jomfru Ane Gade -.-.."
+  // Its registered address is Jomfru Anes Gård 5, a courtyard off that street,
+  // so the bar matched no bar street at all. `street` is where a row says which
+  // published street it stands on, and placeContainer reads it INSTEAD of the
+  // address rather than alongside it. Empty on almost every row: it earns its
+  // place only where the address and the street a person walks are two
+  // different names. See utils/placeContainer.js.
+  if (type === "night") { const isClub = !!t.isClub; return { name: t.name, type: t.type || "Local", crowd: t.crowd || "", emoji: t.emoji || "🍺", category: t.category || "", venueStyle: t.venueStyle || "", priceNote: t.priceNote || "", location: t.location || "", street: t.street || "", isClub, desc: t.desc, mapHint: t.mapHint || "", color: t.color || "#5D4037", gemlyxFind: t.gemlyxFind || "",
     blogBody: [
       ...bbData(isClub ? [["Who It's For", t.whoFor], ["Best Time to Go", t.bestTime], ["When Do People Enter", t.whenEnter], ["The Reality Check", t.realityCheck]]
                         : [["Who It's For", t.whoFor], ["Best Time to Go", t.bestTime], ["Before Dark", t.beforeDark], ["After Dark", t.afterDark], ["The Reality Check", t.realityCheck]]),
@@ -334,7 +342,7 @@ const shapeForLiveFields = (type, t) => {
   // the container, they are matched to it by address at render time, so
   // publishing one more shop needs no edit to the street. `town` is its own
   // field because the page groups on it. See utils/placeContainer.js.
-  if (type === "shop") return { name: t.name, town: t.town || "", location: t.location || "", emoji: t.emoji || "🛍",
+  if (type === "shop") return { name: t.name, town: t.town || "", location: t.location || "", street: t.street || "", emoji: t.emoji || "🛍",
     shopKind: shopKindOf(t.shopKind)?.value || "", tier: t.tier || "", priceNote: t.priceNote || "",
     photo: `/shops/${slugify(t.name)}.jpg`, desc: t.desc, mapHint: t.mapHint || "", color: t.color || "#7B5E57", gemlyxFind: t.gemlyxFind || "",
     blogBody: [
