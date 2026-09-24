@@ -148,34 +148,61 @@ export const CostsBlock = ({ guide, C, rowFor, now = new Date(), doors = false, 
   // The whole-trip figure, drawn under the tickets estimate when there is one
   // and on its own when the tickets came to nothing, since free sights and a
   // priced bed are still a trip with a cost.
-  const wholeTrip = (est) => {
+  // ── THE TWO HALVES, DRAWN APART ───────────────────────────────────
+  //
+  // Oliver, 24 Sep 2026: "make a 'inevitable prices' and under it 'budget
+  // estimate'". The first attempt renamed the headings and went on summing
+  // everything into one figure at the bottom, so the tickets were counted
+  // under Inevitable and again inside the Budget estimate, and the petrol for
+  // a route the plan chose sat in the half headed as the reader's own choices.
+  // Caught by rendering the block and reading it as a traveller would, which
+  // is the only thing that finds a total adding up perfectly to the wrong
+  // question.
+  const tripFor = (est) => {
     const party = partyFrom(guide?._party) || partyOf(guide?._travelers);
-    const trip = tripEstimate(est, bedsEstimate(guide), party, fuel);
+    return tripEstimate(est, bedsEstimate(guide), party, fuel);
+  };
+  const eatingFor = (trip) => tierCost(eatTier, {
+    days: meals?.days || 0,
+    heads: meals?.heads || trip?.heads || 1,
+    meals: mealsADay,
+  });
+  const sum = (label, amount, lines, extra = null) => (
+    <div style={{ marginTop: 10, paddingTop: 9, borderTop: `1px solid ${C.gold}44` }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "0 8px", alignItems: "baseline" }}>
+        <span style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, letterSpacing: 0.8, textTransform: "uppercase" }}>{label}</span>
+        <span style={{ fontSize: 15, fontWeight: 800, color: C.text }}>{amount}</span>
+      </div>
+      {lines.map(t => <div key={t} style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 2 }}>{t}</div>)}
+      {extra}
+    </div>
+  );
+
+  // What the plan forces: a ticket for a stop it chose, and the fuel to reach
+  // it. Drawn at the foot of the priced list it is made of.
+  const forcedTotal = (est) => {
+    const trip = tripFor(est);
+    if (!trip || !trip.forced) return null;
+    // The same word as the heading above it. Two names for one section is how
+    // a reader ends up thinking there are three lists.
+    return sum("Inevitable in total", `from ${trip.forced} DKK`,
+      describeTrip(trip, { half: "forced" }));
+  };
+
+  // And what they choose: a bed and food.
+  const chosenTotal = (est) => {
+    const trip = tripFor(est);
     if (!trip) return null;
+    const eat = eatingFor(trip);
+    const total = trip.chosen + (eat ? eat.from : 0);
     const said = describeTrip(trip, {
+      half: "chosen",
+      eating: eat,
       car: lines.some(l => l.kind === COST_KIND.CAR),
       transport: lines.some(l => l.kind === COST_KIND.TRANSPORT),
     });
-    // ── AND EATING, WHICH THIS PAGE NEVER HELD A FIGURE FOR ─────────
-    //
-    // The sentence under the total has always ended "Not in it: meals". It is
-    // in it now, built off the prices Gemlyx read on the restaurants' own pages
-    // rather than off a national average about people who cook at home. See
-    // utils/mealsEstimate.js.
-    // The tier they picked, over the nights this trip has. Null on a tier that
-    // carries no national figure, and the total then says so rather than
-    // quietly counting eating as zero.
-    const eat = tierCost(eatTier, { days: meals?.days || 0, heads: meals?.heads || trip.heads || 1, meals: mealsADay });
-    const total = trip.from + (eat ? eat.from : 0);
-    return (
-      <div style={{ marginTop: 10, paddingTop: 9, borderTop: `1px solid ${C.gold}44` }}>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "0 8px", alignItems: "baseline" }}>
-          <span style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, letterSpacing: 0.8, textTransform: "uppercase" }}>Budget estimate</span>
-          <span style={{ fontSize: 15, fontWeight: 800, color: C.text }}>
-            {eat ? `from ${total} DKK` : `from ${total} DKK plus food`}
-          </span>
-        </div>
-        {said.map(t => <div key={t} style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 2 }}>{t}</div>)}
+    return sum("Budget estimate", eat ? `from ${total} DKK` : `from ${total} DKK plus food`, said, (
+      <>
         {/* ── AND THE THREE WAYS TO EAT ────────────────────────────
             A row of three rather than a number with an assumption in small
             print under it. No sentence explaining what the buttons do: the
@@ -184,7 +211,11 @@ export const CostsBlock = ({ guide, C, rowFor, now = new Date(), doors = false, 
           {FOOD_TIERS.map(t => (
             <button key={t.key} onClick={() => setEatTier(t.key)} aria-pressed={eatTier === t.key}
               style={{ background: eatTier === t.key ? `${C.gold}26` : C.bg, border: `1px solid ${eatTier === t.key ? C.gold : `${C.gold}55`}`, color: eatTier === t.key ? C.gold : C.text, borderRadius: 100, padding: "5px 11px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-              {t.label}{t.perTrip ? ` · ${t.perTrip} DKK` : tierDayRate(t.key, mealsADay) ? ` · ${tierDayRate(t.key, mealsADay)} DKK a day` : ""}
+              {/* ── AND THE UNIT, BECAUSE ONE OF THEM IS NOT A RATE ──
+                  "Cheapest · 60 DKK" beside "Cheap · 100 DKK a day" reads as
+                  a daily rate that happens to be lower, and it is a whole
+                  shop. Found by rendering the row and reading it. */}
+              {t.label}{t.perTrip ? ` · ${t.perTrip} DKK the shop` : tierDayRate(t.key, mealsADay) ? ` · ${tierDayRate(t.key, mealsADay)} DKK a day` : ""}
             </button>
           ))}
         </div>
@@ -205,16 +236,25 @@ export const CostsBlock = ({ guide, C, rowFor, now = new Date(), doors = false, 
             Oliver, 24 Sep 2026: "It's likely we do not decide what they eat
             and where they stay. So it's estimates for them."
 
-            The two halves of this section have different standing, not just
-            different payers: above is what this plan puts in front of them,
-            each figure off a page or a measurement, and below is a guess at a
-            decision they have not made. A kroner sign looks identical in both,
-            which is why it is said rather than implied by a heading. */}
+            The two halves have different standing, not just different payers:
+            above is what this plan puts in front of them, each figure off a
+            page or a measurement, and this is a guess at a decision they have
+            not made. A kroner sign looks identical in both. */}
         <div style={{ fontSize: 10.5, color: C.text, lineHeight: 1.55, marginTop: 7, background: `${C.gold}0F`, border: `1px solid ${C.gold}33`, borderRadius: 8, padding: "6px 9px" }}>
           {BUDGET_WARNING}
         </div>
-      </div>
-    );
+        {/* ── AND THE NUMBER THEY CAME FOR ────────────────────────
+            Two halves and no sum leaves the reader adding up a page. Last, and
+            quiet, because it is the least honest figure on the card: half of
+            it was checked and half of it is a guess, and the warning directly
+            above says which is which. */}
+        {trip.forced > 0 && (
+          <div style={{ fontSize: 11.5, color: C.light, lineHeight: 1.5, marginTop: 8, fontWeight: 700 }}>
+            Both halves together, from {trip.forced + trip.chosen + (eat ? eat.from : 0)} DKK{eat ? "" : " plus food"}.
+          </div>
+        )}
+      </>
+    ));
   };
 
   const heading = (text) => (
@@ -295,14 +335,16 @@ export const CostsBlock = ({ guide, C, rowFor, now = new Date(), doors = false, 
                   before this, or one whose searches stated no price, shows
                   the tickets figure above and nothing invented under it. See
                   bedsEstimate in utils/costLedger.js. */}
-              {wholeTrip(est)}
+              {forcedTotal(est)}
             </div>
           );
         })()}
       </div>
     </div>
     )}
-    {!estimateFrom(priced) && wholeTrip(null)}
+    {/* The chosen half stands on its own, under both lists, because a bed and
+        a dinner are owed whether or not this trip has a single priced stop. */}
+    {chosenTotal(estimateFrom(priced))}
     {/* ── AND THE THINGS THAT HAVE NO PRICE YET ──────────────
         A bed, a crossing, a fare that depends on the sailing. Each one is a
         thing to arrange rather than a number to budget, and under its own

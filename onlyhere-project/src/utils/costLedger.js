@@ -904,36 +904,71 @@ export const tripEstimate = (tickets, beds, party = null, fuel = null) => {
   //
   // Oliver, 24 Sep 2026: "990 dkk? Think about gas prices.. that needs to be
   // calculated." A meal and a room are choices and a traveller expects to pay
-  // for both; the fuel to drive a route this guide picked is not. Leaving it
-  // out made the one unavoidable cost the one cost the page never mentioned.
+  // for both; the fuel to drive a route this guide picked is not.
   //
   // NOT MULTIPLIED BY HEADS. One car carries the party, the same way one room
-  // does, and the line under this keeps per-person and per-vehicle apart for
-  // exactly that reason. See utils/fuel.js for where the figure comes from.
+  // does. See utils/fuel.js for where the figure comes from.
   const fuelPart = Number(fuel?.kr) > 0 ? Number(fuel.kr) : 0;
-  return { from: ticketPart + beds.from + fuelPart, ticketPart, fuelPart, fuel: fuelPart ? fuel : null, heads, beds };
+  return {
+    // ── THE TWO HALVES, SUMMED APART ────────────────────────────────
+    //
+    // Oliver, 24 Sep 2026: "make a 'inevitable prices' and under it 'budget
+    // estimate'". The first version of this renamed the two HEADINGS and went
+    // on summing everything into the bottom figure, so the tickets appeared
+    // under Inevitable and again inside the Budget estimate, and the petrol
+    // for a route the plan chose sat in the half headed as the reader's own
+    // choices. Found by rendering the block and reading it, which is the only
+    // thing that catches a total that adds up perfectly to the wrong question.
+    //
+    // FORCED is what the plan imposes: a ticket for a stop it put on a day,
+    // and the fuel to reach it. CHOSEN is the bed and the food, which the same
+    // trip does at a hostel and a kebab or at a hotel and a tasting menu.
+    forced: ticketPart + fuelPart,
+    chosen: beds.from,
+    // Kept, because a traveller still wants one number for the trip, and
+    // because every caller that read `from` before this predates the split.
+    from: ticketPart + beds.from + fuelPart,
+    ticketPart, fuelPart, fuel: fuelPart ? fuel : null, heads, beds,
+  };
 };
 
-export const describeTrip = (trip, { car = false, transport = false } = {}) => {
+// ── WHAT EACH HALF IS MADE OF ───────────────────────────────────────
+//
+// `eating` is the food figure the reader picked, or null on a tier that has
+// none. Passed in rather than computed, because which way somebody eats is a
+// question this file has no business answering: see utils/mealsEstimate.js.
+export const describeTrip = (trip, { car = false, transport = false, half = "all", eating = null } = {}) => {
   if (!trip) return [];
   const out = [];
   const b = trip.beds;
   const nights = b.stays.reduce((n, s) => n + s.nights, 0);
-  out.push(`Beds from ${b.from} DKK for one room, ${nights} ${nights === 1 ? "night" : "nights"}, at the lowest room price the search found when this guide was built.`);
-  if (trip.ticketPart) out.push(`Tickets from ${trip.ticketPart} DKK${trip.heads > 1 ? ` for ${trip.heads} of you` : ""}.`);
-  // Its own line, with what it assumed printed on it, because a reader whose
-  // car is a thirsty old estate has to be able to see why the figure is wrong
-  // for them. See describeFuel in utils/fuel.js.
-  if (trip.fuel) out.push(describeFuel(trip.fuel));
-  const not = ["meals"];
+  if (half !== "chosen") {
+    if (trip.ticketPart) out.push(`Tickets from ${trip.ticketPart} DKK${trip.heads > 1 ? ` for ${trip.heads} of you` : ""}.`);
+    // Its own line, with what it assumed printed on it, because a reader whose
+    // car is a thirsty old estate has to be able to see why the figure is
+    // wrong for them. See describeFuel in utils/fuel.js.
+    if (trip.fuel) out.push(describeFuel(trip.fuel));
+  }
+  if (half !== "forced") {
+    out.push(`Beds from ${b.from} DKK for one room, ${nights} ${nights === 1 ? "night" : "nights"}, at the lowest room price the search found when this guide was built.`);
+  }
+  // ── AND WHAT IS IN NEITHER ────────────────────────────────────────
+  //
+  // Printed once, under whichever half is last, rather than on both.
+  if (half === "forced") return out;
+  const not = [];
+  // MEALS CAME OFF THIS LIST when the food tiers went in, and the first
+  // version of the split forgot: the card said "Not in it: meals" directly
+  // above a figure that had just added them. See utils/mealsEstimate.js.
+  if (!eating) not.push("meals");
   // ── AND HIRE IS NOT FUEL ──────────────────────────────────────────
   // Two different things that the one phrase "the car" used to cover. Once the
   // petrol is counted, saying the car is not in the figure is false; saying
-  // nothing about the hire is false the other way. So the line names whichever
-  // half is still outstanding.
+  // nothing about the hire is false the other way.
   if (car) not.push(trip.fuel ? "hiring the car itself" : "the car");
   if (transport) not.push("trains and buses");
   if (b.unpricedNights) not.push(`${b.unpricedNights} ${b.unpricedNights === 1 ? "night" : "nights"} with no room price found`);
+  if (!not.length) return out;
   const list = not.length === 1 ? not[0] : `${not.slice(0, -1).join(", ")} and ${not[not.length - 1]}`;
   out.push(`Not in it: ${list}.`);
   return out;

@@ -36976,14 +36976,20 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // ── AND THE ROW IS ON THE PAGE ─────────────────────────────────
     const cbM = readFileSync(join(root, "src/components/CostsBlock.jsx"), "utf8");
     ok("the plan's own costs are headed as unavoidable", /heading\("Inevitable"\)/.test(cbM));
-    ok("and the chosen ones are an estimate", /Budget estimate<\/span>/.test(cbM));
+    ok("and the chosen ones are an estimate", /sum\("Budget estimate"/.test(cbM));
+    ok("each half sums on its own rather than sharing one total",
+       /sum\("Inevitable in total"/.test(cbM) && /half: "forced"/.test(cbM) && /half: "chosen"/.test(cbM));
+    // Two halves and no sum leaves the reader adding up a page.
+    ok("and the two are added for them, last", /Both halves together, from/.test(cbM));
     ok("the three tiers are buttons", /FOOD_TIERS\.map\(t => \(/.test(cbM) && /setEatTier\(t\.key\)/.test(cbM));
     ok("the warning is drawn, not just exported", /\{BUDGET_WARNING\}/.test(cbM));
     ok("the meals control is one pair of buttons rather than a second row of three",
        /MEALS_A_DAY_OPTIONS\.map\(n => \(/.test(cbM) && /setMealsADay\(n\)/.test(cbM));
     ok("and it reaches the figure", /meals: mealsADay/.test(cbM));
-    ok("a basket and a rate are labelled differently",
-       /t\.perTrip \? ` · \$\{t\.perTrip\} DKK` : tierDayRate\(t\.key, mealsADay\)/.test(cbM));
+    // "Cheapest · 60 DKK" beside "Cheap · 100 DKK a day" reads as a daily rate
+    // that happens to be lower, and it is a whole shop. Found by rendering it.
+    ok("a basket says it is a shop and a rate says it is a day",
+       /\$\{t\.perTrip\} DKK the shop/.test(cbM) && /\$\{tierDayRate\(t\.key, mealsADay\)\} DKK a day/.test(cbM));
     // Every shipped tier has a figure, so this branch is a guard rather than a
     // path: it is what stops a tier added later from reading as "food is free".
     ok("a tier with no figure would be said rather than counted as zero", /plus food/.test(cbM));
@@ -73401,8 +73407,31 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   const trip = M.tripEstimate({ from: 275 }, beds, { heads: 2 });
   is("tickets for both, the room once", trip.from, 2300 + 550);
   const lines = M.describeTrip(trip, { car: true });
-  ok("it says the beds are one room and where the price came from", /one room, 2 nights, at the lowest room price the search found/.test(lines[0]));
-  ok("that the tickets are for both of them", /Tickets from 550 DKK for 2 of you/.test(lines[1]));
+  // ── THE FORCED HALF READS FIRST ─────────────────────────────────
+  // Oliver, 24 Sep 2026, asked for the plan's own costs above the traveller's
+  // choices, so the lines come out in that order: what the plan imposes, then
+  // what they pick.
+  ok("that the tickets are for both of them", /Tickets from 550 DKK for 2 of you/.test(lines[0]));
+  ok("it says the beds are one room and where the price came from", /one room, 2 nights, at the lowest room price the search found/.test(lines[1]));
+  // ── AND EACH HALF SUMS ON ITS OWN ───────────────────────────────
+  // The first version of the split renamed the headings and went on summing
+  // everything into one figure, so the tickets were counted under Inevitable
+  // and again inside the Budget estimate. Caught by rendering the block.
+  is("the plan's own costs stand alone", trip.forced, 550);
+  is("and so do the traveller's", trip.chosen, 2300);
+  is("and the two still make the whole", trip.forced + trip.chosen, trip.from);
+  // Asked for one half, it prints only that half.
+  ok("the forced half names no bed",
+     !M.describeTrip(trip, { half: "forced", car: true }).some(l => /Beds from/.test(l)));
+  ok("and the chosen half names no ticket",
+     !M.describeTrip(trip, { half: "chosen", car: true }).some(l => /Tickets from/.test(l)));
+  // MEALS CAME OFF THE EXCLUDED LIST when the food tiers went in, and the
+  // first version forgot: the card said "Not in it: meals" directly above a
+  // figure that had just added them.
+  ok("meals are not called missing once a food figure is counted",
+     !M.describeTrip(trip, { half: "chosen", car: true, eating: { from: 900 } }).some(l => /meals/.test(l)));
+  ok("and are still named when there is none",
+     M.describeTrip(trip, { half: "chosen", car: true }).some(l => /meals/.test(l)));
   ok("and what is not in it", /Not in it: meals, the car and 1 night with no room price found\./.test(lines[2]));
   ok("with no dash anywhere", !lines.some(l => /[\u2013\u2014]/.test(l)));
   is("a guide built before this has no whole-trip figure", M.bedsEstimate({ days: GUIDE.days.map(d => ({ ...d, glance: {} })) }), null);
