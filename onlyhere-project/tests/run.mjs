@@ -270,7 +270,7 @@ writeFileSync(entry, `
   export { PARTNER_OPENER, PARTNER_INTRO, partnerSections, partnerCount } from ${JSON.stringify(join(root, "src/utils/partnerSheet.js"))};
   export { baseKey, staysIn as stayRunsIn, doorsFor, doorOn, sameBaseLine, nightsLabel } from ${JSON.stringify(join(root, "src/utils/stayDoors.js"))};
   export { SECTIONS as DIR_SECTIONS, ROW_KINDS, kindOf as dirKindOf, directoryLinks, pathWord, ferryDoorIn, DIRECTORY_PROMPT, rowsFromDirectory, directoryProblems, staysIn, eatsIn, islandSaysBlock, ISLAND_SAYS } from ${JSON.stringify(join(root, "src/utils/islandDirectory.js"))};
-  export { GEM_TYPE, GEM_KINDS, GEM_SECTION, WHERE_LABEL, RECHECK_DAYS, STALE_DAYS, isCouponSite, isOwnSite, shapeGem, gemProblems, gemLive, gemsView, checkedLabel, checkedAgo, isDataSite, gemWhere, gemCategory, isForStudents, gemMatches, gemFilterOptions, GEM_CATEGORIES, GEM_CATEGORY_LABEL, gemSearches, gemSearchesFor, ownPagesIn, pageAsResult, MAX_OWN_PAGES, GEMS_PROMPT, settleGems, gemRunNotes, gemsForGuide, gemHeading, SAID_CHECKS, saidLine, saidWords, gemsForChat, gemsChatBlock, MAX_CHAT_GEMS, isForeignStore, AUDIENCES, AUDIENCE_LABEL, audienceIn } from ${JSON.stringify(join(root, "src/utils/cheapGems.js"))};
+  export { GEM_TYPE, GEM_KINDS, GEM_SECTION, WHERE_LABEL, RECHECK_DAYS, STALE_DAYS, isCouponSite, isOwnSite, shapeGem, gemProblems, gemLive, gemsView, checkedLabel, checkedAgo, isDataSite, gemWhere, gemCategory, isForStudents, gemMatches, gemFilterOptions, GEM_CATEGORIES, GEM_CATEGORY_LABEL, gemSearches, gemSearchesFor, ownPagesIn, pageAsResult, MAX_OWN_PAGES, GEMS_PROMPT, settleGems, gemRunNotes, gemsForGuide, gemHeading, SAID_CHECKS, saidLine, saidWords, gemsForChat, gemsChatBlock, MAX_CHAT_GEMS, isForeignStore, AUDIENCES, AUDIENCE_LABEL, audienceIn, partySays, gemFitsParty } from ${JSON.stringify(join(root, "src/utils/cheapGems.js"))};
   export { NOTE_TYPE, NOTE_KINDS, NOTE_KIND_LABEL, NOTE_KIND_MEANING, NOTE_CHECKS, NOTE_LIFE, NOTE_RECHECK, shapeNote, noteProblems, noteLive, noteAgo, noteSubjects, notesFor, notesForGuide, notesBlock, NOTE_LINE, MAX_NOTES, noteSearches, NOTE_PROMPT, settleNote, noteRunNotes, namesPublished, ALREADY_SAID, alreadySaid, aboutWords, MODES_WITH_WORDS, MODES_THE_APP_HAS } from ${JSON.stringify(join(root, "src/utils/founderNotes.js"))};
   export { toolUsesIn, toolResultsFor, queriesIn, NO_ANSWER, nothingToSearch } from ${JSON.stringify(join(root, "src/utils/toolTurn.js"))};
   export { reelLive, withLiveReels, reelCount } from ${JSON.stringify(join(root, "src/utils/reelGate.js"))};
@@ -74250,7 +74250,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
 
   const appG = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
   ok("the chat picks its gems before the call, off their own turns",
-    /gemsChatBlock\(gemsForChat\(travellerTurns\.join\("\\n"\), gems, \{ town: namedByThem\[0\]\?\.name \|\| "" \}\)\)/.test(appG));
+    /gemsChatBlock\(gemsForChat\(travellerTurns\.join\("\\n"\), gems, \{[\s\S]{0,240}town: namedByThem\[0\]\?\.name \|\| ""/.test(appG));
   ok("and the block reaches the prompt beside the local notes",
     /\$\{kindsRuledOut\}\$\{localSays\}\$\{gemsSay\}/.test(appG));
 }
@@ -74353,6 +74353,52 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   const guide = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
   ok("the card says it under the name", /\{AUDIENCE_LABEL\[g\.audience\]\} only/.test(page));
   ok("and the guide says it above the saving", /\{AUDIENCE_LABEL\[g\.audience\]\} only/.test(guide));
+}
+
+// ── AND WHETHER THE SHOP SELLS TO ANYBODY ON THIS TRIP ──────────────
+//
+// A womenswear discount offered to two men is a bad recommendation even with
+// the label on it. What this deliberately does NOT do is guess a traveller's
+// sex: nobody states their own, and "me and my brother" tells you about the
+// brother rather than the speaker. It reads what they said.
+{
+  const DAY = new Date(2026, 8, 24);
+  const W = { name: "MSCH Copenhagen", kind: "scheme", what: "15% off for students", who: "students", how: "Email a card", towns: [], category: "shop", audience: "women", source: "https://www.mschcopenhagen.dk/", checkedAt: "2026-09-23" };
+  const K = { name: "Smaa Sko", kind: "cheap", what: "kids shoes from 99 kr", towns: [], category: "shop", audience: "kids", source: "https://smaasko.dk/", checkedAt: "2026-09-23" };
+  const n = (q, o) => M.gemsForChat(q, [W, K], { today: DAY, ...(o || {}) }).map(g => g.name);
+
+  // A PARTY THAT NAMED ITSELF is the only thing that rules out a sex.
+  is("a stag weekend is a statement about everybody on the trip", n("stag do in Copenhagen, where do we shop"), []);
+  is("so is a lads trip", n("lads trip, where do we shop"), []);
+  is("a hen weekend rules out the other one", M.gemsForChat("hen do, where do we shop", [{ ...W, audience: "men", name: "Brdr Simonsen", source: "https://brdr-simonsen.dk/" }], { today: DAY }), []);
+  is("an ordinary trip sees it", n("where should we go shopping in Copenhagen"), ["MSCH Copenhagen"]);
+  is("and a girls trip does", n("girls trip, where do we shop"), ["MSCH Copenhagen"]);
+  // One person named is not the whole party: a stag weekend with a wife on it
+  // is a trip with a woman on it.
+  is("a woman named on a stag weekend puts it back", n("stag do but my wife is coming too, where do we shop"), ["MSCH Copenhagen"]);
+  is("and naming a husband rules nothing out", n("shopping with my husband"), ["MSCH Copenhagen"]);
+
+  // CHILDREN ARE KNOWABLE, because the brief asks outright.
+  is("a children's shop reaches a trip with children", n("where can we shop", { hasKids: true }), ["MSCH Copenhagen", "Smaa Sko"]);
+  is("and never one that has said there are none", n("where can we shop", { hasKids: false }), ["MSCH Copenhagen"]);
+  is("with nothing said either way, their own words decide", n("shopping with the kids"), ["MSCH Copenhagen", "Smaa Sko"]);
+  is("and silence is not children", n("where can we shop"), ["MSCH Copenhagen"]);
+
+  // Asked about by name, they get the answer they asked for.
+  is("a shop asked about by name comes back whoever is travelling", n("is MSCH Copenhagen worth it on a stag do"), ["MSCH Copenhagen"]);
+
+  // The readers themselves.
+  ok("a wife is a woman on the trip", M.partySays("me and my wife").women);
+  ok("a brother is a man on it", M.partySays("me and my brother").men);
+  ok("and neither says anything about the speaker",
+    !M.partySays("me and my brother").women && !M.partySays("me and my wife").men);
+  ok("the brief's tick box beats the words", M.partySays("no kids on this one", { hasKids: true }).kids);
+  ok("and a measured no holds", M.partySays("the kids will love it", { hasKids: false }).noKids === true
+    && M.partySays("the kids will love it", { hasKids: false }).kids === false);
+  ok("a shop for everybody fits every trip", M.gemFitsParty({ audience: "" }, M.partySays("stag do")));
+
+  const appP = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+  ok("the chat hands the party through", /hasKids: brief\.known\?\.party\?\.hasKids === true \? true : brief\.known\?\.party \? false : null/.test(appP));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

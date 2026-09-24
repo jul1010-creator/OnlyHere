@@ -789,10 +789,13 @@ const TOPICS = [
 // already holds itself to one a day for the same reason.
 export const MAX_CHAT_GEMS = 2;
 
-export const gemsForChat = (travellerText = "", rows = [], { town = "", today = new Date(), max = MAX_CHAT_GEMS } = {}) => {
+export const gemsForChat = (travellerText = "", rows = [], { town = "", today = new Date(), max = MAX_CHAT_GEMS, hasKids = null } = {}) => {
   const said = clean(travellerText);
   if (!said) return [];
   const here = fold(clean(town));
+  // Who is on this trip, off their own words and the brief's measured slot.
+  // See partySays and gemFitsParty at the foot of this file.
+  const party = partySays(said, { hasKids });
   const out = [];
   for (const row of Array.isArray(rows) ? rows : []) {
     if (!gemLive(row, today)) continue;
@@ -806,6 +809,10 @@ export const gemsForChat = (travellerText = "", rows = [], { town = "", today = 
     const named = !!g.name && containsName(said, g.name);
     const topic = TOPICS.some(t => t.ask.test(said) && t.gem.test(text));
     if (!named && !topic) continue;
+    // A shop that sells to nobody on this trip is not an answer to anything,
+    // unless they asked about it by name, in which case they get the answer
+    // they asked for and the label with it.
+    if (!named && !gemFitsParty(g, party)) continue;
     out.push(g);
     if (out.length >= max) break;
   }
@@ -839,4 +846,55 @@ export const gemsChatBlock = (list = []) => {
     + `THE CATCH GOES WITH IT, always, in the same breath. A discount a visitor cannot use is worse than no discount, and the catch is the half they will not find out until they are standing there.\n`
     + `ONE OF THESE IS PLENTY IN A REPLY, and none at all is fine. A list of savings reads as an advertisement, which is the one thing this is not.\n\n`
     + `${gems.map(line).join("\n")}\n`;
+};
+
+// ── AND WHETHER THE SHOP SELLS TO ANYBODY ON THIS TRIP ──────────────
+//
+// Oliver, 24 Sep 2026, agreeing this should exist: a womenswear discount
+// offered to two men is a bad recommendation even with the label on it, and
+// the label only helps if the model reads it.
+//
+// WHAT THIS DELIBERATELY DOES NOT DO IS GUESS A TRAVELLER'S SEX. Nobody
+// states their own, a solo traveller says nothing about it, and "me and my
+// brother" tells you about the brother rather than the speaker. A filter
+// built on that guess would hide a real saving from the person it was for,
+// which is worse than the problem it set out to fix.
+//
+// So it reads only what they SAID, and it acts on two kinds of evidence:
+// somebody named in the party, and a party named as one sex outright. A stag
+// weekend is a statement about everybody on the trip; a husband is a
+// statement about one person on it and says nothing about the rest.
+const NAMED_WOMAN = /\b(?:wife|girlfriend|gf|mother|mum|mom|sister|daughter|grandmother|granny|aunt|kone|k(?:æ|ae)reste\s+\w*hun|mor|s(?:ø|oe)ster|datter|mormor|farmor|moster|faster)\b/i;
+const NAMED_MAN = /\b(?:husband|boyfriend|bf|father|dad|brother|son|grandfather|grandad|uncle|mand|far|bror|s(?:ø|oe)n|morfar|farfar|onkel)\b/i;
+const ALL_MEN = /\b(?:stag(?:\s*(?:do|night|weekend|party))?|bachelor\s*party|lads'?\s*(?:trip|holiday|weekend)|boys'?\s*(?:trip|holiday|weekend)|polterabend\s+for\s+ham)\b/i;
+const ALL_WOMEN = /\b(?:hen(?:\s*(?:do|night|weekend|party))?|bachelorette\s*party|girls'?\s*(?:trip|holiday|weekend)|ladies'?\s*(?:trip|weekend))\b/i;
+const NAMED_KIDS = /\b(?:kids?|children|child|toddler|baby|babies|son|daughter|b(?:ø|oe)rn\w*|barn|datter|s(?:ø|oe)n)\b/i;
+
+export const partySays = (text = "", { hasKids = null } = {}) => {
+  const t = clean(text);
+  return {
+    women: NAMED_WOMAN.test(t),
+    men: NAMED_MAN.test(t),
+    // The brief's measured slot first, because the form asks outright and a
+    // sentence is a weaker reader than a tick box. See readParty in tripBrief.
+    kids: hasKids === true || (hasKids !== false && NAMED_KIDS.test(t)),
+    noKids: hasKids === false,
+    allMen: ALL_MEN.test(t) && !NAMED_WOMAN.test(t),
+    allWomen: ALL_WOMEN.test(t) && !NAMED_MAN.test(t),
+  };
+};
+
+// True when this shop has somebody to sell to on this trip. Empty audience is
+// every shop that sells to everybody, which is most of them.
+export const gemFitsParty = (gem = {}, party = {}) => {
+  const who = clean(gem?.audience);
+  if (!who) return true;
+  // CHILDREN ARE KNOWABLE, and the brief asks outright. A children's shop
+  // reaches a trip with children on it, and a trip that has said there are
+  // none never sees it.
+  if (who === "kids") return party.kids === true;
+  // The other two are only ever ruled out by a party that named itself.
+  if (who === "women") return !party.allMen;
+  if (who === "men") return !party.allWomen;
+  return true;
 };

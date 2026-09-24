@@ -21138,7 +21138,13 @@ If the conversation only covers a single day or a few stops with no explicit day
       // could not name the answer. Picked here, before the call, by what they
       // asked and the town in play, the same as the notes above. See
       // gemsForChat in utils/cheapGems.js.
-      const gemsSay = gemsChatBlock(gemsForChat(travellerTurns.join("\n"), gems, { town: namedByThem[0]?.name || "" }));
+      // hasKids from the brief's measured slot rather than from the words
+      // again: the form asks outright, and a children's shop is the one
+      // audience this can answer for certain. See gemFitsParty.
+      const gemsSay = gemsChatBlock(gemsForChat(travellerTurns.join("\n"), gems, {
+        town: namedByThem[0]?.name || "",
+        hasKids: brief.known?.party?.hasKids === true ? true : brief.known?.party ? false : null,
+      }));
       const nightTip = reservedEssential(essentials, { convoText: travellerTurns.join("\n"), interests: intakeInterest });
       const nightBlock = !nightTip ? "" : `\n── AND THE ONE THING A NIGHT OUT HERE NEEDS ──\nThey have said nightlife is part of this trip, so tell them about this once, in your own words, at whatever point in the conversation it is useful rather than all at once. It is a published Gemlyx entry, quoted here as written: state it, never embellish it, and never invent a second app like it.\n\n${essentialsBlock([nightTip])}\n`;
 
