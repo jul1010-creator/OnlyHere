@@ -35,7 +35,9 @@
 // condition it holds under, and the research pass is not marking him right or
 // wrong: it is looking for what NARROWS the sentence. "depends" is the most
 // useful answer it can come back with, not a failure.
-import { fold } from "./danishNames";
+import { fold, containsName } from "./danishNames";
+import { isNeverASource } from "./sourcePolicy";
+import { MODE_DAY_KM } from "./routeOrder";
 import { hostOf } from "./pageScan";
 
 const clean = (v) => String(v == null ? "" : v).replace(/\s+/g, " ").trim();
@@ -179,6 +181,15 @@ const words = (text) => String(text || "")
 export const noteSubjects = (note = {}) =>
   [...new Set(words(`${clean(note.about)} ${clean(note.said)}`))];
 
+// ── AND THE HALF HE WROTE ON PURPOSE ────────────────────────────────
+//
+// The subject line is the field he fills in to say what a note is about; the
+// sentence is prose that happens to contain words. Matching on either pulled
+// "Kombardo and Flixbus are budget alternatives to DSB" into "we are on a
+// tight budget, where do we eat in Aarhus", on the word budget. So where he
+// has written a subject line, a hit has to land on it.
+export const aboutWords = (note = {}) => [...new Set(words(clean(note.about)))];
+
 // ── WHAT A NOTE STILL OWES ──────────────────────────────────────────
 //
 // Sentences rather than a boolean, the same as a gem. `blocks` is true when
@@ -216,6 +227,15 @@ export const noteProblems = (payload = {}, today = new Date()) => {
   }
   if (n.kind === "cost" && !n.when) {
     out.push("A price with no when. Say what it depends on, even if the answer is the day of the week.");
+  }
+  // ── AND WHETHER GEMLYX ALREADY SAYS IT ──────────────────────────
+  //
+  // Never blocking. A sentence that repeats something AND narrows it is worth
+  // having, which is what his first note turned out to be. This is here so
+  // the repeat is in front of him while he can still change the sentence into
+  // the half only he knows. See ALREADY_SAID.
+  for (const row of alreadySaid(n.said)) {
+    out.push(`Gemlyx already tells people this: ${row.what}. Worth writing what it does not know instead.`);
   }
   if (n.source && !/^https:\/\//i.test(n.source)) out.push("The page behind it is not an https address.");
   const ago = noteAgo(n, today);
@@ -268,11 +288,16 @@ export const notesFor = (travellerText = "", rows = [], { town = "", today = new
     // A note about one town is that town's. It reaches a conversation that
     // names the town, and no other: a note about Aalborg nightlife in a
     // Copenhagen trip is noise wearing a local's clothes.
-    const townHit = towns.length ? towns.some(t => t === here || text.includes(t)) : true;
+    // containsName, not includes: "Ry" sits inside "ferry" and "Als" inside
+    // "also". utils/danishNames.js documents that trap and exports the reader.
+    const townHit = towns.length ? towns.some(t => t === here || containsName(travellerText, t)) : true;
     if (!townHit) continue;
-    const score = noteSubjects(n).filter(w => said.has(w)).length
-      + (towns.length && towns.some(t => t === here) ? 1 : 0);
-    if (!score) continue;
+    const onSubject = aboutWords(n).filter(w => said.has(w)).length;
+    const anywhere = noteSubjects(n).filter(w => said.has(w)).length;
+    // With a subject line, the subject line decides. Without one, two words
+    // have to land, because one common word is not a topic.
+    if (!(aboutWords(n).length ? onSubject > 0 : anywhere >= 2)) continue;
+    const score = anywhere + onSubject + (towns.length && towns.some(t => t === here) ? 1 : 0);
     scored.push({ note: n, score });
   }
   return scored
@@ -344,15 +369,28 @@ export const notesForGuide = (rows = [], { travellerText = "", towns = [], stops
 // What each way of getting around is called, in the words a note would use.
 // Read by notesForGuide only: the chat has the traveller's own words and
 // needs no translation of them.
+// ── KEYED ON WHAT THE APP SAYS, WHICH WAS NOT WHAT I WROTE ────────
+//
+// Found by a review pass the night this shipped. The first version keyed on
+// transit, train and bus. travelModeKey in utils/routeOrder.js has never
+// returned any of those: its six answers are walk, tent, bike, public
+// transport, camper and car. So the lookup was undefined for every real trip,
+// the plan got no transport words, and the headline case of this whole
+// feature, a fare note reaching a public transport guide, was dead in the app
+// while the tests passed on a key the app cannot produce.
+//
+// MODE_DAY_KM is imported rather than the list retyped, and the suite holds
+// the two to the same keys, so a seventh mode fails here until it has words.
 const MODE_WORDS = {
-  transit: "public transport train trains bus buses fare fares ticket tickets station",
-  train: "public transport train trains bus buses fare fares ticket tickets station",
-  bus: "public transport bus buses train trains fare fares ticket tickets",
+  "public transport": "public transport train trains bus buses coach coaches fare fares ticket tickets station",
   car: "car driving parking petrol motorway toll bridge",
   camper: "camper van driving parking campsite motorway toll bridge",
+  tent: "tent camping campsite",
   bike: "bike cycling cycle route ferry",
   walk: "walking on foot",
 };
+export const MODES_WITH_WORDS = Object.keys(MODE_WORDS);
+export const MODES_THE_APP_HAS = Object.keys(MODE_DAY_KM);
 
 export const notesBlock = (notes = [], { daysAhead = null } = {}) => {
   const list = (Array.isArray(notes) ? notes : []).filter(Boolean);
@@ -395,7 +433,15 @@ export const notesBlock = (notes = [], { daysAhead = null } = {}) => {
     // reading "what a local told us" at the top of a block will say it back.
     + `NEVER ATTRIBUTE ONE TO "a local", "someone local", "a local told us" or any single unnamed person. You are the local. Where the sentence needs attribution at all, it is "locals" in the plural: "locals mostly take the bus for that one". Most of the time it needs none, because you are the one saying it.\n`
     + `THE CONDITION IS PART OF THE CLAIM. A line that holds only when something is true is wrong without that something, and stating it bare is worse than not stating it: "the bus is cheaper than the train" is a lie to somebody booking six weeks out.\n`
-    + `NEVER STATE ONE AS CHECKED when the line says no page backs it. It is a local's word, it is worth having, and it is not a timetable.\n\n`
+    + `NEVER STATE ONE AS CHECKED when the line says no page backs it. It is a local's word, it is worth having, and it is not a timetable.\n`
+    // ── AND AN ENTRY BEATS A LINE HERE ──────────────────────────────
+    //
+    // The blocks above this one are published Gemlyx entries checked against
+    // their own sources, and one of them is quoted with "state it, never
+    // embellish it". A line here is one person's word. Without this the model
+    // was handed both and told to say both plainly, which on a figure or a
+    // rule is a contradiction the traveller has to settle for themselves.
+    + `WHERE A LINE HERE DISAGREES WITH A PUBLISHED GEMLYX ENTRY ABOVE, on a figure, an hour, a rule or how something works, THE ENTRY WINS. Say the entry's version, and use the line only for the part the entry is silent about.\n\n`
     // ── AND A GUIDE CAN SETTLE A CONDITION THE READER CANNOT ────────
     //
     // His own example is the argument: "Kombardo and Flixbus are cheaper than
@@ -476,11 +522,23 @@ export const settleNote = (json, note, results = [], { today = new Date() } = {}
   const hit = Number.isInteger(i) && i >= 0 && i < results.length ? results[i] : null;
   const url = hit && /^https?:\/\//i.test(clean(hit.url)) ? clean(hit.url) : "";
   // A verdict standing on a page it cannot name is a verdict about nothing.
-  const settled = (check === "holds" || check === "depends" || check === "against") && !url ? "notfound" : check;
+  // ── A VERDICT NEEDS A PAGE, AND A PAGE WORTH HAVING ─────────────
+  //
+  // Three ways a verdict is not one. No page at all, which was here from the
+  // start. A page off a host the app already refuses as a source, because a
+  // forum thread agreeing with him is the one path that turns his sentence
+  // into "a page says the same" in front of a traveller, and sourcePolicy
+  // decides that rather than this file. And a narrowing or a disagreement
+  // with nothing written down, which reached the prompt as "a page narrows
+  // it: " and told the model nothing at all.
+  const pageSays = clean(json?.found);
+  const settled = !url || isNeverASource(url) || (check !== "holds" && check !== "notfound" && !pageSays)
+    ? "notfound"
+    : check;
   return shapeNote({
     ...n,
     check: settled,
-    found: settled === "notfound" ? "" : clean(json?.found),
+    found: settled === "notfound" ? "" : pageSays,
     // HIS CONDITION SURVIVES THE PASS. What it found is added where he wrote
     // nothing, and never written over what he did write: he is the one who
     // has been doing this for years.
@@ -521,7 +579,83 @@ export const namesPublished = (said = "", names = []) => {
     // Short names match half of Denmark. Four letters is Fanø and Ribe, and
     // below that a name is a word before it is a place.
     if (name.length < 4) continue;
-    if (text.includes(` ${fold(name)} `) || text.includes(`${fold(name)} `)) out.push(name);
+    if (containsName(said, name)) out.push(name);
   }
   return [...new Set(out)].slice(0, 4);
+};
+
+// ── KNOWLEDGE, NOT REPETITION ───────────────────────────────────────
+//
+// Oliver, 23 Sep 2026: "Remember, what I write into Gemlyx should be
+// knowledge. NOT REPETITION."
+//
+// Measured the same night, and he is right: his first note said Kombardo and
+// Flixbus are the budget alternative to DSB, and the guide writer's prompt
+// already said that, in more detail, with the route limits on it. The note
+// added exactly one thing the prompt did not have, the condition about how
+// far ahead you book, and it also overwrote the prompt's correct spelling of
+// the operator with a wrong one. That is the whole risk of a repeat: it adds
+// nothing and it can take something away.
+//
+// So the panel says so at the moment he writes it. It does not block: a note
+// that repeats something AND narrows it is worth having, which is what his
+// first one turned out to be. It says what Gemlyx already tells people, so he
+// can decide whether his sentence is the half only he knows.
+//
+// ── AND THE LIST CANNOT DRIFT ───────────────────────────────────────
+//
+// The obvious failure here is a copy of the prompts going stale beside the
+// prompts, which is a thing this codebase has done more than once. Every
+// entry carries `proof`, a string that must still appear in App.jsx, and the
+// suite asserts it. Change a frozen fact and the test fails until this list
+// is changed with it.
+export const ALREADY_SAID = [
+  {
+    key: "coaches",
+    what: "Kombardo Expressen and Flixbus are the budget alternative to a full fare train on long legs between regions, and never on short ones inside a region",
+    words: ["kombardo", "flixbus", "coach", "bus", "bus lines"],
+    proof: "LONG-DISTANCE coach lines",
+  },
+  {
+    key: "orange",
+    what: "DSB Orange billetter are the discount advance-purchase train ticket, recommended for expensive train legs",
+    words: ["orange", "dsb", "train ticket", "togbillet"],
+    proof: "Orange billetter (discount advance-purchase train tickets)",
+  },
+  {
+    key: "rejsekort",
+    what: "the physical Rejsekort card is gone, the app is not residents only, and a visitor is steered to a fixed ticket because checking out is what people forget",
+    words: ["rejsekort", "rejsebillet", "check out", "dot app"],
+    proof: "the physical Rejsekort card is discontinued",
+  },
+  {
+    key: "carInCopenhagen",
+    what: "a rental car inside Copenhagen is argued against, and starts earning its keep once the trip leaves the capital",
+    words: ["rental car", "rent a car", "parking", "billeje"],
+    proof: "LEAN AGAINST A RENTAL CAR SPECIFICALLY INSIDE COPENHAGEN",
+  },
+  {
+    key: "camping",
+    what: "camping in Denmark is allowed at designated campsites or with the landowner's permission, never at the roadside",
+    // Phrases as well as words, because the claim this one guards against is
+    // usually made without the word camping in it at all: "you can camp
+    // anywhere" is the wild camping belief, and it is wrong here.
+    words: ["camping", "campsite", "wild camp", "camp anywhere", "sleep in the car", "telt", "camper"],
+    proof: "Denmark allows camping only at designated campsites",
+  },
+];
+
+// Which of them a sentence is walking over. Two words have to land, or one
+// that is a brand: "bus" alone is half the transport in Denmark, while
+// "Kombardo" is only ever about one thing.
+// Two points and it is a repeat. A brand is worth both on its own, because
+// "Kombardo" is only ever about one thing, and so is a phrase of more than one
+// word: "camp anywhere" is a claim, "camp" is a syllable.
+const BRANDS = new Set(["kombardo", "flixbus", "rejsekort", "rejsebillet", "dsb"]);
+const weight = (w) => (BRANDS.has(fold(w)) || w.includes(" ") ? 2 : 1);
+export const alreadySaid = (said = "") => {
+  const text = ` ${fold(clean(said))} `;
+  if (!clean(said)) return [];
+  return ALREADY_SAID.filter(row =>
+    row.words.filter(w => text.includes(fold(w))).reduce((n, w) => n + weight(w), 0) >= 2);
 };

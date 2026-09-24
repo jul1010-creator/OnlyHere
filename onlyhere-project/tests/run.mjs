@@ -271,7 +271,8 @@ writeFileSync(entry, `
   export { baseKey, staysIn as stayRunsIn, doorsFor, doorOn, sameBaseLine, nightsLabel } from ${JSON.stringify(join(root, "src/utils/stayDoors.js"))};
   export { SECTIONS as DIR_SECTIONS, ROW_KINDS, kindOf as dirKindOf, directoryLinks, pathWord, ferryDoorIn, DIRECTORY_PROMPT, rowsFromDirectory, directoryProblems, staysIn, eatsIn, islandSaysBlock, ISLAND_SAYS } from ${JSON.stringify(join(root, "src/utils/islandDirectory.js"))};
   export { GEM_TYPE, GEM_KINDS, GEM_SECTION, WHERE_LABEL, RECHECK_DAYS, STALE_DAYS, isCouponSite, isOwnSite, shapeGem, gemProblems, gemLive, gemsView, checkedLabel, checkedAgo, isDataSite, gemWhere, gemCategory, isForStudents, gemMatches, gemFilterOptions, GEM_CATEGORIES, GEM_CATEGORY_LABEL, gemSearches, gemSearchesFor, ownPagesIn, pageAsResult, MAX_OWN_PAGES, GEMS_PROMPT, settleGems, gemRunNotes, gemsForGuide, gemHeading, SAID_CHECKS, saidLine, saidWords } from ${JSON.stringify(join(root, "src/utils/cheapGems.js"))};
-  export { NOTE_TYPE, NOTE_KINDS, NOTE_KIND_LABEL, NOTE_KIND_MEANING, NOTE_CHECKS, NOTE_LIFE, NOTE_RECHECK, shapeNote, noteProblems, noteLive, noteAgo, noteSubjects, notesFor, notesForGuide, notesBlock, NOTE_LINE, MAX_NOTES, noteSearches, NOTE_PROMPT, settleNote, noteRunNotes, namesPublished } from ${JSON.stringify(join(root, "src/utils/founderNotes.js"))};
+  export { NOTE_TYPE, NOTE_KINDS, NOTE_KIND_LABEL, NOTE_KIND_MEANING, NOTE_CHECKS, NOTE_LIFE, NOTE_RECHECK, shapeNote, noteProblems, noteLive, noteAgo, noteSubjects, notesFor, notesForGuide, notesBlock, NOTE_LINE, MAX_NOTES, noteSearches, NOTE_PROMPT, settleNote, noteRunNotes, namesPublished, ALREADY_SAID, alreadySaid, aboutWords, MODES_WITH_WORDS, MODES_THE_APP_HAS } from ${JSON.stringify(join(root, "src/utils/founderNotes.js"))};
+  export { toolUsesIn, toolResultsFor, queriesIn, NO_ANSWER } from ${JSON.stringify(join(root, "src/utils/toolTurn.js"))};
   export { reelLive, withLiveReels, reelCount } from ${JSON.stringify(join(root, "src/utils/reelGate.js"))};
   export { sentencesIn, readerBody, noticeAsk, noticeText, TRANSLATE_NOTICE, translatedNotice, DEAD_ENDS } from ${JSON.stringify(join(root, "src/utils/noticeVoice.js"))};
   export { guideClaims, guideClaimNote } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
@@ -44546,7 +44547,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // something is composed AROUND the rule it guards teaches the next person to
   // edit the assertion, which is how a guard stops guarding.
   ok("the stream holds back an unfinished sentence", /holdPartial \? fullText\.slice\(0, completeUpTo\(fullText\)\) : fullText/.test(app));
-  ok("and flushes when a stream really has ended", /if \(!toolUseBlock\) \{ flush\(out\); return \{ data: out, exhausted: false \}; \}/.test(app));
+  ok("and flushes when a stream really has ended", /if \(!toolUses\.length\) \{ flush\(out\); return \{ data: out, exhausted: false \}; \}/.test(app));
   ok("including when the search rounds run out", /flush\(out\);\s*\n\s*return \{ data: out, exhausted:/.test(app));
 
   // ── 21 AUGUST 2026: "BECAUSE HE WENT FURTHER, IT STOPPED WORKING" ─
@@ -44579,7 +44580,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
      !/const retryData = await streamClaudeChat\(baseMessages, handleDelta\)/.test(app));
   // RUNNING OUT OF ROUNDS IS NOT A FAULT, and saying so is both honest and
   // actionable. A cap that can be hit has to be able to say it was hit.
-  ok("exhaustion is reported as its own state", /exhausted: !!out\.content\?\.find\(b => b\.type === "tool_use"\)/.test(app));
+  ok("exhaustion is reported as its own state", /exhausted: toolUsesIn\(out\.content\)\.length > 0/.test(app));
   ok("and reads as a question that needed more looking up",
      /needed more looking up than I can do in one go/.test(app));
   // AND NO DASHES IN EITHER ERROR LINE, his standing rule, which both broke.
@@ -73817,7 +73818,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   is("and is stamped with the day it was read", dep.checkedAt, "2026-09-23");
   is("his own condition is never written over", M.settleNote({ check: "depends", when: "something else entirely", source: 0 }, DSB, RES, { today: DAY }).when, DSB.when);
   is("and one he left empty is filled by what it found",
-    M.settleNote({ check: "depends", when: "if you book in the same week", source: 0 }, { ...DSB, when: "" }, RES, { today: DAY }).when, "if you book in the same week");
+    M.settleNote({ check: "depends", found: "Orange tickets appear about two months ahead", when: "if you book in the same week", source: 0 }, { ...DSB, when: "" }, RES, { today: DAY }).when, "if you book in the same week");
   is("a verdict with no page behind it is no verdict", M.settleNote({ check: "holds", source: -1 }, DSB, RES, { today: DAY }).check, "notfound");
   is("and it keeps no page either", M.settleNote({ check: "holds", source: -1 }, DSB, RES, { today: DAY }).source, "");
   is("an answer that is not one of the four is read as the weakest", M.settleNote({ check: "obviously true", source: 0 }, DSB, RES, { today: DAY }).check, "notfound");
@@ -73853,27 +73854,27 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   {
     const PLAN = { travellerText: "five days in Denmark, we like food", towns: ["Copenhagen", "Aalborg"], today: DAY };
     is("a fare note reaches a public transport trip with the word train never typed",
-      M.notesForGuide([DSB], { ...PLAN, mode: "transit" }).length, 1);
+      M.notesForGuide([DSB], { ...PLAN, mode: "public transport" }).length, 1);
     is("and reaches no car trip", M.notesForGuide([DSB], { ...PLAN, mode: "car" }).length, 0);
     is("a note about one town reaches a route through it",
-      M.notesForGuide([howAgainst], { ...PLAN, mode: "transit" }).length, 1);
+      M.notesForGuide([howAgainst], { ...PLAN, mode: "public transport" }).length, 1);
     // The planner picks places the conversation never named, and a note about
     // one of those belongs in the guide that stands on it.
     is("a note about a place reaches the guide that stops there, off the plan alone",
-      M.notesForGuide([howAgainst], { travellerText: "three nights", towns: ["Aalborg"], stops: ["Jomfru Ane Gade"], mode: "transit", today: DAY }).length, 1);
+      M.notesForGuide([howAgainst], { travellerText: "three nights", towns: ["Aalborg"], stops: ["Jomfru Ane Gade"], mode: "public transport", today: DAY }).length, 1);
     is("and not the guide that stops somewhere else",
       M.notesForGuide([howAgainst], { travellerText: "three nights", towns: ["Ribe"], stops: ["Ribe Domkirke"], mode: "car", today: DAY }).length, 0);
     is("and stays out of a route that misses it",
-      M.notesForGuide([howAgainst], { ...PLAN, towns: ["Ribe"], mode: "transit" }).length, 0);
-    is("nothing matching is nothing handed over", M.notesForGuide([], { ...PLAN, mode: "transit" }), []);
+      M.notesForGuide([howAgainst], { ...PLAN, towns: ["Ribe"], mode: "public transport" }).length, 0);
+    is("nothing matching is nothing handed over", M.notesForGuide([], { ...PLAN, mode: "public transport" }), []);
     is("and the same note is never handed over twice",
-      M.notesForGuide([howAgainst], { ...PLAN, towns: ["Aalborg", "Aalborg"], mode: "transit" }).length, 1);
+      M.notesForGuide([howAgainst], { ...PLAN, towns: ["Aalborg", "Aalborg"], mode: "public transport" }).length, 1);
     ok("never more than three, whatever the route",
-      M.notesForGuide(Array.from({ length: 9 }, (_, i) => ({ ...DSB, said: `${DSB.said} ${i}` })), { ...PLAN, mode: "transit" }).length === 3);
+      M.notesForGuide(Array.from({ length: 9 }, (_, i) => ({ ...DSB, said: `${DSB.said} ${i}` })), { ...PLAN, mode: "public transport" }).length === 3);
 
     // The lead time is what makes his own example answerable rather than a
     // choice handed back to the reader.
-    const near = M.notesBlock(M.notesForGuide([DSB], { ...PLAN, mode: "transit" }), { daysAhead: 1 });
+    const near = M.notesBlock(M.notesForGuide([DSB], { ...PLAN, mode: "public transport" }), { daysAhead: 1 });
     ok("a guide built the day before says so", /THIS GUIDE IS BEING BUILT 1 DAY BEFORE THEY TRAVEL/.test(near));
     ok("and is told to settle the condition rather than hand over both halves", /Settle it and give them the one that applies/.test(near));
     // Oliver, 23 Sep 2026: "Of course, this does make it akward for the
@@ -73884,9 +73885,9 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     ok("a cheaper operator is named beside the measured leg, not instead of it", /name it beside that leg as the cheaper way to do it/.test(near));
     ok("and the chat, which draws no legs, is never told any of that",
       !/THE MAP AND EVERY LEG TIME/.test(M.notesBlock(M.notesFor("is the train expensive", [DSB], { today: DAY }))));
-    ok("the plural is right further out", /BUILT 40 DAYS BEFORE/.test(M.notesBlock(M.notesForGuide([DSB], { ...PLAN, mode: "transit" }), { daysAhead: 40 })));
+    ok("the plural is right further out", /BUILT 40 DAYS BEFORE/.test(M.notesBlock(M.notesForGuide([DSB], { ...PLAN, mode: "public transport" }), { daysAhead: 40 })));
     ok("a guide with no date claims no lead time",
-      !/THIS GUIDE IS BEING BUILT/.test(M.notesBlock(M.notesForGuide([DSB], { ...PLAN, mode: "transit" }))));
+      !/THIS GUIDE IS BEING BUILT/.test(M.notesBlock(M.notesForGuide([DSB], { ...PLAN, mode: "public transport" }))));
     ok("and the chat, which usually has none, says nothing either",
       !/THIS GUIDE IS BEING BUILT/.test(M.notesBlock(M.notesFor("is the train expensive", [DSB], { today: DAY }))));
 
@@ -73896,10 +73897,81 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     ok("with the way they are getting around, read the way the plan gate reads it",
       /mode: tickedTravelMode\(saidByTravellerForGuide\) \|\| travelModeKey\(saidByTravellerForGuide\)/.test(appG)
       && /const gateMode = tickedTravelMode\(saidByTravellerForGuide\) \|\| travelModeKey\(saidByTravellerForGuide\)/.test(appG));
-    ok("and the days between building it and travelling", /daysAhead: arrivalDate \? daysUntil\(arrivalDate, nowForDates\) : null/.test(appG));
+    ok("and the days between building it and travelling, when the date is a date",
+      /daysAhead: arrivalDate && datePrecision === "day" \? daysUntil\(arrivalDate, nowForDates\) : null/.test(appG));
     ok("the towns come off the planner's own stops", /plannerTowns = \[\.\.\.new Set\(planDays\.flatMap\(d => \(d\.stops \|\| \[\]\)\.map\(s => s\?\.town\)\)/.test(appG));
     ok("and the block reaches the writer, not the structure pass", /\$\{kindsOutBlock\}\$\{localSaysGuide\}\$\{bookedStayBlock\}/.test(appG)
       && !/\$\{kindsOutBlock\}\$\{localSaysGuide\}\\n\\nConversation/.test(appG));
+  }
+
+  // ── WHAT A REVIEW PASS FOUND THE NIGHT THIS SHIPPED ──────────────
+  //
+  // Every one of these is a defect that was live in the code above, found by
+  // reading it rather than by running it, so each keeps its own assertion.
+  {
+    // 1. THE MODE KEYS THE APP CANNOT PRODUCE. MODE_WORDS was keyed on
+    // transit/train/bus. travelModeKey returns walk, tent, bike, public
+    // transport, camper or car, so the lookup was undefined on every real
+    // trip and the headline case was dead while the tests passed.
+    is("the modes with words are the modes the app has",
+      M.MODES_WITH_WORDS.slice().sort(), M.MODES_THE_APP_HAS.slice().sort());
+    is("a fare note reaches a public transport guide, on the app's own key",
+      M.notesForGuide([DSB], { travellerText: "three days", towns: ["Aarhus"], stops: ["ARoS"], mode: "public transport", today: DAY }).length, 1);
+    is("and a tent trip is a mode with words too",
+      M.notesForGuide([{ ...DSB, about: "camping, campsite" }], { travellerText: "three days", towns: ["Aarhus"], stops: ["ARoS"], mode: "tent", today: DAY }).length, 1);
+
+    // 3. ONE SHARED WORD WAS ENOUGH. "budget" appears in the fare note's
+    // sentence, so a question about cheap food pulled in a note about trains.
+    is("a question about cheap food does not pull in a note about fares",
+      M.notesFor("we are on a tight budget, where do we eat in Aarhus", [DSB], { today: DAY }), []);
+    is("and a phone number question does not pull in one about paying in bars",
+      M.notesFor("what is the phone number for the ferry", [{ said: "NightPay only takes a Danish phone number", kind: "how", about: "NightPay, nightlife, bars, paying", check: "notfound", checkedAt: "2026-09-23" }], { today: DAY }), []);
+    ok("the subject line is what a hit has to land on", M.aboutWords(DSB).includes("train"));
+    is("a note with no subject line needs two words to land",
+      M.notesFor("is the train expensive", [{ ...DSB, about: "" }], { today: DAY }), []);
+    is("and gets in when two do",
+      M.notesFor("is Flixbus cheaper than DSB", [{ ...DSB, about: "" }], { today: DAY }).length, 1);
+
+    // 6. A VERDICT OFF A HOST THE APP REFUSES AS A SOURCE. This was the one
+    // path that turned his own sentence into "a page says the same".
+    const FORUM = [{ title: "thread", url: "https://www.reddit.com/r/denmark/x", snippet: "yes" }];
+    is("a forum agreeing with him is not a page saying the same",
+      M.settleNote({ check: "holds", source: 0 }, DSB, FORUM, { today: DAY }).check, "notfound");
+    is("and it keeps none of that page", M.settleNote({ check: "holds", source: 0 }, DSB, FORUM, { today: DAY }).source, "");
+
+    // 9. A NARROWING WITH NOTHING WRITTEN DOWN reached the prompt as "a page
+    // narrows it: " with nothing after the colon.
+    const OWN = [{ title: "dsb", url: "https://www.dsb.dk/x", snippet: "s" }];
+    is("a narrowing that says nothing is not a narrowing",
+      M.settleNote({ check: "depends", found: "", source: 0 }, DSB, OWN, { today: DAY }).check, "notfound");
+    is("nor is a disagreement that says nothing",
+      M.settleNote({ check: "against", found: "", source: 0 }, DSB, OWN, { today: DAY }).check, "notfound");
+
+    // 10. A TOWN NAME IS A NAME. "Ry" sits inside "ferry".
+    is("a note scoped to Ry stays out of a sentence about a ferry",
+      M.notesFor("we take the ferry tomorrow", [{ ...DSB, towns: ["Ry"] }], { today: DAY }), []);
+    is("and namesPublished does not find Ribe inside scribe", M.namesPublished("he was a scribe", ["Ribe"]), []);
+
+    // 5. AND WHAT WINS WHEN A NOTE AND A PUBLISHED ENTRY DISAGREE.
+    ok("a published entry beats a line in the block",
+      /WHERE A LINE HERE DISAGREES WITH A PUBLISHED GEMLYX ENTRY ABOVE/.test(M.notesBlock([M.shapeNote(DSB)])));
+    ok("and the line is kept for what the entry does not cover",
+      /use the line only for the part the entry is silent about/.test(M.notesBlock([M.shapeNote(DSB)])));
+
+    const appF = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    // 2. A MONTH IS NOT A DATE. arrivalDate is the 15th when only a month was
+    // named, and settling a booking-window condition on it gives the wrong half.
+    ok("a month-only trip gets no lead time",
+      /daysAhead: arrivalDate && datePrecision === "day" \? daysUntil\(arrivalDate, nowForDates\) : null/.test(appF));
+    // 4. A NOTE HE JUST TAUGHT IT HAS TO REACH THE SAME SESSION.
+    ok("publishing a note pulls it into the running session",
+      /await refreshLiveContent\(\(\) => \{\}\);\s*\n\s*bumpLiveContent\(v => v \+ 1\);\s*\n\s*return \{ ok: true, done \};/.test(appF));
+    // 7. AND THE REEL TICK CANNOT LEAK INTO THE NEXT DRAFT.
+    ok("every door that clears a draft clears the reel tick",
+      /set\(setStudioReelActive, false\);/.test(appF) && /setStudioInstagramUrl\(""\); setStudioReelActive\(false\);/.test(appF));
+    // 12. AN ERRORED STREAM IS NOT A TOOL TURN.
+    ok("a failed turn is not sent back as a search",
+      /if \(out\.error\) \{ flush\(out\); return \{ data: out, exhausted: false \}; \}/.test(appF));
   }
 
   // ── AND THE WIRING ───────────────────────────────────────────────
@@ -73923,6 +73995,40 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   ok("a note too old to be told to anybody is marked as such", /Too old to be told to anybody/.test(panelN));
   ok("and every one can be taken down", /Take it down/.test(panelN)
     && /onRemove=\{\(id\) => deleteContentItem\(id, NOTE_TYPE\)\}/.test(appN));
+  // ── KNOWLEDGE, NOT REPETITION ────────────────────────────────────
+  //
+  // Oliver, 23 Sep 2026: "Remember, what I write into Gemlyx should be
+  // knowledge. NOT REPETITION." Measured the same night: his first note said
+  // what the guide writer's prompt already said, in less detail, and
+  // overwrote its correct spelling of the operator on the way.
+  is("his own first note is caught as a repeat", M.alreadySaid(DSB.said).map(r => r.key), ["coaches", "orange"]);
+  ok("and it is said without blocking it, because it also narrows it",
+    !M.noteProblems(DSB, DAY).blocks
+    && M.noteProblems(DSB, DAY).problems.some(p => /Gemlyx already tells people this/.test(p)));
+  ok("the line says what Gemlyx says, so he can see the difference",
+    M.noteProblems(DSB, DAY).problems.some(p => /never on short ones inside a region/.test(p)));
+  is("a brand is enough on its own", M.alreadySaid("Kombardo is fine").map(r => r.key), ["coaches"]);
+  is("and a phrase is", M.alreadySaid("you can camp anywhere in the woods").map(r => r.key), ["camping"]);
+  is("one ordinary word is not", M.alreadySaid("a nice bus ride"), []);
+  is("a note about something it has never heard of is left alone", M.alreadySaid("NightPay only works with a Danish number"), []);
+  is("and so is one about food", M.alreadySaid("the cheapest food is kebab or a hot dog stand"), []);
+  is("nothing written is nothing to match", M.alreadySaid(""), []);
+
+  // ── AND THE LIST CANNOT DRIFT AWAY FROM THE PROMPTS ──────────────
+  //
+  // The failure this guards: a copy of what the prompts say, going stale
+  // beside the prompts. Every entry names a string that must still be in
+  // App.jsx, so changing a frozen fact fails here until the list changes too.
+  {
+    const appK = readFileSync(join(root, "src/App.jsx"), "utf8");
+    is("every thing Gemlyx is said to already say is still in its prompts",
+      M.ALREADY_SAID.filter(r => !appK.includes(r.proof)).map(r => r.key), []);
+    ok("and there are no two entries under one name",
+      new Set(M.ALREADY_SAID.map(r => r.key)).size === M.ALREADY_SAID.length);
+    ok("each one has words to match on", M.ALREADY_SAID.every(r => Array.isArray(r.words) && r.words.length > 0));
+    ok("and says what it is in a sentence", M.ALREADY_SAID.every(r => typeof r.what === "string" && r.what.length > 20));
+  }
+
   // ── AND CHANGING ONE, RATHER THAN REWRITING IT ───────────────────
   ok("a published note can be opened back into the boxes", /onClick=\{\(\) => openNote\(\{ id, note \}\)\}/.test(panelN));
   ok("and saved back to the row it came from", /onSave\(editing, row\)/.test(panelN)
@@ -74002,6 +74108,44 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     /setReelActive\(row, b\._idx, !reelLive\(b\)\)/.test(appR) && /i === blockIdx && b\?\.type === "instagram" \? \{ \.\.\.b, active: on === true \}/.test(appR));
   ok("and turning one off never touches its address", !/active: on === true, url:/.test(appR));
   ok("he can see how many are showing", /\{reels\.live\} of \{reels\.held\}/.test(appR));
+}
+
+// ── ONE TOOL RESULT PER TOOL CALL ───────────────────────────────────
+//
+// Found live on gemlyxtravel.com, 23 Sep 2026, on the first message of a
+// fresh Detour thread: "Hit a snag: messages.4: `tool_use` ids were found
+// without `tool_result` blocks immediately after: toolu_01MacYLivgm4uTFd3vfvMGNu".
+// The loop answered the FIRST tool call in a turn and sent it back, and
+// Anthropic rejects a turn where any tool_use is unanswered, so a model that
+// searched twice cost the traveller the whole thread.
+{
+  const TURN = [
+    { type: "text", text: "let me look that up" },
+    { type: "tool_use", id: "toolu_a", name: "web_search", input: { query: "aalborg" } },
+    { type: "tool_use", id: "toolu_b", name: "web_search", input: { query: "dsb orange" } },
+  ];
+  is("every call in the turn is found, not the first", M.toolUsesIn(TURN).map(b => b.id), ["toolu_a", "toolu_b"]);
+  is("and every one is answered", M.toolResultsFor(TURN, ["one", "two"]).map(r => r.tool_use_id), ["toolu_a", "toolu_b"]);
+  is("in the order the model asked", M.toolResultsFor(TURN, ["one", "two"]).map(r => r.content), ["one", "two"]);
+  is("a search that came back with nothing is still answered",
+    M.toolResultsFor(TURN, ["one"]).map(r => r.content), ["one", M.NO_ANSWER]);
+  is("and so is one that threw", M.toolResultsFor(TURN, ["", null]).map(r => r.content), [M.NO_ANSWER, M.NO_ANSWER]);
+  is("a turn with no calls needs no message", M.toolResultsFor([{ type: "text", text: "x" }]), []);
+  is("a tool_use with no id cannot be answered and is not counted", M.toolUsesIn([{ type: "tool_use", name: "web_search" }]), []);
+  is("and nothing at all is nothing", M.toolUsesIn(null), []);
+  is("the queries come out in the same order", M.queriesIn(TURN), ["aalborg", "dsb orange"]);
+  is("a call with no query reads as empty rather than as undefined", M.queriesIn([{ type: "tool_use", id: "x", input: {} }]), [""]);
+  ok("every result carries a string, never an object", M.toolResultsFor(TURN, [{ a: 1 }, 2]).every(r => typeof r.content === "string"));
+
+  const appT = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+  ok("the chat loop reads every call", /const toolUses = toolUsesIn\(out\.content\);/.test(appT));
+  ok("and answers every one of them", /content: toolResultsFor\(out\.content, answers\)/.test(appT));
+  ok("the searches run together rather than one after another", /await Promise\.all\(queriesIn\(out\.content\)\.map/.test(appT));
+  ok("a failed search returns an empty answer rather than breaking the loop", /catch \{ return ""; \}/.test(appT));
+  // The .find() that caused it must not come back anywhere in this loop.
+  ok("nothing in the chat answers only the first call",
+    !/out\.content\?\.find\(b => b\.type === "tool_use"\)/.test(appT));
+  ok("and the request asks for one call at a time", /tool_choice: \{ type: "auto", disable_parallel_tool_use: true \}/.test(appT));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

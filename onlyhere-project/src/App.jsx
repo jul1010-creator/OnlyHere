@@ -315,6 +315,7 @@ import { FounderNotesPanel } from "./components/FounderNotesPanel";
 import { GEM_TYPE } from "./utils/cheapGems";
 import { NOTE_TYPE, notesFor, notesForGuide, notesBlock } from "./utils/founderNotes";
 import { reelLive, reelCount } from "./utils/reelGate";
+import { toolUsesIn, toolResultsFor, queriesIn } from "./utils/toolTurn";
 import { founderNotes } from "./data/founderNotes";
 import { linkPatch } from "./utils/affiliateAudit";
 import { EntryLink } from "./components/EntryLink";
@@ -2621,6 +2622,11 @@ function GemlyxApp() {
     set(setGoogleCheckResult, null); set(setGoogleCheckError, null); set(setGooglePrecheckRan, false);
     set(setFactCheckClaims, null); set(setFactCheckFixPreview, null); set(setFactCheckFixError, null);
     set(setStudioInstagramUrl, "");
+    // AND THE TICK BESIDE IT. Without this, editing a row whose reel is
+    // active leaves the box ticked, and the next fresh draft publishes its
+    // reel switched on without him ticking anything. The whole point of the
+    // flag is that it is off until he says.
+    set(setStudioReelActive, false);
     set(setStudioFrozenGeo, null);
     set(setStudioPlaced, null);
     set(setScanHint, null);
@@ -10331,6 +10337,16 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
       return { ok: false, done, why: `${done} saved, then ${String(err?.message || err).slice(0, 160)}` };
     }
     loadManageItems();
+    // ── AND INTO THE SESSION HE IS SITTING IN ───────────────────────
+    //
+    // loadManageItems fills the Studio list and nothing else. The chat reads
+    // the founderNotes array, which only the loader writes, so a note he had
+    // just taught it reached no conversation until he reloaded the page, while
+    // the panel told him "Gemlyx knows it from the next conversation on".
+    // refreshLiveContent is the one supported way to pull a newly published
+    // row into a running session; the bump repaints what reads it.
+    await refreshLiveContent(() => {});
+    bumpLiveContent(v => v + 1);
     return { ok: true, done };
   };
 
@@ -17435,7 +17451,17 @@ THE LIST ABOVE COUNTS AS CONTEXT FOR recommendedStay, and it is the only list th
           mode: tickedTravelMode(saidByTravellerForGuide) || travelModeKey(saidByTravellerForGuide),
           today: nowForDates,
         }),
-        { daysAhead: arrivalDate ? daysUntil(arrivalDate, nowForDates) : null },
+        // ── AND ONLY WHEN THE DATE IS A DATE ──────────────────────
+        //
+        // A traveller who named only a month has arrivalDate set to the 15th
+        // of it, which the comment where that happens calls a figure nobody
+        // may be shown. Handing it to the lead-time line would settle a
+        // booking-window condition on an invented day: "sometime in October",
+        // read on 23 September, becomes 22 days and the guide tells them to
+        // book the cheap advance fare, which is the wrong half for a trip
+        // starting on the 1st. No date, no lead time, and the block then says
+        // nothing about how far ahead they are.
+        { daysAhead: arrivalDate && datePrecision === "day" ? daysUntil(arrivalDate, nowForDates) : null },
       );
       const writerSaid = (aiMessages || []).filter(m => m.role === "user").map(m => m.text || "").join("\n");
       const writerLevel = travellerBudget(intakeBudgetText) || travellerBudget(writerSaid);
@@ -21275,7 +21301,14 @@ ${languageBlock()}`;
         const res = await fetch("/api/anthropic", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ model: "claude-sonnet-5", system: sysPrompt, messages, tools: claudeTools, max_tokens: maxTokens, stream: true }),
+          // ── ONE TOOL CALL AT A TIME ─────────────────────────────
+          // A turn with two tool_use blocks needs two tool_result blocks in
+          // the message after it, and answering one of them kills the whole
+          // thread: see the live failure recorded in utils/toolTurn.js. The
+          // loop below now answers every one of them, and this stops most
+          // turns from making more than one in the first place, which is a
+          // round trip saved as well as a class of failure avoided.
+          body: JSON.stringify({ model: "claude-sonnet-5", system: sysPrompt, messages, tools: claudeTools, tool_choice: { type: "auto", disable_parallel_tool_use: true }, max_tokens: maxTokens, stream: true }),
         });
 
         if (!res.ok || !res.body) {
@@ -21455,30 +21488,46 @@ ${languageBlock()}`;
           if (better(roomier)) out = roomier;
         }
         for (let round = 0; round < TOOL_ROUNDS; round++) {
-          const toolUseBlock = out.content?.find(b => b.type === "tool_use");
+          // ── EVERY CALL IN THE TURN, NOT THE FIRST ONE ─────────────
+          //
+          // Found live 23 Sep 2026 on the first message of a fresh thread:
+          // "tool_use ids were found without tool_result blocks immediately
+          // after". This read `.find(...)`, answered that one call and sent
+          // the turn back, and Anthropic rejects a turn where any tool_use is
+          // unanswered, so the traveller lost the whole thread rather than
+          // one search. See utils/toolTurn.js.
+          // A turn that failed is not a turn that asked for a search. A
+          // stream cut off after the tool_use block started leaves a call with
+          // no query and no signature, and asking again spends a second call
+          // on a conversation the API will reject anyway.
+          if (out.error) { flush(out); return { data: out, exhausted: false }; }
+          const toolUses = toolUsesIn(out.content);
           // No search coming, so the fragment after the last full stop is the end
           // of the reply rather than a thought that was interrupted. Show it.
-          if (!toolUseBlock) { flush(out); return { data: out, exhausted: false }; }
+          if (!toolUses.length) { flush(out); return { data: out, exhausted: false }; }
           // Any preamble that streamed in before it decided to search is dropped:
           // only the real answer should end up on screen.
           clearStreamedBubble();
-          const { query } = toolUseBlock.input || {};
-          let searchSummary = "No results found.";
-          try {
-            const searchRes = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
-            const searchData = await searchRes.json();
-            searchSummary = searchData.answer || (searchData.results || []).map(r => `${r.title}: ${r.snippet}`).join(" | ") || searchSummary;
-          } catch { /* keep fallback summary, don't break the chat */ }
+          // Together rather than one after another: two searches are two
+          // seconds of a traveller's wait, not four.
+          const answers = await Promise.all(queriesIn(out.content).map(async (query) => {
+            if (!query) return "";
+            try {
+              const searchRes = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+              const searchData = await searchRes.json();
+              return searchData.answer || (searchData.results || []).map(r => `${r.title}: ${r.snippet}`).join(" | ") || "";
+            } catch { return ""; }   // answered as "no results", never left unanswered
+          }));
           msgs = [
             ...msgs,
             // apiContent, not content: thinking blocks must go back verbatim.
             { role: "assistant", content: out.apiContent || out.content },
-            { role: "user", content: [{ type: "tool_result", tool_use_id: toolUseBlock.id, content: searchSummary }] },
+            { role: "user", content: toolResultsFor(out.content, answers) },
           ];
           out = await streamClaudeChat(msgs, handleDelta);
         }
         flush(out);
-        return { data: out, exhausted: !!out.content?.find(b => b.type === "tool_use") };
+        return { data: out, exhausted: toolUsesIn(out.content).length > 0 };
       };
 
       let turn = await runTurn(baseMessages);
@@ -27190,7 +27239,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         {editingId !== null && (
                           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: `${C.gold}12`, border: `1px solid ${C.gold}44`, borderRadius: 8, padding: "8px 12px", marginBottom: 10 }}>
                             <span style={{ fontSize: 11, color: C.gold, fontWeight: 700 }}>✏️ Editing an existing published entry (id {editingId})</span>
-                            <button onClick={() => { setEditingId(null); setStudioResult(null); setStudioDraft(null); setStudioDraftText(""); setStudioInstagramUrl(""); setStudioFrozenGeo(null); }}
+                            <button onClick={() => { setEditingId(null); setStudioResult(null); setStudioDraft(null); setStudioDraftText(""); setStudioInstagramUrl(""); setStudioReelActive(false); setStudioFrozenGeo(null); }}
                               style={{ background: "none", border: "none", color: C.muted, fontSize: 11, cursor: "pointer", textDecoration: "underline" }}>Cancel</button>
                           </div>
                         )}
