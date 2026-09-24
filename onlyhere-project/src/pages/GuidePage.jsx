@@ -71,7 +71,10 @@ import { namedIslandOf } from "../utils/geography";
 import { BOOKING_AFFILIATE_ID } from "../config";
 import { tiqetsBrowseUrl, partnerDisclosure, supportNote, partnerLinkCount, isPartnerLink, carRentalFits, stayDoorUrl, tripcomStayUrl, stayDisclosure, STAY_DISCLOSURE, outboundLink, featuredStayFor, tourMerchant } from "../utils/affiliates";
 import { CostsBlock } from "../components/CostsBlock";
-import { costLines } from "../utils/costLedger";
+import { GuideDayPager } from "../components/GuideDayPager";
+import { pagerStep, pagerAt, swipeDirection } from "../utils/dayPager";
+import { fuelCost, drivingLegs, DRIVEN_MODES } from "../utils/fuel";
+import { costLines, partyFrom, partyOf } from "../utils/costLedger";
 import { PartnerSheet, PartnerOpener } from "../components/PartnerSheet";
 import { partnerSections, partnerCount } from "../utils/partnerSheet";
 import { tourPhrase } from "../utils/tourSweep";
@@ -576,6 +579,21 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
   // both: it spends the space AND withholds the sentence. Nothing on this page
   // let you read the rest. Keyed by day and stop index.
   const [openNotes, setOpenNotes] = useState({});
+  // ── "SOME PEOPLE MIGHT HATE A LONG PAGE OF DAYS AND TRIPS" ────────
+  //
+  // Oliver, 24 Sep 2026. Two ways to hold the same guide, switched here rather
+  // than chosen before the build: a choice made before anybody has seen the
+  // guide is a guess, and a toggle also reaches a guide saved weeks ago.
+  //
+  // NOTHING PERSISTS. He was offered a version that remembers which view a
+  // reader last used and picked the plain toggle, so there is no storage here
+  // and no effect that writes any. See utils/dayPager.js.
+  const [dayMode, setDayMode] = useState("all");
+  const [dayAt, setDayAt] = useState(0);
+  // Where a touch started, so the handler at the bottom can tell a page turn
+  // from a scroll. A ref rather than state: a value read once on touchend and
+  // never rendered has no business re-rendering the guide on every touch.
+  const swipeFrom = useRef(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState([
     { role: "assistant", text: "Hi again ◆ I'm still here if you want to talk through this trip, ask about a stop, or anything else about Denmark." }
@@ -1358,19 +1376,46 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
           </div>
         )}
 
+        {/* ── AND THE TWO WAYS TO HOLD IT ──────────────────────────
+            Oliver, 24 Sep 2026: "Make a 'swipe through' option. Because some
+            people might hate a long page of days and trips." Above the day
+            buttons rather than beside them, because it changes what those
+            buttons do: in the long view they scroll, in the one-day view they
+            select. See utils/dayPager.js. */}
+        {days.length > 1 && (
+          <GuideDayPager
+            mode={dayMode}
+            onMode={(m) => { setDayMode(m); if (m === "one") setDayAt(a => pagerAt(a, days.length)); }}
+            C={C} count={days.length} at={dayAt}
+            dayNo={days[pagerAt(dayAt, days.length)]?.day || null}
+            onStep={(by) => setDayAt(a => pagerStep(a, by, days.length))}
+          />
+        )}
         {/* A seven day guide is a long page. Jumping is not a substitute for the
             day structure, which he asked to keep, it is a way to get back to
             Thursday without scrolling past Monday again. */}
         {/* Five days, not three: on a short guide these are three buttons
-            that scroll past what they are covering. */}
-        {days.length >= 5 && (
+            that scroll past what they are covering.
+
+            IN THE ONE-DAY VIEW THE FLOOR GOES, and the reason is that these
+            stop being a shortcut and become the navigation: a three day guide
+            paged one day at a time still needs a way to reach day 3 without
+            two swipes. */}
+        {(dayMode === "one" ? days.length > 1 : days.length >= 5) && (
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 26 }}>
-            {days.map((d, i) => (
-              <button key={i} onClick={() => document.getElementById(`gx-day-${d.day || i + 1}`)?.scrollIntoView({ behavior: "smooth", block: "start" })}
-                style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "6px 13px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                Day {d.day || i + 1}
-              </button>
-            ))}
+            {days.map((d, i) => {
+              const here = dayMode === "one" && pagerAt(dayAt, days.length) === i;
+              return (
+                <button key={i} onClick={() => {
+                  if (dayMode === "one") { setDayAt(pagerAt(i, days.length)); return; }
+                  document.getElementById(`gx-day-${d.day || i + 1}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}
+                  aria-current={here ? "true" : undefined}
+                  style={{ background: here ? `${C.gold}26` : C.surface, border: `1px solid ${here ? C.gold : C.border}`, color: here ? C.gold : C.light, borderRadius: 100, padding: "6px 13px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                  Day {d.day || i + 1}
+                </button>
+              );
+            })}
           </div>
         )}
 
@@ -1510,14 +1555,29 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                   instead of quietly showing March's rate under tonight's trip.
                   Absent whenever the rate could not be fetched, and a guide with
                   no rate line is still completely correct. */}
-              {guide._fx?.amount > 0 && (
-                <div style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
-                  <span style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, letterSpacing: 0.8, textTransform: "uppercase", flexShrink: 0, width: 92 }}>{uiT("guide.kroner", uiLang)}</span>
-                  <span style={{ fontSize: 13, color: C.light, lineHeight: 1.6 }}>
-                    {uiT("guide.pricedInDkk", uiLang)} {guide._fx.baseAmount} DKK {uiT("guide.wasAbout", uiLang)} {guide._fx.amount} {guide._fx.to}{guide._fx.on ? ` ${uiT("guide.onDate", uiLang)} ${guide._fx.on}` : ""}, {uiT("guide.ratesMoved", uiLang)}
-                  </span>
-                </div>
-              )}
+              {/* ── AND WHAT THAT IS IN MONEY THEY KNOW ───────────
+                  Oliver, 24 Sep 2026: "convert it to US dollars and Euro when
+                  guide shows." Several rates now, off one ECB publication, so
+                  they share a date by construction. A guide saved before this
+                  carries only the flat to/amount pair, which is why that is
+                  still read as a fallback rather than replaced. */}
+              {(() => {
+                const fx = guide._fx;
+                const rates = Array.isArray(fx?.rates) && fx.rates.length
+                  ? fx.rates
+                  : (Number(fx?.amount) > 0 ? [{ to: fx.to, amount: fx.amount }] : []);
+                if (!rates.length) return null;
+                const said = rates.map(r => `${r.amount} ${r.to}`);
+                const list = said.length === 1 ? said[0] : `${said.slice(0, -1).join(", ")} ${uiT("guide.orAbout", uiLang)} ${said[said.length - 1]}`;
+                return (
+                  <div style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
+                    <span style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, letterSpacing: 0.8, textTransform: "uppercase", flexShrink: 0, width: 92 }}>{uiT("guide.kroner", uiLang)}</span>
+                    <span style={{ fontSize: 13, color: C.light, lineHeight: 1.6 }}>
+                      {uiT("guide.pricedInDkk", uiLang)} {fx.baseAmount} DKK {uiT("guide.wasAbout", uiLang)} {list}{fx.on ? ` ${uiT("guide.onDate", uiLang)} ${fx.on}` : ""}, {uiT("guide.ratesMoved", uiLang)}
+                    </span>
+                  </div>
+                );
+              })()}
               {[["guide.money", guide.essentials.budgetReality], ["guide.gettingAround", guide.essentials.transportTip], ["guide.keepInMind", guide.essentials.keepInMind], ["guide.weather", weatherNoteNow(guide.essentials.weatherNote, weatherMoved)]].filter(([, v]) => v).map(([label, v]) => (
                 <div key={label} style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
                   <span style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, letterSpacing: 0.8, textTransform: "uppercase", flexShrink: 0, width: 92 }}>{uiT(label, uiLang)}</span>
@@ -1534,7 +1594,29 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                   hooks, where the suite could assert costLines was CALLED and
                   never ask what came out — which is the gap four wiring failures
                   shipped through this month. See components/CostsBlock.jsx. */}
-              <CostsBlock guide={guide} C={C} rowFor={lookupRealPlace} now={now} />
+              {/* ── AND WHAT THE ROUTE BURNS ────────────────────
+                  Oliver, 24 Sep 2026: "990 dkk? Think about gas prices.. that
+                  needs to be calculated." Worked out here rather than in the
+                  block, because it needs the leg distances and that component
+                  has never known where anything is. Only on a trip that
+                  drives: a public transport guide pays fares, not petrol, and
+                  those are already their own lines. */}
+              <CostsBlock guide={guide} C={C} rowFor={lookupRealPlace} now={now}
+                fuel={DRIVEN_MODES.has(String(guide?._mode || "").trim().toLowerCase())
+                  ? fuelCost(drivingLegs(guide, legDistanceKm) || {})
+                  : null}
+                /* ── AND WHAT EATING COSTS ────────────────────────
+                   Off the published food library's own checked prices, not off
+                   a national average about residents who cook at home. The
+                   party count is the one the brief read, and partyOf is only a
+                   fallback for a guide built before _party existed, which is
+                   the same pair CostsBlock uses for tickets. See
+                   utils/mealsEstimate.js. */
+                /* The trip's shape, not a figure. Which of the three ways to
+                   eat applies is the reader's to pick, inside the block, so
+                   the page hands over the days and the heads and nothing
+                   else. See utils/mealsEstimate.js. */
+                meals={{ days: days.length, heads: (partyFrom(guide?._party) || partyOf(guide?._travelers))?.heads || 1 }} />
               {/* ── THE ONE WAY IN TO EVERY PAID DOOR ─────────────
                   Oliver, 21 Sep 2026: "Make a 'use our affiliates
                   (optional)' and make it something clickable. When you click
@@ -1669,7 +1751,42 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
             </div>
           </div>
         )}
+        {/* ── AND THE SWIPE ITSELF ────────────────────────────────
+            Wrapped around the days rather than put on each one, so a gesture
+            that starts on a stop card and ends on the stay card underneath is
+            still one swipe. The handlers come off entirely in the long view:
+            a page that quietly watches every touch on a fourteen thousand
+            character article for a gesture it will never act on is work done
+            for nothing, and one misread diagonal there would jump the reader
+            to a day they never asked for.
+
+            swipeDirection refuses a drag that moved further down than across,
+            which is what stops a thumb arcing through a scroll from turning
+            the page. See utils/dayPager.js. */}
+        <div
+          onTouchStart={dayMode === "one" ? (e) => {
+            const t = e.touches && e.touches[0];
+            swipeFrom.current = t ? { x: t.clientX, y: t.clientY } : null;
+          } : undefined}
+          onTouchEnd={dayMode === "one" ? (e) => {
+            const from = swipeFrom.current;
+            swipeFrom.current = null;
+            const t = e.changedTouches && e.changedTouches[0];
+            if (!from || !t) return;
+            const way = swipeDirection({ startX: from.x, startY: from.y, endX: t.clientX, endY: t.clientY });
+            if (!way) return;
+            setDayAt(a => pagerStep(a, way === "next" ? 1 : -1, days.length));
+          } : undefined}
+        >
         {days.map((day, dayIdx) => {
+          // ── ONE DAY, WITHOUT RENUMBERING ANYTHING ─────────────────
+          // Filtered here rather than by slicing the array, so dayIdx stays the
+          // day's TRUE index. Half this block reads it: the weather lookup is
+          // freshWeather?.[dayIdx], the add-in panel keys on `${dayIdx}:${cat}`,
+          // and the done-marker is markDayDone(day, dayIdx). Handing this loop
+          // a one-element array would renumber every one of those to 0 and the
+          // guide would show Monday's weather on Thursday.
+          if (dayMode === "one" && dayIdx !== pagerAt(dayAt, days.length)) return null;
           // Real coordinates for this guide (from geocodeStopsForGuide, baked onto
           // the guide object as _geo when the build handed off to this page — see
           // App.jsx's generateGuide) plus this day's own real exact-duration/route
@@ -2839,7 +2956,37 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
               const dayNo = day.day || dayIdx + 1;
               const stops = (day.stops || []).filter(s => s && s.name);
               const town = stops.map(s => stopTown(s)).find(Boolean) || "";
-              const anchor = stops.map(s => resolveStopCoords(s, guide)).find(p => p && Number.isFinite(p.lat));
+              // ── AND THE NEARBY LIST HAS NEVER ONCE RUN ──────────
+              //
+              // Oliver, 24 Sep 2026, of the chips at the foot of every day:
+              // "when you click this, it takes you back to detour.. it should
+              // not do that. It should give a list of options nearby."
+              //
+              // It should, and it could not. resolveStopCoords takes a NAME, a
+              // geo map and a TOWN, and this call handed it a stop object and
+              // the whole guide. So `geo[name]` read guide["[object Object]"],
+              // the town was the empty default, every fallback missed, and
+              // `anchor` came back null on every day of every guide ever
+              // built. A null anchor means addInNear is never called, the list
+              // is always empty, and the panel always falls through to its own
+              // "nothing of ours is close enough" line with the door back to
+              // the Detour underneath it. The only control that ever worked
+              // was the one that threw the reader out of an unsaved guide.
+              //
+              // The ninth helper this codebase has found written, tested and
+              // wired to nothing, and the first one where the wrong wiring was
+              // an ARITY rather than a missing import: two arguments into a
+              // three argument function is legal JavaScript and reads fine.
+              // The suite now asserts the call passes a name and a town, which
+              // is the shape that was wrong rather than the fact that a call
+              // exists.
+              //
+              // stopTown is what the line above already uses for the day's
+              // town, so the reader is the same one, not a second guess at the
+              // same question.
+              const anchor = stops
+                .map(s => resolveStopCoords(s.name, guide._geo || {}, stopTown(s)))
+                .find(p => p && Number.isFinite(p.lat));
               return (
                 /* ── AND THE ADD-ON SHE NEVER SAW ────────────────────
                    Oliver, 14 Sep 2026: "she didn't even notice the 'add on'
@@ -2896,9 +3043,28 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                              the other door still works. */
                           <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.6 }}>Nothing of ours is close enough to this day to suggest. Ask and Gemlyx will look.</div>
                         )}
-                        {/* THE SEED NAMES THE DAY, which is the whole of his
+                        {/* ── AND IT ASKS WITHOUT LEAVING THE GUIDE ────
+                            This navigated to "/" with the question seeded, and
+                            "/" is where GemlyxApp remounts. lastBuiltGuide is
+                            React state inside that component, so the remount
+                            clears it and the guide the reader was standing in
+                            is gone: asking for one more stop meant building
+                            the whole trip again, which is a second run and a
+                            second bill. Oliver, 24 Sep 2026: "it takes you
+                            back to detour.. it should not do that."
+
+                            This page has had its own chat panel the whole
+                            time, bottom right, which answers about THIS guide
+                            without unmounting it. That is the door, and the
+                            seed goes into its composer rather than into a
+                            route. The panel opens with the question already
+                            typed, so the reader still sees what is being asked
+                            before it is sent, which is the same thing the
+                            seeded route gave them.
+
+                            THE SEED NAMES THE DAY, which is the whole of his
                             "instead it's just into that specific day". */}
-                        <button onClick={() => navigate("/", { state: { detourAsk: addInSeed(cat, { town, dayNo }) } })}
+                        <button onClick={() => { setChatInput(addInSeed(cat, { town, dayNo })); setChatOpen(true); }}
                           style={{ marginTop: 8, background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 12px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                           Ask Gemlyx to add one to day {dayNo}
                         </button>
@@ -2911,6 +3077,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
           </div>
           );
         })}
+        </div>
 
         {/* ── AND THEN HOW DO THEY GET HOME ──────────────────────────
             A guide could end in Aalborg, five and a half hours from the airport

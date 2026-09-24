@@ -38,6 +38,7 @@ import { isNeverOwnSite } from "./sourcePolicy";
 // The one hostOf, which the suite holds to one declaration across utils.
 import { hostOf, textHasPrice, menuImagesToRead } from "./pageScan";
 import { haversineKm } from "./helpers";
+import { branchesOf, branchPoints, branchLabel, cleanBranches, branchCandidates } from "./branches";
 
 // The row type in gemlyx_content. Deliberately NOT in CONTENT_TYPES, for the
 // reason "undated" is not: nothing drafts a gem through the normal pipeline.
@@ -240,6 +241,19 @@ export const shapeGem = (t = {}) => {
     desc: clean(t.desc).slice(0, 400),
     source: clean(t.source),
     checkedAt: clean(t.checkedAt).slice(0, 10),
+    // ── AND WHERE THE SHOPS ACTUALLY ARE ────────────────────────────
+    //
+    // Oliver, 24 Sep 2026, looking at his own page: "we need a 'location
+    // sweep'. Now, some will be all of Denmark, just make a 'store closest to
+    // me'." A chain with no town reads "All over Denmark", which is true and
+    // is no use to somebody standing in Aarhus wondering whether there is one
+    // here.
+    //
+    // The shape is the one utils/branches.js already holds for an entry with
+    // several addresses, so the same cleaner, the same cap and the same
+    // coordinate rules apply, and nothing here invents a second way to say
+    // where a brand is.
+    branches: cleanBranches(t.branches),
     // ── WHAT HE SAID, IN HIS WORDS ──────────────────────────────────
     //
     // Oliver, 23 Sep 2026: "If I write something, then also let me be able to
@@ -392,9 +406,48 @@ const inTown = (g, town) => {
 // hold a point for one of those towns, and the reader is somewhere we can
 // measure from. A row with no town is a chain, and a chain is wherever they
 // are, which is the honest line for it.
+// ── THE ONE NEAREST TO WHOEVER IS READING ───────────────────────────
+//
+// Null rather than a guess when we do not know where they are, or when no
+// branch carries a coordinate. A chain with addresses nobody geocoded is
+// still a chain that is everywhere, and saying which is nearest would be a
+// number nobody measured.
+export const gemNearest = (g = {}, me = null) => {
+  const lat = Number(me?.lat), lon = Number(me?.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  const pts = branchPoints(g).filter(p => p.at);
+  if (!pts.length) return null;
+  let best = null, bestKm = Infinity;
+  for (const p of pts) {
+    const km = haversineKm({ lat, lon }, p.at);
+    if (km == null || !(km < bestKm)) continue;
+    bestKm = km; best = p;
+  }
+  return best ? { ...best, km: bestKm, label: branchLabel(best) } : null;
+};
+
+// How far, said the way this page already says it: never sharper than 2 km,
+// because a reader's own position is a city block at best.
+const kmLine = (km) => {
+  const n = Math.round(km);
+  return Number.isFinite(n) ? `${n < 2 ? "~2" : `~${n}`} km from you` : "";
+};
+
 export const gemWhere = (g = {}, { point = null, me = null } = {}) => {
+  // THE SHOP ITSELF BEATS THE TOWN LIST. A reader wants the one they can walk
+  // to, and a chain that knows its own addresses can answer that outright.
+  const near = gemNearest(g, me);
+  if (near) {
+    const line = kmLine(near.km);
+    return line ? `${near.label} · ${line}` : near.label;
+  }
   const towns = (Array.isArray(g?.towns) ? g.towns : []).map(clean).filter(Boolean);
-  if (!towns.length) return "All over Denmark";
+  // A chain with addresses but no reader position names how many it has,
+  // which is more than "all over Denmark" and is still true.
+  if (!towns.length) {
+    const list = branchesOf(g);
+    return list.length > 1 ? `${list.length} shops around Denmark` : "All over Denmark";
+  }
   const where = towns.join(", ");
   const at = typeof point === "function" ? point(towns[0]) : null;
   const lat = Number(me?.lat), lon = Number(me?.lon);
@@ -897,4 +950,36 @@ export const gemFitsParty = (gem = {}, party = {}) => {
   if (who === "women") return !party.allMen;
   if (who === "men") return !party.allWomen;
   return true;
+};
+
+// ── THE LOCATION SWEEP ──────────────────────────────────────────────
+//
+// Oliver, 24 Sep 2026: "we need a 'location sweep'."
+//
+// Which rows are worth asking about, in the order worth asking. A chain with
+// no town is the whole point of this: it is the one a reader cannot place. A
+// gem that already carries its shops is skipped, so running the sweep twice
+// costs nothing the second time.
+export const gemsToLocate = (rows = [], { today = new Date() } = {}) =>
+  (Array.isArray(rows) ? rows : [])
+    .filter(r => gemLive(r?.payload || r, today))
+    .filter(r => branchesOf(r?.payload || r).length === 0)
+    .map(r => ({ id: r?.id ?? null, gem: shapeGem(r?.payload || r) }))
+    // A chain first: it has no town at all, so it is the one nobody can place.
+    .sort((a, b) => (a.gem.towns.length ? 1 : 0) - (b.gem.towns.length ? 1 : 0)
+      || a.gem.name.localeCompare(b.gem.name, "da"));
+
+// What a sweep found for one row, ready for him to tick. The name test is
+// branchCandidates' own, so a shop called something else entirely is shown
+// and left unticked rather than dropped: see utils/branches.js.
+export const gemBranchesFound = (gem = {}, candidates = []) =>
+  branchCandidates(clean(gem?.name), candidates);
+
+// And the line the Studio prints when a sweep comes back with nothing, which
+// is a normal answer for a single bar that Google has under another name.
+export const gemLocateNote = (name, found = []) => {
+  const n = (Array.isArray(found) ? found : []).filter(c => c?.matches).length;
+  if (!found.length) return `${name}: nothing came back, so it keeps the town it has.`;
+  if (!n) return `${name}: ${found.length} found, none of them named like it. Tick any that are right.`;
+  return `${name}: ${n} of ${found.length} look like theirs.`;
 };

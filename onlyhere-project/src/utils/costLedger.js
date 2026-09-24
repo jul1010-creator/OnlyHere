@@ -79,6 +79,7 @@ import { showsTicketForKind } from "./journeyScope";
 import { stampDay } from "./provenance";
 import { bedStateOf, openNightsLine, needsABed } from "./nightsOpen";
 import { staysIn } from "./stayDoors";
+import { describeFuel } from "./fuel";
 
 export const COST_KIND = {
   ENTRY: "entry",
@@ -895,11 +896,22 @@ export const bedsEstimate = (guide) => {
 // The line under the tickets estimate. The tickets are per person and the beds
 // per room, and the sentence keeps them apart rather than adding people to
 // rooms: "for one room and N people's tickets" is a sum a reader can check.
-export const tripEstimate = (tickets, beds, party = null) => {
+export const tripEstimate = (tickets, beds, party = null, fuel = null) => {
   if (!beds) return null;
   const heads = party?.heads > 1 ? party.heads : 1;
   const ticketPart = tickets ? tickets.from * heads : 0;
-  return { from: ticketPart + beds.from, ticketPart, heads, beds };
+  // ── AND THE ONE COST NOBODY CHOOSES ───────────────────────────────
+  //
+  // Oliver, 24 Sep 2026: "990 dkk? Think about gas prices.. that needs to be
+  // calculated." A meal and a room are choices and a traveller expects to pay
+  // for both; the fuel to drive a route this guide picked is not. Leaving it
+  // out made the one unavoidable cost the one cost the page never mentioned.
+  //
+  // NOT MULTIPLIED BY HEADS. One car carries the party, the same way one room
+  // does, and the line under this keeps per-person and per-vehicle apart for
+  // exactly that reason. See utils/fuel.js for where the figure comes from.
+  const fuelPart = Number(fuel?.kr) > 0 ? Number(fuel.kr) : 0;
+  return { from: ticketPart + beds.from + fuelPart, ticketPart, fuelPart, fuel: fuelPart ? fuel : null, heads, beds };
 };
 
 export const describeTrip = (trip, { car = false, transport = false } = {}) => {
@@ -909,8 +921,17 @@ export const describeTrip = (trip, { car = false, transport = false } = {}) => {
   const nights = b.stays.reduce((n, s) => n + s.nights, 0);
   out.push(`Beds from ${b.from} DKK for one room, ${nights} ${nights === 1 ? "night" : "nights"}, at the lowest room price the search found when this guide was built.`);
   if (trip.ticketPart) out.push(`Tickets from ${trip.ticketPart} DKK${trip.heads > 1 ? ` for ${trip.heads} of you` : ""}.`);
+  // Its own line, with what it assumed printed on it, because a reader whose
+  // car is a thirsty old estate has to be able to see why the figure is wrong
+  // for them. See describeFuel in utils/fuel.js.
+  if (trip.fuel) out.push(describeFuel(trip.fuel));
   const not = ["meals"];
-  if (car) not.push("the car");
+  // ── AND HIRE IS NOT FUEL ──────────────────────────────────────────
+  // Two different things that the one phrase "the car" used to cover. Once the
+  // petrol is counted, saying the car is not in the figure is false; saying
+  // nothing about the hire is false the other way. So the line names whichever
+  // half is still outstanding.
+  if (car) not.push(trip.fuel ? "hiring the car itself" : "the car");
   if (transport) not.push("trains and buses");
   if (b.unpricedNights) not.push(`${b.unpricedNights} ${b.unpricedNights === 1 ? "night" : "nights"} with no room price found`);
   const list = not.length === 1 ? not[0] : `${not.slice(0, -1).join(", ")} and ${not[not.length - 1]}`;

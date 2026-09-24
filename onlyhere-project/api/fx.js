@@ -65,14 +65,32 @@ export default async function handler(req, res) {
   if (!requestIsFromSite(req.headers)) {
     return res.status(403).json({ error: NOT_FROM_SITE });
   }
-  const to = String(req.query?.to || "").toUpperCase();
-  if (!to) return res.status(400).json({ error: "Which currency?" });
+  // ── MORE THAN ONE, IN ONE CALL ────────────────────────────────────
+  //
+  // Oliver, 24 Sep 2026: "convert it to US dollars and Euro when guide shows."
+  //
+  // Two currencies rather than one, and on every guide rather than only for a
+  // reader who filled in a country. Visitors to Denmark come overwhelmingly
+  // from the eurozone or from the States, and a guide that shows a rate only
+  // to signed-in accounts shows it to almost nobody.
+  //
+  // ONE REQUEST, not one per currency. Frankfurter takes a comma-separated
+  // symbols list and answers all of them off the same ECB publication, so the
+  // rates on a guide are guaranteed to share a date. Asking twice would let a
+  // build straddle 16:00 CET and stamp two different days on one line.
+  const asked = [...new Set(String(req.query?.to || "").toUpperCase().split(",").map(x => x.trim()).filter(Boolean))];
+  if (!asked.length) return res.status(400).json({ error: "Which currency?" });
   // DKK to DKK is not a conversion and a Danish reader is not asking for one.
-  if (to === "DKK") return res.status(400).json({ error: "DKK needs no conversion." });
-  if (!ALLOWED.has(to)) return res.status(400).json({ error: `No rate is offered for ${to}.` });
+  if (asked.includes("DKK")) return res.status(400).json({ error: "DKK needs no conversion." });
+  const bad = asked.find(c => !ALLOWED.has(c));
+  if (bad) return res.status(400).json({ error: `No rate is offered for ${bad}.` });
+  // A cap, because this value goes into somebody else's URL and an unbounded
+  // list is an unbounded request made on our origin's behalf.
+  if (asked.length > 4) return res.status(400).json({ error: "Too many currencies at once." });
+  const to = asked[0];
 
   try {
-    const r = await fetch(`https://api.frankfurter.dev/v1/latest?base=DKK&symbols=${to}`, {
+    const r = await fetch(`https://api.frankfurter.dev/v1/latest?base=DKK&symbols=${asked.join(",")}`, {
       headers: { Accept: "application/json" },
     });
     if (!r.ok) {
@@ -82,20 +100,34 @@ export default async function handler(req, res) {
       return res.status(502).json({ error: "No rate available just now." });
     }
     const data = await r.json();
-    const rate = Number(data?.rates?.[to]);
+    const priced = (code) => {
+      const rate = Number(data?.rates?.[code]);
+      if (!Number.isFinite(rate) || rate <= 0) return null;
+      const amount = rate * BASE_AMOUNT;
+      return { to: code, amount: WHOLE_UNITS.has(code) ? Math.round(amount) : Math.round(amount * 100) / 100 };
+    };
+    // A currency the ECB did not price today is DROPPED, not zeroed. One
+    // missing rate must not cost a reader the one that did arrive.
+    const rates = asked.map(priced).filter(Boolean);
     // A response that parsed but carries no number is not a rate. The same shape
     // as api/ask.js reading a missing content-range header as zero: the honest
     // reading of a missing value is that the value is unknown.
-    if (!Number.isFinite(rate) || rate <= 0) {
-      console.warn(`fx: no usable rate in the response for DKK->${to}`);
+    if (!rates.length) {
+      console.warn(`fx: no usable rate in the response for DKK->${asked.join(",")}`);
       return res.status(502).json({ error: "No rate available just now." });
     }
-    const amount = rate * BASE_AMOUNT;
+    const first = rates[0];
     return res.status(200).json({
       base: "DKK",
       baseAmount: BASE_AMOUNT,
-      to,
-      amount: WHOLE_UNITS.has(to) ? Math.round(amount) : Math.round(amount * 100) / 100,
+      rates,
+      // ── AND THE OLD SHAPE, STILL ────────────────────────────────
+      // Every guide saved before today carries _fx.to and _fx.amount and is
+      // rendered from its own stored copy, so nothing already saved breaks.
+      // Keeping the flat pair means a caller asking for one currency gets the
+      // answer it has always got.
+      to: first.to,
+      amount: first.amount,
       // THE DATE THE ECB PUBLISHED, not the date we asked. A guide saved today
       // and read in March should say which day its rate is from, and saying
       // "today" would make it lie the moment it was saved.

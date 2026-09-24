@@ -321,19 +321,93 @@ export const notesFor = (travellerText = "", rows = [], { town = "", today = new
     .map(s => s.note);
 };
 
+// ── A CHECKED FIGURE IS CHECKED FOR THE THING IT NAMES ──────────────
+//
+// Watched live on 24 Sep 2026, on a guide from Copenhagen to Aalborg. The
+// note said the coach lines are the budget alternative to DSB, and the page
+// that narrowed it said, in its own first four words:
+//
+//   "For Copenhagen to Aarhus, Kombardo Expressen starts around 99 DKK and
+//    FlixBus around 70 DKK, versus about 150 DKK for DSB Orange."
+//
+// The guide's money section came back with "FlixBus starts around 70 DKK and
+// Kombardo Expressen around 99 DKK versus roughly 150 DKK for DSB Orange" and
+// put it on the Copenhagen to Aalborg leg, which is a different crossing and
+// about a hundred kilometres further. Every figure was his, every figure was
+// checked, and not one of them was about a journey in that guide.
+//
+// That is worse than the invented fare this file already refuses. An invented
+// figure is a guess and reads like one; this one arrives wearing a source, a
+// checked date and his own name on it, so nothing downstream has any reason
+// to doubt it.
+//
+// THE INSTRUCTION IS WHAT DID IT. "Say that part too" asks for the narrowing
+// to be repeated, and the narrowing begins with the scope. A model asked to
+// repeat a sentence keeps the part that is useful to the reader in front of
+// it and drops the part that is not, and the scope is exactly the part that
+// is not.
+//
+// So the scope is checked here rather than asked for: the page's sentence
+// names places, and this trip has places, and a figure whose sentence names
+// somewhere this trip never goes does not travel.
+//
+// GEOGRAPHY STAYS OUT, the same way it does in accommodation.js. This file
+// has no gazetteer and building one here would be a second source of truth
+// about where Denmark is. The caller passes the town names it already holds
+// and the towns this trip covers; this decides.
+const FIGURE = /\d[\d.,]*\s*(?:dkk|kr\.?|kroner|eur(?:os?)?|usd|gbp)\b|\b(?:dkk|kr\.?|kroner|eur(?:os?)?|usd|gbp)\s*\d|[€$£]\s*\d|\d[\d.,]*\s*[€$£]/i;
+export const hasFigure = (text) => FIGURE.test(clean(text));
+
+// The towns a page's sentence names that this trip does not go to. Empty when
+// the sentence carries no figure, because a narrowing with no figure in it
+// travels perfectly well: "how far ahead you book decides this" is as true on
+// one crossing as on another, and only a number is tied to a route.
+export const foundElsewhere = (found, { townNames = [], trip = [] } = {}) => {
+  const text = clean(found);
+  if (!text || !hasFigure(text)) return [];
+  // containsName, not includes, for the reason notesFor gives a hundred lines
+  // up: "Ry" sits inside "ferry" and "Als" inside "also".
+  const here = (Array.isArray(trip) ? trip : []).map(clean).filter(Boolean);
+  const onTrip = (name) => here.some(t => fold(t) === fold(name) || containsName(t, name) || containsName(name, t));
+  const out = [];
+  for (const name of (Array.isArray(townNames) ? townNames : [])) {
+    const t = clean(name);
+    if (!t || !containsName(text, t) || onTrip(t)) continue;
+    if (!out.some(x => fold(x) === fold(t))) out.push(t);
+  }
+  return out;
+};
+
+const andList = (list) => {
+  const l = list.filter(Boolean);
+  if (l.length <= 1) return l[0] || "";
+  return `${l.slice(0, -1).join(", ")} and ${l[l.length - 1]}`;
+};
+
 // ── AND HANDED OVER AS SOMEBODY'S WORDS, NOT AS A FACT ──────────────
 //
 // The model is told three things about every line: who said it, when it
 // holds, and what a page made of it. A note that no page backs is still worth
 // saying and is not worth saying as though it were checked, and the
 // difference between those two is the whole reason this is safe.
-export const NOTE_LINE = (n) => {
+export const NOTE_LINE = (n, { townNames = [], trip = [] } = {}) => {
   const bits = [`"${n.said}"`];
   if (n.when) bits.push(`HOLDS: ${n.when}`);
+  // Where the page's own sentence prices a journey this trip does not make,
+  // the line says so in the same breath as the sentence, because a
+  // prohibition that arrives after the figures has already lost.
+  const away = (n.check === "depends" || n.check === "against") ? foundElsewhere(n.found, { townNames, trip }) : [];
+  // The page's sentence usually ends on a full stop of its own, and the line
+  // adds one after it. Trimmed here rather than in shapeNote, because the
+  // stored sentence is his and this is only about how it reads in a prompt.
+  const found = clean(n.found).replace(/[.\s]+$/, "");
+  const scoped = away.length
+    ? ` ITS FIGURES ARE FOR ${andList(away).toUpperCase()}, WHICH THIS TRIP DOES NOT GO TO, so say what it narrows and never a figure from it: not one of those numbers is about a journey in this trip.`
+    : "";
   if (n.kind === "advice") bits.push("THIS IS ADVICE, not a fact to check");
   else if (n.check === "holds") bits.push(`A page says the same${n.source ? ` (${hostOf(n.source)})` : ""}`);
-  else if (n.check === "depends") bits.push(`BUT a page narrows it: ${n.found}. Say that part too`);
-  else if (n.check === "against") bits.push(`A page says ${n.found}. Say his and say the page's, and let them choose`);
+  else if (n.check === "depends") bits.push(`BUT a page narrows it: ${found}.${scoped || " Say that part too"}`);
+  else if (n.check === "against") bits.push(`A page says ${found}.${scoped || " Say his and say the page's, and let them choose"}`);
   else bits.push("No page says either way, so say it as your own knowledge of the place");
   if (n.towns.length) bits.push(`ONLY FOR: ${n.towns.join(", ")}`);
   return `- ${bits.join(". ")}`;
@@ -407,7 +481,7 @@ const MODE_WORDS = {
 export const MODES_WITH_WORDS = Object.keys(MODE_WORDS);
 export const MODES_THE_APP_HAS = Object.keys(MODE_DAY_KM);
 
-export const notesBlock = (notes = [], { daysAhead = null } = {}) => {
+export const notesBlock = (notes = [], { daysAhead = null, townNames = [], trip = [] } = {}) => {
   const list = (Array.isArray(notes) ? notes : []).filter(Boolean);
   if (!list.length) return "";
   return `\n── WHAT YOU KNOW FROM LIVING HERE, WHICH IS ON NO PAGE ──\n`
@@ -445,6 +519,14 @@ export const notesBlock = (notes = [], { daysAhead = null } = {}) => {
     // lookups. A line about which of two is cheaper is an invitation to
     // supply the figures, and the figures are the part nobody checked.
     + `A LINE ABOUT WHICH OF TWO THINGS IS CHEAPER IS NOT A PRICE. Never put a figure on it that the line does not contain and that you have not looked up in this conversation: no fare, no "from X kroner", no "around Y right now". Say which is cheaper and what it depends on, and let them see the price where they buy it.\n`
+    // ── AND A FIGURE THAT IS CHECKED IS STILL CHECKED FOR SOMETHING ─
+    //
+    // The rule above is about a figure nobody looked up. This one is about a
+    // figure somebody did, put on the wrong thing, and it is the harder of
+    // the two to catch downstream because everything about it looks right.
+    // See foundElsewhere above: the mismatch is detected and named on the
+    // line itself, and this is the standing rule the naming rests on.
+    + `A FIGURE ON A PAGE BELONGS TO WHAT THAT PAGE'S SENTENCE NAMES, AND TO NOTHING ELSE. "For Copenhagen to Aarhus, the coach starts around 99 DKK" is a price for that crossing: moving it to another journey, another town or another product makes it a figure nobody checked, and that is worse than one you invented, because it arrives with a source on it. Where the thing a figure names is not in this trip, say which is cheaper and what it depends on, and leave every number out.\n`
     + `AND NEVER AS A MEMORY OR AN OCCASION. "Last time I was there", "when I did that crossing", "I paid", "it was about 40 kroner last time" are inventions: there was no such visit and no such figure, and a line above gives you none. Say the thing, never a story about how you learned it, and never a number the line does not contain.\n`
     + `WHAT YOU MAY NOT DO with one is give it the voice you use for something you looked up: no opening hours phrasing, no "they offer", no figure stated the way a price off a page is stated. If the traveller is about to spend money on it, say it is worth checking when they get there.\n`
     // ── AND THE ONE PHRASE THAT IS OUT ──────────────────────────────
@@ -494,7 +576,7 @@ export const notesBlock = (notes = [], { daysAhead = null } = {}) => {
         // said beside the measured leg and never in place of it.
         + `THE MAP AND EVERY LEG TIME ON THIS GUIDE ARE MEASURED, and a line above is not. A line may change WHAT THEY BUY for a leg and never what the route shows: never restate a duration, a departure time, a frequency or a route from one, and never say a measured leg is wrong. Where a cheaper operator runs a leg the plan already has, name it beside that leg as the cheaper way to do it, with what it depends on, and leave the timing to the measurement.\n`
       : "")
-    + `\n${list.map(NOTE_LINE).join("\n")}\n`;
+    + `\n${list.map(n => NOTE_LINE(n, { townNames, trip })).join("\n")}\n`;
 };
 
 // ── THE PASS THAT LOOKS FOR WHAT NARROWS IT ─────────────────────────

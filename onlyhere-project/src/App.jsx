@@ -128,6 +128,7 @@ import { ReviewsSection } from "./components/ReviewsSection";
 import { InstagramEmbed, isEmbeddablePost } from "./components/InstagramEmbed";
 import { Ico, EmojiIcon, FlagDK } from "./components/Icon";
 import { GemlyxLogo, GemlyxMark, GemlyxWordmark, GemlyxLoader, GemlyxIntro } from "./components/GemlyxLogo";
+import { AskGemlyxLauncher } from "./components/AskGemlyxLauncher";
 import { TypewriterText } from "./components/TypewriterText";
 import { GuidePreviewScreen } from "./components/GuidePreviewScreen";
 import { EventMatchCard } from "./components/EventMatchCard";
@@ -2684,6 +2685,42 @@ function GemlyxApp() {
     // what a visitor gets, and a legacy block with no flag opens unticked.
     setStudioReelActive(reelLive(reelBlock));
     setManageOpen(false);
+  };
+
+  // ── "HOW DO I MANUALLY WRITE THIS, AS A WHOLE DRAFT, INTO THE TIPS?" ─
+  //
+  // Oliver, 24 Sep 2026. He could not, and that is the answer rather than a
+  // setting he had missed.
+  //
+  // The whole editor is gated on `studioResult`, and only two things ever set
+  // it: generateArea, which spends a research run, and editItem, which opens a
+  // PUBLISHED row and sets editingId so Publish updates that row rather than
+  // inserting a new one. So writing a tip by hand meant either burning a
+  // research pass on a draft he was about to throw away, or opening somebody
+  // else's live entry and overwriting its JSON, which publishes over it.
+  //
+  // Neither is a workaround, they are two ways to lose work. This is the third
+  // door: the editor, open, empty, on a row that does not exist yet.
+  //
+  // SHAPED BY shapeForLive, not by a hand-typed object literal. That function
+  // is already the one door every insert goes through and it knows which
+  // fields each of the thirteen types carries, so a blank drafted here has
+  // exactly the keys a researched one has and no others. Typing the shape out
+  // again here would be a second answer to "what is an essential", and this
+  // file has learned what two answers to one question cost.
+  //
+  // editingId STAYS NULL, which is the whole difference from editItem and the
+  // reason Publish inserts instead of overwriting.
+  const writeItMyself = () => {
+    const name = String(studioTown || "").trim();
+    if (!name) { showToast("Type the name first, then write it yourself", 3500); return; }
+    clearPreviousEntry();
+    setStudioTown(name);
+    setEditingId(null);
+    const blank = shapeForLive(studioType, { name });
+    setStudioDraft(blank);
+    setStudioDraftText(JSON.stringify(blank, null, 2));
+    setStudioResult(`// Blank ${studioType} draft, written by hand. Nothing was researched, so nothing here is checked: every field is yours.\n// Publishing inserts a NEW row. For an essential, "kind" decides the list: "tip" puts it under Tips, "essential" under Essentials, empty leaves it unsorted.`);
   };
 
   // ── MEDIA EDITOR (Oliver: "we need to have the picture of it shown in the
@@ -10318,6 +10355,23 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
     return { ok: true, done };
   };
 
+  // ── WHERE A GEM'S SHOPS ARE ─────────────────────────────────────
+  //
+  // Oliver, 24 Sep 2026: "we need a 'location sweep'." The addresses go onto
+  // the row in the shape utils/branches.js already holds, through the same
+  // patch and the same in-place swap every other single-row write uses, so
+  // the Cheap gems page has them without a reload.
+  const saveGemBranches = async (rowId, picked) => {
+    const row = (manageItems || []).find(r => r?.id === rowId);
+    if (!row) return { ok: false, why: "That row is not in the list any more." };
+    const branches = mergeBranches(branchesOf(row.payload), (picked || []).map(branchFromCandidate).filter(Boolean));
+    const shaped = shapeForLive(GEM_TYPE, { ...(row.payload || {}), branches });
+    const got = await patchRowPayload(rowId, shaped);
+    if (!got?.ok) return { ok: false, why: got?.why || "Could not save it." };
+    if (applyEditedRow(Number(rowId), GEM_TYPE, shaped)) bumpLiveContent(v => v + 1);
+    return { ok: true };
+  };
+
   // ── AND PUBLISHING WHAT HE TOLD IT ──────────────────────────────
   // Through shapeForLive like every other insert. One at a time, because a
   // note is written one at a time.
@@ -17461,7 +17515,18 @@ THE LIST ABOVE COUNTS AS CONTEXT FOR recommendedStay, and it is the only list th
         // book the cheap advance fare, which is the wrong half for a trip
         // starting on the 1st. No date, no lead time, and the block then says
         // nothing about how far ahead they are.
-        { daysAhead: arrivalDate && datePrecision === "day" ? daysUntil(arrivalDate, nowForDates) : null },
+        {
+          daysAhead: arrivalDate && datePrecision === "day" ? daysUntil(arrivalDate, nowForDates) : null,
+          // ── AND WHICH CROSSING A CHECKED FARE IS FOR ──────────────
+          // Watched live on 24 Sep 2026: a page's "For Copenhagen to Aarhus,
+          // Kombardo Expressen starts around 99 DKK" came out in the money
+          // section of a Copenhagen to Aalborg guide, figures intact and
+          // route swapped. The plan's own towns are what settles it, and
+          // they are already worked out here. See foundElsewhere in
+          // utils/founderNotes.js.
+          townNames: towns.map(t => t?.name).filter(Boolean),
+          trip: plannerTowns,
+        },
       );
       const writerSaid = (aiMessages || []).filter(m => m.role === "user").map(m => m.text || "").join("\n");
       const writerLevel = travellerBudget(intakeBudgetText) || travellerBudget(writerSaid);
@@ -17928,13 +17993,27 @@ If the conversation only covers a single day or a few stops with no explicit day
       // never falls back to a stored rate: a hardcoded rate is wrong by a little
       // at first and by a lot later, without ever saying so.
       let fxLine = null;
+      // ── DOLLARS AND EUROS ON EVERY GUIDE ──────────────────────────
+      //
+      // Oliver, 24 Sep 2026: "convert it to US dollars and Euro when guide
+      // shows."
+      //
+      // This used to fetch a rate only when a signed-in reader had set a
+      // country, which is almost nobody, so almost no guide carried the line
+      // at all. Visitors to Denmark come overwhelmingly from the eurozone or
+      // the States, so those two are the default and the account's own
+      // currency joins them when it is a third thing.
+      //
+      // ONE CALL FOR ALL OF THEM, so every rate on a guide shares one ECB
+      // publication date. See api/fx.js.
       const wantFx = homeCurrency(userProfile?.country);
-      if (wantFx) {
+      const fxWanted = [...new Set(["USD", "EUR", ...(wantFx ? [wantFx] : [])])];
+      {
         try {
-          const fxRes = await fetch(`/api/fx?to=${encodeURIComponent(wantFx)}`);
+          const fxRes = await fetch(`/api/fx?to=${encodeURIComponent(fxWanted.join(","))}`);
           if (fxRes.ok) {
             const fxData = await fxRes.json();
-            if (Number(fxData?.amount) > 0) fxLine = fxData;
+            if (Array.isArray(fxData?.rates) ? fxData.rates.length > 0 : Number(fxData?.amount) > 0) fxLine = fxData;
           }
         } catch { /* no rate, no line, no harm */ }
       }
@@ -19076,6 +19155,46 @@ If the conversation only covers a single day or a few stops with no explicit day
       } catch { setLocating("failed"); }
     }, () => setLocating("refused"), { timeout: 10000, maximumAge: 60000 });
   };
+  // ── AND THE SAME THING AS A TICK ON THE INTAKE ──────────────
+  //
+  // Oliver, 24 Sep 2026: "Also, make a tick of 'starting from my current
+  // location'."
+  //
+  // The chip above sends a sentence into the chat. This fills the STARTING
+  // POINT box instead, which is the field the guide build reads, so a
+  // traveller who fills the form rather than talking gets the same thing.
+  //
+  // THE SAME DISCIPLINE AS THE CHIP, deliberately: the fix is turned into a
+  // TOWN here and the town is what lands in the box. No coordinate is stored,
+  // put in state, or sent anywhere but the one reverse lookup that names it.
+  // Unticking clears the box, because a starting point nobody chose is worse
+  // than none: the blank means Copenhagen Airport and says so on the label.
+  const [startHere, setStartHere] = useState(false);
+  const [startHereState, setStartHereState] = useState("");
+  const useMyLocationAsStart = (on) => {
+    setStartHere(on);
+    setStartHereState("");
+    if (!on) { setIntakeStartPoint(""); return; }
+    if (typeof navigator === "undefined" || !navigator.geolocation) { setStartHereState("failed"); setStartHere(false); return; }
+    setStartHereState("asking");
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+      try {
+        const { latitude, longitude } = pos.coords || {};
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) { setStartHereState("failed"); setStartHere(false); return; }
+        const data = await nominatimJson(reverseUrl(latitude, longitude), { cache: false });
+        const town = townFromReverse(data);
+        // No town, no starting point. A reverse lookup that came back with a
+        // road and nothing else is refused rather than read further down the
+        // object, which is the one path that could put an address in the box.
+        if (!town) { setStartHereState("failed"); setStartHere(false); return; }
+        // The country only when it is not this one, and by its CODE, because
+        // `country` comes back in the reader's own language.
+        setIntakeStartPoint(isDenmark(data) ? town : [town, countryFromReverse(data)].filter(Boolean).join(", "));
+        setStartHereState("");
+      } catch { setStartHereState("failed"); setStartHere(false); }
+    }, () => { setStartHereState("refused"); setStartHere(false); }, { timeout: 10000, maximumAge: 60000 });
+  };
+
   const [chatResetAsk, setChatResetAsk] = useState(false);
   const [intakeArrival, setIntakeArrival] = useState("");
   const departurePickerRef = useRef(null);
@@ -20334,8 +20453,11 @@ If the conversation only covers a single day or a few stops with no explicit day
   // rather than at each of them. The id never moves: it is the routing key and
   // the tab order, and translating it would have made goTab language-dependent.
   //
-  // "✦ Gemlyx Detour" comes back untranslated from the catalogue on purpose.
-  // A product name is a proper noun and readerLanguage.js has the rule.
+  // The Detour's own entry used to come back untranslated as "✦ Gemlyx Detour",
+  // on the proper-noun rule in readerLanguage.js. It is now "✦ Plan my trip"
+  // and it translates, because a door labelled with a product name is a door a
+  // first-time visitor cannot find: see nav.ai in utils/uiLanguage.js for the
+  // whole of why. The page it opens still carries the name.
   const NAV_ITEMS = [
     { id: "home", label: uiT("nav.home", uiLang), ico: "compass" },
     { id: "essentials", label: uiT("nav.essentials", uiLang), ico: "map" },
@@ -21046,9 +21168,15 @@ If the conversation only covers a single day or a few stops with no explicit day
         : "";
 
       const HELD_TOWNS_IN_A_PROMPT = 3;
-      const namedByThem = towns
-        .filter(t => t?.name && mentionsPlace(travellerTurns.join("\n"), t.name))
-        .slice(0, HELD_TOWNS_IN_A_PROMPT);
+      // ── AND THE UNCAPPED LIST, FOR A DIFFERENT QUESTION ───────────
+      // The cap below is about prompt size: three towns is as much held
+      // material as one reply can carry. Whether a town is on this trip is
+      // not a question with a budget, and answering it off a truncated list
+      // would call the fourth town they named somewhere they are not going.
+      // See foundElsewhere in utils/founderNotes.js.
+      const townsTheyNamed = towns
+        .filter(t => t?.name && mentionsPlace(travellerTurns.join("\n"), t.name));
+      const namedByThem = townsTheyNamed.slice(0, HELD_TOWNS_IN_A_PROMPT);
       const heldBlock = !namedByThem.length ? "" : `\n── WHAT GEMLYX ALREADY HOLDS ON THE PLACES THEY NAMED ──\nEvery line below is off a published, fact-checked entry. It is the material for the give-before-you-ask rule: say ONE of these things, in your own words, and never more than one.\n\n${namedByThem.map(t => [
         `${t.name}:`,
         cardLine(t),
@@ -21126,7 +21254,16 @@ If the conversation only covers a single day or a few stops with no explicit day
       // The town is the first one they named, which is the one namedByThem
       // was already computed for a few lines above. A note scoped to a town
       // reaches a conversation that has said the town, and no other.
-      const localSays = notesBlock(notesFor(travellerTurns.join("\n"), founderNotes, { town: namedByThem[0]?.name || "" }));
+      const localSays = notesBlock(
+        notesFor(travellerTurns.join("\n"), founderNotes, { town: namedByThem[0]?.name || "" }),
+        // ── AND WHERE THE PAGE'S FIGURES ARE FROM ──────────────────
+        // A note's narrowing sentence can price a crossing this traveller is
+        // not making, and a chat that repeats the figures has handed them a
+        // checked number about somebody else's journey. The towns they have
+        // named are what this conversation is about; anything else in that
+        // sentence is not. See foundElsewhere in utils/founderNotes.js.
+        { townNames: towns.map(t => t?.name).filter(Boolean), trip: townsTheyNamed.map(t => t.name) },
+      );
       // ── AND THE SAVINGS IT HAS ALREADY CHECKED ────────────────────
       //
       // Oliver, 24 Sep 2026, on a live reply that named NightPay's catch and
@@ -24771,6 +24908,15 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           eat") — queues the typed name with the selected type;
                           the queue runs itself in the background one draft at a
                           time and collects results below. */}
+                      {/* ── AND THE DOOR THAT SPENDS NOTHING ──────────
+                          Oliver, 24 Sep 2026: "How to I manually write this, as
+                          a whole draft, into the tips?" Until this button there
+                          was no way to: the editor only opened after a research
+                          run or on top of a published row. See writeItMyself. */}
+                      <button onClick={writeItMyself} title="Opens the editor on a blank draft of this type. Nothing is researched and nothing is spent."
+                        style={{ background: "none", border: `1px solid ${C.gold}66`, borderRadius: 10, padding: "10px 14px", fontSize: 12, fontWeight: 700, color: C.gold, cursor: "pointer", fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>
+                        ✎ Write it myself
+                      </button>
                       <button onClick={addToDraftQueue} title="Add to the draft queue. Nothing is researched until you press Start."
                         style={{ background: "none", border: `1px solid ${C.gold}66`, borderRadius: 10, padding: "10px 14px", fontSize: 12, fontWeight: 700, color: C.gold, cursor: "pointer", fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>
                         ＋ Queue
@@ -25283,6 +25429,8 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     {(
                       <CheapGemsPanel
                         existing={(manageItems || []).filter(r => r?.type === GEM_TYPE).map(r => r?.payload?.name)}
+                        published={(manageItems || []).filter(r => r?.type === GEM_TYPE)}
+                        onLocate={saveGemBranches}
                         onPublish={publishGems}
                         readPage={readSourcePage}
                         readImage={readPosterText} />
@@ -29727,9 +29875,18 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
 
                   <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Starting point <span style={{ textTransform: "none", fontWeight: 400 }}>(blank = Copenhagen Airport)</span></div>
                   <div style={{ marginBottom: 14 }}>
-                    <input value={intakeStartPoint} onChange={e => setIntakeStartPoint(e.target.value)}
+                    <input value={intakeStartPoint} onChange={e => { setIntakeStartPoint(e.target.value); if (startHere) { setStartHere(false); setStartHereState(""); } }}
                       placeholder="e.g. Germany, Billund Airport, Aarhus, or leave blank"
                       style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "11px 13px", fontSize: 13, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif", boxSizing: "border-box" }} />
+                    <label style={{ display: "inline-flex", alignItems: "center", gap: 7, marginTop: 8, fontSize: 12, color: startHere ? C.gold : C.light, cursor: startHereState === "asking" ? "default" : "pointer" }}>
+                      <input type="checkbox" checked={startHere} disabled={startHereState === "asking"}
+                        onChange={e => useMyLocationAsStart(e.target.checked)}
+                        style={{ accentColor: C.gold, cursor: startHereState === "asking" ? "default" : "pointer" }} />
+                      {startHereState === "asking" ? "Finding you…"
+                        : startHereState === "refused" ? "Starting from my current location (your browser said no)"
+                          : startHereState === "failed" ? "Starting from my current location (that did not work)"
+                            : "Starting from my current location"}
+                    </label>
                   </div>
 
                   {/* MORE EXPLICIT (Oliver: "The 'fine-tune the plan' should be
@@ -31982,6 +32139,23 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           // empty composer hands the work back to the traveller.
           askGemlyx={(seed) => { if (seed) setPreviewChatInput(seed); setPreviewChatOpen(true); }}
         />
+      )}
+      {/* ── AND THE CORNER DOOR ON EVERY OTHER PAGE ───────────────
+          Oliver, 24 Sep 2026: "my friend signed into my website but asked
+          'where is the AI'.. hmm.. do you think it is too difficult to find?"
+
+          The header button is always on screen and his friend looked straight
+          at it, so the label was changed (see nav.ai in utils/uiLanguage.js).
+          This is the other half: a reader four screens into a town page has
+          the header above the fold and nothing in front of them.
+
+          NOT ON THE DETOUR ITSELF, where it would take you where you already
+          are, and not while anything is over the page: the preview has its own
+          launcher in the right corner, a guide has one on its own page, and a
+          third button appearing under a thumb depending on what is open is
+          worse than no button. See components/AskGemlyxLauncher.jsx. */}
+      {active !== "ai" && !guideModal && !showMenu && !eventDetail && !townDetail && !nightlifeDetail && !shopDetail && !freeDetail && !foodDetail && !craftDetail && (
+        <AskGemlyxLauncher C={C} label={uiT("nav.askLauncher", uiLang)} onOpen={() => goTab("ai")} />
       )}
       {/* PREVIEW CHAT — floating Ask Gemlyx corner launcher + panel ON TOP of
           the preview overlay (zIndex 960 > the preview's 950), per Oliver:

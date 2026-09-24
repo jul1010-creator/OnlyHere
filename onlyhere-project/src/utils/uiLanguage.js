@@ -101,7 +101,30 @@ export const UI_STRINGS = {
   // this page is the general one.
   "nav.islands":     { en: "Islands",         da: "Øer",            de: "Inseln" },
   // The product name, untranslated in all three. See the note above.
-  "nav.ai":          { en: "✦ Gemlyx Detour", da: "✦ Gemlyx Detour", de: "✦ Gemlyx Detour" },
+  // ── "WHERE IS THE AI" ───────────────────────────────────────────
+  //
+  // Oliver, 24 Sep 2026, of a friend who had just signed in: "my friend signed
+  // into my website but asked 'where is the AI'.. hmm.. do you think it is too
+  // difficult to find?"
+  //
+  // It is not hidden. This button sits OUTSIDE the scrolling nav strip and is
+  // always on screen, which is the fix from 5 September, and his friend looked
+  // straight at it and asked anyway. That is a naming result, not a placement
+  // one, and it means a bigger button would not have helped.
+  //
+  // "Gemlyx Detour" is a proper noun and contains no word a person scanning for
+  // an AI would match: not ask, not chat, not plan. The ✦ does not carry it
+  // either, because the same mark is on Gemlyx Find and Gemlyx Intelligence, so
+  // it reads as the brand rather than as a door.
+  //
+  // So the DOOR says what it opens and the PAGE still teaches the name: the
+  // Detour page's own heading is "Gemlyx Detour" and is untouched. And because
+  // this is no longer a proper noun, it translates, which the old value was
+  // deliberately exempt from.
+  "nav.ai":          { en: "✦ Plan my trip", da: "✦ Planlæg min tur", de: "✦ Meine Reise planen" },
+  // The corner door on every other page, which says the verb the header's now
+  // says too. Shorter, because it sits over the content rather than in a bar.
+  "nav.askLauncher": { en: "Ask Gemlyx",      da: "Spørg Gemlyx",   de: "Gemlyx fragen" },
 
   // The front-page category filter, which is a SECOND render site holding four
   // of the same words. Those four reuse the nav keys rather than getting a
@@ -394,6 +417,8 @@ export const UI_STRINGS = {
   "guide.pricedInDkk":  { en: "Everything here is priced in DKK, which is what you will be charged.", da: "Alt her er i danske kroner, og det er også det, du bliver trukket.", de: "Alles hier ist in dänischen Kronen ausgezeichnet, und genau das wird auch abgebucht." },
   "guide.wasAbout":     { en: "was about", da: "svarede til cirka", de: "waren etwa" },
   "guide.onDate":       { en: "on",       da: "den",     de: "am" },
+  // Joins the last two rates when a guide carries more than one.
+  "guide.orAbout":      { en: "or about", da: "eller cirka", de: "oder etwa" },
   "guide.ratesMoved":   { en: "so rates will have moved a little by the time you travel.", da: "så kurserne har flyttet sig en smule, når du rejser.", de: "die Kurse werden sich bis zu deiner Reise also ein wenig bewegt haben." },
 
   // ── THE SENTENCE UNDER EVERY PAID LINK ────────────────────────────

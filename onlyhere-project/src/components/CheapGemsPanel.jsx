@@ -2,7 +2,7 @@ import { useState } from "react";
 import { C } from "../utils/theme";
 import { askOpenAI } from "../utils/aiClient";
 import { menuImagesToRead, textHasPrice, hostOf } from "../utils/pageScan";
-import { gemSearches, gemSearchesFor, ownPagesIn, pageAsResult, GEMS_PROMPT, settleGems, gemRunNotes, gemProblems, isCouponSite, isDataSite, WHERE_LABEL, saidLine } from "../utils/cheapGems";
+import { gemSearches, gemSearchesFor, ownPagesIn, pageAsResult, GEMS_PROMPT, settleGems, gemRunNotes, gemProblems, isCouponSite, isDataSite, WHERE_LABEL, saidLine, gemsToLocate, gemBranchesFound, gemLocateNote } from "../utils/cheapGems";
 
 // ── FINDING CHEAP GEMS, FOR HIM TO PICK ─────────────────────────────
 //
@@ -25,7 +25,7 @@ const parseJson = (text) => {
   try { return JSON.parse(raw.slice(a, b + 1)); } catch { return null; }
 };
 
-export const CheapGemsPanel = ({ existing = [], onPublish, readPage = null, readImage = null }) => {
+export const CheapGemsPanel = ({ existing = [], published = [], onPublish, onLocate = null, readPage = null, readImage = null }) => {
   const [place, setPlace] = useState("");
   const [named, setNamed] = useState("");
   // ── WHAT HE ALREADY KNOWS THE DEAL IS ─────────────────────────────
@@ -40,6 +40,8 @@ export const CheapGemsPanel = ({ existing = [], onPublish, readPage = null, read
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [added, setAdded] = useState("");
+  // What the location sweep came back with, one entry per published gem.
+  const [found, setFound] = useState([]);
 
   const have = new Set(existing.map(n => String(n || "").trim().toLowerCase()));
   const statusOf = (r) => {
@@ -139,6 +141,49 @@ export const CheapGemsPanel = ({ existing = [], onPublish, readPage = null, read
     setBusy("");
   };
 
+  // ── THE LOCATION SWEEP ────────────────────────────────────────────
+  //
+  // Oliver, 24 Sep 2026: "we need a 'location sweep'. Now, some will be all of
+  // Denmark, just make a 'store closest to me'." One call to places-locate per
+  // published gem that has no shops on it yet, the chains first, and every
+  // address ticked the way the single-entry lookup already ticks them: named
+  // like the brand is ticked, anything else is shown and left for him.
+  const toLocate = gemsToLocate(published);
+  const sweepOne = async (row) => {
+    const res = await fetch(`/api/places-locate?limit=12&name=${encodeURIComponent(row.gem.name)}`);
+    const data = await res.json().catch(() => null);
+    if (data?.error) throw new Error(String(data.error).slice(0, 120));
+    const found = gemBranchesFound(row.gem, data?.candidates);
+    return { ...row, found, chosen: new Set(found.map((c, i) => (c.matches ? i : -1)).filter(i => i >= 0)) };
+  };
+  const sweep = async () => {
+    if (!toLocate.length) return;
+    setBusy("locating"); setError(""); setAdded("");
+    const out = [];
+    try {
+      for (const row of toLocate) out.push(await sweepOne(row));
+    } catch (err) {
+      setError(String(err?.message || err).slice(0, 200));
+    }
+    setFound(out);
+    setBusy("");
+  };
+  const saveFound = async () => {
+    if (!onLocate) return;
+    setBusy("saving"); setError(""); setAdded("");
+    let done = 0;
+    for (const row of found) {
+      const picked = [...row.chosen].map(i => row.found[i]).filter(Boolean);
+      if (!picked.length) continue;
+      const got = await onLocate(row.id, picked);
+      if (!got?.ok) { setError(got?.why || "Could not save the shops."); setBusy(""); return; }
+      done += 1;
+    }
+    setAdded(`${done} now know where their shops are.`);
+    setFound([]);
+    setBusy("");
+  };
+
   const box = { background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "11px 13px", marginTop: 12 };
   const count = rows.filter((r, i) => picked[i] && !statusOf(r).blocks).length;
   return (
@@ -164,6 +209,43 @@ export const CheapGemsPanel = ({ existing = [], onPublish, readPage = null, read
         <input value={deal} onChange={e => setDeal(e.target.value)} placeholder="The deal, in your words, if you know it"
           style={{ flex: "1 1 260px", minWidth: 0, background: C.surface, border: `1px solid ${C.border}`, color: C.text, borderRadius: 8, padding: "7px 10px", fontSize: 11.5, fontFamily: "'Inter', sans-serif" }} />
       </div>
+      {(toLocate.length > 0 || found.length > 0) && onLocate && (
+        <div style={{ marginTop: 11, paddingTop: 9, borderTop: `1px solid ${C.border}` }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.1, textTransform: "uppercase" }}>
+              Where their shops are
+            </div>
+            <button onClick={sweep} disabled={!!busy || !toLocate.length}
+              style={{ background: "none", border: `1px solid ${C.gold}66`, borderRadius: 100, padding: "5px 12px", fontSize: 10.5, fontWeight: 700, color: C.gold, cursor: busy || !toLocate.length ? "default" : "pointer", opacity: busy || !toLocate.length ? 0.5 : 1, fontFamily: "'Inter', sans-serif" }}>
+              {busy === "locating" ? "Looking…" : `Sweep ${toLocate.length}`}
+            </button>
+          </div>
+          {found.map((row, ri) => (
+            <div key={row.id ?? ri} style={{ marginTop: 8 }}>
+              <div style={{ fontSize: 10.5, color: C.muted }}>{gemLocateNote(row.gem.name, row.found)}</div>
+              {row.found.map((c, i) => (
+                <label key={i} style={{ display: "flex", gap: 7, alignItems: "flex-start", fontSize: 11, color: C.light, marginTop: 3, cursor: "pointer" }}>
+                  <input type="checkbox" checked={row.chosen.has(i)}
+                    onChange={() => setFound(prev => prev.map((r, j) => {
+                      if (j !== ri) return r;
+                      const next = new Set(r.chosen);
+                      if (next.has(i)) next.delete(i); else next.add(i);
+                      return { ...r, chosen: next };
+                    }))}
+                    style={{ marginTop: 3, accentColor: C.gold, cursor: "pointer" }} />
+                  <span>{[c.address, c.town].filter(Boolean).join(", ")}{c.found && !c.matches ? ` (listed as ${c.found})` : ""}</span>
+                </label>
+              ))}
+            </div>
+          ))}
+          {found.length > 0 && (
+            <button onClick={saveFound} disabled={!!busy}
+              style={{ marginTop: 9, background: C.gold, border: "none", borderRadius: 100, padding: "7px 14px", fontSize: 11, fontWeight: 700, color: C.onGold, cursor: busy ? "default" : "pointer", opacity: busy ? 0.5 : 1, fontFamily: "'Inter', sans-serif" }}>
+              {busy === "saving" ? "Saving…" : "Save the ticked ones"}
+            </button>
+          )}
+        </div>
+      )}
       {notes.length > 0 && (
         <ul style={{ margin: "9px 0 0", paddingLeft: 15, fontSize: 10.5, color: C.muted, lineHeight: 1.55 }}>
           {notes.map((n, i) => <li key={i}>{n}</li>)}

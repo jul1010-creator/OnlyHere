@@ -193,10 +193,13 @@ writeFileSync(entry, `
   export { RIGHTS_HOLDER, copyrightLine, GUIDE_RIGHTS_SHORT, GUIDE_RIGHTS_FULL, TDM_RESERVATION } from ${JSON.stringify(join(root, "src/utils/rights.js"))};
   export { guideHero, heroCaption } from ${JSON.stringify(join(root, "src/utils/guideHero.js"))};
   export { nameFit, describeNameFit } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
-  export { stayTextProblem, stayTextForReader, withoutStump, withoutDayTripClaim as wdtc } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
+  export { stayTextProblem, stayTextForReader, withoutStump, withoutDayTripClaim as wdtc, stayFigure, withoutStayFigure } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
   export { offerReason as offerReasonFn, rowThemeWords, ARRIVAL_WORDS } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
   export { nightPriceFrom } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
   export { bedsEstimate, tripEstimate, describeTrip } from ${JSON.stringify(join(root, "src/utils/costLedger.js"))};
+  export { FUEL_PRICE, FUEL_USE, roadKm, fuelCost, describeFuel, fuelAge, FUEL_STALE_DAYS, drivingLegs, DRIVEN_MODES } from ${JSON.stringify(join(root, "src/utils/fuel.js"))};
+  export { pagerStep, pagerAt, canStep, swipeDirection, pagerLabel, PAGER_MODES, SWIPE_MIN_PX } from ${JSON.stringify(join(root, "src/utils/dayPager.js"))};
+  export { FOOD_TIERS, FOOD_TIER_DEFAULT, foodTier, tierCost, tierDayRate, describeTier, GROCERY_DAY, SHOP_BASKET, STREET_MEAL, FLEXIBLE_MEAL, REGION_SPREAD_NOTE, BUDGET_WARNING, MEALS_A_DAY_OPTIONS, MEALS_A_DAY_DEFAULT, cleanMeals, BASKET_DAYS } from ${JSON.stringify(join(root, "src/utils/mealsEstimate.js"))};
   export { isSplurge, SPLURGE_KR } from ${JSON.stringify(join(root, "src/utils/budgetFit.js"))};
   export { profileFromWords, FIT_STRONG as FIT_STRONG_WORD } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
   export { priceAverageKr } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
@@ -270,8 +273,8 @@ writeFileSync(entry, `
   export { PARTNER_OPENER, PARTNER_INTRO, partnerSections, partnerCount } from ${JSON.stringify(join(root, "src/utils/partnerSheet.js"))};
   export { baseKey, staysIn as stayRunsIn, doorsFor, doorOn, sameBaseLine, nightsLabel } from ${JSON.stringify(join(root, "src/utils/stayDoors.js"))};
   export { SECTIONS as DIR_SECTIONS, ROW_KINDS, kindOf as dirKindOf, directoryLinks, pathWord, ferryDoorIn, DIRECTORY_PROMPT, rowsFromDirectory, directoryProblems, staysIn, eatsIn, islandSaysBlock, ISLAND_SAYS } from ${JSON.stringify(join(root, "src/utils/islandDirectory.js"))};
-  export { GEM_TYPE, GEM_KINDS, GEM_SECTION, WHERE_LABEL, RECHECK_DAYS, STALE_DAYS, isCouponSite, isOwnSite, shapeGem, gemProblems, gemLive, gemsView, checkedLabel, checkedAgo, isDataSite, gemWhere, gemCategory, isForStudents, gemMatches, gemFilterOptions, GEM_CATEGORIES, GEM_CATEGORY_LABEL, gemSearches, gemSearchesFor, ownPagesIn, pageAsResult, MAX_OWN_PAGES, GEMS_PROMPT, settleGems, gemRunNotes, gemsForGuide, gemHeading, SAID_CHECKS, saidLine, saidWords, gemsForChat, gemsChatBlock, MAX_CHAT_GEMS, isForeignStore, AUDIENCES, AUDIENCE_LABEL, audienceIn, partySays, gemFitsParty } from ${JSON.stringify(join(root, "src/utils/cheapGems.js"))};
-  export { NOTE_TYPE, NOTE_KINDS, NOTE_KIND_LABEL, NOTE_KIND_MEANING, NOTE_CHECKS, NOTE_LIFE, NOTE_RECHECK, shapeNote, noteProblems, noteLive, noteAgo, noteSubjects, notesFor, notesForGuide, notesBlock, NOTE_LINE, MAX_NOTES, noteSearches, NOTE_PROMPT, settleNote, noteRunNotes, namesPublished, ALREADY_SAID, alreadySaid, aboutWords, MODES_WITH_WORDS, MODES_THE_APP_HAS } from ${JSON.stringify(join(root, "src/utils/founderNotes.js"))};
+  export { GEM_TYPE, GEM_KINDS, GEM_SECTION, WHERE_LABEL, RECHECK_DAYS, STALE_DAYS, isCouponSite, isOwnSite, shapeGem, gemProblems, gemLive, gemsView, checkedLabel, checkedAgo, isDataSite, gemWhere, gemCategory, isForStudents, gemMatches, gemFilterOptions, GEM_CATEGORIES, GEM_CATEGORY_LABEL, gemSearches, gemSearchesFor, ownPagesIn, pageAsResult, MAX_OWN_PAGES, GEMS_PROMPT, settleGems, gemRunNotes, gemsForGuide, gemHeading, SAID_CHECKS, saidLine, saidWords, gemsForChat, gemsChatBlock, MAX_CHAT_GEMS, isForeignStore, AUDIENCES, AUDIENCE_LABEL, audienceIn, partySays, gemFitsParty, gemNearest, gemsToLocate, gemBranchesFound, gemLocateNote } from ${JSON.stringify(join(root, "src/utils/cheapGems.js"))};
+  export { NOTE_TYPE, NOTE_KINDS, NOTE_KIND_LABEL, NOTE_KIND_MEANING, NOTE_CHECKS, NOTE_LIFE, NOTE_RECHECK, shapeNote, noteProblems, noteLive, noteAgo, noteSubjects, notesFor, notesForGuide, notesBlock, NOTE_LINE, hasFigure, foundElsewhere, MAX_NOTES, noteSearches, NOTE_PROMPT, settleNote, noteRunNotes, namesPublished, ALREADY_SAID, alreadySaid, aboutWords, MODES_WITH_WORDS, MODES_THE_APP_HAS } from ${JSON.stringify(join(root, "src/utils/founderNotes.js"))};
   export { toolUsesIn, toolResultsFor, queriesIn, NO_ANSWER, nothingToSearch } from ${JSON.stringify(join(root, "src/utils/toolTurn.js"))};
   export { reelLive, withLiveReels, reelCount } from ${JSON.stringify(join(root, "src/utils/reelGate.js"))};
   export { sentencesIn, readerBody, noticeAsk, noticeText, TRANSLATE_NOTICE, translatedNotice, DEAD_ENDS } from ${JSON.stringify(join(root, "src/utils/noticeVoice.js"))};
@@ -36722,13 +36725,444 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
            /partnerDisclosure\(partnered\[0\]\)/.test(costs));
       }
       ok("and only about what the day is short of", /addInOffers\(day, \{ kindOf: addInKind \}\)/.test(gp));
-      ok("and hands the question over naming the day",
-         /navigate\("\/", \{ state: \{ detourAsk: addInSeed\(cat, \{ town, dayNo \}\) \} \}\)/.test(gp));
+      // ── AND THE NEARBY LIST HAS TO HAVE AN ANCHOR ─────────────────
+      //
+      // Oliver, 24 Sep 2026: "when you click this, it takes you back to
+      // detour.. it should not do that. It should give a list of options
+      // nearby." It could not. The anchor was resolved with
+      // resolveStopCoords(s, guide), and that function's signature is
+      // (name, geo, town): a stop object for a name and the whole guide for a
+      // geo map. Every lookup missed, the anchor was null on every day of
+      // every guide, addInNear was never reached, and the panel fell through
+      // to its own empty line with the door back to the Detour underneath.
+      //
+      // Asserted on the SHAPE rather than on the call existing, because a call
+      // existed the whole time. Two arguments into a three argument function
+      // is legal JavaScript, which is why nothing caught this: the name and
+      // the town are the two that were wrong, so the name and the town are
+      // what this checks.
+      ok("the nearby list is anchored with a stop name, a geo map and a town",
+         /resolveStopCoords\(s\.name, guide\._geo \|\| \{\}, stopTown\(s\)\)/.test(gp));
+      ok("and never with the stop object and the whole guide",
+         !/resolveStopCoords\(s, guide\)/.test(gp));
+      // ── AND THE ASK DOES NOT COST THEM THE GUIDE ──────────────────
+      //
+      // "/" is where GemlyxApp remounts, and lastBuiltGuide is state inside
+      // it, so the seeded route threw away the guide the reader was standing
+      // in. One more stop meant building the whole trip again, which is a
+      // second run and a second bill. This page has its own chat panel that
+      // answers about THIS guide without unmounting it.
+      ok("the ask opens the guide's own chat with the question typed",
+         /setChatInput\(addInSeed\(cat, \{ town, dayNo \}\)\); setChatOpen\(true\);/.test(gp));
+      ok("and never routes back to the Detour",
+         !/navigate\("\/", \{ state: \{ detourAsk/.test(gp));
       ok("the chat types it rather than sending it", /setAiInput\(seed\);/.test(appG));
       ok("and clears it so a refresh does not put it back",
          /navigate\(location\.pathname, \{ replace: true, state: null \}\);/.test(appG));
     }
   }
+  // ── "HOW DO I MANUALLY WRITE THIS, AS A WHOLE DRAFT, INTO THE TIPS?" ─
+  //
+  // Oliver, 24 Sep 2026. He could not. The editor is gated on studioResult and
+  // only two things set it: generateArea, which spends a research run, and
+  // editItem, which opens a PUBLISHED row with editingId set so Publish
+  // overwrites it. So hand-writing a tip meant burning a pass or publishing
+  // over a live entry.
+  {
+    const appW = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("there is a door that opens the editor with nothing researched",
+       /const writeItMyself = \(\) => \{/.test(appW));
+    ok("and it is on the panel beside Draft it",
+       /onClick=\{writeItMyself\}/.test(appW));
+    // SHAPED BY shapeForLive: the one door every insert already goes through,
+    // so a blank has exactly the keys a researched draft has and no others.
+    // Typing the shape out again would be a second answer to "what is an
+    // essential".
+    ok("the blank is shaped by the same function every insert uses",
+       /const blank = shapeForLive\(studioType, \{ name \}\);/.test(appW));
+    ok("and it fills both the draft and the text the publisher reads",
+       /setStudioDraft\(blank\);/.test(appW) && /setStudioDraftText\(JSON\.stringify\(blank, null, 2\)\);/.test(appW));
+    // THE WHOLE DIFFERENCE FROM editItem. A blank draft that kept editingId
+    // would publish over whichever row was last open.
+    ok("it publishes as a new row rather than over the last one opened",
+       /const writeItMyself[\s\S]{0,900}?setEditingId\(null\);/.test(appW));
+    // A name is what every type is keyed on, and liveContent drops a payload
+    // with no name on the way in.
+    ok("and it refuses to open on no name at all",
+       /const writeItMyself[\s\S]{0,400}?if \(!name\)/.test(appW));
+    // The note on the blank says which list an essential lands on, because
+    // `kind` is the field that decides Tips against Essentials and nothing on
+    // the screen would otherwise say so.
+    ok("the blank says how to put an essential under Tips",
+       /"tip" puts it under Tips/.test(appW));
+  }
+
+  // ── "CONVERT IT TO US DOLLARS AND EURO WHEN GUIDE SHOWS" ────────
+  //
+  // Oliver, 24 Sep 2026. The rate used to be fetched only when a signed-in
+  // reader had set a country, which is almost nobody, so almost no guide
+  // carried the line at all.
+  {
+    const fxSrc = readFileSync(join(root, "api/fx.js"), "utf8");
+    const appFx = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("dollars and euros are asked for on every guide",
+       /\["USD", "EUR", \.\.\.\(wantFx \? \[wantFx\] : \[\]\)\]/.test(appFx));
+    // ONE CALL FOR ALL OF THEM. Asking twice would let a build straddle 16:00
+    // CET and stamp two different ECB dates on one line.
+    ok("in one request, so every rate shares a publication date",
+       /symbols=\$\{asked\.join\(","\)\}/.test(fxSrc));
+    ok("the account's own currency joins them rather than replacing them",
+       /new Set\(\["USD", "EUR"/.test(appFx));
+    // The list goes into somebody else's URL.
+    ok("the currencies are still checked against the allow-list", /const bad = asked\.find\(c => !ALLOWED\.has\(c\)\)/.test(fxSrc));
+    ok("and the list is bounded", /asked\.length > 4/.test(fxSrc));
+    ok("DKK is still refused", /asked\.includes\("DKK"\)/.test(fxSrc));
+    // A currency the ECB did not price must not cost a reader the one it did.
+    ok("a missing rate is dropped rather than zeroed", /asked\.map\(priced\)\.filter\(Boolean\)/.test(fxSrc));
+    ok("and nothing at all is still a refusal", /if \(!rates\.length\)/.test(fxSrc));
+    // Guides saved before today carry only the flat pair and render from their
+    // own stored copy.
+    ok("the old single-currency shape is still returned", /\n      to: first\.to,\n      amount: first\.amount,/.test(fxSrc));
+    const gpFx = stripComments(readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8"));
+    ok("and the page still reads it for a guide saved before this",
+       /Number\(fx\?\.amount\) > 0 \? \[\{ to: fx\.to, amount: fx\.amount \}\] : \[\]/.test(gpFx));
+    ok("the page lists every rate it was given", /rates\.map\(r => `\$\{r\.amount\} \$\{r\.to\}`\)/.test(gpFx));
+    ok("and says nothing at all when there is no rate", /if \(!rates\.length\) return null;/.test(gpFx));
+  }
+
+  // ── "MAKE 3 OPTIONS YOU CAN CLICK ON" ───────────────────────────
+  //
+  // Oliver, 24 Sep 2026, then four corrections, each of which moved the design
+  // rather than a number.
+  //
+  //   1. "the 'Prinsen's Pizza' one has no 30 dkk." The first version took the
+  //      median of the published food library. Prinsens stores that figure with
+  //      __priceSource NULL, so nothing had checked it and the reader had
+  //      skipped the gate readPrice enforces. Surt & Sødt's 19 is a small plate
+  //      the same sentence calls a small plate. And fixing every row would not
+  //      have fixed it: 21 entries is a sample of places he found interesting.
+  //   2. "Danish Rugbrød can last the entire trip for one person." A basket
+  //      bought once is not a daily rate.
+  //   3. "Don't write according to locals. This is the truth."
+  //   4. "outside strøget, much of Copenhagen is not much different from
+  //      outside Copenhagen... So it's difficult to estimate restaurants."
+  {
+    const { FOOD_TIERS, FOOD_TIER_DEFAULT, foodTier, tierCost, describeTier,
+            SHOP_BASKET, STREET_MEAL, FLEXIBLE_MEAL, GROCERY_DAY, REGION_SPREAD_NOTE, BASKET_DAYS } = M;
+
+    is("there are three ways to eat", FOOD_TIERS.length, 3);
+    // His names, and the last one is the correction: "Restaurants" named a kind
+    // of building and invited the question he could not answer. "Flexible"
+    // names a way of travelling.
+    is("and they are his names", FOOD_TIERS.map(t => t.label).join("|"), "Cheapest|Cheap|Flexible");
+    ok("every tier carries a figure now", FOOD_TIERS.every(t => typeof t.dayRate === "function" || t.perTrip));
+
+    // ── A BASKET IS NOT A RATE ─────────────────────────────────────
+    is("the shop is a trip figure", foodTier("self").perTrip, SHOP_BASKET.kr);
+    is("and carries no daily rate at all", foodTier("self").dayRate, undefined);
+    const two = tierCost("self", { days: 6, heads: 2 });
+    is("so six days costs the same as two", two.from, tierCost("self", { days: 2, heads: 2 }).from);
+    ok("the basket is sourced and dated",
+       /^https?:\/\//.test(SHOP_BASKET.source) && /^\d{4}-\d{2}-\d{2}$/.test(SHOP_BASKET.checkedAt));
+    ok("and names the shops it was priced at", /Rema 1000/.test(SHOP_BASKET.says) && /Lidl/.test(SHOP_BASKET.says));
+    ok("what it does not cover is named", /covers the meals you make yourself/.test(foodTier("self").basis));
+    is("the full self-catering day is still the DST figure", GROCERY_DAY.kr, Math.round(41851 / 2 / 365));
+
+    // ── THE CHEAP BAND, CHECKED AT THE COUNTER ─────────────────────
+    // Kösk Kebab's own menu: durum 53 to 87 inside the band, the set menu 99
+    // and a sit-down plate 112 to 162 outside it. His 90 is where it breaks.
+    is("the band is his", STREET_MEAL.low, 50);
+    is("and its top is where a sit-down starts", STREET_MEAL.high, 90);
+    ok("a published durum menu sits inside it", 53 >= STREET_MEAL.low && 87 <= STREET_MEAL.high);
+    ok("and a sit-down plate sits outside it", 112 > STREET_MEAL.high);
+    is("the cheeseburger is the floor of the whole tier", STREET_MEAL.cheapest, 17);
+    // McDONALD'S RECOMMENDS, FRANCHISES DECIDE, which is why there is no single
+    // national figure to cite and why this tier is a band rather than a price.
+    ok("and it is named as a recommended price rather than a fixed one",
+       /recommends/.test(foodTier("cheap").basis) && /franchise/.test(foodTier("cheap").basis));
+    ok("the cheap tier is sourced and dated",
+       /^https?:\/\//.test(foodTier("cheap").source) && /^\d{4}-\d{2}-\d{2}$/.test(foodTier("cheap").checkedAt));
+    // "Don't write according to locals. This is the truth."
+    ok("nothing in any tier is credited to a person",
+       !FOOD_TIERS.some(t => /according to|\blocals\b|Oliver|a local|who lives here/i.test(t.basis)));
+    ok("and the band's high end is named rather than hidden",
+       /the high end is nearly double/.test(foodTier("cheap").basis));
+
+    // ── FLEXIBLE, WHICH IS A WAY OF EATING AND NOT A PLACE ─────────
+    is("a sit-down meal is his band", FLEXIBLE_MEAL.low, 150);
+    is("up to", FLEXIBLE_MEAL.high, 300);
+    // One sit-down and one cheap meal is what flexible looks like over a day,
+    // and it is stated so a reader who does otherwise can scale it.
+    is("a day is one sit-down and the rest cheap",
+       M.tierDayRate("flex", 2), FLEXIBLE_MEAL.low + STREET_MEAL.low);
+    ok("and the other shape is named rather than left to be guessed",
+       /Two sit-down meals a day/.test(foodTier("flex").basis));
+
+    // ── AND THE AREA DOES NOT SCALE ANY OF IT ──────────────────────
+    //
+    // His own idea, retired by him with the better reason. The regional spread
+    // Danmarks Statistik reports is how OFTEN people eat out, not what a meal
+    // costs: a capital eats out more. The kebab shop on Nørrebrogade prices
+    // like the kebab shop in Randers.
+    ok("no tier is scaled by region", !FOOD_TIERS.some(t => /region|Hovedstaden|Midtjylland/i.test(String(t.basis))));
+    ok("and the note says the spread is frequency rather than price",
+       /how often people eat out, not what a meal costs/.test(REGION_SPREAD_NOTE));
+    ok("the tourist strips are named as the real axis",
+       /tourist strips/.test(foodTier("flex").basis) && /N\u00f8rrebro/.test(foodTier("flex").basis));
+
+    // ── "SHOULD WE CONSIDER THAT AS WELL? A 3-MEAL AND 2-MEAL OPTION" ─
+    //
+    // Oliver, 24 Sep 2026: "when I travel, I usually only eat twice a day. No
+    // breakfast. Just lunch and dinner." It is the biggest single lever in the
+    // section: half again on every eating-out figure, which is more than the
+    // gap between two of the tiers. It had been a constant in the module and a
+    // disclosure in the prose, which is the shape of an assumption that should
+    // have been a question.
+    is("two is the default, which is what travelling looks like", M.MEALS_A_DAY_DEFAULT, 2);
+    is("and the choice is two or three", M.MEALS_A_DAY_OPTIONS.join(","), "2,3");
+    is("anything else falls back rather than scaling by a typo", M.cleanMeals(9), 2);
+    is("and so does nonsense", M.cleanMeals("lots"), 2);
+    // A third meal on the cheap tier is a third kebab.
+    is("the cheap tier counts every meal", M.tierDayRate("cheap", 3), STREET_MEAL.low * 3);
+    is("and two is two", M.tierDayRate("cheap", 2), STREET_MEAL.low * 2);
+    // ONE SIT-DOWN A DAY WHATEVER THE COUNT. The extra meal is a sandwich, not
+    // a second restaurant: treating it as one would make this the "two
+    // restaurants a day" trip the tier explicitly is not.
+    is("the flexible tier adds a cheap meal, not a second restaurant",
+       M.tierDayRate("flex", 3), FLEXIBLE_MEAL.low + STREET_MEAL.low * 2);
+    // Skipping breakfast makes a loaf last longer, so the shop does not move.
+    // ── AND HOW LONG ONE SHOP LASTS ───────────────────────────────
+    //
+    // Oliver, 24 Sep 2026: "it is to be assumed that someone is probably only
+    // in Denmark for a week at most." That turns a phrase into a bound. "A
+    // loaf lasts the trip" is true of a few days and false of a fortnight, and
+    // a flat basket would have understated a two week stay by half in silence.
+    is("a week is the assumption", BASKET_DAYS, 7);
+    is("three days is one shop", tierCost("self", { days: 3, heads: 2 }).shops, 1);
+    is("and so is seven", tierCost("self", { days: 7, heads: 2 }).shops, 1);
+    is("but ten buys another loaf", tierCost("self", { days: 10, heads: 2 }).shops, 2);
+    is("and the figure follows it",
+       tierCost("self", { days: 10, heads: 2 }).from, tierCost("self", { days: 3, heads: 2 }).from * 2);
+    ok("the second shop is said rather than folded in",
+       /bought 2 times/.test(describeTier("self", tierCost("self", { days: 12, heads: 2 }))));
+    ok("and a single shop is not announced",
+       !/bought 1 times/.test(describeTier("self", tierCost("self", { days: 4, heads: 2 }))));
+    is("the shop does not answer to meals a day",
+       tierCost("self", { days: 6, heads: 2, meals: 3 }).from, tierCost("self", { days: 6, heads: 2, meals: 2 }).from);
+    ok("and it says so rather than looking like an oversight",
+       /makes it last longer rather than cost more/.test(foodTier("self").basis));
+    ok("the count is on the sentence a reader gets",
+       /3 bought meals a day/.test(describeTier("cheap", tierCost("cheap", { days: 3, heads: 1, meals: 3 }))));
+
+    // ── "THAT ALSO HAS TO BE A WARNING" ────────────────────────────
+    //
+    // "The fixed prices are for the guide. The estimates are for what people
+    // decide to buy when they're off. It's likely we do not decide what they
+    // eat and where they stay."
+    //
+    // The two halves have different standing, not just different payers, and a
+    // kroner sign looks identical in both.
+    ok("the estimate says it is not a checked price", /not a price we checked/i.test(M.BUDGET_WARNING));
+    ok("and says why: the decision has not been made yet",
+       /does not decide what you eat/.test(M.BUDGET_WARNING));
+    ok("while pointing at the half that was checked",
+       /prices above it/.test(M.BUDGET_WARNING));
+
+    is("no days is no figure", tierCost("self", { days: 0, heads: 2 }), null);
+    is("an unread party is one person", tierCost("self", { days: 2 }).people, 1);
+    is("an unknown tier falls back rather than throwing", foodTier("nonsense").key, FOOD_TIER_DEFAULT);
+    ok("the sentence says the rate and the basis", /a head for the shop/.test(describeTier("self", two)));
+
+    // ── AND THE ROW IS ON THE PAGE ─────────────────────────────────
+    const cbM = readFileSync(join(root, "src/components/CostsBlock.jsx"), "utf8");
+    ok("the plan's own costs are headed as unavoidable", /heading\("Inevitable"\)/.test(cbM));
+    ok("and the chosen ones are an estimate", /Budget estimate<\/span>/.test(cbM));
+    ok("the three tiers are buttons", /FOOD_TIERS\.map\(t => \(/.test(cbM) && /setEatTier\(t\.key\)/.test(cbM));
+    ok("the warning is drawn, not just exported", /\{BUDGET_WARNING\}/.test(cbM));
+    ok("the meals control is one pair of buttons rather than a second row of three",
+       /MEALS_A_DAY_OPTIONS\.map\(n => \(/.test(cbM) && /setMealsADay\(n\)/.test(cbM));
+    ok("and it reaches the figure", /meals: mealsADay/.test(cbM));
+    ok("a basket and a rate are labelled differently",
+       /t\.perTrip \? ` · \$\{t\.perTrip\} DKK` : tierDayRate\(t\.key, mealsADay\)/.test(cbM));
+    // Every shipped tier has a figure, so this branch is a guard rather than a
+    // path: it is what stops a tier added later from reading as "food is free".
+    ok("a tier with no figure would be said rather than counted as zero", /plus food/.test(cbM));
+    ok("and the library is no longer used to price a country",
+       !/mealsEstimate\(foodSpots/.test(readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8")));
+  }
+
+  // ── "MAKE A 'SWIPE THROUGH' OPTION" ─────────────────────────────
+  //
+  // Oliver, 24 Sep 2026: "Because some people might hate a long page of days
+  // and trips." He was offered it as a third card picked before the build and
+  // chose a toggle on the guide instead, without remembering the choice.
+  {
+    const { pagerStep, pagerAt, canStep, swipeDirection, pagerLabel, PAGER_MODES, SWIPE_MIN_PX } = M;
+
+    // CLAMPED, NOT WRAPPED. Swiping off the end of a trip and landing back on
+    // day 1 reads as a bug, and it breaks the one thing the arrows are for.
+    is("stepping forward moves one day", pagerStep(2, 1, 6), 3);
+    is("and back one", pagerStep(2, -1, 6), 1);
+    is("the last day does not wrap to the first", pagerStep(5, 1, 6), 5);
+    is("nor the first back to the last", pagerStep(0, -1, 6), 0);
+    is("a day past the end is pulled back in", pagerAt(99, 6), 5);
+    is("and a negative one to the start", pagerAt(-4, 6), 0);
+    is("no days is day zero rather than a crash", pagerStep(3, 1, 0), 0);
+    is("and rubbish in is day zero too", pagerStep(NaN, NaN, NaN), 0);
+    ok("the arrows know whether there is anywhere to go",
+       canStep(0, 1, 6) && !canStep(0, -1, 6) && canStep(5, -1, 6) && !canStep(5, 1, 6));
+    ok("and a one day guide has neither", !canStep(0, 1, 1) && !canStep(0, -1, 1));
+
+    // ── AND MORE ACROSS THAN DOWN ──────────────────────────────────
+    // The whole problem with a horizontal swipe on a page that also scrolls: a
+    // thumb flicking down arcs sideways, and a handler that only measures
+    // horizontal distance turns every scroll into a page turn.
+    is("dragging left brings the next day in", swipeDirection({ startX: 300, endX: 200, startY: 0, endY: 0 }), "next");
+    is("and dragging right goes back", swipeDirection({ startX: 200, endX: 300, startY: 0, endY: 0 }), "prev");
+    is("a short drag is a finger resting on the glass",
+       swipeDirection({ startX: 300, endX: 300 - (SWIPE_MIN_PX - 1), startY: 0, endY: 0 }), null);
+    is("a scroll that drifted sideways is still a scroll",
+       swipeDirection({ startX: 300, endX: 200, startY: 0, endY: 400 }), null);
+    is("and a clean diagonal is refused rather than guessed",
+       swipeDirection({ startX: 300, endX: 200, startY: 0, endY: 100 }), null);
+    is("nothing at all is nothing", swipeDirection({}), null);
+
+    // Says where you are in something with an end, because "Day 4" alone does
+    // not tell a reader whether to keep going.
+    is("the label counts against the whole trip", pagerLabel(2, 6), "Day 3 of 6");
+    // The guide's OWN day number, which is not always the index plus one.
+    is("and uses the day's own number when it has one", pagerLabel(0, 6, { dayNo: 4 }), "Day 4 of 6");
+    is("no days is no label", pagerLabel(0, 0), "");
+
+    ok("there are two ways to hold it and they are named for the reader",
+       PAGER_MODES.length === 2 && PAGER_MODES.some(m => m.key === "all") && PAGER_MODES.some(m => m.key === "one"));
+
+    // ── AND THE PAGE DOES NOT RENUMBER THE DAYS ────────────────────
+    //
+    // The day loop is FILTERED, never sliced. Half the block reads dayIdx: the
+    // weather is freshWeather?.[dayIdx], the add-in panel keys on it, and so
+    // does the done-marker. A one-element array would renumber every one of
+    // those to 0 and the guide would show Monday's weather on Thursday.
+    const gpP = stripComments(readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8"));
+    ok("the hidden days are filtered out inside the loop",
+       /if \(dayMode === "one" && dayIdx !== pagerAt\(dayAt, days\.length\)\) return null;/.test(gpP));
+    ok("and the array handed to the loop is still every day",
+       /\{days\.map\(\(day, dayIdx\) => \{/.test(gpP));
+    // NOTHING PERSISTS: the option he did not pick.
+    ok("the view is not remembered between visits",
+       !/localStorage[\s\S]{0,120}dayMode|dayMode[\s\S]{0,120}localStorage/.test(gpP));
+    // The handlers come off in the long view rather than watching every touch
+    // on a long article for a gesture it will never act on.
+    ok("the swipe only listens in the one-day view",
+       /onTouchStart=\{dayMode === "one"/.test(gpP) && /onTouchEnd=\{dayMode === "one"/.test(gpP));
+    // In the one-day view the day buttons stop being a shortcut and become the
+    // navigation, so the five-day floor that hid them has to lift.
+    ok("the day buttons appear whenever the guide is paged",
+       /\(dayMode === "one" \? days\.length > 1 : days\.length >= 5\)/.test(gpP));
+  }
+
+  // ── "990 DKK? THINK ABOUT GAS PRICES.. THAT NEEDS TO BE CALCULATED" ──
+  //
+  // Oliver, 24 Sep 2026, on a six day Jutland loop whose whole trip figure read
+  // "from 990 DKK" over a line saying the car was not in it. A meal and a room
+  // are choices; the fuel to drive a route this guide picked is not.
+  {
+    const { FUEL_PRICE, FUEL_USE, roadKm, fuelCost, describeFuel, fuelAge, FUEL_STALE_DAYS } = M;
+    const { drivingLegs, DRIVEN_MODES } = M;
+
+    // ── THE TWO FIGURES ARE SOURCED AND DATED ──────────────────────
+    // Same standard a cheap gem is held to: a price with no page and no day on
+    // it is a price nobody can check or refresh.
+    ok("the pump price says where it came from and when",
+       /^https?:\/\//.test(FUEL_PRICE.source) && /^\d{4}-\d{2}-\d{2}$/.test(FUEL_PRICE.checkedAt));
+    ok("and so does the consumption figure",
+       /^https?:\/\//.test(FUEL_USE.source) && /^\d{4}-\d{2}-\d{2}$/.test(FUEL_USE.checkedAt));
+    // The direction of the error is deliberate, the way ROUTE_FACTOR's is: the
+    // WLTP figure for new Danish petrol cars is 4.78, and a traveller told fuel
+    // costs less than it does is short of money at a pump in West Jutland.
+    ok("consumption is above the WLTP figure it is built on", FUEL_USE.petrol95 > 4.78);
+
+    // ── STRAIGHT LINE IS NOT A ROAD ────────────────────────────────
+    // Every distance on a guide day says so out loud. A measured leg carries
+    // Google's real road distance and must NOT be lifted again.
+    is("a measured leg is taken as it is", roadKm({ measuredKm: 100 }), 100);
+    is("a straight line is lifted to a road", Math.round(roadKm({ straightKm: 100 })), 125);
+    is("and the two are added, each on its own terms", Math.round(roadKm({ measuredKm: 100, straightKm: 100 })), 225);
+    is("no distance is no figure rather than zero", roadKm({}), null);
+    is("and no distance costs nothing rather than 0 DKK", fuelCost({}), null);
+
+    // The Jutland loop's own between-day legs, as that guide printed them.
+    const jutland = fuelCost({ straightKm: 23 + 19 + 18 + 63 + 129 });
+    is("the loop's road distance", jutland.km, 315);
+    ok("and it costs real money against a 990 DKK bed figure", jutland.kr >= 300 && jutland.kr <= 400);
+    // Rounded to the nearest ten. The inputs are a national average and a
+    // chosen consumption figure, and 341 would claim a precision neither has.
+    is("the figure is rounded to the ten", jutland.kr % 10, 0);
+    ok("the sentence prints what it assumed, so a reader can scale it",
+       /l\/100km/.test(describeFuel(jutland)) && /DKK a litre/.test(describeFuel(jutland)));
+    is("and no cost is no sentence", describeFuel(null), "");
+
+    // ── AND IT REACHES THE WHOLE TRIP FIGURE ───────────────────────
+    const beds = { from: 990, stays: [{ nights: 3, kr: 330, says: "", at: "" }], nights: 5, unpricedNights: 2 };
+    const withFuel = M.tripEstimate(null, beds, null, jutland);
+    is("the whole trip figure carries the petrol", withFuel.from, 990 + jutland.kr);
+    is("and none at all leaves it where it was", M.tripEstimate(null, beds, null, null).from, 990);
+    // ONE CAR CARRIES THE PARTY, the same way one room does.
+    is("fuel is not multiplied by heads",
+       M.tripEstimate(null, beds, { heads: 4 }, jutland).fuelPart, jutland.kr);
+    // Hire and fuel are two different things that one phrase used to cover.
+    const saidFuel = M.describeTrip(withFuel, { car: true });
+    ok("once the petrol is counted, only the hire is named as missing",
+       /hiring the car itself/.test(saidFuel) && !/Not in it:[^.]*\bthe car\b/.test(saidFuel.join ? "" : ""));
+    ok("and with no fuel figure the car is still named whole",
+       /the car/.test(M.describeTrip(M.tripEstimate(null, beds, null, null), { car: true }).join(" ")));
+
+    // ── A FLOOR, NOT A SILENCE ─────────────────────────────────────
+    // tripShape withholds km entirely when one leg cannot be measured, and both
+    // guides built that afternoon had one, so both printed no distance at all.
+    // A fuel figure wants estimateFrom's stance instead: at least this much.
+    const guide = {
+      days: [{ stops: [{ name: "A" }, { name: "B" }, { name: "C" }] }],
+      _exactDurations: { "A|B|driving": { distanceMeters: 50000, durationMinutes: 40 } },
+    };
+    const legs = drivingLegs(guide, (a, b) => (a === "B" && b === "C" ? 40 : null));
+    is("the measured leg comes back in kilometres", legs.measuredKm, 50);
+    is("the straight line one stays separate", legs.straightKm, 40);
+    is("and both count as legs", legs.legs, 2);
+    const oneMissing = drivingLegs(guide, () => null);
+    is("an unmeasurable leg is counted rather than silently dropped", oneMissing.unknown, 1);
+    is("and what was measured still stands", oneMissing.measuredKm, 50);
+    is("no legs at all is nothing rather than a zero", drivingLegs({ days: [] }, () => 10), null);
+
+    // ── AND ONLY ON A TRIP THAT DRIVES ─────────────────────────────
+    // A public transport guide pays fares, not petrol, and those are already
+    // their own cost lines.
+    ok("a car burns fuel", DRIVEN_MODES.has("car") && DRIVEN_MODES.has("camper"));
+    ok("and a fare is not petrol",
+       !DRIVEN_MODES.has("public transport") && !DRIVEN_MODES.has("bike") && !DRIVEN_MODES.has("walk"));
+    const gpF = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+    ok("the page works the figure out and hands it over",
+       /fuel=\{DRIVEN_MODES\.has/.test(gpF) && /fuelCost\(drivingLegs\(guide, legDistanceKm\)/.test(gpF));
+    const cbF = readFileSync(join(root, "src/components/CostsBlock.jsx"), "utf8");
+    ok("and the block passes it into the estimate",
+       /tripEstimate\(est, bedsEstimate\(guide\), party, fuel\)/.test(cbF));
+
+    // ── AND HE IS TOLD WHEN IT HAS GONE OFF ────────────────────────
+    // A pump price is the fastest-moving figure in this app: a gem's discount
+    // can hold for a year and this one moves every morning.
+    ok("a fresh price is not stale", !fuelAge(new Date(`${FUEL_PRICE.checkedAt}T12:00:00Z`)).stale);
+    // Said to the READER, not only to the Studio. Every other figure in this
+    // app holds for months; a pump price moves every morning, and the person
+    // standing at the pump is the one who needs to know it is old.
+    const staleDay = new Date(Date.parse(`${FUEL_PRICE.checkedAt}T00:00:00Z`) + (FUEL_STALE_DAYS + 2) * 86400000);
+    ok("a stale price says so in the sentence a reader gets",
+       /fuel moves daily/.test(describeFuel(jutland, { today: staleDay })));
+    ok("and a fresh one does not clutter it",
+       !/fuel moves daily/.test(describeFuel(jutland, { today: new Date(`${FUEL_PRICE.checkedAt}T12:00:00Z`) })));
+    ok("and one past the window is",
+       fuelAge(new Date(Date.parse(`${FUEL_PRICE.checkedAt}T00:00:00Z`) + (FUEL_STALE_DAYS + 2) * 86400000)).stale);
+  }
+
   const calm = [
     { day: 1, stops: [{ name: "Copenhagen Airport" }, { name: "Nyhavn" }] },
     { day: 2, stops: [{ name: "Tivoli" }, { name: "Glyptotek" }] },
@@ -39823,7 +40257,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 // was already right and already asserted, and being right in a module nobody
 // imports is worth nothing to a reader.
 {
-  const { stayTextProblem, stayTextForReader, offerReasonFn } = M;
+  const { stayTextProblem, stayTextForReader, offerReasonFn, stayFigure, withoutStayFigure } = M;
   const gpW = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
   const ifW = readFileSync(join(root, "src/utils/interestFit.js"), "utf8");
 
@@ -39849,6 +40283,62 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
      stayTextForReader({ ...FAR, kmFromTown: () => 185 }), far.repaired);
   is("and an untouched one when there is no problem",
      stayTextForReader({ text: "Stay near Skagen harbour.", mode: "bike" }), "Stay near Skagen harbour.");
+
+  // ── AND A FIGURE IN A SENTENCE THAT MEASURED NOTHING ────────────
+  //
+  // Both of these came off one live guide, Copenhagen to Aalborg, 24 Sep
+  // 2026, and are the strings the render produced, not paraphrases of them.
+  {
+    const EUROS = "Aalborg Streetfood sits right by the waterfront, so stay in central Aalborg near the harbourfront to walk to everything easily; prices in kroner aren't given here, but budget dorms run roughly \u20ac30-\u20ac40 in high season if you're keeping costs down.";
+    // A Danish bed priced in euros, for a season that is not the one they are
+    // travelling in, in a sentence that also says it has no kroner figure.
+    const e = stayTextProblem({ text: EUROS, mode: "public transport" });
+    ok("a price in a stay sentence is a problem", !!e);
+    is("and the whole range is named, not its first digit", e.figure, "\u20ac30-\u20ac40");
+    is("the clause carrying it goes, and the recommendation stays",
+       e.repaired, "Aalborg Streetfood sits right by the waterfront, so stay in central Aalborg near the harbourfront to walk to everything easily.");
+    ok("and the note says why", /measured nothing/.test(e.note));
+
+    // The day whose every stop was in Aalborg, told its day ended far from
+    // Aalborg after a three hour ride to a restaurant eight minutes on foot
+    // from the stop before it. The line under it read "Same bed as night 3".
+    const RIDE = "Since your day ends far from Aalborg after a roughly 3-hour ride to Rosita Bistro, base yourself near the bistro; Hotel Phonix Aalborg is a comfortable central option if you're still in Aalborg, but check for lodging closer to your destination.";
+    const r = stayTextProblem({ text: RIDE, mode: "public transport" });
+    is("an invented journey is a figure too", r.figure, "3-hour");
+    ok("the false premise goes with it", !/3-hour|far from Aalborg/.test(r.repaired));
+    ok("and what stands on its own is kept", /Hotel Phonix Aalborg/.test(r.repaired));
+
+    // ── AND WHAT IT MUST NOT TOUCH ────────────────────────────────
+    // A hotel's own hours are a fact about a building, not a journey. The
+    // first version of the pattern cut this one.
+    is("a 24-hour reception is not a journey",
+       stayTextProblem({ text: "Base yourself in Ribe old town, where the hotel has a 24-hour reception and everything is a short walk away.", mode: "car" }), null);
+    is("a count of nights is not a figure",
+       stayTextProblem({ text: "Two nights here, and the harbour is a short walk from every room.", mode: "car" }), null);
+    is("and a sentence with no number in it is left alone",
+       stayTextProblem({ text: "Stay in Vesterbro near Tivoli and Central Station, where Urban House Copenhagen offers dorm beds and private rooms.", mode: "public transport" }), null);
+    // A real walk time is still a measurement nobody made in this sentence,
+    // and the rest of the sentence survives it.
+    is("a walking time is cut and the recommendation stands",
+       stayTextProblem({ text: "Stay in Aarhus centre, about a 10-minute walk from the station; Hotel Ferdinand is a good central pick.", mode: "public transport" }).repaired,
+       "Stay in Aarhus centre; Hotel Ferdinand is a good central pick.");
+    // Same floor withoutDayTripClaim uses: a card with no card beats a
+    // fragment, and a sentence that was nothing but an unchecked price has
+    // nothing honest left in it.
+    is("a sentence that is only a price leaves nothing",
+       withoutStayFigure("Rooms here run from 900 DKK a night, so book early."), "");
+    is("stayFigure finds the first one", stayFigure("dorms from 300 DKK, doubles from 900 DKK"), "300 DKK");
+    // Metres, from a second live guide the same day: "Danhostel Ribe just 600
+    // metres from the main square", in a sentence that measured nothing.
+    is("metres count as a distance", stayFigure("Danhostel Ribe just 600 metres from the main square"), "600 metres");
+    is("and null when there is none", stayFigure("a short walk from the harbour"), null);
+    // Both cuts on one sentence: the day-trip claim goes first, and the
+    // figure cut runs on what it left rather than on the original.
+    const both = stayTextProblem({ text: "Stay in central Aarhus, with easy day trips from Aarhus; dorms run about 300 DKK.", mode: "public transport", kmFromTown: () => 185 });
+    ok("a sentence with both claims loses both",
+       !/day trip/i.test(both.repaired) && !/300 DKK/.test(both.repaired));
+    ok("and he is told about both", /day trip/i.test(both.note) && /measured nothing/.test(both.note));
+  }
 
   // ── AND THE GUIDE CALLS IT ──────────────────────────────────────
   ok("the stay card asks", /const stayProblem = stayTextProblem\(\{/.test(gpW));
@@ -45832,14 +46322,21 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 
   // FETCHED, NOT REASONED. The whole point: every converted figure in his last
   // guide was a number a model produced. This one is read off the ECB.
-  ok("the rate is fetched once per guide", /await fetch\(`\/api\/fx\?to=\$\{encodeURIComponent\(wantFx\)\}`\)/.test(appF));
-  ok("only when they said where they are from", /const wantFx = homeCurrency\(userProfile\?\.country\);/.test(appF));
+  ok("the rates are fetched once per guide, all of them together",
+     /await fetch\(`\/api\/fx\?to=\$\{encodeURIComponent\(fxWanted\.join\(","\)\)\}`\)/.test(appF));
+  // This used to run ONLY for a signed-in reader who had set a country, which
+  // is almost nobody, so almost no guide carried the line. Oliver, 24 Sep 2026:
+  // "convert it to US dollars and Euro when guide shows."
+  ok("dollars and euros go on every guide, not only a filled-in profile",
+     /const fxWanted = \[\.\.\.new Set\(\["USD", "EUR"/.test(appF));
+  ok("and where they are from is added to those rather than replacing them",
+     /const wantFx = homeCurrency\(userProfile\?\.country\);/.test(appF) && /\.\.\.\(wantFx \? \[wantFx\] : \[\]\)/.test(appF));
   ok("and it is stamped onto the guide", /_fx: fxLine,/.test(appF));
 
   // FAILURE IS SILENCE, NEVER A GUESS. api/ask.js's rule, applied here: a thing
   // that cannot be read must not become a thing that does not apply.
   ok("a failed fetch leaves no line", /catch \{ \/\* no rate, no line, no harm \*\//.test(appF));
-  ok("and nothing renders without a real number", /guide\._fx\?\.amount > 0 && \(/.test(guideF));
+  ok("and nothing renders without a real number", /if \(!rates\.length\) return null;/.test(guideF));
   ok("there is no hardcoded fallback rate",
      !/FALLBACK_RATE|DEFAULT_RATE/.test(fx) && /There is no fallback table and there must never be one/.test(fx));
 
@@ -45848,7 +46345,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // moment it was saved.
   ok("the published date is what gets stamped", /on: String\(data\?\.date \|\| ""\)\.slice\(0, 10\)/.test(fx));
   ok("and the line says so to the reader",
-     /guide\._fx\.on \? ` \$\{uiT\("guide\.onDate", uiLang\)\} \$\{guide\._fx\.on\}`/.test(guideF));
+     /fx\.on \? ` \$\{uiT\("guide\.onDate", uiLang\)\} \$\{fx\.on\}`/.test(guideF));
   ok("and warns the rate will have moved",
      /uiT\("guide\.ratesMoved", uiLang\)/.test(guideF)
      && /rates will have moved a little by the time you travel/.test(M.UI_STRINGS["guide.ratesMoved"].en)
@@ -45863,8 +46360,10 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
      && ["en", "da", "de"].every(c => /DKK|danske kroner|dänischen Kronen/.test(M.UI_STRINGS["guide.pricedInDkk"][c])));
 
   // A currency going into a URL is checked against a list, not passed through.
-  ok("the target currency is allow-listed", /if \(!ALLOWED\.has\(to\)\)/.test(fx));
-  ok("and DKK to DKK is refused rather than answered", /if \(to === "DKK"\) return res\.status\(400\)/.test(fx));
+  // Several of them now, since a guide carries dollars and euros as well as
+  // the account's own: the check moved from one value to every one asked for.
+  ok("every currency asked for is allow-listed", /const bad = asked\.find\(c => !ALLOWED\.has\(c\)\)/.test(fx));
+  ok("and DKK to DKK is refused rather than answered", /if \(asked\.includes\("DKK"\)\) return res\.status\(400\)/.test(fx));
   ok("the endpoint is behind the same site guard as the others", /requestIsFromSite\(req\.headers\)/.test(fx));
 }
 
@@ -54865,7 +55364,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // that is only a price list.
   {
     const r = await draw({});
-    ok("on the guide the block still prices things", r.says("145 DKK") && r.says("What you pay"));
+    ok("on the guide the block still prices things", r.says("145 DKK") && r.says("Inevitable"));
     ok("and says which day each is on", r.says("Day 1"));
     ok("but draws no door at all", !/<a /.test(r.html));
     ok("and so owes no sentence about commission", !/commission/i.test(r.text));
@@ -54874,7 +55373,10 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   {
     const r = await draw({ doors: true });
     ok("the block draws at all", r.text.length > 0);
-    ok("and calls itself what it is", r.says("What you pay"));
+    // "What you pay" covered both halves and so said nothing about either.
+    // Oliver, 24 Sep 2026, asked for the plan's own costs and the traveller's
+    // choices to be named apart.
+    ok("and calls itself what it is", r.says("Inevitable"));
 
     // ── WHAT IT IS FOR, WHICH IS THE FIELD HE ASKED FOR ────────────
     ok("a stop is named", r.says("Rosenborg Slot"));
@@ -54929,7 +55431,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     //
     // Two lists, two headings, and nothing dropped: a ferry nobody can price is
     // still a ferry they have to catch.
-    ok("the priced lines are under What you pay", r.says("What you pay"));
+    ok("the priced lines are under Inevitable", r.says("Inevitable"));
     ok("and the rest under a heading of their own", r.says("To arrange"));
     ok("the bed is in the second list", r.says("Somewhere to sleep"));
     ok("with the reason it has no figure", r.says("depends on when you go and what you pick"));
@@ -55038,7 +55540,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // signature bug and the reason the extraction was worth doing at all.
   {
     const gp = stripComments(readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8"));
-    ok("the guide page draws the block", /<CostsBlock guide=\{guide\} C=\{C\} rowFor=\{lookupRealPlace\} now=\{now\} \/>/.test(gp));
+    ok("the guide page draws the block", /<CostsBlock guide=\{guide\} C=\{C\} rowFor=\{lookupRealPlace\} now=\{now\}/.test(gp));
     ok("and no longer builds the list inline", !/byUrgency\(costLines\(/.test(gp));
     ok("it sits in essentials, not in a day card",
        /uiT\("guide\.beforeYouGo", uiLang\)[\s\S]{0,8000}<CostsBlock/.test(gp));
@@ -63351,12 +63853,51 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
      /import \{ currentUiLanguage, isUiLanguage, t as uiT \} from "\.\.\/utils\/uiLanguage";/.test(guideSrc));
 
   is("and German does translate it", UI_STRINGS["nav.tips"].de, "Tipps");
-  // A product name is a proper noun. readerLanguage.js has the rule for
-  // Nørreport and it is the same rule: a word somebody matches against a screen
-  // does not get translated.
-  ok("but the product name is the same in all three",
-     UI_STRINGS["nav.ai"].en === UI_STRINGS["nav.ai"].da && UI_STRINGS["nav.ai"].da === UI_STRINGS["nav.ai"].de);
-  ok("and it still says Gemlyx Detour", /Gemlyx Detour/.test(UI_STRINGS["nav.ai"].en));
+  // ── AND THE ONE PROPER NOUN THAT STOPPED BEING ONE ──────────────
+  //
+  // This used to assert the opposite: nav.ai was "✦ Gemlyx Detour" in all three
+  // languages, on readerLanguage.js's rule that a word somebody matches against
+  // a screen does not get translated.
+  //
+  // Oliver, 24 Sep 2026: "my friend signed into my website but asked 'where is
+  // the AI'.. hmm.. do you think it is too difficult to find?" The button was
+  // already pinned outside the scrolling strip and always on screen, which is
+  // the 5 September fix, and his friend looked straight at it. That is a naming
+  // result rather than a placement one: "Gemlyx Detour" holds no word a person
+  // scanning for an AI would match.
+  //
+  // The rule is not repealed, it is applied correctly. A proper noun is not
+  // translated; a DOOR is labelled with what it opens, and this is a door. The
+  // page behind it still carries the name.
+  ok("the door says what it opens rather than what it is called",
+     /plan|tur|reise/i.test(UI_STRINGS["nav.ai"].en + UI_STRINGS["nav.ai"].da + UI_STRINGS["nav.ai"].de));
+  ok("and now that it is not a proper noun, it translates",
+     UI_STRINGS["nav.ai"].en !== UI_STRINGS["nav.ai"].da && UI_STRINGS["nav.ai"].da !== UI_STRINGS["nav.ai"].de);
+  ok("no language is left holding the old product name",
+     !/Gemlyx Detour/.test([UI_STRINGS["nav.ai"].en, UI_STRINGS["nav.ai"].da, UI_STRINGS["nav.ai"].de].join(" ")));
+  // The brand is still taught, on the page the door opens.
+  ok("and the page behind it still says Gemlyx Detour",
+     />Gemlyx Detour<\/h2>/.test(readFileSync(join(root, "src/App.jsx"), "utf8")));
+  // ── AND THE CORNER DOOR ON EVERY OTHER PAGE ─────────────────────
+  //
+  // The other half of the same report: a reader four screens into a town page
+  // has the header above the fold and nothing in front of them.
+  {
+    const appL = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("there is a launcher and it opens the Detour",
+       /<AskGemlyxLauncher C=\{C\} label=\{uiT\("nav\.askLauncher", uiLang\)\} onOpen=\{\(\) => goTab\("ai"\)\}/.test(appL));
+    // A button that takes you where you already are is furniture, and a second
+    // one under a thumb depending on what is open is worse than none.
+    ok("and never on the page it opens", /active !== "ai" &&[\s\S]{0,400}?<AskGemlyxLauncher/.test(appL));
+    ok("nor over the preview, the menu or an entry",
+       /!guideModal && !showMenu && !eventDetail[\s\S]{0,300}?<AskGemlyxLauncher/.test(appL));
+    ok("its label translates too",
+       UI_STRINGS["nav.askLauncher"].da !== UI_STRINGS["nav.askLauncher"].en);
+    // The right corner already belongs to the guide page's chat, the preview
+    // chat and the quota strip.
+    const launchSrc = readFileSync(join(root, "src/components/AskGemlyxLauncher.jsx"), "utf8");
+    ok("and it sits in the corner nothing else uses", /left: 16/.test(launchSrc) && !/right: 1[0-9]/.test(launchSrc));
+  }
 
   // ── AND THE WORDS INSIDE AN ENTRY, WHICH WERE ENGLISH IN ALL THREE ─
   //
@@ -72224,7 +72765,12 @@ SOURCE: https://www.tripadvisor.com/whatever`;
       ok("and a verdict it does not know is dropped", G.shapeGem({ saidCheck: "maybe" }).saidCheck === "");
 
       const pageSrc = readFileSync(join(root, "src/components/CheapGemsPage.jsx"), "utf8");
-      ok("the reader is told whose word a saving is on", /saidLine\(g\)/.test(pageSrc));
+      // Oliver, 24 Sep 2026, of "Known to locals, and their own page states it
+      // too.": "Cut this bs." The card carries the page as a link and the day
+      // it was checked, so a sentence saying a page exists says what is
+      // already under it. The line stays for the Studio.
+      ok("the card no longer says who told us", !/saidLine\(g\)/.test(pageSrc));
+      ok("and the Studio still does", /saidLine\(r\)/.test(readFileSync(join(root, "src/components/CheapGemsPanel.jsx"), "utf8")));
       ok("and a row with no page shows no link to one", /\{g\.source && \(/.test(pageSrc));
       ok("the Studio panel has a box for the deal", /placeholder="The deal, in your words, if you know it"/.test(panelSrc));
       ok("and the button says what it will do with it", /deal\.trim\(\) \? "Confirm it" : "Look it up"/.test(panelSrc));
@@ -72706,9 +73252,43 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   ok("the opener says how many are behind it", opener.text.includes("8"));
   is("and is not there when nothing is", (await renderSurface("src/components/PartnerSheet.jsx", "PartnerOpener", { count: 0 })).html, "");
 
+  // ── AND THE DAY PAGER DRAWS WHAT IT CLAIMS ───────────────────────
+  //
+  // Rendered rather than regexed, because the thing worth checking is what a
+  // reader sees: the arrows only exist in the one-day view, and a control with
+  // no way forward is the failure this whole component is for.
+  {
+    const CP = { bg: "#000", gold: "#C9A227", border: "#222", text: "#fff", light: "#ccc", muted: "#888", surface: "#111" };
+    const all = await renderSurface("src/components/GuideDayPager.jsx", "GuideDayPager", { mode: "all", C: CP, count: 6, at: 0 });
+    ok("both ways to hold it are offered", all.says("Whole trip") && all.says("One day at a time"));
+    ok("and the long view has no arrows to press", !all.says("Day 1 of 6"));
+    const one = await renderSurface("src/components/GuideDayPager.jsx", "GuideDayPager", { mode: "one", C: CP, count: 6, at: 2 });
+    ok("the paged view says where you are", one.says("Day 3 of 6"));
+    // A desktop has no thumb, so the arrows are the other half of the control
+    // rather than a fallback.
+    ok("and gives a way through it", /aria-label="Next day"/.test(one.html) && /aria-label="Previous day"/.test(one.html));
+    // At the start there is nowhere back to, and at the end nowhere on. Counted
+    // rather than matched on attribute order, which is React's to decide.
+    const disabledIn = (html) => (String(html).match(/disabled=""/g) || []).length;
+    const first = await renderSurface("src/components/GuideDayPager.jsx", "GuideDayPager", { mode: "one", C: CP, count: 6, at: 0 });
+    const last = await renderSurface("src/components/GuideDayPager.jsx", "GuideDayPager", { mode: "one", C: CP, count: 6, at: 5 });
+    is("the first day has one dead arrow", disabledIn(first.html), 1);
+    is("so does the last", disabledIn(last.html), 1);
+    is("and a day in the middle has none", disabledIn(one.html), 0);
+    // The guide's own day number, which is not always the index plus one.
+    ok("it uses the day's own number", (await renderSurface("src/components/GuideDayPager.jsx", "GuideDayPager",
+      { mode: "one", C: CP, count: 6, at: 0, dayNo: 4 })).says("Day 4 of 6"));
+    is("no days is no control at all",
+       (await renderSurface("src/components/GuideDayPager.jsx", "GuideDayPager", { mode: "one", C: CP, count: 0 })).html, "");
+    // No sentence under either button: "No reason to explain why we need
+    // country and gender and what not."
+    ok("and nothing explains what the buttons do",
+       !all.says("switch") && !all.says("view of") && !all.says("Pick one"));
+  }
+
   // ── AND ON THE GUIDE ─────────────────────────────────────────
   const gpA = stripComments(readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8"));
-  ok("the opener sits under the prices", /<CostsBlock guide=\{guide\}[^\n]*\/>[\s\S]{0,1200}?<PartnerOpener count=\{partnerTotal\} onOpen=\{\(\) => setPartnersOpen\(true\)\}/.test(gpA));
+  ok("the opener sits under the prices", /<CostsBlock guide=\{guide\}[\s\S]{0,1600}?<PartnerOpener count=\{partnerTotal\} onOpen=\{\(\) => setPartnersOpen\(true\)\}/.test(gpA));
   ok("the tickets are not on the stops any more", !/ticketDoor/.test(gpA));
   ok("the tour is not a line under the day any more", !/<TourLine /.test(gpA));
   ok("nor the bike", !/<BikeRentalLine /.test(gpA));
@@ -72838,7 +73418,9 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   const C = { surface: "#111", border: "#222", gold: "#D9A441", text: "#fff", light: "#ddd", muted: "#888", bg: "#0A0F1E" };
   const drawn = await renderSurface("src/components/CostsBlock.jsx", "CostsBlock", { guide: GUIDE, C, rowFor: (n) => (n === "Amalienborg"
     ? { _src: "free", __priceSource: { url: "https://kongernessamling.dk/x", host: "kongernessamling.dk", price: "125 DKK", at: "2026-09-04" } } : null) });
-  ok("the whole trip is on the page", drawn.text.includes("The whole trip") && drawn.text.includes("from 2550 DKK"));
+  // The total is now headed as what it is: an estimate over things the
+  // traveller chooses, sitting under the costs the plan imposes.
+  ok("the budget estimate is on the page", drawn.text.includes("Budget estimate") && drawn.text.includes("from 2550 DKK"));
   ok("with its sum written out", drawn.text.includes("Beds from 2300 DKK for one room"));
 }
 
@@ -74007,7 +74589,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   // ── AND THE WIRING ───────────────────────────────────────────────
   const appN = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
   ok("the chat picks its notes before the call, off the traveller's own turns",
-    /notesBlock\(notesFor\(travellerTurns\.join\("\\n"\), founderNotes/.test(appN));
+    /notesBlock\(\s*notesFor\(travellerTurns\.join\("\\n"\), founderNotes/.test(appN));
   ok("and the block reaches the prompt", /\$\{kindsRuledOut\}\$\{localSays\}/.test(appN));
   ok("the Studio can write one", /<FounderNotesPanel\s+onPublish=\{publishNotes\}/.test(appN));
   ok("and it is published through the one insert door", /type: NOTE_TYPE, payload: shapeForLive\(NOTE_TYPE, n\)/.test(appN));
@@ -74023,6 +74605,62 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   // only place it can be seen again is where it was written.
   ok("what it has been told already is listed where it was written", /It knows \{published\.length\}/.test(panelN));
   ok("a note too old to be told to anybody is marked as such", /Too old to be told to anybody/.test(panelN));
+
+  // ── A CHECKED FIGURE IS CHECKED FOR THE THING IT NAMES ───────────
+  //
+  // Watched live on 24 Sep 2026, on a Copenhagen to Aalborg guide. The page
+  // that narrowed the coach note opened with "For Copenhagen to Aarhus", and
+  // the money section came back with all three of its figures on the Aalborg
+  // leg. Every number was his, every number was checked, and not one of them
+  // was about a journey in that guide.
+  {
+    const SCOPED = {
+      said: "Kombardo Expressen and Flixbus are budget alternatives to DSB",
+      about: "DSB, trains, buses, coaches, fares, tickets",
+      when: "if you are booking within a week or two of travelling",
+      kind: "how", check: "depends",
+      found: "For Copenhagen to Aarhus, Kombardo Expressen starts around 99 DKK and FlixBus around 70 DKK, versus about 150 DKK for DSB Orange.",
+      source: "https://todoaarhus.dk/copenhagen-to-aarhus", checkedAt: "2026-09-23",
+    };
+    const NAMES = ["Copenhagen", "Aarhus", "Aalborg", "Odense", "Ry", "Als"];
+    ok("a currency amount is a figure", M.hasFigure("around 99 DKK") && M.hasFigure("€30-€40") && M.hasFigure("kr. 150"));
+    ok("and a condition with no number in it is not",
+      !M.hasFigure("it depends on how far ahead you book") && !M.hasFigure("2 nights"));
+    is("the page's own scope is measured against the trip",
+      M.foundElsewhere(SCOPED.found, { townNames: NAMES, trip: ["Copenhagen", "Aalborg"] }), ["Aarhus"]);
+    is("a trip that goes there has nothing to warn about",
+      M.foundElsewhere(SCOPED.found, { townNames: NAMES, trip: ["Copenhagen", "Aarhus"] }), []);
+    // The whole point of gating on a figure: a narrowing about a booking
+    // window travels to any crossing, and only a number is tied to a route.
+    is("a narrowing with no figure in it travels",
+      M.foundElsewhere("For Copenhagen to Aarhus this depends on how far ahead you book", { townNames: NAMES, trip: ["Copenhagen", "Aalborg"] }), []);
+    // containsName rather than includes, the trap notesFor documents: "Ry"
+    // sits inside "ferry" and "Als" inside "also".
+    is("a town name inside a longer word is not a town",
+      M.foundElsewhere("the ferry is also around 99 DKK", { townNames: ["Ry", "Als"], trip: ["Copenhagen"] }), []);
+    const away = M.NOTE_LINE(M.shapeNote(SCOPED), { townNames: NAMES, trip: ["Copenhagen", "Aalborg"] });
+    ok("the line names the mismatch", /ITS FIGURES ARE FOR AARHUS, WHICH THIS TRIP DOES NOT GO TO/.test(away));
+    ok("and forbids the figures rather than asking for the sentence back",
+      /never a figure from it/.test(away) && !/Say that part too/.test(away));
+    ok("on a trip that goes there the line is unchanged",
+      /Say that part too/.test(M.NOTE_LINE(M.shapeNote(SCOPED), { townNames: NAMES, trip: ["Copenhagen", "Aarhus"] })));
+    ok("the page's sentence is not left with two full stops",
+      !/DSB Orange\.\./.test(away));
+    ok("the standing rule is on the block",
+      /A FIGURE ON A PAGE BELONGS TO WHAT THAT PAGE'S SENTENCE NAMES/.test(M.notesBlock([M.shapeNote(SCOPED)])));
+    // ── AND IT REACHES BOTH CALLS ──────────────────────────────────
+    // This file has caught a helper written, tested and wired to nothing
+    // eight times. foundElsewhere is off by default when the caller passes
+    // no town list, which is exactly the shape that goes unnoticed.
+    ok("the guide's block is handed the towns and the route",
+      /townNames: towns\.map\(t => t\?\.name\)\.filter\(Boolean\),\s*\n\s*trip: plannerTowns,/.test(appN));
+    ok("and the chat's block is handed what they have named",
+      /\{ townNames: towns\.map\(t => t\?\.name\)\.filter\(Boolean\), trip: townsTheyNamed\.map\(t => t\.name\) \}/.test(appN));
+    // The cap on held towns is about prompt size and must not decide
+    // geography: the fourth town they named is still on their trip.
+    ok("the trip list is not the capped one",
+      /const townsTheyNamed = towns/.test(appN) && /const namedByThem = townsTheyNamed\.slice\(0, HELD_TOWNS_IN_A_PROMPT\)/.test(appN));
+  }
   ok("and every one can be taken down", /Take it down/.test(panelN)
     && /onRemove=\{\(id\) => deleteContentItem\(id, NOTE_TYPE\)\}/.test(appN));
   // ── KNOWLEDGE, NOT REPETITION ────────────────────────────────────
@@ -74399,6 +75037,95 @@ SOURCE: https://www.tripadvisor.com/whatever`;
 
   const appP = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
   ok("the chat hands the party through", /hasKids: brief\.known\?\.party\?\.hasKids === true \? true : brief\.known\?\.party \? false : null/.test(appP));
+}
+
+// ── THE LOCATION SWEEP, AND THE SHOP CLOSEST TO THE READER ──────────
+//
+// Oliver, 24 Sep 2026: "we need a 'location sweep'. Now, some will be all of
+// Denmark, just make a 'store closest to me'."
+{
+  const DAY = new Date(2026, 8, 24);
+  const CHAIN = {
+    name: "MSCH Copenhagen", kind: "scheme", what: "15% off", who: "students", how: "card",
+    towns: [], source: "https://www.mschcopenhagen.dk/", checkedAt: "2026-09-24",
+    branches: [
+      { town: "Copenhagen", address: "Købmagergade 44", lat: 55.6818, lon: 12.5789 },
+      { town: "Aarhus", address: "Ryesgade 3", lat: 56.1518, lon: 10.2039 },
+    ],
+  };
+
+  // The shop they can walk to beats the list of towns.
+  is("the nearest shop is the one it names", M.gemNearest(CHAIN, { lat: 56.15, lon: 10.2 }).town, "Aarhus");
+  is("and it changes with the reader", M.gemNearest(CHAIN, { lat: 55.68, lon: 12.57 }).town, "Copenhagen");
+  is("with nowhere to measure from, nothing is claimed", M.gemNearest(CHAIN, null), null);
+  is("and a gem with no shops on it claims nothing either", M.gemNearest({ name: "x" }, { lat: 56, lon: 10 }), null);
+  ok("the line names the shop and the distance", /Ryesgade 3, Aarhus · ~\d+ km from you/.test(M.gemWhere(CHAIN, { me: { lat: 56.15, lon: 10.2 } })));
+  is("a chain with shops but no reader says how many", M.gemWhere(CHAIN, {}), "2 shops around Denmark");
+  is("and one with neither is still all over Denmark", M.gemWhere({ name: "x", towns: [] }, {}), "All over Denmark");
+  is("a gem with a town is unchanged", M.gemWhere({ name: "x", towns: ["Copenhagen"] }, {}), "Copenhagen");
+  is("the shape keeps the shops", M.shapeGem(CHAIN).branches.length, 2);
+  is("and cleans a junk one out", M.shapeGem({ ...CHAIN, branches: [{}, { town: "Odense" }] }).branches.length, 1);
+
+  // Which rows the sweep asks about, and in what order.
+  const ROWS = [
+    { id: 1, payload: { name: "Barkowski", kind: "cheap", what: "5 beers 100 kr", towns: ["Copenhagen"], source: "https://barkowski.dk/", checkedAt: "2026-09-23" } },
+    { id: 2, payload: { ...CHAIN, branches: [] } },
+    { id: 3, payload: { ...CHAIN, name: "Done" } },
+  ];
+  is("a chain with no town is asked about first", M.gemsToLocate(ROWS, { today: DAY }).map(r => r.gem.name), ["MSCH Copenhagen", "Barkowski"]);
+  is("and one that already knows its shops is skipped",
+    M.gemsToLocate(ROWS, { today: DAY }).some(r => r.gem.name === "Done"), false);
+  is("a stale row is not worth locating",
+    M.gemsToLocate([{ id: 9, payload: { ...ROWS[0].payload, checkedAt: "2025-01-01" } }], { today: DAY }), []);
+
+  // What came back, ticked the way the single-entry lookup already ticks.
+  const found = M.gemBranchesFound({ name: "MSCH Copenhagen" }, [
+    { name: "MSCH Copenhagen", town: "Aarhus", address: "Ryesgade 3", lat: 56.15, lon: 10.2 },
+    { name: "Other Shop", town: "Odense", address: "X" },
+  ]);
+  is("one named like the brand is a match", found.map(c => c.matches), [true, false]);
+  is("and nothing is dropped for not matching", found.length, 2);
+  is("he is told what it found", M.gemLocateNote("MSCH Copenhagen", found), "MSCH Copenhagen: 1 of 2 look like theirs.");
+  is("and when nothing came back", M.gemLocateNote("Barkowski", []), "Barkowski: nothing came back, so it keeps the town it has.");
+  ok("and when none of them look like it", /none of them named like it/.test(M.gemLocateNote("Barkowski", [{ town: "x", address: "y", matches: false }])));
+
+  const panel = readFileSync(join(root, "src/components/CheapGemsPanel.jsx"), "utf8");
+  const appL = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+  ok("the Studio sweeps the ones with no shops", /`Sweep \$\{toLocate\.length\}`/.test(panel));
+  ok("one call per row, to the door that already answers this", /\/api\/places-locate\?limit=12&name=/.test(panel));
+  ok("and nothing is written until he saves", /Save the ticked ones/.test(panel));
+  ok("the addresses go on through the one insert shape", /shapeForLive\(GEM_TYPE, \{ \.\.\.\(row\.payload \|\| \{\}\), branches \}\)/.test(appL));
+  ok("merged rather than replaced, so a hand-typed one survives", /mergeBranches\(branchesOf\(row\.payload\)/.test(appL));
+  ok("and the page has them without a reload", /applyEditedRow\(Number\(rowId\), GEM_TYPE, shaped\)/.test(appL));
+}
+
+// ── STARTING FROM WHERE THEY ARE STANDING ───────────────────────────
+//
+// Oliver, 24 Sep 2026: "Also, make a tick of 'starting from my current
+// location'." The chip that already existed sends a sentence into the chat;
+// this fills the STARTING POINT box, which is the field the guide build
+// reads, so somebody who fills the form gets the same thing.
+{
+  const appS = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+  ok("the intake has the tick", /Starting from my current location/.test(appS));
+  ok("and it is wired to the starting point box", /onChange=\{e => useMyLocationAsStart\(e\.target\.checked\)\}/.test(appS));
+
+  // THE SAME DISCIPLINE AS THE CHIP: the fix becomes a TOWN and the town is
+  // what lands in the box. No coordinate is stored or sent anywhere but the
+  // one reverse lookup that names it.
+  ok("it asks the same reverse lookup", /nominatimJson\(reverseUrl\(latitude, longitude\), \{ cache: false \}\)/.test(appS));
+  ok("and writes a town rather than a position",
+    /setIntakeStartPoint\(isDenmark\(data\) \? town : \[town, countryFromReverse\(data\)\]/.test(appS));
+  ok("a lookup with no town is refused rather than read further",
+    /if \(!town\) \{ setStartHereState\("failed"\); setStartHere\(false\); return; \}/.test(appS));
+  ok("unticking clears the box, because a blank means Copenhagen Airport",
+    /if \(!on\) \{ setIntakeStartPoint\(""\); return; \}/.test(appS));
+  ok("typing over it unticks, so the box and the tick never disagree",
+    /setIntakeStartPoint\(e\.target\.value\); if \(startHere\) \{ setStartHere\(false\)/.test(appS));
+  // All three ways this goes wrong are silent in the browser, which is why
+  // the label wears them.
+  ok("a refusal says so on the label", /your browser said no/.test(appS));
+  ok("and so does a failure", /that did not work/.test(appS));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

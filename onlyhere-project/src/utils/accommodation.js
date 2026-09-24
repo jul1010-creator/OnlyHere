@@ -661,6 +661,110 @@ export const describeDayTripClaim = ({ town, kmFromBase, mode } = {}) => {
   return `The stay line called this a day trip from ${town}, which is ${Math.round(km)} km away. A day trip by ${how} is about ${radius} km each way, so the claim was removed.`;
 };
 
+// ── AND A FIGURE IN A SENTENCE THAT MEASURED NOTHING ────────────────
+//
+// Two stay lines off one live guide, Copenhagen to Aalborg, 24 Sep 2026:
+//
+//   Day 3: "...stay in central Aalborg near the harbourfront to walk to
+//    everything easily; prices in kroner aren't given here, but budget dorms
+//    run roughly €30-€40 in high season if you're keeping costs down."
+//
+//   Day 4: "Since your day ends far from Aalborg after a roughly 3-hour ride
+//    to Rosita Bistro, base yourself near the bistro..."
+//
+// The first prices a Danish bed in euros, for a season that is not the one
+// they are travelling in, and says out loud that it has no kroner figure. The
+// second invents a three hour journey to a restaurant that is eight minutes
+// on foot from the stop before it, on a day every one of whose stops is in
+// Aalborg, and the line directly under it read "Same bed as night 3".
+//
+// ── AND THE COMMON PART IS NOT THAT THEY WERE WRONG ─────────────────
+//
+// It is that the writer of this sentence measures nothing. Every distance and
+// every duration in a Gemlyx guide comes off the route pipeline and is drawn
+// on the map as the same journey, and the one bed price in the guide comes off
+// the room search and says the day it was found. The stay sentence is a per
+// day enrichment call with none of that in front of it, so a figure in it is
+// a figure with no source anywhere in the build, and it sits beside real ones
+// wearing the same clothes.
+//
+// So the rule is the sentence's job rather than a list of the ways it has
+// gone wrong: say where to sleep and why, and leave every number to the part
+// of the build that measured one.
+//
+// CUT, NOT REWRITTEN, for the reason withoutDayTripClaim gives at length: a
+// shorter honest sentence beats a longer plausible one, and a rewrite here
+// would be this file inventing prose about a place it knows nothing about.
+// ── AND THE ONE NUMBER A HOTEL IS ALLOWED ───────────────────────────
+// "24-hour reception" and "24h check-in" are facts about a building, not
+// journeys, and the first version of this cut them: a duration followed by a
+// desk is the shape, so it is excluded by name rather than by hoping the rest
+// of the pattern misses it.
+// ── AND THE ONE NUMBER A HOTEL IS ALLOWED ───────────────────────────
+// "24-hour reception" and "24h check-in" are facts about a building, not
+// journeys, and the first version of this cut them: a duration followed by a
+// desk is the shape, so it is excluded by name rather than by hoping the rest
+// of the pattern misses it.
+const STAY_FIGURE = /\b(?:dkk|kr\.?|kroner|eur(?:os?)?|usd|gbp)\s*\d|\d[\d.,]*\s*(?:dkk|kr\.?|kroner|eur(?:os?)?|usd|gbp)\b|[€$£]\s*\d[\d.,]*(?:\s*(?:-|to|and)\s*[€$£]?\d[\d.,]*)?|\d[\d.,]*\s*[€$£]|\b\d+(?:[.,]\d+)?\s*(?:-|to|and)?\s*\d*\s*(?:hours?|hrs?|h|mins?|minutes?|km|kilometres?|kilometers?|metres?|meters?|miles?)\b(?!\s+(?:reception|desk|check[\s-]?in|check[\s-]?out|service|staff|bar|kitchen|shop|access|security|support))|\b\d+(?:[.,]\d+)?[-\s]?(?:hour|hr|minute|min|km|kilometre|kilometer|metre|meter|mile)[-\s]?(?:ride|drive|walk|journey|trip|train|bus|long)\b/i;
+
+// The unit of the sentence a figure sits in. A semicolon or a full stop is a
+// harder boundary than a comma, and both bad lines above hang their figure off
+// one, so the nearest of those wins and a comma is only the fallback. The
+// comma case is the day 4 shape, where the claim opens the sentence and the
+// comma is all that separates it from the clause that survives.
+const unitAround = (text, at) => {
+  const before = text.slice(0, at);
+  const hard = Math.max(before.lastIndexOf(";"), before.lastIndexOf("."));
+  const soft = before.lastIndexOf(",");
+  const start = hard >= 0 ? hard + 1 : (soft >= 0 ? soft + 1 : 0);
+  const after = text.slice(at);
+  const endHard = after.search(/[;.]/);
+  const endSoft = after.indexOf(",");
+  // Nothing after it is a boundary: the figure's clause runs to the end.
+  const end = endHard >= 0 ? at + endHard : (start === 0 && endSoft >= 0 ? at + endSoft : text.length);
+  return { start, end };
+};
+
+// The figure a stay sentence has no business carrying, or null.
+export const stayFigure = (text) => {
+  const t = String(text || "");
+  const m = t.match(STAY_FIGURE);
+  return m ? String(m[0]).trim() : null;
+};
+
+export const withoutStayFigure = (text) => {
+  let t = String(text || "");
+  // Twice at most: the day 3 line carries one figure in one clause, and a
+  // sentence with three of them is a sentence this file should not be
+  // reassembling. A third pass would be guesswork dressed as a loop.
+  for (let pass = 0; pass < 2; pass++) {
+    const at = t.search(STAY_FIGURE);
+    if (at < 0) break;
+    const { start, end } = unitAround(t, at);
+    const cut = `${t.slice(0, start)} ${t.slice(end)}`
+      .replace(/\s{2,}/g, " ")
+      .replace(/\s+([,.;])/g, "$1")
+      .replace(/[,;]\s*([.;])/g, "$1")
+      .replace(/^[\s,;]+/, "")
+      .trim();
+    // The same stump the day-trip cut leaves, and the same reader for it: a
+    // lead that now ends on "after" or "from" lost its predicate to the cut.
+    t = withoutStump(cut, start);
+    if (!t) return "";
+  }
+  const words = t.replace(/[^\wÆØÅæøå\s]/g, " ").trim().split(/\s+/).filter(Boolean);
+  // Same floor as withoutDayTripClaim: a card with no card beats a fragment.
+  if (words.length < 4) return "";
+  const out = t.charAt(0).toUpperCase() + t.slice(1);
+  return /[.!?]$/.test(out) ? out : `${out}.`;
+};
+
+// What to tell him, rather than repairing it behind his back.
+export const describeStayFigure = (figure) =>
+  figure
+    ? `The stay line put "${figure}" in a sentence that measured nothing: every distance and time on this guide comes off the route, and the one bed price comes off the room search. The figure was removed and the rest of the sentence kept.`
+    : "";
+
 // ── AND THE ONE FUNCTION THE GUIDE ACTUALLY CALLS ────────────────────
 //
 // Everything above this line was written on 17 Aug, tested, and wired to NOTHING.
@@ -681,19 +785,31 @@ export const describeDayTripClaim = ({ town, kmFromBase, mode } = {}) => {
 // where places are. The caller measures; this decides.
 export const stayTextProblem = ({ text = "", mode = null, kmFromTown = null } = {}) => {
   const town = dayTripClaim(text);
-  if (!town) return null;
-  const km = typeof kmFromTown === "function" ? kmFromTown(town) : null;
-  if (dayTripHonest({ kmFromBase: km, mode })) return null;
+  const km = town && typeof kmFromTown === "function" ? kmFromTown(town) : null;
+  // A claim that measures true is not a problem, and a sentence with no claim
+  // in it never had one.
+  const badTrip = !!town && !dayTripHonest({ kmFromBase: km, mode });
+  // Run on what the day-trip cut left, not on the original: cutting the same
+  // text twice from two starting points would put the two cuts back in each
+  // other's way, and the day-trip claim can itself carry the figure.
+  const afterTrip = badTrip ? withoutDayTripClaim(text) : String(text || "");
+  const figure = stayFigure(afterTrip);
+  if (!badTrip && !figure) return null;
+  const notes = [
+    badTrip ? describeDayTripClaim({ town, kmFromBase: km, mode }) : "",
+    figure ? describeStayFigure(figure) : "",
+  ].filter(Boolean);
   return {
-    town,
-    kmFromBase: km,
+    town: badTrip ? town : null,
+    kmFromBase: badTrip ? km : null,
     mode: travelModeKey(mode),
+    figure: figure || null,
     // The cut sentence, which is what a reader gets. Never a rewrite: see
     // withoutDayTripClaim for why a shorter honest sentence beats a longer
     // plausible one.
-    repaired: withoutDayTripClaim(text),
+    repaired: figure ? withoutStayFigure(afterTrip) : afterTrip,
     // And the line that says a cut happened, for Studio rather than for a reader.
-    note: describeDayTripClaim({ town, kmFromBase: km, mode }),
+    note: notes.join(" "),
   };
 };
 

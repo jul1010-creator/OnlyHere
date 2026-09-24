@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { costLines, byUrgency, estimateFrom, describeEstimate, partyOf, partyFrom, describeGroup, costAction, bedsEstimate, tripEstimate, describeTrip, COST_KIND } from "../utils/costLedger";
+import { FOOD_TIERS, FOOD_TIER_DEFAULT, tierCost, describeTier, tierDayRate, BUDGET_WARNING, MEALS_A_DAY_OPTIONS, MEALS_A_DAY_DEFAULT } from "../utils/mealsEstimate";
 import { partnerDisclosure, outboundLink } from "../utils/affiliates";
 import { tripDayDate } from "../utils/guideReading";
 
@@ -34,7 +36,22 @@ import { tripDayDate } from "../utils/guideReading";
 // prices, the estimate and the list of things to arrange stay here; every
 // button moved to the day it is used. See doorsByDay in utils/costLedger.js.
 // The prop stays so a page that is ONLY a price list can still have them.
-export const CostsBlock = ({ guide, C, rowFor, now = new Date(), doors = false }) => {
+// `fuel` is computed by the page rather than here, because working it out needs
+// the leg distances and this component has never known where anything is. See
+// drivingLegs in pages/GuidePage.jsx and fuelCost in utils/fuel.js.
+export const CostsBlock = ({ guide, C, rowFor, now = new Date(), doors = false, fuel = null, meals = null }) => {
+  // ── AND WHICH WAY THEY EAT, WHICH ONLY THEY KNOW ──────────────────
+  // Oliver, 24 Sep 2026: "make 3 options you can click on." The figure under
+  // this used to assume one restaurant meal a day and say so in small print,
+  // which is a guess wearing a disclosure. See utils/mealsEstimate.js.
+  const [eatTier, setEatTier] = useState(FOOD_TIER_DEFAULT);
+  // ── AND HOW OFTEN THEY EAT, WHICH MOVES IT MORE THAN THE TIER ─────
+  // Oliver, 24 Sep 2026: "when I travel, I usually only eat twice a day. No
+  // breakfast. Just lunch and dinner." Half again on every eating-out figure,
+  // which is more than the gap between two of the tiers, and it had been an
+  // assumption in a comment. One pair of buttons rather than a second row of
+  // three: it applies to every tier at once. See utils/mealsEstimate.js.
+  const [mealsADay, setMealsADay] = useState(MEALS_A_DAY_DEFAULT);
   const lines = byUrgency(costLines({
     guide,
     rowFor,
@@ -133,19 +150,69 @@ export const CostsBlock = ({ guide, C, rowFor, now = new Date(), doors = false }
   // priced bed are still a trip with a cost.
   const wholeTrip = (est) => {
     const party = partyFrom(guide?._party) || partyOf(guide?._travelers);
-    const trip = tripEstimate(est, bedsEstimate(guide), party);
+    const trip = tripEstimate(est, bedsEstimate(guide), party, fuel);
     if (!trip) return null;
     const said = describeTrip(trip, {
       car: lines.some(l => l.kind === COST_KIND.CAR),
       transport: lines.some(l => l.kind === COST_KIND.TRANSPORT),
     });
+    // ── AND EATING, WHICH THIS PAGE NEVER HELD A FIGURE FOR ─────────
+    //
+    // The sentence under the total has always ended "Not in it: meals". It is
+    // in it now, built off the prices Gemlyx read on the restaurants' own pages
+    // rather than off a national average about people who cook at home. See
+    // utils/mealsEstimate.js.
+    // The tier they picked, over the nights this trip has. Null on a tier that
+    // carries no national figure, and the total then says so rather than
+    // quietly counting eating as zero.
+    const eat = tierCost(eatTier, { days: meals?.days || 0, heads: meals?.heads || trip.heads || 1, meals: mealsADay });
+    const total = trip.from + (eat ? eat.from : 0);
     return (
       <div style={{ marginTop: 10, paddingTop: 9, borderTop: `1px solid ${C.gold}44` }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "0 8px", alignItems: "baseline" }}>
-          <span style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, letterSpacing: 0.8, textTransform: "uppercase" }}>The whole trip</span>
-          <span style={{ fontSize: 15, fontWeight: 800, color: C.text }}>from {trip.from} DKK</span>
+          <span style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, letterSpacing: 0.8, textTransform: "uppercase" }}>Budget estimate</span>
+          <span style={{ fontSize: 15, fontWeight: 800, color: C.text }}>
+            {eat ? `from ${total} DKK` : `from ${total} DKK plus food`}
+          </span>
         </div>
         {said.map(t => <div key={t} style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 2 }}>{t}</div>)}
+        {/* ── AND THE THREE WAYS TO EAT ────────────────────────────
+            A row of three rather than a number with an assumption in small
+            print under it. No sentence explaining what the buttons do: the
+            labels are the explanation. */}
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 9 }}>
+          {FOOD_TIERS.map(t => (
+            <button key={t.key} onClick={() => setEatTier(t.key)} aria-pressed={eatTier === t.key}
+              style={{ background: eatTier === t.key ? `${C.gold}26` : C.bg, border: `1px solid ${eatTier === t.key ? C.gold : `${C.gold}55`}`, color: eatTier === t.key ? C.gold : C.text, borderRadius: 100, padding: "5px 11px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+              {t.label}{t.perTrip ? ` · ${t.perTrip} DKK` : tierDayRate(t.key, mealsADay) ? ` · ${tierDayRate(t.key, mealsADay)} DKK a day` : ""}
+            </button>
+          ))}
+        </div>
+        {/* ── AND HOW OFTEN ───────────────────────────────────────
+            One control, applying to every tier at once. */}
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 7 }}>
+          {MEALS_A_DAY_OPTIONS.map(n => (
+            <button key={n} onClick={() => setMealsADay(n)} aria-pressed={mealsADay === n}
+              style={{ background: mealsADay === n ? `${C.gold}1F` : "none", border: `1px solid ${mealsADay === n ? `${C.gold}AA` : C.border}`, color: mealsADay === n ? C.gold : C.muted, borderRadius: 100, padding: "4px 10px", fontSize: 10.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+              {n} meals a day
+            </button>
+          ))}
+        </div>
+        <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 5 }}>
+          {describeTier(eatTier, eat)}
+        </div>
+        {/* ── "THAT ALSO HAS TO BE A WARNING" ─────────────────────
+            Oliver, 24 Sep 2026: "It's likely we do not decide what they eat
+            and where they stay. So it's estimates for them."
+
+            The two halves of this section have different standing, not just
+            different payers: above is what this plan puts in front of them,
+            each figure off a page or a measurement, and below is a guess at a
+            decision they have not made. A kroner sign looks identical in both,
+            which is why it is said rather than implied by a heading. */}
+        <div style={{ fontSize: 10.5, color: C.text, lineHeight: 1.55, marginTop: 7, background: `${C.gold}0F`, border: `1px solid ${C.gold}33`, borderRadius: 8, padding: "6px 9px" }}>
+          {BUDGET_WARNING}
+        </div>
       </div>
     );
   };
@@ -158,7 +225,16 @@ export const CostsBlock = ({ guide, C, rowFor, now = new Date(), doors = false }
     <div>
     {priced.length > 0 && (
     <div style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
-      {heading("What you pay")}
+      {/* ── "INEVITABLE PRICES" AND UNDER IT "BUDGET ESTIMATE" ──
+          Oliver, 24 Sep 2026. The split is a real one and it is about who
+          decides. A ticket for a stop this guide put on day 4 and the petrol to
+          reach it are costs the PLAN imposes: the only way out of them is not
+          to go. A bed and a dinner are costs the TRAVELLER chooses, and the
+          same trip runs at a hostel and street food or at a hotel and a
+          tasting menu.
+
+          "What you pay" covered both and so said nothing about either. */}
+      {heading("Inevitable")}
       <div style={{ flex: 1, minWidth: 0 }}>
         {priced.map(row)}
         {/* ── THE ESTIMATE, UNDER THE LINES IT IS MADE OF ──────
