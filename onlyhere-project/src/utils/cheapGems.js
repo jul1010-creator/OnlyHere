@@ -33,7 +33,7 @@
 // discount safe to print: it carries a date. An offer carries the day it ends.
 // A brand's own scheme usually states no end, so a gem carries the day it was
 // last CHECKED instead, and stops rendering when that day is too far back.
-import { fold } from "./danishNames";
+import { fold, containsName } from "./danishNames";
 import { isNeverOwnSite } from "./sourcePolicy";
 // The one hostOf, which the suite holds to one declaration across utils.
 import { hostOf, textHasPrice, menuImagesToRead } from "./pageScan";
@@ -675,3 +675,87 @@ export const gemsForGuide = (days = [], rows = [], { today = new Date() } = {}) 
 
 // The line's heading, which is all the words the guide adds of its own.
 export const gemHeading = (pick) => (pick?.town ? `Cheap gem in ${pick.town}` : "Cheap gem");
+
+// ── AND THE CHAT COULD NOT SEE ANY OF THIS ──────────────────────────
+//
+// Oliver, 24 Sep 2026, reading a live reply that named NightPay's catch and
+// stopped there: "I guess it doesn't dig into the cheap gems? Because it could
+// mention the alternative, which is Barkowski and Leanowski."
+//
+// He is right, and it was never wired. A published gem reaches the Cheap gems
+// page and reaches a guide, through gemsForGuide, at the moment the guide is
+// read. The CHAT saw none of them, so it could say "that app needs a Danish
+// number" and could not say "these two give a real discount to anybody", which
+// is the answer to the sentence it had just written.
+//
+// PICKED BEFORE THE CALL, like the local notes beside it: code chooses the few
+// that fit what was asked, the model never queries anything, and a
+// conversation about lunch never meets a discount on shoes.
+const TOPICS = [
+  // Both sides of each pair, because the words a traveller uses and the words
+  // a gem is written in are not the same vocabulary. "Where do people go out"
+  // has to reach a bar with a beer offer on it.
+  { key: "night", ask: /\b(?:night|nights|nightlife|bar|bars|beer|beers|drink|drinks|club|clubs|pub|pubs|cocktail|cocktails|go(?:ing)? out|party)\b/i,
+    gem: /\b(?:bar|beer|(?:ø|oe)l|drink|club|pub|cocktail|happy hour|nightlife)\b/i },
+  { key: "eat", ask: /\b(?:eat|eating|food|restaurant|restaurants|lunch|dinner|breakfast|brunch|hungry|meal|meals|cheap eats)\b/i,
+    gem: /\b(?:restaurant|caf[eé]|bakery|bager\w*|burger|pizza|kebab|shawarma|food|mad|frokost|lunch|dinner|brunch|sm(?:ø|oe)rrebr(?:ø|oe)d|p(?:ø|oe)lse\w*|hot ?dog|grill\w*|takeaway|buffet)\b/i },
+  { key: "shop", ask: /\b(?:shop|shopping|shops|buy|clothes|clothing|souvenir|souvenirs|design|second ?hand|vintage|store|stores)\b/i, gem: SHOP_WORDS },
+  { key: "travel", ask: /\b(?:train|trains|bus|buses|coach|coaches|ferry|ticket|tickets|fare|fares|transport|getting around|metro|bike|bikes)\b/i, gem: TRAVEL_WORDS },
+  { key: "stay", ask: /\b(?:hotel|hostel|stay|staying|sleep|accommodation|bed|beds|room|rooms|camping)\b/i, gem: STAY_WORDS },
+  { key: "student", ask: /\b(?:student|students|studerende|studie\w*)\b/i, gem: /\b(?:student|studie\w*|studerende)\b/i },
+];
+
+// Two at most. A reply listing four discounts is an advertisement, which is
+// the thing this page was built not to be, and the guide's own gem rule
+// already holds itself to one a day for the same reason.
+export const MAX_CHAT_GEMS = 2;
+
+export const gemsForChat = (travellerText = "", rows = [], { town = "", today = new Date(), max = MAX_CHAT_GEMS } = {}) => {
+  const said = clean(travellerText);
+  if (!said) return [];
+  const here = fold(clean(town));
+  const out = [];
+  for (const row of Array.isArray(rows) ? rows : []) {
+    if (!gemLive(row, today)) continue;
+    const g = shapeGem(row);
+    const towns = (g.towns || []).map(fold);
+    // A gem with no town is a chain and is wherever they are. One with a town
+    // belongs to a conversation about that town, and nowhere else.
+    if (towns.length && !towns.some(t => t === here || containsName(said, t))) continue;
+    const text = [g.name, g.what, g.who, g.how, g.desc, g.category].map(clean).join(" ");
+    // Named outright is a match whatever the subject: they asked about it.
+    const named = !!g.name && containsName(said, g.name);
+    const topic = TOPICS.some(t => t.ask.test(said) && t.gem.test(text));
+    if (!named && !topic) continue;
+    out.push(g);
+    if (out.length >= max) break;
+  }
+  return out;
+};
+
+// ── HANDED OVER AS CHECKED, WHICH IS WHAT THEY ARE ──────────────────
+//
+// The difference from a local's note beside it: a gem carries a page and the
+// day it was read, and it does not go up without them. So the chat may state
+// one as a fact, and the one thing it may not do is improve the figure.
+export const gemsChatBlock = (list = []) => {
+  const gems = (Array.isArray(list) ? list : []).filter(Boolean);
+  if (!gems.length) return "";
+  const line = (g) => {
+    const bits = [`${g.name}: ${g.what || "cheaper than it looks"}`];
+    if (g.who) bits.push(`for ${g.who}`);
+    if (g.how) bits.push(`to get it: ${g.how}`);
+    if (g.where === "shop") bits.push("in the shop only, never online");
+    if (g.catch) bits.push(`THE CATCH: ${g.catch}`);
+    if (g.towns?.length) bits.push(`only in ${g.towns.join(", ")}`);
+    else bits.push("everywhere they have a branch");
+    bits.push(`checked ${g.checkedAt}`);
+    return `- ${bits.join(". ")}`;
+  };
+  return `\n── CHEAP GEMS GEMLYX HAS CHECKED, ON WHAT THEY JUST ASKED ABOUT ──\n`
+    + `Each one was read off the brand's own page and carries the day it was checked, so unlike a local's word these may be stated as fact.\n`
+    + `USE THE FIGURE AS IT IS WRITTEN. Never round it, never turn "up to 20%" into "20%", and never add a price that is not here.\n`
+    + `THE CATCH GOES WITH IT, always, in the same breath. A discount a visitor cannot use is worse than no discount, and the catch is the half they will not find out until they are standing there.\n`
+    + `ONE OF THESE IS PLENTY IN A REPLY, and none at all is fine. A list of savings reads as an advertisement, which is the one thing this is not.\n\n`
+    + `${gems.map(line).join("\n")}\n`;
+};

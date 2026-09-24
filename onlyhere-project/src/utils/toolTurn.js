@@ -44,3 +44,20 @@ export const toolResultsFor = (uses, answers = []) =>
 // an empty query search is a wasted call rather than a broken thread.
 export const queriesIn = (content) =>
   toolUsesIn(content).map(u => String(u?.input?.query || "").trim());
+
+// ── AND A CALL WITH NOTHING IN IT IS NOT A SEARCH ───────────────────
+//
+// Watched live on 24 Sep 2026, on an account whose Anthropic credit had run
+// out. The stream opened a tool_use block, the request then failed, and the
+// block arrived with no input at all. The loop read that as "it wants to
+// search", answered "No results found." because there was no query to run,
+// asked the model again, and did the whole thing three times: four model
+// calls and no search, ending on "That one needed more looking up", which is
+// the copy for a question too big rather than for a turn that fell over.
+//
+// A turn whose every call is empty is a broken turn. One good query among
+// them is still worth running, so this asks for all-empty rather than any.
+export const nothingToSearch = (content) => {
+  const qs = queriesIn(content);
+  return qs.length > 0 && qs.every(q => !q);
+};

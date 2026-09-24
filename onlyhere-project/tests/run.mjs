@@ -270,9 +270,9 @@ writeFileSync(entry, `
   export { PARTNER_OPENER, PARTNER_INTRO, partnerSections, partnerCount } from ${JSON.stringify(join(root, "src/utils/partnerSheet.js"))};
   export { baseKey, staysIn as stayRunsIn, doorsFor, doorOn, sameBaseLine, nightsLabel } from ${JSON.stringify(join(root, "src/utils/stayDoors.js"))};
   export { SECTIONS as DIR_SECTIONS, ROW_KINDS, kindOf as dirKindOf, directoryLinks, pathWord, ferryDoorIn, DIRECTORY_PROMPT, rowsFromDirectory, directoryProblems, staysIn, eatsIn, islandSaysBlock, ISLAND_SAYS } from ${JSON.stringify(join(root, "src/utils/islandDirectory.js"))};
-  export { GEM_TYPE, GEM_KINDS, GEM_SECTION, WHERE_LABEL, RECHECK_DAYS, STALE_DAYS, isCouponSite, isOwnSite, shapeGem, gemProblems, gemLive, gemsView, checkedLabel, checkedAgo, isDataSite, gemWhere, gemCategory, isForStudents, gemMatches, gemFilterOptions, GEM_CATEGORIES, GEM_CATEGORY_LABEL, gemSearches, gemSearchesFor, ownPagesIn, pageAsResult, MAX_OWN_PAGES, GEMS_PROMPT, settleGems, gemRunNotes, gemsForGuide, gemHeading, SAID_CHECKS, saidLine, saidWords } from ${JSON.stringify(join(root, "src/utils/cheapGems.js"))};
+  export { GEM_TYPE, GEM_KINDS, GEM_SECTION, WHERE_LABEL, RECHECK_DAYS, STALE_DAYS, isCouponSite, isOwnSite, shapeGem, gemProblems, gemLive, gemsView, checkedLabel, checkedAgo, isDataSite, gemWhere, gemCategory, isForStudents, gemMatches, gemFilterOptions, GEM_CATEGORIES, GEM_CATEGORY_LABEL, gemSearches, gemSearchesFor, ownPagesIn, pageAsResult, MAX_OWN_PAGES, GEMS_PROMPT, settleGems, gemRunNotes, gemsForGuide, gemHeading, SAID_CHECKS, saidLine, saidWords, gemsForChat, gemsChatBlock, MAX_CHAT_GEMS } from ${JSON.stringify(join(root, "src/utils/cheapGems.js"))};
   export { NOTE_TYPE, NOTE_KINDS, NOTE_KIND_LABEL, NOTE_KIND_MEANING, NOTE_CHECKS, NOTE_LIFE, NOTE_RECHECK, shapeNote, noteProblems, noteLive, noteAgo, noteSubjects, notesFor, notesForGuide, notesBlock, NOTE_LINE, MAX_NOTES, noteSearches, NOTE_PROMPT, settleNote, noteRunNotes, namesPublished, ALREADY_SAID, alreadySaid, aboutWords, MODES_WITH_WORDS, MODES_THE_APP_HAS } from ${JSON.stringify(join(root, "src/utils/founderNotes.js"))};
-  export { toolUsesIn, toolResultsFor, queriesIn, NO_ANSWER } from ${JSON.stringify(join(root, "src/utils/toolTurn.js"))};
+  export { toolUsesIn, toolResultsFor, queriesIn, NO_ANSWER, nothingToSearch } from ${JSON.stringify(join(root, "src/utils/toolTurn.js"))};
   export { reelLive, withLiveReels, reelCount } from ${JSON.stringify(join(root, "src/utils/reelGate.js"))};
   export { sentencesIn, readerBody, noticeAsk, noticeText, TRANSLATE_NOTICE, translatedNotice, DEAD_ENDS } from ${JSON.stringify(join(root, "src/utils/noticeVoice.js"))};
   export { guideClaims, guideClaimNote } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
@@ -73904,6 +73904,36 @@ SOURCE: https://www.tripadvisor.com/whatever`;
       && !/\$\{kindsOutBlock\}\$\{localSaysGuide\}\\n\\nConversation/.test(appG));
   }
 
+  // ── AND WHAT THE LIVE CHAT SHOWED THE MORNING AFTER ──────────────
+  //
+  // Four notes published and three messages sent through the real site, 24
+  // Sep 2026. Two things came back wrong.
+  {
+    // 1. A NOTE WITH NO SUBJECT LINE MAY NEVER FIRE. "Vesterbrogade next to
+    // Tivoli is a massive tourist hub, go to Gothersgade to meet locals" did
+    // not reach "where do locals actually go out in Copenhagen at night": the
+    // only word the two share is locals, and one word is not a topic.
+    const noSubject = { said: "Vesterbrogade next to Tivoli is a massive tourist hub. Go to Gothersgade to meet locals", kind: "advice", about: "", checkedAt: "2026-09-23" };
+    is("a note with no subject line says so", M.noteProblems(noSubject, DAY).problems, [
+      "No subject line, so this only reaches a conversation that uses two of its own words. Write what it is about and it will be found.",
+    ]);
+    ok("and is not blocked for it", !M.noteProblems(noSubject, DAY).blocks);
+    ok("advice with a subject line has nothing to answer for",
+      M.noteProblems({ ...noSubject, about: "nightlife, bars, going out" }, DAY).problems.length === 0);
+    is("and without one it still misses the question it was written for",
+      M.notesFor("where do locals actually go out in Copenhagen at night", [noSubject], { today: DAY }), []);
+    is("with one, it lands", M.notesFor("where do locals actually go out in Copenhagen at night",
+      [{ ...noSubject, about: "nightlife, bars, going out, locals, Copenhagen" }], { today: DAY }).length, 1);
+
+    // 2. AND A LINE ABOUT WHICH IS CHEAPER IS NOT A PRICE. The reply came
+    // back with "FlixBus fares to Aalborg start around 24 DKK right now" on a
+    // turn that made one model call and no searches at all.
+    const BLOCK2 = M.notesBlock([M.shapeNote(DSB)]);
+    ok("a comparison may not be dressed with a fare", /A LINE ABOUT WHICH OF TWO THINGS IS CHEAPER IS NOT A PRICE/.test(BLOCK2));
+    ok("nor with one nobody looked up in the conversation", /that you have not looked up in this conversation/.test(BLOCK2));
+    ok("and the price is left where they buy it", /let them see the price where they buy it/.test(BLOCK2));
+  }
+
   // ── WHAT A REVIEW PASS FOUND THE NIGHT THIS SHIPPED ──────────────
   //
   // Every one of these is a defect that was live in the code above, found by
@@ -74137,7 +74167,28 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   is("a call with no query reads as empty rather than as undefined", M.queriesIn([{ type: "tool_use", id: "x", input: {} }]), [""]);
   ok("every result carries a string, never an object", M.toolResultsFor(TURN, [{ a: 1 }, 2]).every(r => typeof r.content === "string"));
 
+  // ── AND A CALL WITH NOTHING IN IT IS NOT A SEARCH ─────────────────
+  //
+  // Watched live 24 Sep 2026 on an account out of Anthropic credit: the
+  // stream opened a tool_use block, the request failed, and the block arrived
+  // with no input. The loop answered "no results", asked again, and spent
+  // four model calls and no searches to arrive at "That one needed more
+  // looking up", which is the copy for a question too big.
+  ok("a turn that asked to search with no query is a broken turn",
+    M.nothingToSearch([{ type: "tool_use", id: "a", name: "web_search", input: {} }]));
+  ok("and so is one where every call is empty",
+    M.nothingToSearch([{ type: "tool_use", id: "a", input: {} }, { type: "tool_use", id: "b", input: { query: "  " } }]));
+  ok("one good query among them is still worth running",
+    !M.nothingToSearch([{ type: "tool_use", id: "a", input: {} }, { type: "tool_use", id: "b", input: { query: "aalborg" } }]));
+  ok("a turn with no calls at all is not this", !M.nothingToSearch([{ type: "text", text: "hi" }]));
+  ok("and nothing is not this either", !M.nothingToSearch(null));
+
   const appT = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+  ok("the loop stops on a turn with nothing to search for",
+    /if \(nothingToSearch\(out\.content\)\) \{ flush\(out\); return \{ data: out, exhausted: false \}; \}/.test(appT));
+  // A retry exists for a transient empty turn. An error the API NAMED will be
+  // named again a second later, so the retry buys nothing and costs a call.
+  ok("an error the API named is not retried", /if \(data\?\.error\) \{\s*\n\s*console\.warn\("Gemlyx chat: not retrying/.test(appT));
   ok("the chat loop reads every call", /const toolUses = toolUsesIn\(out\.content\);/.test(appT));
   ok("and answers every one of them", /content: toolResultsFor\(out\.content, answers\)/.test(appT));
   ok("the searches run together rather than one after another", /await Promise\.all\(queriesIn\(out\.content\)\.map/.test(appT));
@@ -74146,6 +74197,62 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   ok("nothing in the chat answers only the first call",
     !/out\.content\?\.find\(b => b\.type === "tool_use"\)/.test(appT));
   ok("and the request asks for one call at a time", /tool_choice: \{ type: "auto", disable_parallel_tool_use: true \}/.test(appT));
+}
+
+// ── THE CHAT COULD NOT SEE THE CHEAP GEMS ───────────────────────────
+//
+// Oliver, 24 Sep 2026, reading a live reply that named NightPay's catch and
+// stopped there: "I guess it doesn't dig into the cheap gems? Because it could
+// mention the alternative, which is Barkowski and Leanowski." A published gem
+// reached the Cheap gems page and a guide, and never the chat.
+{
+  const DAY = new Date(2026, 8, 24);
+  const BARK = { name: "Barkowski", kind: "cheap", what: "5 bottled beers for 100 DKK", desc: "A casual sports bar with games and a cozy atmosphere.", towns: ["Copenhagen"], category: "food", where: "shop", source: "https://barkowski.dk/", checkedAt: "2026-09-23" };
+  const MSCH = { name: "MSCH Copenhagen", kind: "scheme", what: "15% off for students", who: "students", how: "Email a photo of your student card and they send a personal code", towns: [], category: "shop", where: "both", source: "https://www.mschcopenhagen.dk/", checkedAt: "2026-09-23", catch: "You need a student card they will accept" };
+  const ROWS = [BARK, MSCH];
+  const names = (q, town) => M.gemsForChat(q, ROWS, { today: DAY, town }).map(g => g.name);
+
+  // The words a traveller uses and the words a gem is written in are not the
+  // same vocabulary: "go out at night" has to reach a bar with a beer offer.
+  is("a night out question reaches the bar", names("where do locals actually go out in Copenhagen at night", "Copenhagen"), ["Barkowski"]);
+  is("a student discount question reaches the shop", names("any student discounts on clothes"), ["MSCH Copenhagen"]);
+  is("a question about the weather reaches nothing", names("what is the weather like"), []);
+  is("and a question about lunch does not reach a beer offer", names("where should we eat in Aarhus", "Aarhus"), []);
+  is("a gem named outright comes back whatever the subject", names("is Barkowski any good", "Copenhagen"), ["Barkowski"]);
+
+  // A gem with a town belongs to that town's conversation and no other.
+  is("a Copenhagen bar stays out of an Aalborg night out", names("where do we go out in Aalborg", "Aalborg"), []);
+  is("and a chain with no town is wherever they are", names("student discount", "Aalborg"), ["MSCH Copenhagen"]);
+  is("nothing typed is nothing offered", names(""), []);
+
+  // Stale and unpublishable rows never reach a traveller, the same gate the
+  // page uses.
+  is("a gem checked too long ago is not offered",
+    M.gemsForChat("where do we go out at night", [{ ...BARK, checkedAt: "2025-01-01" }], { today: DAY, town: "Copenhagen" }), []);
+  is("nor one that could not be published at all",
+    M.gemsForChat("where do we go out at night", [{ ...BARK, source: "" }], { today: DAY, town: "Copenhagen" }), []);
+
+  // Two at most: a reply listing four discounts is an advertisement.
+  is("two is the ceiling", M.MAX_CHAT_GEMS, 2);
+  is("and it holds", M.gemsForChat("student discount shopping",
+    Array.from({ length: 6 }, () => ({ ...MSCH })), { today: DAY }).length, 2);
+
+  const BLOCK = M.gemsChatBlock(M.gemsForChat("any student discounts on clothes", ROWS, { today: DAY }));
+  ok("the block says these are checked, unlike a local's word", /may be stated as fact/.test(BLOCK));
+  ok("the figure is used as written", /Never round it/.test(BLOCK));
+  ok("the catch travels with it", /THE CATCH GOES WITH IT, always/.test(BLOCK));
+  ok("and one is plenty", /ONE OF THESE IS PLENTY IN A REPLY/.test(BLOCK));
+  ok("the line carries the saving, who it is for and how", /15% off for students/.test(BLOCK) && /for students/.test(BLOCK) && /to get it: Email a photo/.test(BLOCK));
+  ok("and the catch itself", /THE CATCH: You need a student card/.test(BLOCK));
+  ok("a chain says it works anywhere they have a branch", /everywhere they have a branch/.test(BLOCK));
+  ok("and the day it was checked is on it", /checked 2026-09-23/.test(BLOCK));
+  is("nothing matching is no block at all", M.gemsChatBlock([]), "");
+
+  const appG = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+  ok("the chat picks its gems before the call, off their own turns",
+    /gemsChatBlock\(gemsForChat\(travellerTurns\.join\("\\n"\), gems, \{ town: namedByThem\[0\]\?\.name \|\| "" \}\)\)/.test(appG));
+  ok("and the block reaches the prompt beside the local notes",
+    /\$\{kindsRuledOut\}\$\{localSays\}\$\{gemsSay\}/.test(appG));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

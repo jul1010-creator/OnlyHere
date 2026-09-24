@@ -200,6 +200,21 @@ export const noteProblems = (payload = {}, today = new Date()) => {
   let blocks = false;
   if (!n.said) { out.push("Nothing written."); blocks = true; }
   if (!n.kind) { out.push("Not marked as how a thing is, what it costs, or something worth doing."); blocks = true; }
+  // ── AND WHETHER IT CAN EVER BE FOUND ────────────────────────────
+  //
+  // Watched live on 24 Sep 2026. His note "Vesterbrogade (next to Tivoli) is
+  // a massive tourist hub. If you want to meet locals, go to Gothersgade" had
+  // no subject line, and a traveller asking "where do locals actually go out
+  // in Copenhagen at night" did not get it: the only word the two share is
+  // locals, and one word is not a topic. The transport note, which has a
+  // subject line, fired on the same conversation.
+  //
+  // Not blocking, because a note with no subject line still reaches a
+  // conversation that repeats its own words. Said plainly, because the field
+  // is the difference between a note that works and one that sits there.
+  if (!clean(n.about)) {
+    out.push("No subject line, so this only reaches a conversation that uses two of its own words. Write what it is about and it will be found.");
+  }
   if (n.kind === "advice") {
     // Nothing to check, so nothing below applies. Advice is not a claim about
     // the world and a page agreeing with it would not make it truer.
@@ -421,6 +436,15 @@ export const notesBlock = (notes = [], { daysAhead = null } = {}) => {
     // So the rule now separates the two halves that were confused: say the
     // thing plainly, and never tell a story about how you came to know it.
     + `A LINE NO PAGE BACKS IS STILL SAID PLAINLY, as a thing you know about this country: "the coach is the cheaper way to do that crossing when you are booking this late". Plainly means without the hedging you would use for something you were unsure of.\n`
+    // ── AND NEVER WITH A PRICE NOBODY LOOKED UP ─────────────────────
+    //
+    // Watched live on 24 Sep 2026. The line said the coach beats the train
+    // when you are booking this late, which is what it says and nothing more.
+    // The reply came back with "FlixBus fares to Aalborg start around 24 DKK
+    // right now", and the turn made no search at all: one model call, no
+    // lookups. A line about which of two is cheaper is an invitation to
+    // supply the figures, and the figures are the part nobody checked.
+    + `A LINE ABOUT WHICH OF TWO THINGS IS CHEAPER IS NOT A PRICE. Never put a figure on it that the line does not contain and that you have not looked up in this conversation: no fare, no "from X kroner", no "around Y right now". Say which is cheaper and what it depends on, and let them see the price where they buy it.\n`
     + `AND NEVER AS A MEMORY OR AN OCCASION. "Last time I was there", "when I did that crossing", "I paid", "it was about 40 kroner last time" are inventions: there was no such visit and no such figure, and a line above gives you none. Say the thing, never a story about how you learned it, and never a number the line does not contain.\n`
     + `WHAT YOU MAY NOT DO with one is give it the voice you use for something you looked up: no opening hours phrasing, no "they offer", no figure stated the way a price off a page is stated. If the traveller is about to spend money on it, say it is worth checking when they get there.\n`
     // ── AND THE ONE PHRASE THAT IS OUT ──────────────────────────────

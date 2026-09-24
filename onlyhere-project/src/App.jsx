@@ -312,10 +312,10 @@ import { CheapGemsPage } from "./components/CheapGemsPage";
 import { ShoppingPage } from "./components/ShoppingPage";
 import { CheapGemsPanel } from "./components/CheapGemsPanel";
 import { FounderNotesPanel } from "./components/FounderNotesPanel";
-import { GEM_TYPE } from "./utils/cheapGems";
+import { GEM_TYPE, gemsForChat, gemsChatBlock } from "./utils/cheapGems";
 import { NOTE_TYPE, notesFor, notesForGuide, notesBlock } from "./utils/founderNotes";
 import { reelLive, reelCount } from "./utils/reelGate";
-import { toolUsesIn, toolResultsFor, queriesIn } from "./utils/toolTurn";
+import { toolUsesIn, toolResultsFor, queriesIn, nothingToSearch } from "./utils/toolTurn";
 import { founderNotes } from "./data/founderNotes";
 import { linkPatch } from "./utils/affiliateAudit";
 import { EntryLink } from "./components/EntryLink";
@@ -21127,6 +21127,18 @@ If the conversation only covers a single day or a few stops with no explicit day
       // was already computed for a few lines above. A note scoped to a town
       // reaches a conversation that has said the town, and no other.
       const localSays = notesBlock(notesFor(travellerTurns.join("\n"), founderNotes, { town: namedByThem[0]?.name || "" }));
+      // ── AND THE SAVINGS IT HAS ALREADY CHECKED ────────────────────
+      //
+      // Oliver, 24 Sep 2026, on a live reply that named NightPay's catch and
+      // stopped: "I guess it doesn't dig into the cheap gems? Because it
+      // could mention the alternative, which is Barkowski and Leanowski."
+      //
+      // A published gem reached the Cheap gems page and a guide, and never
+      // the chat, so the one surface that had just described the problem
+      // could not name the answer. Picked here, before the call, by what they
+      // asked and the town in play, the same as the notes above. See
+      // gemsForChat in utils/cheapGems.js.
+      const gemsSay = gemsChatBlock(gemsForChat(travellerTurns.join("\n"), gems, { town: namedByThem[0]?.name || "" }));
       const nightTip = reservedEssential(essentials, { convoText: travellerTurns.join("\n"), interests: intakeInterest });
       const nightBlock = !nightTip ? "" : `\n── AND THE ONE THING A NIGHT OUT HERE NEEDS ──\nThey have said nightlife is part of this trip, so tell them about this once, in your own words, at whatever point in the conversation it is useful rather than all at once. It is a published Gemlyx entry, quoted here as written: state it, never embellish it, and never invent a second app like it.\n\n${essentialsBlock([nightTip])}\n`;
 
@@ -21201,7 +21213,7 @@ ONE QUESTION PER TURN. Not two, whatever else is missing. Somebody asked two thi
 DO NOT COMPLIMENT THEIR CHOICE. "Great pick", "excellent choice", "you'll love it", "way underrated" said about a place they just named is the banned filler in a different costume: it is a sentence with no information in it, spent on making them feel approved of.
 
 GIVE BEFORE YOU ASK. Every turn puts one real thing on the table before its question: a fact about the place they named, an opinion about it, or a warning worth having. One thing, not three, and off the block below when there is one. A conversation where one side only asks is an intake form, and it puts the whole weight of the trip on somebody who came here so they would not have to carry it. This is also what makes a short answer workable: a traveller who types four words at a time is normal, and a turn that gives something is still a real turn when their half is thin.
-${heldBlock}${nightBlock}${budgetCapital}${budgetFood}${flyingIn}${kindsRuledOut}${localSays}${seasonSays ? `\n${seasonSays}\n` : ""}${homeSays ? `\n${homeSays}\n` : ""}${activitySays ? `\n${activitySays}\n` : ""}
+${heldBlock}${nightBlock}${budgetCapital}${budgetFood}${flyingIn}${kindsRuledOut}${localSays}${gemsSay}${seasonSays ? `\n${seasonSays}\n` : ""}${homeSays ? `\n${homeSays}\n` : ""}${activitySays ? `\n${activitySays}\n` : ""}
 ── THE TRIP BRIEF, AS MEASURED RATHER THAN AS YOU FEEL IT ──
 This block is computed from what the traveller has typed and from the form they filled in. It is not your impression of the conversation and it overrides your impression of the conversation. Never say you have everything you need unless this block says so, and never say a traveller has already told you something that is not listed as known here.
 
@@ -21502,6 +21514,10 @@ ${languageBlock()}`;
           // on a conversation the API will reject anyway.
           if (out.error) { flush(out); return { data: out, exhausted: false }; }
           const toolUses = toolUsesIn(out.content);
+          // A turn that asked to search and gave nothing to search for fell
+          // over on the way. Answering it and asking again spends three more
+          // rounds to arrive at the same place. See nothingToSearch.
+          if (nothingToSearch(out.content)) { flush(out); return { data: out, exhausted: false }; }
           // No search coming, so the fragment after the last full stop is the end
           // of the reply rather than a thought that was interrupted. Show it.
           if (!toolUses.length) { flush(out); return { data: out, exhausted: false }; }
@@ -21601,17 +21617,29 @@ ${languageBlock()}`;
         // filter above) — an error notice should never be able to poison future turns.
         clearStreamedBubble();
         console.warn("Gemlyx chat: empty reply, retrying once.", { data, stop_reason: data?.stop_reason, error: data?.error });
+        // ── AND A REPORTED ERROR IS NOT A BLIP ──────────────────────
+        //
+        // The retry exists for a transient empty turn. An error the API
+        // NAMED ("Your credit balance is too low", a bad key, a refused
+        // model) will be named again a second later, so the retry buys
+        // nothing and costs another call. Watched live on 24 Sep 2026, twice
+        // per message, on an account with no credit left.
         try {
-          // Through the same loop, or the retry re-runs exactly the turn that
-          // just failed and fails identically. That is what made this permanent
-          // rather than transient.
-          const retry = await runTurn(baseMessages);
-          const retryData = retry.data;
-          replyText = trimFillerForChat(priorReplies, retryData.content?.filter(b => b.type === "text").map(b => b.text).join("").trim());
-          if (!replyText) {
-            console.warn("Gemlyx chat: retry also empty, giving up.", { retryData, stop_reason: retryData?.stop_reason, error: retryData?.error });
-            clearStreamedBubble();
-            data = retryData;
+          // An error the API NAMED is not retried: see above.
+          if (data?.error) {
+            console.warn("Gemlyx chat: not retrying, the API named an error.", { error: data.error });
+          } else {
+            // Through the same loop, or the retry re-runs exactly the turn
+            // that just failed and fails identically. That is what made this
+            // permanent rather than transient.
+            const retry = await runTurn(baseMessages);
+            const retryData = retry.data;
+            replyText = trimFillerForChat(priorReplies, retryData.content?.filter(b => b.type === "text").map(b => b.text).join("").trim());
+            if (!replyText) {
+              console.warn("Gemlyx chat: retry also empty, giving up.", { retryData, stop_reason: retryData?.stop_reason, error: retryData?.error });
+              clearStreamedBubble();
+              data = retryData;
+            }
           }
         } catch (retryErr) {
           console.warn("Gemlyx chat: retry threw.", retryErr);
