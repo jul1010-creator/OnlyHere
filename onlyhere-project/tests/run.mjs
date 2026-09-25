@@ -73,7 +73,7 @@ writeFileSync(entry, `
   export { WEGOTRIP_DK, WEGOTRIP_TOWN_PAGE, CHECKED_ON as WEGOTRIP_CHECKED_ON } from ${JSON.stringify(join(root, "src/data/wegotrip.js"))};
   export { TAB_HASH, hashForTab, tabForHash, isEntryHash, ownsTheAddress, STUDIO_HASH } from ${JSON.stringify(join(root, "src/utils/tabUrl.js"))};
   export { venueCore, venueMentions, venueQuote, venueVerdict, venueVia, describeVenue, VENUE_MIN_MENTIONS, VENUE_MIN_MENTIONS_NO_TOWN, VENUE_MAX_KM, NO_NAME as V_NO_NAME, NOT_NAMED as V_NOT_NAMED, TOO_FAR as V_TOO_FAR, IS_AN_EVENT as V_IS_AN_EVENT, OK as V_OK } from ${JSON.stringify(join(root, "src/utils/venueMatch.js"))};
-  export { wrongEdition, urlYears, isTiqetsProductUrl, tiqetsPageKind, ticketMatches, pickTicketUrl, describeTicketSearch, ticketQuery, ticketQueries, isBookableTicketUrl, ticketAgentOf, isTicketmasterEventUrl, isTicketmasterHubUrl, isWegotripTicketUrl, ticketUrlSaysElsewhere, ticketmasterVenuePhrase, ticketIsInDenmark, reviewPastedTicketUrl, ticketUrlIsASubEvent, MAX_TICKET_TOWN_KM, sameShop, priceSourceHost, isTourUrl, cleanTourUrl, typeHasAdmission, TICKET_FIELD, TOUR_FIELD, TOUR_TYPES } from ${JSON.stringify(join(root, "src/utils/ticketLink.js"))};
+  export { wrongEdition, urlYears, editionYearOf, isTiqetsProductUrl, tiqetsPageKind, ticketMatches, pickTicketUrl, describeTicketSearch, ticketQuery, ticketQueries, isBookableTicketUrl, ticketAgentOf, isTicketmasterEventUrl, isTicketmasterHubUrl, isWegotripTicketUrl, ticketUrlSaysElsewhere, ticketmasterVenuePhrase, ticketIsInDenmark, reviewPastedTicketUrl, ticketUrlIsASubEvent, MAX_TICKET_TOWN_KM, sameShop, priceSourceHost, isTourUrl, cleanTourUrl, typeHasAdmission, TICKET_FIELD, TOUR_FIELD, TOUR_TYPES } from ${JSON.stringify(join(root, "src/utils/ticketLink.js"))};
   export { dayStart, dayEnd, dayWithin, dayKey, dayPlus, dayLabel, eventLastDay } from ${JSON.stringify(join(root, "src/utils/calendarDay.js"))};
   export { essentials as ESSENTIALS_FOR_TEST } from ${JSON.stringify(join(root, "src/data/essentials.js"))};
   export { EDITABLE_TYPES, typeOf, isEditable, blockText, withBlockText, editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict, MAX_EDIT_LOG } from ${JSON.stringify(join(root, "src/utils/bodyEdit.js"))};
@@ -68185,7 +68185,11 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     ok("through the queries ticketLink already owns", /ticketQueries\(name, town\)/.test(runBody));
     // Two queries, and the second is only bought when the first found nothing
     // this gate would take. Same order the draft pipeline uses.
-    ok("and it stops at the first that answers", /if \(pickTicketUrl\(results, \{ name, town \}\)\) break;/.test(runBody));
+    // ...and it stops on the same judgement the proposal will make, not a
+    // looser one. See PASS 111: without the year it stopped on a page
+    // ticketProposal was about to refuse, and the second query, the one that
+    // might have had the real edition, was never paid for.
+    ok("and it stops at the first that answers", /if \(pickTicketUrl\(results, \{ name, town, year: editionYearOf\(row\?\.payload\) \}\)\) break;/.test(runBody));
     // ── AND A FAILED QUERY IS COUNTED, NOT SWALLOWED ──────────────
     //
     // A mutation put `continue` back without the count and every test still
@@ -72730,11 +72734,93 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   // -- THE PIPELINE HANDS IT THE YEAR --------------------------------
   const app = readFileSync(join(root, "src/App.jsx"), "utf8");
   is("both draft-side pickers are given the edition year",
-     (app.match(/year: yearOfDraft\(t\)/g) || []).length, 2);
-  // Off the date, never off the name or the research blob: a festival's name
-  // carries no year and the blob carries every year anybody wrote about it.
-  ok("and the year comes off the draft's own date",
-     /const yearOfDraft = \(t\) => \{[\s\S]{0,200}dateStart/.test(app));
+     (app.match(/year: editionYearOf\(t\)/g) || []).length, 2);
+}
+
+// -- PASS 111: THE GUARD THE AFFILIATE SWEEP NEVER HANDED A YEAR -----------
+//
+// Oliver, 25 Sep 2026: "the Tinderbox affiliate search gave me a 2024 link on
+// ticketmaster.. something to look into."
+//
+// wrongEdition was written on 16 Sep, tested, and already refusing the 2022
+// TinderBox link in the draft pipeline. It did nothing whatever in the
+// affiliate sweep: `wrongEdition(url, undefined)` returns false on its first
+// line, so the guard ran on every row there and could never once fire.
+//
+// The fault is this codebase's oldest one in its plainest form. One guard, two
+// callers, one of them holding the value and one of them not, and nothing on
+// either side that could show the difference. So the guard now owns the reader.
+{
+  const { editionYearOf, pickTicketUrl, describeTicketSearch, ticketProposal,
+          AFF_NOTHING, AFF_FOUND } = M;
+  const TM2024 = "https://www.ticketmaster.dk/event/partout-tinderbox-2024-billetter/484597";
+  const TM2027 = "https://www.ticketmaster.dk/event/partout-tinderbox-2027-billetter/484599";
+
+  // -- ONE READER, AND IT READS THE DATE -----------------------------
+  // Off the row's own date, never off the name or the research blob: a
+  // festival's name carries no year and the blob carries every year anybody
+  // ever wrote about it.
+  is("a festival's start date is the edition", editionYearOf({ dateStart: "2027-06-24" }), 2027);
+  is("and the other dated types store it as date", editionYearOf({ date: "2027-08-01" }), 2027);
+  is("dateStart wins where a row somehow has both", editionYearOf({ dateStart: "2027-06-24", date: "2024-01-01" }), 2027);
+  is("a row with no date has no edition", editionYearOf({ name: "Somewhere" }), null);
+  is("and nothing at all is not a crash", editionYearOf(null), null);
+  // STRICTLY YYYY-MM-DD, which is the format every draft prompt in this app
+  // demands in capitals. A European-order date must not read as a year.
+  is("a day-first date is not a year", editionYearOf({ dateStart: "24-06-2027" }), null);
+  is("and a year before this app existed is not one either", editionYearOf({ dateStart: "1999-06-24" }), null);
+
+  // -- THE SWEEP HANDS IT OVER NOW -----------------------------------
+  {
+    const row = { id: 9, type: "festival", payload: { name: "TinderBox", town: "Odense", dateStart: "2027-06-24", location: "Tusindårsskoven, Odense" } };
+    const stale = [{ url: TM2024, snippet: "Partout TinderBox 2024 billetter Odense" }];
+    const got = ticketProposal(row, stale, { today: new Date("2026-09-25") });
+    is("the 2024 page is not proposed for a 2027 row", got.verdict, AFF_NOTHING);
+    // AND IT SAYS WHICH KIND OF NOTHING. "None of them is clearly about this
+    // place" reads as a naming problem and would send him to check a name that
+    // was never wrong.
+    ok("and says it is the finished edition rather than the wrong place", /2024/.test(got.why) && /2027/.test(got.why));
+    ok("and that there is nothing for him to fix", /Nothing to fix here/.test(got.why));
+    // THE REAL PAGE STILL LANDS. A guard that refused the right year too would
+    // be a worse bug than the one it replaced.
+    const right = ticketProposal(row, [{ url: TM2027, snippet: "Partout TinderBox 2027 billetter Odense" }], { today: new Date("2026-09-25") });
+    is("the right edition is still proposed", right.verdict, AFF_FOUND);
+  }
+
+  // -- AND THE STALE ANSWER CANNOT FIRE ON A SEARCH THAT WORKED ------
+  {
+    const both = [{ url: TM2024, snippet: "Partout TinderBox 2024 billetter Odense" },
+                  { url: TM2027, snippet: "Partout TinderBox 2027 billetter Odense" }];
+    is("a run that found the real page has an answer, not an explanation",
+       pickTicketUrl(both, { name: "TinderBox", town: "Odense", where: "Odense", year: 2027 }), TM2027);
+    // EVERY one of them, not some: one stale page beside a live one is a
+    // success and never reaches describeTicketSearch at all.
+    ok("and the stale wording needs all of them to be stale",
+       !/finished edition/.test(describeTicketSearch(both, { name: "TinderBox", town: "Odense", year: 2027 })));
+    ok("while all-stale says so", /finished edition/.test(
+       describeTicketSearch([{ url: TM2024, snippet: "Partout TinderBox 2024 billetter Odense" }], { name: "TinderBox", town: "Odense", year: 2027 })));
+    // WITHOUT A YEAR THE OLD WORDING STANDS. A row with no date knows nothing
+    // about editions and must not be told about one.
+    ok("a row with no date is told nothing about editions",
+       !/finished edition/.test(describeTicketSearch([{ url: TM2024, snippet: "Partout TinderBox 2024 billetter Odense" }], { name: "TinderBox", town: "Odense" })));
+  }
+
+  // -- AND THE PROBE THAT DECIDES WHETHER TO PAY FOR A SECOND SEARCH -
+  //
+  // It stops at the first query that yields something the gate would take. On
+  // the wrong year it stopped on a page ticketProposal was about to refuse, and
+  // the second query, the one that might have had the real edition, was never
+  // paid for. A cheaper search that answers the wrong question is not a saving.
+  {
+    const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+    ok("the early-break probe is given the same year the proposal will judge by",
+       /if \(pickTicketUrl\(results, \{ name, town, year: editionYearOf\(row\?\.payload\) \}\)\) break;/.test(app));
+    const sweep = readFileSync(join(root, "src/utils/affiliateSweep.js"), "utf8");
+    ok("and the proposal reads the year once and uses it for both",
+       /const year = editionYearOf\(payload\);/.test(sweep)
+       && /pickTicketUrl\(list, \{[\s\S]*?, year \}\);/.test(sweep)
+       && /describeTicketSearch\(list, \{ name, town, year \}\)/.test(sweep));
+  }
 }
 
 // -- PASS 110: A CHAIN OF CROSSINGS IS ITS OWN WARNING ----------------------

@@ -232,7 +232,7 @@ import { TRIP_SCOPES, scopeSaid } from "./utils/tripScopeChoice";
 import { STAY_CHOICES, stayIsBooked, stayProblem, staySaid } from "./utils/stayChoice";
 import { FOOD_TIERS } from "./utils/mealsEstimate";
 import { weighAdd, addCaution, tripLoadBlock } from "./utils/weighAdd";
-import { isBookableTicketUrl, pickTicketUrl, describeTicketSearch, ticketQueries, ticketUrlSaysElsewhere, ticketAgentOf, reviewPastedTicketUrl, isTourUrl, typeHasAdmission, TICKET_FIELD, TOUR_FIELD } from "./utils/ticketLink";
+import { isBookableTicketUrl, pickTicketUrl, describeTicketSearch, ticketQueries, ticketUrlSaysElsewhere, ticketAgentOf, reviewPastedTicketUrl, isTourUrl, typeHasAdmission, editionYearOf, TICKET_FIELD, TOUR_FIELD } from "./utils/ticketLink";
 import { tourQuery, tourKindFor, tourTownFor, pickTourUrl, tourPhrase, tourCandidates, tourProposal, replaceTour, describeTourFindings, tourAliveVerdict, tourRemovalFor, TOUR_RESWEEP_DAYS, FOUND as TOUR_FOUND, GONE as TOUR_GONE, UNKNOWN as TOUR_UNKNOWN, ALIVE as TOUR_ALIVE } from "./utils/tourSweep";
 import { currentUiLanguage, setStoredUiLanguage, t as uiT } from "./utils/uiLanguage";
 import { LanguageChoice } from "./components/LanguagePicker";
@@ -712,10 +712,14 @@ WHERE THE NEXT DATES LIVE, when the front page is still showing the last edition
 // Which edition a draft is about, for the ticket-link filter. The date is the
 // only honest answer: a festival's name carries no year and the research blob
 // carries every year anybody has written about it.
-const yearOfDraft = (t) => {
-  const m = /^(\d{4})-/.exec(String(t?.dateStart || t?.date || "").trim());
-  return m ? Number(m[1]) : null;
-};
+// ── WHICH EDITION A ROW IS FOR IS READ IN ONE PLACE ─────────────────
+// yearOfDraft used to live here, private to this file, which meant the
+// affiliate sweep had no way to ask the same question and silently handed no
+// year to the same guard. It now sits beside wrongEdition in
+// utils/ticketLink.js and is imported above, so every caller of that guard
+// reads the year from one place and a new caller cannot quietly skip it.
+// An alias here would be a second name for one value, which is the same fault
+// one indirection further along, so the call sites say editionYearOf.
 
 const RESEARCH_SOURCE_RULES = `SOURCES, EVERY TIME: always check Wikipedia and the place's own official website — Wikipedia for background/history, the official site for anything current (prices, hours, booking). Britannica and Denmark.dk are also good general/background sources when relevant. Use Reddit, Quora and Facebook specifically for real visitor opinions and reviews (what it's like), never as the source of a hard fact like a date, price, or opening hour — those need the official site or a source that would know. If the official site and Wikipedia disagree on something current (a price, a status), the official site wins. Anything priced or timed from before ${STALE_BEFORE_YEAR} should be treated as stale, not current. ${EXISTENCE_RULE}
 
@@ -8292,7 +8296,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
           // The edition year comes off the draft's own date, so a ticket page
           // naming a different year is refused rather than ranked. See
           // wrongEdition in utils/ticketLink.js for the 2022 link this is from.
-          const picked = pickTicketUrl(candidates, { name, town: draftTown, where: `${t.location || ""} ${t.mapHint || ""}`, year: yearOfDraft(t) });
+          const picked = pickTicketUrl(candidates, { name, town: draftTown, where: `${t.location || ""} ${t.mapHint || ""}`, year: editionYearOf(t) });
           if (picked) {
             t.ticketUrl = picked;
             note("The ticket link, off a page already read", {
@@ -8782,7 +8786,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
               // page that is not about this place — which matters more here than
               // anywhere else in this pipeline, because a wrong ticket link is
               // not a weak fact, it is a reader who paid for something else.
-              const found = pickTicketUrl(results, { name, town: draftTown, where: `${t.location || ""} ${t.mapHint || ""}`, year: yearOfDraft(t) });
+              const found = pickTicketUrl(results, { name, town: draftTown, where: `${t.location || ""} ${t.mapHint || ""}`, year: editionYearOf(t) });
               note(`Ask ${domainOf(q.includes("tiqets") ? "https://tiqets.com" : "https://ticketmaster.dk")} directly`, {
                 provider: "tavily",
                 detail: q.slice(0, 110),
@@ -12762,7 +12766,12 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
           // Stop at the first query that yields something this gate would take.
           // The second search is only worth paying for when the first found
           // nothing usable, which is the same order the draft pipeline uses.
-          if (pickTicketUrl(results, { name, town })) break;
+          // THE SAME YEAR ticketProposal WILL JUDGE IT BY. Without it this
+          // probe stops on a page the proposal is about to refuse, and the
+          // second query, the one that might have had the real edition, is
+          // never paid for. A cheaper search that answers the wrong question
+          // is not a saving.
+          if (pickTicketUrl(results, { name, town, year: editionYearOf(row?.payload) })) break;
         } catch { failed += 1; }
         await new Promise(r => setTimeout(r, 150));
       }

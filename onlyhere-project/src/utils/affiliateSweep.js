@@ -57,7 +57,7 @@
 // festival with no 2026 listing has a 2027 one the moment it goes on sale, and
 // a stamp that never expires would make this sweep answer no forever, cheaply
 // and wrongly. RESWEEP_DAYS puts the row back in the paid list on its own.
-import { ticketQueries, pickTicketUrl, describeTicketSearch, isBookableTicketUrl, ticketAgentOf } from "./ticketLink";
+import { ticketQueries, pickTicketUrl, describeTicketSearch, isBookableTicketUrl, ticketAgentOf, editionYearOf } from "./ticketLink";
 import { ticketDestination } from "./affiliateAudit";
 import { TYPES_WITH_A_DOOR } from "./entryPrice";
 import { parentTownOf } from "./previewMatch";
@@ -246,7 +246,17 @@ export const ticketProposal = (row, results, { today = new Date(), failed = 0 } 
   const list = (Array.isArray(results) ? results : []).filter(r => r?.url);
   // The row's own address goes too, so a "<venue> | <event>" listing is read as
   // this entry's rather than as something inside it. See isSubEventListing.
-  const url = pickTicketUrl(list, { name, town, where: `${clean(payload.location)} ${clean(payload.mapHint)}` });
+  // ── AND WHICH EDITION THIS ROW IS FOR ────────────────────────────
+  //
+  // Oliver, 25 Sep 2026: "the Tinderbox affiliate search gave me a 2024 link on
+  // ticketmaster." It did, and this line is why. pickTicketUrl has refused a
+  // stale edition since 16 Sep; the draft pipeline hands it the year and this
+  // call did not, so the guard ran on every row here and could never fire.
+  //
+  // A stale ticket link is the worst wrong link on the site: bookable, plausible
+  // and checkout-ready for a festival that has finished.
+  const year = editionYearOf(payload);
+  const url = pickTicketUrl(list, { name, town, where: `${clean(payload.location)} ${clean(payload.mapHint)}`, year });
   const at = isoDay(today instanceof Date ? today : new Date(today));
   // ── ANY FAILED QUERY POISONS A "NO" AND NOT A "YES" ───────────────
   // A found page is a found page however the other query went. A blank answer
@@ -266,7 +276,7 @@ export const ticketProposal = (row, results, { today = new Date(), failed = 0 } 
       // three cases apart: no agent page at all, only category pages, or
       // bookable pages that are about something else. Each is a different thing
       // for him to do, and "nothing found" told three times is one thing.
-      why: describeTicketSearch(list, { name, town }),
+      why: describeTicketSearch(list, { name, town, year }),
       set: { __ticketSweep: { at, found: false } },
     };
   }

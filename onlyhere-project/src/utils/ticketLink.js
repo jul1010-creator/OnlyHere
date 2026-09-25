@@ -932,6 +932,34 @@ export const wrongEdition = (url, year) => {
   return found.length > 0 && !found.includes(want);
 };
 
+// ── AND ONE READER OF WHICH YEAR THAT IS ────────────────────────────
+//
+// Oliver, 25 Sep 2026: "the Tinderbox affiliate search gave me a 2024 link on
+// ticketmaster.. something to look into."
+//
+// wrongEdition was already written, already tested, and already refusing the
+// 2022 TinderBox link in the draft pipeline. It was doing nothing at all in the
+// affiliate sweep, because a year it is never handed is a year it cannot check:
+// `wrongEdition(url, undefined)` returns false on its first line and every
+// stale page walks straight through.
+//
+// The reason is this codebase's oldest failure, in its plainest form. The draft
+// pipeline read the year out of the row with a private helper in App.jsx. The
+// sweep had no reader at all. Two callers of one guard, one of them holding the
+// value and one of them not, and the difference invisible from either side.
+//
+// So the guard owns its own reader. A caller that has a row can get the year
+// from the same place every other caller does, and a fourth caller cannot be
+// written that quietly forgets to.
+//
+// dateStart first, because that is the field a festival stores and the one the
+// draft pipeline has always read. `date` is what the other dated types use.
+export const editionYearOf = (payload) => {
+  const m = /^(\d{4})-/.exec(String(payload?.dateStart || payload?.date || "").trim());
+  const y = m ? Number(m[1]) : null;
+  return Number.isFinite(y) && y >= 2015 ? y : null;
+};
+
 export const pickTicketUrl = (results, { name, town, where = "", year = null } = {}) => {
   const list = (Array.isArray(results) ? results : []).filter(r => r?.url);
   const matched = list.filter(r => ticketMatches(r, { name, town, where }));
@@ -968,7 +996,7 @@ export const pickTicketUrl = (results, { name, town, where = "", year = null } =
 // For the Studio panel. Each branch is a different thing for him to do, which
 // is the whole reason this returns a sentence rather than a boolean: go and
 // find it by hand, accept that there is no ticket, or fix the name.
-export const describeTicketSearch = (results, { name, town } = {}) => {
+export const describeTicketSearch = (results, { name, town, year = null } = {}) => {
   const list = (Array.isArray(results) ? results : []).filter(r => r?.url);
   const onAnAgent = list.filter(r => isTiqetsUrl(r.url) || isTicketmasterUrl(r.url));
   if (!onAnAgent.length) return `No ticket page found for ${name || "this"} on Tiqets or Ticketmaster. Plenty of Danish events sell through their own site or a local agent, and no ticket link is the right answer for those.`;
@@ -1009,6 +1037,23 @@ export const describeTicketSearch = (results, { name, town } = {}) => {
     : foreign.length ? `, plus ${foreign.length} outside Denmark that ${foreign.length === 1 ? "was" : "were"} refused,`
     : elsewhereInDK ? `, plus ${elsewhereInDK} elsewhere in Denmark that ${elsewhereInDK === 1 ? "was" : "were"} refused,`
     : "";
+  // ── AND LAST YEAR'S FESTIVAL IS ITS OWN ANSWER TOO ─────────────
+  //
+  // The TinderBox case. Every page is bookable, every page is in the right
+  // town, every page is about the right festival, and every one of them sells
+  // an edition that has finished. Told as "none of them is clearly about this
+  // place" that reads as a naming problem, and he would go and check a name
+  // that was never wrong.
+  //
+  // Every one of them, not some: a run that found the 2027 page and the 2024
+  // page has an answer and is not in here at all. So this cannot fire on a
+  // search that worked, and when it does fire the thing to do is wait for the
+  // new edition to go on sale rather than paste anything by hand.
+  const staleYears = year ? here.filter(r => wrongEdition(r.url, year)) : [];
+  if (here.length && staleYears.length === here.length) {
+    const named = [...new Set(staleYears.flatMap(r => urlYears(r.url)))].sort();
+    return `Found ${here.length} bookable Danish page${here.length === 1 ? "" : "s"} for ${name || "this"}, and ${here.length === 1 ? "it names" : "every one of them names"} ${named.join(" and ")} in ${here.length === 1 ? "its" : "their"} own address rather than ${year}. ${here.length === 1 ? "That is" : "Those are"} the finished edition${named.length === 1 ? "" : "s"}, still bookable and still wrong. Left empty: a reader can reach a checkout on a page like that, which is worse than no link. Nothing to fix here, and it will find the ${year} page once tickets go on sale.`;
+  }
   return `Found ${here.length} bookable Danish page${here.length === 1 ? "" : "s"}${refusedNote} and none of them is clearly about ${name || "this place"}${town ? ` in ${town}` : ""}. Left empty rather than guessing. Paste one by hand if you know which is right.`;
 };
 
