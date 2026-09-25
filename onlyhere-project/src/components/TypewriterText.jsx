@@ -45,7 +45,12 @@ import { useState, useEffect, useMemo, useRef } from "react";
 // chat (pages/GuidePage.jsx) — one place to tune the pacing for all three.
 const TICK_MS = 40;
 const MS_PER_WORD = 62;
-const MIN_TOTAL_MS = 700;
+// MIN_TOTAL_MS is gone. It set a floor on how long a REVEAL could take, and
+// once the reveal was rebuilt per stream chunk that floor applied to each
+// chunk's couple of words rather than to the message, which is what capped the
+// whole thing at under three words a second. A floor on the message is no
+// longer a thing this component needs: the rate below is steady per word, so a
+// short message is short because it is short.
 const MAX_TOTAL_MS = 5000;
 
 // One stylesheet for every instance, inserted once. A per-word opacity
@@ -84,55 +89,112 @@ export const TypewriterText = ({ text, active, onDone, onWord }) => {
   const onWordRef = useRef(onWord);
   onWordRef.current = onWord;
   const shownWordsRef = useRef(active ? 0 : wordCount);
+  // ── AND THE COUNT THE TICK READS IS THE CURRENT ONE ───────────────
+  // Held in a ref so a growing reply extends the target the running reveal is
+  // walking towards, rather than restarting it. See the block below.
+  const wordCountRef = useRef(wordCount);
+  wordCountRef.current = wordCount;
+  const onDoneRef = useRef(onDone);
+  onDoneRef.current = onDone;
 
+  // ── THE REVEAL COULD NEVER OUTRUN THE STREAM ──────────────────────
+  //
+  // Found 26 Sep 2026, testing a live reply that crawled: six characters in
+  // forty seconds on a reply the model had already finished sending.
+  //
+  // The stutter fix above solved restarting from word zero. It left a second
+  // restart in place: EVERY text change tore the interval down and built a new
+  // one, and the new one budgeted its time from the words that had just
+  // arrived rather than from the whole backlog.
+  //
+  //   const remaining = wordCount - startAt;                    // 2 new words
+  //   const totalMs = max(MIN_TOTAL_MS, remaining * MS_PER_WORD); // 700 ms
+  //   const perTick = remaining / (totalMs / TICK_MS);            // 0.11/tick
+  //
+  // Two words spread over 700 ms is 2.8 words a second. The model sends faster
+  // than that, so the next chunk landed mid-reveal, restarted the clock, and
+  // budgeted ANOTHER 700 ms for the slightly larger remainder. Modelled over
+  // twenty seconds at one word every 40 ms: 500 words sent, 380 shown, 119
+  // words behind and the gap still growing. The reveal had a ceiling of about
+  // sixteen words a second built into it, and a fast reply could never be
+  // caught up with, only finished late.
+  //
+  // ── ONE INTERVAL, FOR THE LIFE OF THE REVEAL ──────────────────────
+  //
+  // So the timer belongs to the MESSAGE rather than to the text. It reads the
+  // current word count from a ref on every tick, which makes a chunk arriving
+  // a change of target rather than an event: nothing is torn down, no clock is
+  // rebudgeted, and the rate below is free to close the gap.
+  const tickRef = useRef(null);
+  tickRef.current = () => {
+    const target = wordCountRef.current;
+    const at = shownWordsRef.current;
+    if (at >= target) {
+      // Caught up. The reveal is DONE only when the text has stopped growing,
+      // which the caller says by turning `active` off; until then this is just
+      // an idle tick waiting for the next chunk.
+      if (target > 0 && !doneFiredRef.current && !activeRef.current) {
+        doneFiredRef.current = true;
+        onDoneRef.current?.();
+      }
+      return;
+    }
+    // ── THE RATE, COMPUTED FROM THE WHOLE BACKLOG EVERY TICK ────────
+    // A steady reading pace normally, and faster when there is more waiting
+    // than MAX_TOTAL_MS would allow. That second half is what makes a burst
+    // recoverable: the further behind it falls, the faster it goes, so the gap
+    // closes instead of compounding.
+    const steady = TICK_MS / MS_PER_WORD;
+    const catchUp = (target - at) / Math.max(1, MAX_TOTAL_MS / TICK_MS);
+    const n = Math.min(target, Math.ceil(at + Math.max(steady, catchUp)));
+    shownWordsRef.current = n;
+    setShownWords(n);
+    onWordRef.current?.(n);
+    if (n >= target && !activeRef.current && !doneFiredRef.current) {
+      doneFiredRef.current = true;
+      onDoneRef.current?.();
+    }
+  };
+
+  const activeRef = useRef(active);
+  activeRef.current = active;
+
+  // ── WHERE THE REVEAL STARTS, WHICH IS THE ONLY THING TEXT DECIDES ─
+  //
+  // The stutter fix's rule, unchanged and now the whole of what a text change
+  // does: a text that EXTENDS the last one carries on from where the reveal
+  // had got to, and a genuinely different text is a different message and
+  // starts at zero. What is gone is the timer restart that used to come with
+  // it.
   useEffect(() => {
+    const prev = prevTextRef.current;
+    const grew = prev && (text || "").startsWith(prev);
+    prevTextRef.current = text || "";
     if (!active) {
       // Not the message actively streaming (an old message re-rendering, or
       // streaming already finished) — show it in full, instantly, no animation.
-      prevTextRef.current = text || "";
       shownWordsRef.current = wordCount;
       setShownWords(wordCount);
       onWordRef.current?.(wordCount);
       return;
     }
-    // STUTTER FIX (Oliver: "it starts and stops and starts and stops, and then
-    // when the box is big, it starts writing fully"): the main chat's
-    // web-search flow UPDATES the same message's text repeatedly as results
-    // stream in — and this effect used to reset the reveal to word zero on
-    // EVERY text change, so the animation kept restarting from the top: start,
-    // stop, start, stop, until the text finally stopped changing and one full
-    // run played on the finished ("big") box. When the new text simply EXTENDS
-    // the old one (the overwhelmingly common streaming case), continue the
-    // reveal from where it already was instead of restarting; only a genuinely
-    // different text (a different message reusing this component) resets.
-    const prev = prevTextRef.current;
-    const grew = prev && (text || "").startsWith(prev);
-    prevTextRef.current = text || "";
-    doneFiredRef.current = false;
-    const startAt = grew ? Math.min(shownWordsRef.current, wordCount) : 0;
-    shownWordsRef.current = startAt;
-    setShownWords(startAt);
-    if (wordCount === 0) { onDone?.(); return; }
-    if (startAt >= wordCount) { if (!doneFiredRef.current) { doneFiredRef.current = true; onDone?.(); } return; }
-    const remaining = wordCount - startAt;
-    const totalMs = Math.min(MAX_TOTAL_MS, Math.max(MIN_TOTAL_MS, remaining * MS_PER_WORD));
-    const ticks = Math.max(1, Math.round(totalMs / TICK_MS));
-    const perTick = remaining / ticks;
-    let progress = startAt;
-    const id = setInterval(() => {
-      progress = Math.min(wordCount, progress + perTick);
-      const n = Math.ceil(progress);
-      shownWordsRef.current = n;
-      setShownWords(n);
-      onWordRef.current?.(n);
-      if (n >= wordCount) {
-        clearInterval(id);
-        if (!doneFiredRef.current) { doneFiredRef.current = true; onDone?.(); }
-      }
-    }, TICK_MS);
-    return () => clearInterval(id);
+    if (!grew) {
+      doneFiredRef.current = false;
+      shownWordsRef.current = 0;
+      setShownWords(0);
+    }
+    if (wordCount === 0) { onDoneRef.current?.(); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text, active]);
+
+  // ── AND THE TIMER, WHICH TEXT DOES NOT TOUCH ──────────────────────
+  // Keyed on `active` alone, so it is built when a message starts streaming
+  // and torn down when it stops. Everything it needs is in a ref.
+  useEffect(() => {
+    if (!active) return undefined;
+    const id = setInterval(() => tickRef.current?.(), TICK_MS);
+    return () => clearInterval(id);
+  }, [active]);
 
   injectFade();
   // Render only as far as the reveal has reached. Anything past it is left out

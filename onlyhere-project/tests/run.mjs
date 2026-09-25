@@ -13548,10 +13548,84 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // the whole reply in at once, so this is bounded at both ends.
   const num = (name) => Number((tw.match(new RegExp(`const ${name} = (\\d+)`)) || [])[1]);
   ok(`the anchors for the pacing constants exist`, [num("MS_PER_WORD"), num("MAX_TOTAL_MS"), num("TICK_MS")].every(Number.isFinite));
+  // AND THE FLOOR THAT CAUSED IT IS GONE, not left lying unused: it set a
+  // minimum duration for a REVEAL, and once the reveal was rebuilt per chunk
+  // that floor applied to each chunk's couple of words instead.
+  ok("the per-reveal floor is gone", !/const MIN_TOTAL_MS = /.test(code));
   ok("it writes faster than before", num("MS_PER_WORD") < 105);
   ok("but is still word by word, not a dump", num("MS_PER_WORD") >= 30);
   ok("a long reply finishes sooner", num("MAX_TOTAL_MS") < 9000);
   ok("and the growth is smooth rather than stepped", num("TICK_MS") <= 64);
+
+  // ── AND THE REVEAL CAN OUTRUN THE STREAM ────────────────────────
+  //
+  // Found 26 Sep 2026 on a live reply that crawled: six characters in forty
+  // seconds, on a reply the model had already finished sending.
+  //
+  // The stutter fix above stopped the reveal restarting from word zero. It
+  // left a second restart in place: every text change tore the interval down
+  // and rebuilt it, and the rebuilt one budgeted its time from the words that
+  // had JUST ARRIVED rather than from the whole backlog. Two new words spread
+  // over MIN_TOTAL_MS is under three words a second, the model sends faster
+  // than that, and the next chunk restarted the clock again.
+  //
+  // THE TIMER BELONGS TO THE MESSAGE, NOT TO THE TEXT. It reads the current
+  // word count from a ref, so a chunk arriving is a change of target rather
+  // than an event.
+  ok("the timer is keyed on the message, not on its text", /\}, \[active\]\);/.test(code));
+  ok("and reads the current count from a ref rather than a closure",
+     /const target = wordCountRef\.current;/.test(code));
+  ok("with the count kept current on every render", /wordCountRef\.current = wordCount;/.test(code));
+  // A TEXT CHANGE DECIDES WHERE IT STARTS AND NOTHING ELSE. The stutter fix's
+  // own rule, kept.
+  // Raw source: stripNonCode blanks string CONTENTS, so a pattern carrying a
+  // string literal is tested against blank space and proves nothing. This
+  // block's own opening comment says so.
+  ok("a text that extends the last one carries on", /const grew = prev && \(text \|\| ""\)\.startsWith\(prev\);/.test(tw));
+  ok("and a different message starts at zero", /if \(!grew\) \{[\s\S]{0,140}shownWordsRef\.current = 0;/.test(code));
+  // AND THE ONE INTERVAL THERE IS BELONGS TO THE MESSAGE. Exactly one, and
+  // the effect holding it ends on [active]: that is the whole of the fix,
+  // because building it from a text change is what rebudgeted the clock on
+  // every chunk.
+  is("there is exactly one timer", (code.match(/setInterval\(/g) || []).length, 1);
+  ok("and it is torn down only when the message stops streaming",
+     /setInterval\([\s\S]{0,240}?\}, \[active\]\);/.test(code));
+
+  // ── THE RATE, MODELLED AGAINST THE WAY A MODEL REALLY STREAMS ────
+  //
+  // The same arithmetic the component runs, on a stream of words arriving
+  // faster than the old ceiling of about sixteen a second. Before the fix this
+  // ended 119 words behind after twenty seconds and still growing.
+  {
+    const TICK = num("TICK_MS"), PER_WORD = num("MS_PER_WORD"), MAX = num("MAX_TOTAL_MS");
+    const backlogAfter = (wordsPerChunk, chunkMs, seconds = 20) => {
+      let shown = 0, total = 0;
+      for (let t = 0; t < seconds * 1000; t += TICK) {
+        if (t % chunkMs === 0) total += wordsPerChunk;
+        if (shown < total) {
+          const steady = TICK / PER_WORD;
+          const catchUp = (total - shown) / Math.max(1, MAX / TICK);
+          shown = Math.min(total, Math.ceil(shown + Math.max(steady, catchUp)));
+        }
+      }
+      return total - shown;
+    };
+    is("a word every 40ms leaves nothing waiting", backlogAfter(1, 40), 0);
+    is("nor three words every 120ms", backlogAfter(3, 120) <= 1, true);
+    is("nor a word every 80ms", backlogAfter(1, 80), 0);
+    is("nor two every 200ms", backlogAfter(2, 200), 0);
+    // AND THE CATCH-UP IS WHAT DOES IT. Without it the steady rate alone caps
+    // at one word per MS_PER_WORD, which is the ceiling that caused this.
+    const steadyOnly = (wordsPerChunk, chunkMs, seconds = 20) => {
+      let shown = 0, total = 0;
+      for (let t = 0; t < seconds * 1000; t += TICK) {
+        if (t % chunkMs === 0) total += wordsPerChunk;
+        shown = Math.min(total, shown + TICK / PER_WORD);
+      }
+      return Math.floor(total - shown);
+    };
+    ok("a steady pace alone could not have kept up", steadyOnly(1, 40) > 100);
+  }
 }
 
 // ── THE EXPLORE PAGE ON A DESKTOP ───────────────────────────────────
