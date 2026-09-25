@@ -299,6 +299,92 @@ export const useBeforeDeclare = (body) => {
 //
 // which threw on every single render and killed the front page. Nothing nested
 // can produce a false positive here, so this check is exact.
+// ── AND THE THIRD CASE, WHICH COST A LIVE CRASH ─────────────────────
+//
+// Oliver, 25 Sep 2026, from the live console: "Cannot access 'fa' before
+// initialization ... crashes when you click enable budget."
+//
+//   const budgetEstimate = budgetOn
+//     ? estimateDay({ ..., transport: intakeTransport, travellers: intakeTravelers })
+//     : { ready: false };                              // line ~19335
+//   ...
+//   const [intakeTravelers, setIntakeTravelers] = useState("");   // line ~19346
+//   const [intakeTransport, setIntakeTransport] = useState([]);   // line ~19397
+//
+// Both checks above were looking somewhere else. useBeforeDeclare is not run on
+// this component at all, for the reason written above it: a callback on line
+// 2333 reading a const from line 2401 is normal and safe, and comparing
+// character positions in 558 KB of closures finds nine things and no bugs.
+// hookDepsBeforeDeclaration is exact, and this was not in a dependency array.
+//
+// BUT A TOP-LEVEL INITIALISER IS EXACTLY AS EXACT AS A DEPENDENCY ARRAY. It is
+// evaluated during render, synchronously, in the body's own scope. Nothing
+// nested can reach it, so nothing nested can produce a false positive.
+//
+// AND IT HID BEHIND A TERNARY, which is the part worth remembering. The read
+// only happens when budgetOn is true, so the panel rendered perfectly until
+// somebody pressed the button that flipped it. A check on the SOURCE finds
+// that; no amount of clicking around finds it reliably.
+//
+// ── WHAT COUNTS AS RENDER-TIME ──────────────────────────────────────
+// Everything up to the first `=>` in a top-level statement. After an arrow,
+// the code belongs to a function that runs later, which is the whole
+// distinction the general sweep above could not make. `const f = () => x;`
+// reads x later and is fine; `const f = x;` reads it now and is not.
+const IDENT = /(?<![\w$.])([A-Za-z_$][\w$]*)(?![\w$:])/g;
+
+export const renderReadsBeforeDeclaration = (body) => {
+  const src = stripNonCode(String(body || ""));
+  // Split into top-level statements, tracking every kind of nesting: a `;`
+  // inside a for-header or an object literal does not end a statement.
+  const stmts = [];
+  let depth = 0, start = 0;
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i];
+    if (ch === "{" || ch === "(" || ch === "[") depth++;
+    else if (ch === "}" || ch === ")" || ch === "]") depth--;
+    else if (ch === ";" && depth === 0) { stmts.push({ text: src.slice(start, i), at: start }); start = i + 1; }
+  }
+  stmts.push({ text: src.slice(start), at: start });
+
+  // What each statement declares, in order. Destructuring too, because
+  // `const [a, setA] = useState()` is how every one of these is written.
+  const declaredAt = new Map();
+  stmts.forEach((st, i) => {
+    const m = /^\s*(?:const|let)\s+(?:\[([^\]]*)\]|\{([^}]*)\}|([A-Za-z_$][\w$]*))/.exec(st.text);
+    if (!m) return;
+    const names = (m[1] || m[2] || m[3] || "").split(",")
+      .map(x => (/([A-Za-z_$][\w$]*)\s*$/.exec(x.trim().split(":").pop().trim()) || [])[1])
+      .filter(Boolean);
+    for (const n of names) if (!declaredAt.has(n)) declaredAt.set(n, i);
+  });
+
+  const found = [];
+  stmts.forEach((st, i) => {
+    // Only the part that runs during this render. An arrow hands the rest to a
+    // function that runs later, and reading a later const from there is both
+    // normal and safe.
+    const arrow = st.text.indexOf("=>");
+    const now = arrow === -1 ? st.text : st.text.slice(0, arrow);
+    // Past its own declarator, so `const x = ...` is not a read of x.
+    const eq = now.indexOf("=");
+    const rhs = eq === -1 ? "" : now.slice(eq + 1);
+    IDENT.lastIndex = 0;
+    let m;
+    while ((m = IDENT.exec(rhs))) {
+      const name = m[1];
+      const declIn = declaredAt.get(name);
+      if (declIn === undefined || declIn <= i) continue;
+      found.push({
+        name,
+        useLine: src.slice(0, st.at).split("\n").length,
+        declLine: src.slice(0, stmts[declIn].at).split("\n").length,
+      });
+    }
+  });
+  return found;
+};
+
 const HOOK = /\b(useEffect|useLayoutEffect|useMemo|useCallback)\s*\(/g;
 
 export const hookDepsBeforeDeclaration = (body) => {

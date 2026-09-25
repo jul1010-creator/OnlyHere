@@ -442,9 +442,9 @@ export const EXCLUDED = {
 // precision nobody measured, and a traveller who budgets to a midpoint and
 // meets the top of the band is the person this whole panel exists to protect.
 //
-// NULL UNTIL BOTH HALVES ARE ANSWERED. A bed with no food, or food with no
-// bed, is half a day's costs shown as a day's, which is worse than no figure:
-// it reads as complete. The panel asks for the two ticks instead.
+// AND IT COUNTS UP FROM ZERO. `ready` says whether it is a whole day yet;
+// the figure is there from the first tick either way, so somebody can see what
+// their clicking is doing. See the block inside.
 export const estimateDay = ({ stay = "", food = "", freeOnly = false, scope = "", transport = [], travellers = "", heads = null, meals = MEALS_A_DAY_DEFAULT } = {}) => {
   // ── HOW MANY OF THEM, READ ONCE ─────────────────────────────────
   //
@@ -457,34 +457,36 @@ export const estimateDay = ({ stay = "", food = "", freeOnly = false, scope = ""
   const people = Math.max(1, Math.floor(Number(heads ?? said?.heads ?? 2)) || 1);
   const counted = !!(heads ?? said?.heads);
 
-  const bed = bedPerNight(stay, people);
+  const bed = clean(stay) ? bedPerNight(stay, people) : null;
   const tier = clean(food) ? foodTier(food) : null;
   // ── A CONTRADICTION IS NOT A FIGURE ─────────────────────────────
   // Asked before anything is added up. Exploring with no way to cross the
   // country is a trip nobody can take, and putting a confident daily cost on
-  // it would be the panel agreeing to plan it.
+  // it would be the panel agreeing to plan it. This is the ONE state with no
+  // number at all, because the number would be about a trip nobody can take.
   const cannot = movingProblem(scope, transport);
-  if (cannot) return { ready: false, need: [], problem: cannot };
-  if (!bed || !tier) {
-    return {
-      ready: false,
-      need: [!bed ? "where you sleep" : "", !tier ? "what you eat" : ""].filter(Boolean),
-      problem: null,
-    };
-  }
-  // tierDayRate, not a second set of meal numbers. It returns null for the
-  // grocery tier, whose basket is bought once rather than daily, so the day
-  // figure for that one is Danmarks Statistik's full self-catering day: the
-  // tier's own text already names it as what a day costs when dinner is
-  // cooked too.
-  const rate = tierDayRate(tier.key, meals);
-  const foodLow = rate == null ? Math.round(GROCERY_DAY.kr / 3) : rate;
-  const foodHigh = rate == null ? GROCERY_DAY.kr : Math.round(rate * 1.6);
+  if (cannot) return { ready: false, need: [], problem: cannot, low: null, high: null, parts: [] };
 
-  const raw = [
-    { what: "a bed", low: bed.low, high: bed.high, per: "party", rooms: bed.rooms, source: bed.source, says: bed.says },
-    { what: "food", low: foodLow, high: foodHigh, per: "person", source: tier.source || "", says: tier.basis || "" },
-  ];
+  // ── AND EVERYTHING ELSE COUNTS FROM ZERO UPWARDS ────────────────
+  //
+  // Oliver, 25 Sep 2026: "remember budget has pop up instantly like 0. So it
+  // doesn't pop up after it's all picked."
+  //
+  // The first version showed nothing until both halves were answered, on the
+  // argument that half a day's costs shown as a day's reads as complete. He is
+  // right that the cure was worse: a figure that appears out of nowhere on the
+  // fourth click never shows anybody what their clicking is doing, which is
+  // the whole reason the panel replaced a typed field.
+  //
+  // So it counts up from zero and SAYS what is still missing. Both facts are
+  // on screen at once, which is what the first version could not manage.
+  const rate = tier ? tierDayRate(tier.key, meals) : null;
+  const foodLow = !tier ? 0 : (rate == null ? Math.round(GROCERY_DAY.kr / 3) : rate);
+  const foodHigh = !tier ? 0 : (rate == null ? GROCERY_DAY.kr : Math.round(rate * 1.6));
+
+  const raw = [];
+  if (bed) raw.push({ what: "a bed", low: bed.low, high: bed.high, per: "party", rooms: bed.rooms, source: bed.source, says: bed.says });
+  if (tier) raw.push({ what: "food", low: foodLow, high: foodHigh, per: "person", source: tier.source || "", says: tier.basis || "" });
 
   // ── GETTING BETWEEN TOWNS ───────────────────────────────────────
   // Only where the scope says they move at all, and only priced where the
@@ -533,17 +535,21 @@ export const estimateDay = ({ stay = "", food = "", freeOnly = false, scope = ""
   ].filter(Boolean);
 
   return {
-    ready: true,
+    // READY MEANS COMPLETE, not "has a number". The figure is always there and
+    // this says whether it is the whole of a day yet, so the panel can show
+    // both at once instead of choosing between them.
+    ready: !!bed && !!tier,
+    need: [!bed ? "where you sleep" : "", !tier ? "what you eat" : ""].filter(Boolean),
+    problem: null,
     low: parts.reduce((n, p) => n + p.low, 0),
     high: parts.reduce((n, p) => n + p.high, 0),
     parts,
     excludes,
-    problem: null,
     heads: people,
     // Whether the headcount was read or assumed, because a figure resting on
     // an assumption has to say which one.
     headsCounted: counted,
-    rooms: bed.rooms,
+    rooms: bed?.rooms ?? 0,
     // Stated separately from `excludes` because it is the opposite fact: the
     // tick did not remove a cost, it settled one.
     entryFree: !!freeOnly,
@@ -564,9 +570,22 @@ const toTen = (n) => Math.round(Number(n) / 10) * 10;
 // Short enough to sit beside a heading, and it says "a day" every time: a
 // number in a corner with no unit is the thing somebody reads as the trip
 // total and budgets a week against.
-export const estimateShort = (est) => {
-  if (!est?.ready) return "";
-  return est.low === est.high ? `${toTen(est.low)} kr a day` : `${toTen(est.low)} to ${toTen(est.high)} kr a day`;
+export const estimateShort = (est, code = "DKK", rate = null) => {
+  if (!est || est.low == null) return "";
+  const lo = showMoney(est.low, code, rate);
+  const hi = showMoney(est.high, code, rate);
+  if (lo === hi) return `${lo} a day`;
+  // ── THE UNIT ONCE, NOT TWICE ────────────────────────────────────
+  // "50 kr to 100 kr a day" says kroner twice for one band. The symbol stays
+  // on whichever end carries it: kroner trail the number so the first one goes
+  // ("50 to 100 kr"), and a euro sign leads it so the second one stays
+  // ("€60 to €80"), because "€60 to 80" reads as a different kind of figure.
+  const c = currencyOf(code);
+  const live = code === "DKK" || Number.isFinite(typeof rate === "function" ? rate(code) : rate);
+  const trailing = live ? c.after : true;
+  return trailing
+    ? `${lo.replace(/\s*\S+$/, "")} to ${hi} a day`
+    : `${lo} to ${hi} a day`;
 };
 
 // ── AND THE SENTENCE UNDER IT ───────────────────────────────────────
@@ -630,3 +649,61 @@ export const estimateForBrief = (est) => {
 // goes would be a button that does more than it says.
 export const ENABLE_LABEL = "Enable my budget and preferences";
 export const ENABLE_SAYS = "Nothing in here changes your trip until you turn it on.";
+
+
+// ── AND THE FIGURE IN THEIR OWN MONEY ───────────────────────────────
+//
+// Oliver, 25 Sep 2026: "enable multiple currencies."
+//
+// He asked for this on the typed field this morning and it went out with the
+// field. The figure is where it belonged anyway: a traveller typing a budget
+// in euros was telling us something, and this is Gemlyx quoting a price, which
+// is the thing a visitor actually needs converting.
+//
+// THE CODES api/fx ALREADY ANSWERS FOR, and nothing else. A currency in this
+// list that the endpoint cannot price is a menu entry that produces kroner,
+// which is confusing; a currency missing from it is one a traveller cannot
+// ask for at all.
+export const BUDGET_CURRENCIES = [
+  { code: "DKK", symbol: "kr", after: true },
+  { code: "EUR", symbol: "€" },
+  { code: "USD", symbol: "$" },
+  { code: "GBP", symbol: "£" },
+  { code: "SEK", symbol: "kr", after: true },
+  { code: "NOK", symbol: "kr", after: true },
+  { code: "CHF", symbol: "CHF" },
+  { code: "PLN", symbol: "zł", after: true },
+  { code: "CAD", symbol: "C$" },
+  { code: "AUD", symbol: "A$" },
+];
+
+export const currencyOf = (code) =>
+  BUDGET_CURRENCIES.find(c => c.code === clean(code)) || BUDGET_CURRENCIES[0];
+
+// ── ROUNDED IN THE CURRENCY IT IS SHOWN IN ──────────────────────────
+//
+// Not converted from an already-rounded kroner figure, which would round
+// twice and drift. Kroner round to ten because the inputs are room rates and
+// counter prices; a euro figure rounds to five for the same reason, since ten
+// euros is seventy-five kroner and would be a coarser claim than the numbers
+// behind it support.
+const step = (code) => (clean(code) === "DKK" || clean(code) === "SEK" || clean(code) === "NOK" ? 10 : 5);
+const toStep = (n, code) => {
+  const k = step(code);
+  return Math.round(Number(n) / k) * k;
+};
+
+// `rate` is injected and answers one question: how many of this currency is
+// one krone. Null from it means nobody could convert, and the answer is then
+// kroner rather than a guess, which is the honest failure. api/fx forbids a
+// fallback table in its own words.
+export const showMoney = (dkk, code = "DKK", rate = null) => {
+  const n = Number(dkk);
+  if (!Number.isFinite(n)) return "";
+  const want = clean(code) || "DKK";
+  const r = want === "DKK" ? 1 : (typeof rate === "function" ? rate(want) : rate);
+  const live = Number.isFinite(r) && r > 0;
+  const c = currencyOf(live ? want : "DKK");
+  const value = toStep(live ? n * r : n, c.code);
+  return c.after ? `${value} ${c.symbol}` : `${c.symbol}${value}`;
+};

@@ -25,7 +25,7 @@ import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { stripNonCode, stripComments, functionBody, useBeforeDeclare, namedFunctions, hookDepsBeforeDeclaration, readOutOfScope, exportedArity, overArgumentedCalls, uncalledExports } from "./tdz.mjs";
+import { stripNonCode, stripComments, functionBody, useBeforeDeclare, namedFunctions, hookDepsBeforeDeclaration, renderReadsBeforeDeclaration, readOutOfScope, exportedArity, overArgumentedCalls, uncalledExports } from "./tdz.mjs";
 
 let passed = 0, failed = 0;
 const fails = [];
@@ -284,7 +284,7 @@ writeFileSync(entry, `
   export { needsTier, proposedTier, BACKFILL_SORTS, BACKFILL_SORT_DEFAULT, sortForBackfill, tierSpread, backfillPrompt, readBackfill, missedByPass, proposeTiers } from ${JSON.stringify(join(root, "src/utils/tierBackfill.js"))};
   export { STAY_CHOICES, STAY_KEYS, stayChoiceOf, stayIsBooked, stayProblem, staySaid } from ${JSON.stringify(join(root, "src/utils/stayChoice.js"))};
   export { TRIP_SCOPES, TRIP_SCOPE_KEYS, scopeOf as tripScopeOf, scopeSaid, scopeOffersOtherTowns, scopeAllowsTown } from ${JSON.stringify(join(root, "src/utils/tripScopeChoice.js"))};
-  export { BED_TIERS, EXCLUDED, estimateDay, estimateShort, estimateSays, estimateForBrief, ENABLE_LABEL, ENABLE_SAYS, HOPS_PER_DAY, STOREBAELT, TRAIN_HOP, HOP_KM, FERRY_FARE, movingMode, hopCost, movingProblem, movingNote, LONG_HAUL_MODES, ROOM_KR, ROOM_SLEEPS_MAX, HOTEL_SLEEPS, bedPerNight, RECOMMENDED, recommendedModes, recommendedWhy, isRecommended } from ${JSON.stringify(join(root, "src/utils/budgetEstimate.js"))};
+  export { BED_TIERS, EXCLUDED, estimateDay, estimateShort, estimateSays, estimateForBrief, ENABLE_LABEL, ENABLE_SAYS, HOPS_PER_DAY, STOREBAELT, TRAIN_HOP, HOP_KM, FERRY_FARE, movingMode, hopCost, movingProblem, movingNote, LONG_HAUL_MODES, ROOM_KR, ROOM_SLEEPS_MAX, HOTEL_SLEEPS, bedPerNight, RECOMMENDED, recommendedModes, recommendedWhy, isRecommended, showMoney, BUDGET_CURRENCIES, currencyOf } from ${JSON.stringify(join(root, "src/utils/budgetEstimate.js"))};
   export { matchedPlaces, previewPools, mentionsPlace, parentTownOf, isDeparturePlace, isRejectedPlace, onlyAskedAbout, isPassedThrough, regionsNamed, placeIsInRegion, REGION_TOWN_CAP, regionPickLimit } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
   export { wantedCategories, groupKeyOf, foodIsPlanned } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
   export { saysWord, briefThemes, fitsBrief, rankOffers, offerReason, profilePull, THEME_WORDS, MODE_WORDS, THEMES_WITHOUT_WORDS, OFFER_LIMIT, essentialsForTrip, essentialsBlock, reservedEssential, nightlifeWanted, nightlifeNotAsked, RESERVED_THEME, ESSENTIALS_IN_GUIDE } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
@@ -4649,6 +4649,62 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   const component = functionBody(stripped, "function GemlyxApp(");
   ok("GemlyxApp's body can actually be extracted", !!component && component.length > 100000);
   is("no hook depends on a const declared later", hookDepsBeforeDeclaration(component).map(f => `${f.hook} reads ${f.name}`), []);
+  // ── AND NO RENDER-TIME INITIALISER DOES EITHER ──────────────────
+  //
+  // 25 Sep 2026, from Oliver's live console: "Cannot access 'fa' before
+  // initialization ... crashes when you click enable budget." budgetEstimate
+  // was declared above intakeTransport and intakeTravelers and read both.
+  //
+  // Neither check above could see it. useBeforeDeclare is not run on this
+  // component at all, by design. hookDepsBeforeDeclaration is exact and this
+  // was not a dependency array. A top-level initialiser is exactly as exact
+  // as a dependency array, for the same reason: it evaluates during render, in
+  // the body's own scope, where nothing nested can reach it.
+  //
+  // AND IT HID BEHIND A TERNARY. The read only happened once budgetOn went
+  // true, so the panel rendered perfectly until somebody pressed the button.
+  // Clicking around does not find that. Reading the source does.
+  is("and no render-time initialiser reads a const declared later",
+     renderReadsBeforeDeclaration(component).map(f => `${f.name} on line ${f.useLine}, declared on ${f.declLine}`), []);
+  // ── AND THE CHECK CAN FAIL, ON THE REAL SHAPE ───────────────────
+  // A scanner nobody has seen fail is a scanner nobody should believe. This is
+  // the crashing code, reduced: budgetEstimate above the two states it read.
+  {
+    const crashed = `
+      const [budgetOn, setBudgetOn] = useState(false);
+      const budgetEstimate = budgetOn
+        ? estimateDay({ transport: intakeTransport, travellers: intakeTravelers })
+        : { ready: false };
+      const [intakeTravelers, setIntakeTravelers] = useState("");
+      const [intakeTransport, setIntakeTransport] = useState([]);
+    `;
+    is("it catches the order that crashed", renderReadsBeforeDeclaration(crashed).map(f => f.name).sort(),
+       ["intakeTransport", "intakeTravelers"]);
+    is("and goes quiet once the order is right", renderReadsBeforeDeclaration(`
+      const [intakeTravelers, setIntakeTravelers] = useState("");
+      const [intakeTransport, setIntakeTransport] = useState([]);
+      const budgetEstimate = estimateDay({ transport: intakeTransport, travellers: intakeTravelers });
+    `), []);
+    // ── AND IT DOES NOT CRY WOLF ──────────────────────────────────
+    // This is the whole reason useBeforeDeclare is not run on the component: a
+    // callback defined early that reads a const declared later is normal and
+    // safe, because it runs after both exist. An arrow hands the rest of the
+    // statement to a function that runs later, so it is not a render-time read.
+    is("a callback reading a later const is left alone", renderReadsBeforeDeclaration(`
+      const onClick = () => setThing(later);
+      const later = 3;
+    `), []);
+    is("and so is a hook body", renderReadsBeforeDeclaration(`
+      useEffect(() => { doThing(later); }, []);
+      const later = 3;
+    `), []);
+    // A property KEY is not a read, which is the false positive the sibling
+    // check had to learn as well.
+    is("and a key is not a read", renderReadsBeforeDeclaration(`
+      const a = { later: 1 };
+      const later = 3;
+    `), []);
+  }
 
   // Every plain function, by position. The component is excluded by size for the
   // reason above; everything else is small enough that its body is its scope.
@@ -75836,10 +75892,23 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     ok("the bed is in it", est.parts.some(p => p.what === "a bed" && p.partyLow === bedPerNight("cheapest", 2).low));
     ok("and so is the food", est.parts.some(p => p.what === "food"));
     ok("it reads as a band, per day", /to/.test(estimateShort(est)) && /kr a day/.test(estimateShort(est)));
+    // ── THE UNIT ONCE, NOT TWICE ──────────────────────────────────
+    // "50 kr to 100 kr a day" says kroner twice for one band.
+    is("kroner are named once", (estimateShort(est).match(/kr/g) || []).length, 1);
     // THE UNIT IS SAID EVERY TIME. A number in a corner with no unit is the
     // one somebody reads as the trip total and budgets a week against.
     ok("and never as a bare number", /a day/.test(estimateShort(est)));
-    is("nothing ready prints nothing", estimateShort(estimateDay({})), "");
+    // ── AND IT COUNTS UP FROM ZERO ────────────────────────────
+    // Oliver, 25 Sep 2026: "remember budget has pop up instantly like 0. So it
+    // doesn't pop up after it's all picked." The first version showed nothing
+    // until both halves were answered, and a figure that appears out of
+    // nowhere on the fourth click never shows anybody what their clicking is
+    // doing, which is the whole reason the panel replaced a typed field.
+    is("nothing picked is zero, not silence", estimateShort(estimateDay({})), "0 kr a day");
+    ok("and it is not called ready", !estimateDay({}).ready);
+    ok("while it names what is still missing", estimateDay({}).need.length === 2);
+    // ONE TICK MOVES IT, which is the thing being demonstrated.
+    ok("one tick already moves it", estimateDay({ stay: "cheapest" }).low > 0);
   }
 
   // ── THE FOOD HALF IS NOT RE-PRICED HERE ─────────────────────────
@@ -75966,7 +76035,9 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     ok("and says what it does", /\{ENABLE_SAYS\}/.test(app));
     ok("and covers preferences, not the budget alone", /preferences/.test(ENABLE_LABEL));
     // THE FIGURE SITS WHERE HE POINTED: the panel's top right.
-    ok("the figure is in the corner", /\{estimateShort\(budgetEstimate\)\}/.test(app));
+    ok("the figure is in the corner", /estimateShort\(budgetEstimate, budgetCurrency, fromDkk\)/.test(app));
+    // SHOWN WHENEVER THERE IS A NUMBER, not only when the day is complete.
+    ok("and shows from the first tick", /budgetEstimate\.low != null/.test(app));
     ok("and what it covers is spelled out", /\{estimateSays\(budgetEstimate\)\}/.test(app));
     // AND THE BRIEF READS THE ESTIMATE RATHER THAN A SECOND COPY OF IT.
     ok("the brief slot is the estimate", /const intakeBudgetText = estimateForBrief\(budgetEstimate\);/.test(app));
@@ -76099,7 +76170,9 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     ok("and it says what to pick", /public transport, a car/.test(stuck.problem.say));
     // ASKED BEFORE ANYTHING IS ADDED UP. Putting a confident daily cost on a
     // trip nobody can take is the panel agreeing to plan it.
-    is("and no figure is produced at all", stuck.low, undefined);
+    // THE ONE STATE WITH NO NUMBER, because the number would be about a trip
+    // nobody can take. Everything else counts up from zero.
+    is("and no figure is produced at all", stuck.low, null);
     is("staying in one town needs no mode", movingProblem("town", []), null);
     is("nor does an island", movingProblem("island", []), null);
   }
@@ -76381,6 +76454,68 @@ SOURCE: https://www.tripadvisor.com/whatever`;
        app.indexOf("How far do you want to go") < app.indexOf("Getting around"));
     ok("and before where they sleep",
        app.indexOf("Getting around") < app.indexOf("Where you sleep"));
+  }
+}
+
+
+// ── PASS 116: AND THE FIGURE IN THEIR OWN MONEY ────────────────────
+//
+// Oliver, 25 Sep 2026: "enable multiple currencies." He asked for this on the
+// typed field this morning and it went out with the field. The figure is where
+// it belonged anyway: a traveller typing a budget in euros was telling us
+// something, and this is Gemlyx quoting a price, which is the thing a visitor
+// needs converting.
+{
+  const { showMoney, BUDGET_CURRENCIES, currencyOf, estimateShort, estimateDay } = M;
+  // A rate reader standing in for /api/fx, which is the only thing in this app
+  // allowed to know one. These figures are a fixture and never ship.
+  const RATE = (c) => ({ EUR: 0.134, USD: 0.145, GBP: 0.112, SEK: 1.55 })[c] ?? null;
+
+  is("kroner are the default", BUDGET_CURRENCIES[0].code, "DKK");
+  ok("and the list covers the ones a visitor arrives with",
+     ["EUR", "USD", "GBP", "SEK", "NOK"].every(c => BUDGET_CURRENCIES.some(x => x.code === c)));
+
+  // ── THE SYMBOL SITS WHERE THAT CURRENCY PUTS IT ─────────────────
+  is("kroner trail the number", showMoney(500, "DKK", RATE), "500 kr");
+  is("and a euro sign leads it", showMoney(500, "EUR", RATE), "€65");
+  is("so does a dollar", showMoney(500, "USD", RATE), "$75");   // 500 x 0.145 is 72.5, to the nearest five
+
+  // ── ROUNDED IN THE CURRENCY IT IS SHOWN IN ──────────────────────
+  // Not converted from an already-rounded kroner figure, which would round
+  // twice and drift.
+  is("kroner round to ten", showMoney(447, "DKK", RATE), "450 kr");
+  is("and a euro figure to five, since ten euros is a coarser claim", showMoney(500, "EUR", RATE) , "€65");
+
+  // ── A CURRENCY NOBODY CAN PRICE SHOWS KRONER ────────────────────
+  //
+  // api/fx forbids a fallback rate table in its own words, because a hardcoded
+  // rate is wrong by a little at first and by a lot later. So the honest
+  // failure is the real number in the real currency, not a converted guess.
+  is("no rate means kroner", showMoney(500, "EUR", () => null), "500 kr");
+  is("and so does a currency that is not on the list", showMoney(500, "JPY", RATE), "500 kr");
+  is("an unknown code falls back to kroner", currencyOf("ZZZ").code, "DKK");
+
+  // ── WHICH THE HEADLINE FIGURE USES ──────────────────────────────
+  {
+    const est = estimateDay({ scope: "explore", transport: ["🚆 Public transport"], stay: "cheapest", food: "cheap" });
+    ok("the band converts whole", /^€\d+ to €\d+ a day$/.test(estimateShort(est, "EUR", RATE)));
+    ok("and says the unit once either way", (estimateShort(est, "DKK", RATE).match(/kr/g) || []).length === 1);
+    ok("a euro sign stays on both ends, since '€60 to 80' reads as something else",
+       (estimateShort(est, "EUR", RATE).match(/€/g) || []).length === 2);
+  }
+
+  // ── AND THE PANEL OFFERS IT ─────────────────────────────────────
+  {
+    const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+    ok("the picker is built from the list", /BUDGET_CURRENCIES\.map\(c =>/.test(app));
+    ok("and the figure is shown in the chosen one", /estimateShort\(budgetEstimate, budgetCurrency, fromDkk\)/.test(app));
+    // THE RATE COMES FROM THE ONE PLACE ALLOWED TO KNOW ONE.
+    ok("the rate is fetched from the fx endpoint", /\/api\/fx\?to=\$\{encodeURIComponent\(budgetCurrency\)\}/.test(app));
+    ok("and no rate table was added anywhere",
+       !/EUR:\s*7\.4|USD:\s*6\.9/.test(readFileSync(join(root, "src/utils/budgetEstimate.js"), "utf8")));
+    // AND IT SAYS SO WHEN IT COULD NOT CONVERT, rather than showing kroner
+    // under a euro heading.
+    ok("a missing rate is said out loud", /no rate just now, so this is kroner/.test(app));
   }
 }
 

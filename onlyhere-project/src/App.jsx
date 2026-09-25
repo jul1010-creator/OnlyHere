@@ -227,7 +227,7 @@ import { readPromises, brokenPromises, promiseNote, rebuildKeptMore, promiseRetr
 import { swapIsAllowed } from "./utils/stopSwap";
 import { factCheckCopy } from "./utils/factCheckCopy";
 import { matchedPlaces, previewPools, wantedCategories, mentionsPlace } from "./utils/previewMatch";
-import { estimateDay, estimateShort, estimateSays, estimateForBrief, isRecommended, recommendedWhy, ENABLE_LABEL, ENABLE_SAYS } from "./utils/budgetEstimate";
+import { estimateDay, estimateShort, estimateSays, estimateForBrief, isRecommended, recommendedWhy, showMoney, BUDGET_CURRENCIES, ENABLE_LABEL, ENABLE_SAYS } from "./utils/budgetEstimate";
 import { TRIP_SCOPES, scopeSaid } from "./utils/tripScopeChoice";
 import { STAY_CHOICES, stayIsBooked, stayProblem, staySaid } from "./utils/stayChoice";
 import { FOOD_TIERS } from "./utils/mealsEstimate";
@@ -19288,55 +19288,6 @@ If the conversation only covers a single day or a few stops with no explicit day
   const [intakeFood, setIntakeFood] = useState("");
   const [intakeFreeOnly, setIntakeFreeOnly] = useState(false);
   const stayNeedsName = stayProblem(intakeStay, intakeStayName);
-  // ── ONE VALUE, ONE READER ────────────────────────────────────────
-  //
-  // Everything downstream of the panel already reads a budget SENTENCE rather
-  // than a number: the brief slot, travellerBudget, the writer level, the
-  // guide's own spend line. So the estimate fills the same slot the field used
-  // to, and the panel and the brief cannot disagree about what was estimated
-  // because there is nothing left to disagree with.
-  //
-  // DERIVED, NOT STATE. A second copy kept in sync by an effect is a copy that
-  // can be stale for a render, and this one feeds the brief. There is no
-  // longer anything for a person to type here, so there is nothing to hold.
-  // It is declared after budgetEstimate, below.
-  // ── AND WHAT THAT IS IN KRONER, WHEN IT IS NOT KRONER ──────────
-  //
-  // Oliver, 25 Sep 2026: "make it limit. So you can't write under like 300 ...
-  // And make people able to write in other currencies too."
-  //
-  // The rate comes from /api/fx, which is the one place in the app allowed to
-  // know one: that file forbids a fallback table in its own words, because a
-  // hardcoded rate is wrong by a little at first and by a lot later. So this
-  // holds what that endpoint answered and nothing else, and a currency it has
-  // not answered for converts to nothing, which the floor reads as "do not
-  // block". Refusing to plan a trip because a rate call failed is the worse
-  // answer.
-  //
-  // FETCHED ONCE PER CURRENCY, on the figure rather than on every keystroke:
-  // the endpoint answers "100 DKK = X EUR", so one krone per unit is 100/X.
-  // ── THE LOCKOUT ──────────────────────────────────────────────────
-  //
-  // Oliver, 25 Sep 2026: "Make a 'darkening' of everything that can change the
-  // budget. So you have to click on the screen 'enable budget-estimate' or
-  // something. Like a lockout."
-  //
-  // Off by default, and that is the whole point rather than a default nobody
-  // thought about. Every control behind it changes a number in the corner, and
-  // a traveller who never meant to set a budget should not acquire one by
-  // brushing past a row of chips. One deliberate act turns the section on.
-  const [budgetOn, setBudgetOn] = useState(false);
-  // ── AND THE FIGURE IS COMPUTED, NOT TYPED ────────────────────────
-  //
-  // The field that asked for a figure is gone, with its floor and its currency
-  // reading. It asked a traveller to price a country they have not been to.
-  // The ticks ask what they want, which is a question they can answer, and the
-  // pricing is ours. See utils/budgetEstimate.js.
-  const budgetEstimate = budgetOn
-    ? estimateDay({ stay: intakeStay, food: intakeFood, freeOnly: intakeFreeOnly,
-                    scope: intakeScope, transport: intakeTransport, travellers: intakeTravelers })
-    : { ready: false, need: [], problem: null };
-  const intakeBudgetText = estimateForBrief(budgetEstimate);
   const [intakeInterest, setIntakeInterest] = useState([]);
   const [intakeGemPref, setIntakeGemPref] = useState(null);
   // Danish speaker, non speaker, or unanswered. See the panel for why it is
@@ -19395,6 +19346,80 @@ If the conversation only covers a single day or a few stops with no explicit day
   const [intakeIncludeEvents, setIntakeIncludeEvents] = useState(false);
   const [detourTab, setDetourTab] = useState("sightseeing");
   const [intakeTransport, setIntakeTransport] = useState([]);
+  // ── THE LOCKOUT ──────────────────────────────────────────────────
+  //
+  // Oliver, 25 Sep 2026: "Make a 'darkening' of everything that can change the
+  // budget. So you have to click on the screen 'enable budget-estimate' or
+  // something. Like a lockout."
+  //
+  // Off by default, and that is the whole point rather than a default nobody
+  // thought about. Every control behind it changes a number in the corner, and
+  // a traveller who never meant to set a budget should not acquire one by
+  // brushing past a row of chips. One deliberate act turns the section on.
+  const [budgetOn, setBudgetOn] = useState(false);
+  // ── AND IT IS DECLARED DOWN HERE FOR A REASON ────────────────────
+  //
+  // 25 Sep 2026, the crash Oliver caught live: "Cannot access 'fa' before
+  // initialization ... crashes when you click enable budget."
+  //
+  // This block sat ABOVE intakeTransport and intakeTravelers and read both.
+  // `const` in a function body is hoisted but not initialised, so reading one
+  // before its line is a ReferenceError, not undefined. It only threw once
+  // budgetOn went true, because that is the branch that evaluates the call, so
+  // the panel worked perfectly right up until somebody pressed the button.
+  //
+  // It must stay below every piece of intake it reads. Nothing about a state
+  // declaration says so at its own site, which is why tests/tdz.mjs now checks
+  // this file for it rather than trusting the order to hold.
+  //
+  // ── AND THE FIGURE IS COMPUTED, NOT TYPED ────────────────────────
+  //
+  // The field that asked for a figure is gone. It asked a traveller to price a
+  // country they have not been to. The ticks ask what they want, which is a
+  // question they can answer, and the pricing is ours. See
+  // utils/budgetEstimate.js.
+  const budgetEstimate = budgetOn
+    ? estimateDay({ stay: intakeStay, food: intakeFood, freeOnly: intakeFreeOnly,
+                    scope: intakeScope, transport: intakeTransport, travellers: intakeTravelers })
+    : { ready: false, need: [], problem: null };
+  const intakeBudgetText = estimateForBrief(budgetEstimate);
+
+  // ── AND IN THEIR OWN MONEY ───────────────────────────────────────
+  //
+  // Oliver, 25 Sep 2026: "enable multiple currencies." He asked for this on
+  // the typed field this morning and it went out with the field; the figure is
+  // where it belongs anyway, because now it is Gemlyx quoting a price rather
+  // than a traveller stating one.
+  //
+  // THE RATE COMES FROM /api/fx AND NOWHERE ELSE. That file forbids a fallback
+  // table in its own words, because a hardcoded rate is wrong by a little at
+  // first and by a lot later. A currency it cannot answer for shows kroner
+  // rather than a converted guess, which is the honest failure.
+  //
+  // FETCHED ONCE PER CURRENCY: the endpoint answers "100 DKK = X", so one
+  // krone is X/100 of that currency.
+  const [budgetCurrency, setBudgetCurrency] = useState("DKK");
+  const [fxFromDkk, setFxFromDkk] = useState({});
+  useEffect(() => {
+    if (budgetCurrency === "DKK" || fxFromDkk[budgetCurrency] !== undefined) return;
+    let alive = true;
+    (async () => {
+      try {
+        const r = await fetch(`/api/fx?to=${encodeURIComponent(budgetCurrency)}`);
+        if (!r.ok) throw new Error("no rate");
+        const d = await r.json();
+        const row = Array.isArray(d?.rates) ? d.rates.find(x => x?.to === budgetCurrency) : d;
+        const per100 = Number(row?.amount);
+        if (!alive) return;
+        // null rather than absent, so a currency that came back unanswerable is
+        // not asked for again on every render.
+        setFxFromDkk(m => ({ ...m, [budgetCurrency]: per100 > 0 ? per100 / 100 : null }));
+      } catch { if (alive) setFxFromDkk(m => ({ ...m, [budgetCurrency]: null })); }
+    })();
+    return () => { alive = false; };
+  }, [budgetCurrency, fxFromDkk]);
+  const fromDkk = (code) => (code === "DKK" ? 1 : fxFromDkk[code] ?? null);
+
   // Redesign pass: the intake form was one long wall of fields. Dates + starting
   // point stay visible; everything else lives behind this "fine-tune" toggle.
   const [intakeMoreOpen, setIntakeMoreOpen] = useState(false);
@@ -30101,13 +30126,13 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         It reads "a day" every time. A number in a corner with
                         no unit is the one somebody reads as the trip total and
                         budgets a week against. */}
-                    {budgetEstimate.ready && (
+                    {budgetEstimate.low != null && (
                       <span style={{ marginLeft: "auto", textAlign: "right", lineHeight: 1.25 }}>
-                        <span style={{ display: "block", fontSize: 13.5, fontWeight: 700, color: C.gold, fontFamily: "'Inter', sans-serif" }}>{estimateShort(budgetEstimate)}</span>
+                        <span style={{ display: "block", fontSize: 13.5, fontWeight: 700, color: C.gold, fontFamily: "'Inter', sans-serif" }}>{estimateShort(budgetEstimate, budgetCurrency, fromDkk)}</span>
                         <span style={{ display: "block", fontSize: 9.5, color: C.muted, letterSpacing: 0.5, textTransform: "uppercase", fontWeight: 700 }}>estimated, per person</span>
                       </span>
                     )}
-                    <span style={{ marginLeft: budgetEstimate.ready ? 10 : "auto", fontSize: 12, color: C.gold, transform: intakeMoreOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s ease", display: "inline-block" }}>▾</span>
+                    <span style={{ marginLeft: budgetEstimate.low != null ? 10 : "auto", fontSize: 12, color: C.gold, transform: intakeMoreOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s ease", display: "inline-block" }}>▾</span>
                   </button>
 
                   {intakeMoreOpen && (<div style={{ paddingTop: 14 }}>
@@ -30281,12 +30306,39 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     {budgetEstimate.problem ? (
                       // ── A CONTRADICTION IS NOT A FIGURE ──────────
                       // Exploring with no way of moving is a trip nobody can
-                      // take, so the panel asks rather than costing it.
+                      // take, so the panel asks rather than costing it. The
+                      // one state with no number, because the number would be
+                      // about a trip nobody can take.
                       <div style={{ fontSize: 11.5, color: C.accent, lineHeight: 1.55 }}>{budgetEstimate.problem.say}</div>
-                    ) : budgetEstimate.ready ? (
+                    ) : (
                       <>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: C.gold, marginBottom: 3 }}>{estimateShort(budgetEstimate)}</div>
-                        <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.55 }}>{estimateSays(budgetEstimate)}</div>
+                        {/* ── FROM ZERO, AND IN THEIR OWN MONEY ──────
+                            Oliver, 25 Sep 2026: "remember budget has pop up
+                            instantly like 0. So it doesn't pop up after it's
+                            all picked." A figure that appears out of nowhere
+                            on the fourth click never shows anybody what their
+                            clicking is doing. */}
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 3 }}>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: C.gold }}>{estimateShort(budgetEstimate, budgetCurrency, fromDkk)}</div>
+                          <select value={budgetCurrency} onChange={e => setBudgetCurrency(e.target.value)}
+                            style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.light, borderRadius: 8, padding: "3px 6px", fontSize: 10.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                            {BUDGET_CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.code}</option>)}
+                          </select>
+                          {budgetCurrency !== "DKK" && fromDkk(budgetCurrency) == null && (
+                            <span style={{ fontSize: 10, color: C.muted }}>no rate just now, so this is kroner</span>
+                          )}
+                        </div>
+                        {/* BOTH FACTS AT ONCE: what it adds up to so far, and
+                            what is still missing from it. The first version
+                            could only manage one of them. */}
+                        {!budgetEstimate.ready && (
+                          <div style={{ fontSize: 11, color: C.light, lineHeight: 1.55, marginBottom: 3 }}>
+                            So far. Pick {budgetEstimate.need.join(" and ")} and this becomes a whole day.
+                          </div>
+                        )}
+                        {budgetEstimate.ready && (
+                          <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.55 }}>{estimateSays(budgetEstimate)}</div>
+                        )}
                         {/* ── A CYCLE TOUR IS A PLAN, NOT A MISTAKE ──
                             Denmark has eleven signed national cycle routes and
                             the long ones run past 400 km. This says how far a
@@ -30305,10 +30357,6 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           </div>
                         )}
                       </>
-                    ) : (
-                      <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.55 }}>
-                        Pick {budgetEstimate.need.join(" and ")} and the figure appears. Half a day's costs shown as a day's would read as the whole of it.
-                      </div>
                     )}
                   </div>
                 )}
