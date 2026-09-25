@@ -1089,14 +1089,30 @@ export const matchedPlaces = (convoText, pools, { days = null, wanted = null, th
   // leaving, which pass one has to run before it can know.
   const anchor = arrivedAt || goingTo;
   // ── AND WHICH TOWN THE FORM SAID THEY START IN ──────────────
-  // The name test for the injected starting point, needed here because the
-  // first pass has to know it before it decides what a town gets. The
-  // coordinate half is further down, beside `from`, where the reason is
-  // written out in full. mentionsPlace as well as samePlaceName, because the
-  // box holds whatever the traveller typed or the location lookup returned:
-  // "Aarhus", "Aarhus, Denmark" and "Aalborg Kommune" all name one town.
-  const startedHere = (name) => !!startedAt && !!name
-    && (samePlaceName(startedAt, name) || mentionsPlace(startedAt, name));
+  //
+  // The name test for the injected starting point. The first pass needs it
+  // before it decides anything, and it is asked BOTH WAYS because the two
+  // sides are written by different hands: the box holds whatever a traveller
+  // typed or a location lookup returned, and the row holds whatever the
+  // founder published it as.
+  //
+  // THE BRACKET IS WHY THIS IS NOT ONE COMPARISON. His own published row is
+  // named "Nørresundby (Aalborg)", because two towns face each other across
+  // the fjord, and the bracket is his disambiguator rather than part of the
+  // name. mentionsPlace asks whether the ROW name stands inside the text, so
+  // "Nørresundby (Aalborg)" was not found inside "Starting point:
+  // Nørresundby" and the town never entered the list at all: the preview came
+  // back EMPTY for the exact traveller this whole feature was built for.
+  // Stripped on both sides, the same way townKeyFor and placeChoice's
+  // subjectCore already strip it, and for the reason subjectCore states:
+  // "Parentheses go first. They are his own disambiguator."
+  const bare = (v) => String(v || "").replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim();
+  const startedHere = (name) => {
+    if (!startedAt || !name) return false;
+    const box = bare(startedAt), row = bare(name);
+    if (!box || !row) return false;
+    return samePlaceName(box, row) || mentionsPlace(box, row) || mentionsPlace(startedAt, name);
+  };
   const seen = new Set();
   const matched = [];
   const list = Array.isArray(pools) ? pools : [];
@@ -1107,7 +1123,13 @@ export const matchedPlaces = (convoText, pools, { days = null, wanted = null, th
     // `_leaving` rather than dropped: it IS a place they named, it is their
     // starting point, and hiding it would make the screen look like it missed
     // the one town in the brief. What it does not get is its contents.
-    if (mentionsPlace(text, p.name)) {
+    // ── AND THE BOX CAN PUT A TOWN ON THE SCREEN BY ITSELF ─────
+    // Not only flag one that is already here. His own row is named
+    // "Nørresundby (Aalborg)" and the bracket kept mentionsPlace from finding
+    // it in "Starting point: Nørresundby", so the town never entered, nothing
+    // was flagged, the reach door never opened and the preview was empty. A
+    // town the traveller put in the box is a town they named.
+    if (mentionsPlace(text, p.name) || (p._src === "town" && startedHere(p.name))) {
       // ── A REJECTED PLACE IS DROPPED, NOT BADGED ─────────────────
       // Unlike `_leaving`, which stays on the screen because it is where the
       // traveller starts and hiding it would look like a miss. A place the
@@ -1151,10 +1173,31 @@ export const matchedPlaces = (convoText, pools, { days = null, wanted = null, th
         && reachBand(kmBetween(anchor, placePoint(p)), days, mode) === REACH_FAR;
       const base = { ...p, ...(saidByThem ? { _saidByThem: true } : {}), ...(farFromTrip ? { _farFromTrip: true } : {}) };
       seen.add(key);
-      // A STATED STARTING POINT IS WHERE THEY START, and the badge on this
-      // flag has said those exact words since it was written. See startPoint
-      // above for the report this came from.
-      matched.push(isDeparturePlace(text, p.name) || startedHere(p.name) ? { ...base, _leaving: true } : base);
+      // ── AND A STARTING POINT IS NOT A DEPARTURE ─────────────
+      //
+      // The first version of this fix set `_leaving` on the box town, on the
+      // reasoning that the badge already reads "Where you start". That was
+      // wrong and it shipped. `_leaving` is not a label, it is a claim that
+      // the traveller ASKED TO GET OUT, and five things downstream act on it:
+      // the town loses its contents, the reach door opens, the screen header
+      // says "You said you wanted out of the city", `onScreen` drops the town
+      // from what the writer is told is on the list, and `leavingNames` tells
+      // the writer "THEY ARE LEAVING X ... write about where they are going."
+      //
+      // Measured on a four day Copenhagen city break with Copenhagen in the
+      // box: Amalienborg and Rosenborg vanished, Aarhus was offered 166 km
+      // away, and the guide was written as a trip out of the city the
+      // traveller had just said they wanted four days in. That is a worse
+      // failure than the sticking it was meant to fix, and it is the same one
+      // the comment on LEAVING_DIRECT already warns about: a sentence with no
+      // leaving verb in it is not a departure.
+      //
+      // So the flag is its own. `_startPoint` gives the reach ranking an
+      // origin and lets the door open when there is nothing else on screen,
+      // and it says nothing about what the traveller wants.
+      matched.push(isDeparturePlace(text, p.name)
+        ? { ...base, _leaving: true }
+        : (startedHere(p.name) ? { ...base, _startPoint: true } : base));
     }
   }
   // ── AND NOW IT IS KNOWABLE WHETHER ANYTHING ELSE SURVIVED ────────
@@ -1211,8 +1254,23 @@ export const matchedPlaces = (convoText, pools, { days = null, wanted = null, th
   // rule, and it opens only when the traveller named somewhere and is leaving all
   // of it, which is the one state where the screen would otherwise be empty.
   const leavingTowns = matched.filter(p => p._src === "town" && p._leaving);
-  const stayingTowns = matched.filter(p => p._src === "town" && !p._leaving);
-  const fillFromReach = !wantedRegions.length && leavingTowns.length > 0 && stayingTowns.length === 0;
+  const startTowns = matched.filter(p => p._src === "town" && p._startPoint);
+  const stayingTowns = matched.filter(p => p._src === "town" && !p._leaving && !p._startPoint);
+  // ── AND THE SECOND DOOR TAKES A THIRD KEY ────────────────
+  //
+  // "it seems to stick to the location when done so." A brief whose only town
+  // is the one in the Starting point box is a traveller who has said where
+  // they begin and nothing about where they are going, and a screen holding
+  // that one town is the sticking he reported.
+  //
+  // BUT NOT WHEN THEY HAVE SAID WHERE THE TRIP IS. destinationPoint reads
+  // "four days in Copenhagen" and "staying in Aarhus", and somebody who wrote
+  // that has answered the question: they are staying, the box merely says
+  // where they start, and offering them another town is the app arguing with
+  // them. This is the guard the first version of the fix did not have, and
+  // its absence is what turned a Copenhagen city break into a trip to Aarhus.
+  const fillFromReach = !wantedRegions.length && stayingTowns.length === 0
+    && (leavingTowns.length > 0 || (startTowns.length > 0 && !goingTo));
   // ── AND THE TOWN THEY ARE LEAVING IS WHERE THEY ARE ───────────────
   // arrivalPoint reads "flying into X" and "the ferry into X", which is the
   // shape of an arrival and not the shape of "we are already in Copenhagen".

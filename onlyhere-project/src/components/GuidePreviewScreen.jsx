@@ -724,7 +724,17 @@ export const GuidePreviewScreen = ({
             ? (matched.some(p => p._viaRegion)
                 ? "Places you named, and what Gemlyx holds in the part of Denmark you asked about. The route itself comes next."
                 : matched.some(p => p._viaReach)
-                ? "You said you wanted out of the city, so these are the places within reach of where you are. The route itself comes next."
+                // ── AND THE QUOTE HAS TO BE ONE THEY GAVE ─────────
+                // The reach pass has two doors now. One opens because somebody
+                // wrote "we want to get out of the city", and this sentence is
+                // theirs. The other opens because the form's Starting point box
+                // is the only town on the screen, and that traveller said no
+                // such thing: they filled in a field. Putting words in their
+                // mouth is the same failure as the Gilleleje line below, one
+                // door over. See _startPoint in utils/previewMatch.js.
+                ? (matched.some(p => p._leaving)
+                  ? "You said you wanted out of the city, so these are the places within reach of where you are. The route itself comes next."
+                  : "These are the places within reach of where your trip starts. The route itself comes next.")
                 // ── AND THE SENTENCE HAS TO BE TRUE, 19 SEP 2026 ──
                 //
                 // This read "Places you have already mentioned" whatever was
@@ -933,7 +943,7 @@ export const GuidePreviewScreen = ({
                           from Jutland, which is the one thing they asked for.
                           A row that is on the screen for a reason other than
                           "you typed it" now says which. */}
-                      {place._leaving && (
+                      {(place._leaving || place._startPoint) && (
                         <span style={{ fontSize: 9, fontWeight: 700, color: C.muted, letterSpacing: 0.8, textTransform: "uppercase", border: `1px solid ${C.border}`, borderRadius: 100, padding: "2px 7px" }}>Where you start</span>
                       )}
                       {place._viaRegion && (

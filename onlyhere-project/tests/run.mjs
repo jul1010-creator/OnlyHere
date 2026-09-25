@@ -11201,6 +11201,15 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // contradiction this file already carries three comments about, so both call
   // sites are asserted here rather than only the one that found the bug.
   ok("the screen is told where the trip starts", /startedAt: intakeStartPoint/.test(previewSrc));
+  // AND THE SENTENCE OVER THE REACH LIST IS NOT A QUOTE THEY NEVER GAVE.
+  // The door has two keys now. "You said you wanted out of the city" belongs
+  // to the one who wrote it, not to somebody who filled in a form field.
+  ok("the reach header only quotes a traveller who said it",
+     /matched\.some\(p => p\._leaving\)\s*\n?\s*\? "You said you wanted out of the city/.test(previewSrc));
+  ok("and says something true to everyone else",
+     /These are the places within reach of where your trip starts\./.test(previewSrc));
+  // AND THE BADGE COVERS BOTH, because "Where you start" is true of each.
+  ok("the badge reads for a stated start too", /\{\(place\._leaving \|\| place\._startPoint\) && \(/.test(previewSrc));
   ok("and it takes it as a prop rather than re-reading the transcript", /intakeStartPoint = "",/.test(previewSrc));
   {
     const appStart = readFileSync(join(root, "src/App.jsx"), "utf8");
@@ -24299,25 +24308,43 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
     const FORM = "Arriving: 25 September 2026 | Departing: 3 October 2026 | Exact trip length: 8 days | Starting point: Copenhagen | Interests: History | Getting around: \ud83d\ude97 Car";
     const before = matchedPlaces(FORM, POOLS, { days: 8 });
     ok("without the box, the start town is not marked as the start",
-      before.find(p => p.name === "Copenhagen")?._leaving !== true);
-    ok("and it drags its whole inventory onto the screen",
-      before.map(p => p.name).some(n => /Geranium|Amalienborg|Bones|Old Irish/.test(n)));
+      before.find(p => p.name === "Copenhagen")?._startPoint !== true);
+    is("and the screen holds nothing but that town",
+      before.filter(p => p._src === "town").map(p => p.name), ["Copenhagen"]);
 
     const after = matchedPlaces(FORM, POOLS, { days: 8, startedAt: "Copenhagen" });
     const names = after.map(p => p.name);
-    ok("the box marks it as where they start", after.find(p => p.name === "Copenhagen")?._leaving === true);
+    ok("the box marks it as where they start", after.find(p => p.name === "Copenhagen")?._startPoint === true);
     ok("it stays on the screen, because it is still their starting point", names.includes("Copenhagen"));
-    is("and stops dragging its contents along", names.filter(n => /Amalienborg|Kobenhavns|Geranium|Bones|Old Irish/.test(n)), []);
+    // ── AND IT KEEPS ITS CONTENTS, WHICH THE FIRST VERSION TOOK ───
+    // The first version set `_leaving` here, so the start town lost its
+    // restaurants and its palaces. `_leaving` is a claim that somebody asked
+    // to get out; a box on a form is not that claim. Measured on a four day
+    // Copenhagen break: Amalienborg and Rosenborg vanished and Aarhus was
+    // offered 166 km away.
+    ok("and keeps its contents, because nobody said they were leaving it",
+      names.some(n => /Amalienborg|Geranium|Bones|Old Irish/.test(n)));
+    ok("and the writer is not told they are leaving it", after.find(p => p.name === "Copenhagen")?._leaving !== true);
     // THE POINT OF THE WHOLE FIX: somewhere else to go.
     ok("and the trip now reaches past the town it starts in",
-      after.filter(p => p._src === "town" && !p._leaving).length > 0);
+      after.filter(p => p._src === "town" && !p._startPoint).length > 0);
+  }
+  // ── AND A TRIP THAT IS THE START TOWN IS LEFT ALONE ─────────
+  // The regression the first version shipped, kept as a test in the words of
+  // the brief that broke. Somebody who writes "four days in Copenhagen" has
+  // said where the trip IS, and the box only says where it begins.
+  {
+    const CITY = "Exact trip length: 4 days | Starting point: Copenhagen | Interests: History\nFour days in Copenhagen with my partner, we love museums and palaces.";
+    const plain = matchedPlaces(CITY, POOLS, { days: 4, saidByTraveller: CITY }).map(p => p.name);
+    const boxed = matchedPlaces(CITY, POOLS, { days: 4, saidByTraveller: CITY, startedAt: "Copenhagen" }).map(p => p.name);
+    is("a city break is the same screen with the box as without it", boxed, plain);
   }
   // A TYPED STARTING POINT IS THE SAME BOX, so the fix is not about geolocation:
   // the tick only fills a field a traveller can fill by hand.
   {
     const FORM = "Exact trip length: 4 days | Starting point: Aarhus | Interests: History";
     const got = matchedPlaces(FORM, POOLS, { days: 4, startedAt: "Aarhus" });
-    ok("a hand-typed start is read the same way", got.find(p => p.name === "Aarhus")?._leaving === true);
+    ok("a hand-typed start is read the same way", got.find(p => p.name === "Aarhus")?._startPoint === true);
   }
   // AND THE BOX HOLDS WHATEVER WAS TYPED OR LOOKED UP, so the name test is not
   // an equality check: the location lookup can return a kommune, and a
@@ -24325,7 +24352,7 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   {
     const FORM = "Exact trip length: 4 days | Starting point: Aarhus, Denmark | Interests: History";
     ok("a town with its country after it still matches",
-      matchedPlaces(FORM, POOLS, { days: 4, startedAt: "Aarhus, Denmark" }).find(p => p.name === "Aarhus")?._leaving === true);
+      matchedPlaces(FORM, POOLS, { days: 4, startedAt: "Aarhus, Denmark" }).find(p => p.name === "Aarhus")?._startPoint === true);
   }
   // AND A SPOKEN ARRIVAL STILL WINS, because `anchor` is read first. Every
   // brief that worked before this has to work the same afterwards.
@@ -24334,6 +24361,23 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
     const withBox = matchedPlaces(SAID, POOLS, { days: 3, saidByTraveller: SAID, startedAt: "Copenhagen" }).map(p => p.name);
     const without = matchedPlaces(SAID, POOLS, { days: 3, saidByTraveller: SAID }).map(p => p.name);
     is("the box changes nothing when their own words already said it", withBox, without);
+  }
+  // ── AND HIS OWN TOWN, WHICH THE FIRST VERSION LEFT WITH AN
+  //    EMPTY SCREEN ──────────────────────────────────────
+  // The published row is named "Nørresundby (Aalborg)" and mentionsPlace asks
+  // whether the ROW name stands inside the text, so the bracket kept it out of
+  // "Starting point: Nørresundby". The town never entered the list, nothing
+  // was flagged, the reach door never opened, and the preview came back with
+  // NOTHING ON IT for the one traveller this feature was built for.
+  {
+    const P = [{ name: "Nørresundby (Aalborg)", _src: "town", tier: "Worth a Detour" },
+               { name: "Aarhus", _src: "town", tier: "Worth a Detour" },
+               { name: "Skagen", _src: "town", tier: "Worth a Detour" }];
+    const FORM = "Exact trip length: 8 days | Starting point: Nørresundby | Interests: History | Getting around: \ud83d\ude97 Car";
+    const got = matchedPlaces(FORM, P, { days: 8, mode: "car", startedAt: "Nørresundby" });
+    ok("a bracketed row is still seated by the bare name in the box", got.some(p => p.name === "Nørresundby (Aalborg)"));
+    ok("and it is marked as where they start", got.find(p => p.name === "Nørresundby (Aalborg)")?._startPoint === true);
+    ok("and the screen is not empty", got.filter(p => p._src === "town").length > 1);
   }
   // AND AN EMPTY BOX CHANGES NOTHING AT ALL, which is every brief before today.
   is("an empty box is the same as no box",
@@ -44381,8 +44425,14 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
      /const anchor = arrivedAt \|\| goingTo;/.test(pm));
   // The gate, written out in full: matching the fill alone would survive a
   // mutation opening it on every brief, because the fill is still there.
-  ok("and the second door opens only when every named town is one they are leaving",
-     /const fillFromReach = !wantedRegions\.length && leavingTowns\.length > 0 && stayingTowns\.length === 0;/.test(pm));
+  ok("and the second door opens only when every named town is one they are leaving or the one they start in",
+     /const fillFromReach = !wantedRegions\.length && stayingTowns\.length === 0\s*\n\s*&& \(leavingTowns\.length > 0 \|\| \(startTowns\.length > 0 && !goingTo\)\);/.test(pm));
+  // AND THE SECOND KEY IS REFUSED THE MOMENT THEY SAY WHERE THE TRIP IS.
+  // "Four days in Copenhagen" with Copenhagen in the box is somebody staying
+  // put, and the first version of this opened the door on them: it offered a
+  // city break Aarhus and took Amalienborg off the screen. `goingTo` is the
+  // guard and it has to be IN the condition, not near it.
+  ok("and never when they have said where the trip is", /\(startTowns\.length > 0 && !goingTo\)/.test(pm));
   // Reach is ranked in ONE place, not asserted twice in different words.
   ok("without a region, reach is the only filter", /if \(wantedRegions\.length && !hit\) continue;/.test(pm));
   // ── AND THE SCREEN HAS TO SHOW IT ───────────────────────────────
