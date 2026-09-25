@@ -34,12 +34,31 @@ const clean = (s) => String(s ?? "").trim();
 // model, which are different jobs: the chip is read by somebody choosing and
 // the sentence is read by something planning.
 //
-// ONE ISLAND MEANS NO CROSSING, which is the only reading that works for a
-// country where most people start on a peninsula. A traveller in Aalborg who
-// picks it is saying Jutland; one in Copenhagen is saying Zealand; one in
-// Ærøskøbing is saying Ærø. All three are the same sentence: do not put a boat
-// in my trip. The label says island because that is the word a visitor to
-// Denmark reaches for, and the app knows what it means from where they start.
+// ── "I MEAN ZEALAND, JUTLAND ... IS LAND-AREA BETTER?" ──────────────
+//
+// Oliver, 25 Sep 2026, and he was right to ask. The label said island, this
+// comment said "do not put a boat in my trip", and the gate below compared
+// which PART of the country each end sits in. Three rules, and they disagreed
+// in both directions at once:
+//
+//   Copenhagen to Odense was REFUSED. That is the Great Belt BRIDGE.
+//   Odense to Ærø was ALLOWED. Ærø is in the Funen part, and is FERRY-ONLY.
+//
+// It blocked a bridge and permitted a boat. And Jutland, the case he named, is
+// not an island at all: it is a peninsula joined to Germany.
+//
+// ── SO IT IS A PART OF THE COUNTRY, AND IT SAYS SO ──────────────────
+//
+// His answer, asked and given: one town, one PART of Denmark, the whole
+// country. That is a ladder a traveller can climb, and every rung means
+// something you can point at on a map. "Island" could never have described the
+// middle rung, because two of the four parts a Dane would name are not islands
+// in any sense a visitor means.
+//
+// THE KEY IS STILL "island". A stored brief carries it, and renaming a value
+// that lives in other people's saved data to tidy a label is a migration with
+// no reader-visible gain. The label and the sentence are what a person and a
+// model read, and both now say part.
 export const TRIP_SCOPES = [
   {
     key: "town",
@@ -48,8 +67,12 @@ export const TRIP_SCOPES = [
   },
   {
     key: "island",
-    label: "Stay on one island",
-    said: "They want to stay on the landmass they start on, so no ferry crossings and no islands they would have to sail to. Moving between towns is fine as long as the trip never needs a boat.",
+    label: "Stay in one part of Denmark",
+    // WHAT THE GATE REALLY ENFORCES, so the model is not told a looser rule
+    // than the screen applies. It used to say "fine as long as the trip never
+    // needs a boat", which would have let it offer Odense to somebody in
+    // Copenhagen, and the preview would then have refused it.
+    said: "They want to stay in the part of Denmark they start in: Jutland, Funen, Zealand or Bornholm. Do not move them to another part, even where a bridge would carry them, and do not put a ferry in the trip. Moving between towns inside that part is fine, and so is an island joined to it by a bridge.",
   },
   {
     key: "explore",
@@ -86,12 +109,28 @@ export const scopeOffersOtherTowns = (key) => clean(key) !== "town";
 // `partOf` is injected rather than imported, the same way this codebase hands
 // costLines its distances and placeContainer its town reader: which landmass a
 // town sits on is geography, and geography stays out of the vocabulary.
-export const scopeAllowsTown = (key, { from, to } = {}) => {
+export const scopeAllowsTown = (key, { from, to, fromIsland = "", toIsland = "", bridged = null } = {}) => {
   if (clean(key) !== "island") return true;
   const a = clean(from), b = clean(to);
   // Nothing known about one end is not a reason to refuse. An unplaced town is
   // the app's own gap and the traveller should not pay for it with a shorter
   // list; the ferry gate in utils/journey.js errs the same way on purpose.
   if (!a || !b) return true;
-  return a.toLowerCase() === b.toLowerCase();
+  if (a.toLowerCase() !== b.toLowerCase()) return false;
+
+  // ── AND THE PART IS NOT THE WHOLE ANSWER ────────────────────────
+  //
+  // Ærø is in the Funen part of the country and you cannot drive to it. The
+  // part check alone said yes, which is how a preference that exists to keep
+  // boats out of a trip was offering the one town on this list that needs one.
+  //
+  // `bridged` is injected for the reason everything geographic here is: which
+  // islands have a road onto them is a fact about Denmark, and this file holds
+  // a preference. The caller answers it from the founder's own `fixedLink`
+  // field, so Falster and Amager and Møn, which are islands nobody books a
+  // boat to, behave like the mainland they are joined to.
+  const ia = clean(fromIsland).toLowerCase(), ib = clean(toIsland).toLowerCase();
+  if (ia === ib) return true;
+  const reachableByRoad = (n) => !n || (typeof bridged === "function" && !!bridged(n));
+  return reachableByRoad(ia) && reachableByRoad(ib);
 };

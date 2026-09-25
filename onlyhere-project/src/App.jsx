@@ -19465,6 +19465,29 @@ If the conversation only covers a single day or a few stops with no explicit day
   // the clock on every keystroke would recompute the whole brief for nothing;
   // `todayKey` changes once a day and nothing else does.
   const todayKey = new Date().toDateString();
+  // ── WHAT THIS TRAVELLER CAME FOR, FOR THE CARDS ──────────────────
+  //
+  // Oliver, 25 Sep 2026, reading a Skagen pin on a trip he had described as a
+  // nature loop: "I like it but.. it should just explain why it's good for
+  // someone looking for nature." The pin had handed him art history and a
+  // warning about nightlife he never asked about.
+  //
+  // briefThemes, not a second read of the same sentences: it already folds the
+  // interest chips and the traveller's own words into the nine themes the
+  // library is tagged in. The preview screen computes the same thing from the
+  // same two inputs, which is why this is the same call rather than a new one.
+  //
+  // THEIR OWN TURNS ONLY. The same source the preview uses, for the reason
+  // written there: reading the whole transcript lets a card promise an
+  // interest Gemlyx suggested to itself.
+  //
+  // Declared below intakeInterest and aiMessages, both of which it reads. See
+  // the budgetEstimate block for what happens when that is got wrong.
+  const chatThemes = useMemo(
+    () => briefThemes((aiMessages || []).slice(1).filter(m => m.role === "user").map(m => m.text || "").join("\n"), intakeInterest),
+    [aiMessages, intakeInterest],
+  );
+
   const liveIntakeBrief = useMemo(() => {
     const turns = (aiMessages || []).slice(1).filter(m => m.role === "user" && !m.isError).map(m => m.text || "");
     // What each of those turns was answering. Same slice, so the two arrays line
@@ -22863,7 +22886,7 @@ ${languageBlock()}`;
                               about the categories ("awkward to have on all
                               the time") in a new costume. What a Yes and a No
                               do is askOnMap, above with the assist chip. */}
-                          <ChatMiniMap focus={mapFocus} pins={onMap.pins} dropped={onMap.dropped} C={C} onOpen={(p) => openStopDetail(p, { windowed: true })} lang={readerLanguage()} sayWhatFor={unsureWhatTheyWant(liveIntakeBrief)}
+                          <ChatMiniMap focus={mapFocus} pins={onMap.pins} dropped={onMap.dropped} C={C} onOpen={(p) => openStopDetail(p, { windowed: true })} lang={readerLanguage()} sayWhatFor={unsureWhatTheyWant(liveIntakeBrief)} want={chatThemes}
                             // The same answer the rail's class is built from,
                             // so a phone cannot have an open rail with no map
                             // in it or a map inside a closed one.
@@ -30478,7 +30501,22 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       // The field says what it covers, so the line the model reads says it too.
                       // A daily figure that silently excluded the bed is what sent a
                       // 200 DKK brief off to plan a trip it could not sleep on.
-                      if (intakeBudgetText.trim()) parts.push(`Budget: ${intakeBudgetText.trim()} a day, and that has to cover where they sleep as well as everything else`);
+                      // ── AND THE ESTIMATE IS ALREADY A SENTENCE ──
+                      //
+                      // Oliver, 25 Sep 2026, reading his own brief: "Budget:
+                      // about 350 to 510 kr a day per person, covering a bed
+                      // and food. Estimated from what they picked rather than
+                      // a figure they gave... a day, and that has to cover
+                      // where they sleep as well as everything else".
+                      //
+                      // Two sentences welded into one nonsense line. This
+                      // suffix was written for a TYPED figure, where "450 kr"
+                      // needed somebody to say what it had to cover. The slot
+                      // now holds estimateForBrief's whole sentence, which
+                      // says what it covers, who it is for and that Gemlyx
+                      // worked it out. Appending the old tail to it repeated
+                      // the bed and repeated "a day" after a full stop.
+                      if (intakeBudgetText.trim()) parts.push(`Budget: ${intakeBudgetText.trim()}`);
                       if (intakeInterest.length) parts.push(`Interests: ${intakeInterest.join(", ")}`);
                       if (intakeGemPref) parts.push(`Travel style: ${intakeGemPref}`);
                       // The shape of the trip, in the traveller's own choice rather

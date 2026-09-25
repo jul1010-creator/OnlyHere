@@ -288,7 +288,7 @@ writeFileSync(entry, `
   export { matchedPlaces, previewPools, mentionsPlace, parentTownOf, isDeparturePlace, isRejectedPlace, onlyAskedAbout, isPassedThrough, regionsNamed, placeIsInRegion, REGION_TOWN_CAP, regionPickLimit } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
   export { wantedCategories, groupKeyOf, foodIsPlanned } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
   export { saysWord, briefThemes, fitsBrief, rankOffers, offerReason, profilePull, THEME_WORDS, MODE_WORDS, THEMES_WITHOUT_WORDS, OFFER_LIMIT, essentialsForTrip, essentialsBlock, reservedEssential, nightlifeWanted, nightlifeNotAsked, RESERVED_THEME, ESSENTIALS_IN_GUIDE } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
-  export { cardLine, cardLineSource, sentencesOf, isOriginSentence, CARD_LINE_MAX } from ${JSON.stringify(join(root, "src/utils/cardLine.js"))};
+  export { cardLine, cardLineSource, sentencesOf, isOriginSentence, themeSentence, CARD_LINE_MAX } from ${JSON.stringify(join(root, "src/utils/cardLine.js"))};
   export { buildPreviewReport, rowReport, passOf, reportFilename, REPORT_KIND } from ${JSON.stringify(join(root, "src/utils/previewReport.js"))};
   export { OBSERVED_MIN, learnedIsEmpty, seenFromTrip, observeTrip, settledObservations, observedForPrompt } from ${JSON.stringify(join(root, "src/utils/profileLearning.js"))};
   export { previewCoverage, describeCoverage, arrivalPoint, targetForCoords, AIRPORTS, COVERAGE_THIN, COVERAGE_MATCHER, COVERAGE_NOTHING_SAID, COVERAGE_UNANSWERED, COVERAGE_UNCOUNTED } from ${JSON.stringify(join(root, "src/utils/previewCoverage.js"))};
@@ -56658,7 +56658,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       // maps." Through cardLine, the reader the preview and the pin card use,
       // so the three places that describe one row describe it the same way.
       ok("the corner says what the place is, not only its name",
-         /line: cardLine\(newestDot\.place\) \|\| ""/.test(miniSrc));
+         /line: cardLine\(newestDot\.place, undefined, \{ want \}\) \|\| ""/.test(miniSrc));
       ok("and nothing is made up for a row with no usable sentence",
          /\{corner\.line && <div className="corner-line">/.test(miniSrc));
       // ── AND THE PINS STILL DO NOT CHOOSE A CLOSENESS ────────────
@@ -60097,7 +60097,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // the has-map class on.
   ok("the wide column renders on width alone, and the phone on two pins and a tap",
      /const shown = wide \|\| phoneMapOpen\(list, phoneOpen\);/.test(chatCode));
-  ok("and a phone that has not asked gets no map", /phoneOpen = false, unsure = false, around = \[\] \}\) => \{/.test(chatCode));
+  ok("and a phone that has not asked gets no map", /phoneOpen = false, unsure = false, around = \[\], want = null \}\) => \{/.test(chatCode));
   ok("and it mounts on the same condition", /if \(!shown \|\| !holderRef\.current \|\| mapRef\.current\) return;/.test(chatCode));
   ok("a narrow screen still gets no map", /if \(!shown\) return null;/.test(chatCode));
   // No line under an empty map: there is nothing to tap yet, and a sentence
@@ -70515,7 +70515,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
        /sayWhatFor=\{unsureWhatTheyWant\(liveIntakeBrief\)\}/.test(app));
     ok("no second test was invented for it", !/enoughToRecommend\(liveIntakeBrief\)/.test(app.slice(app.indexOf("<ChatMiniMap"), app.indexOf("<ChatMiniMap") + 900)));
     ok("the map takes the props and decides which pins ask",
-       /focus = null, ask = null, turnedDown = \[\], onRestore = null, phoneOpen = false, unsure = false, around = \[\] \}\) => \{/.test(mini));
+       /focus = null, ask = null, turnedDown = \[\], onRestore = null, phoneOpen = false, unsure = false, around = \[\], want = null \}\) => \{/.test(mini));
     // Every considered place asks, town or not, because that is the only way it
     // can stop being considered. A place already chosen asks only on the old
     // gate: a question over something they decided is asking them twice.
@@ -70756,7 +70756,10 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     const cardsSrc = readFileSync(join(root, "src/components/ChatPlaceCards.jsx"), "utf8");
     ok("through the reader the preview imports", /import \{ cardLine \} from "\.\.\/utils\/cardLine";/.test(cardsSrc)
        && /import \{ cardLine \} from "\.\.\/utils\/cardLine";/.test(readFileSync(join(root, "src/components/GuidePreviewScreen.jsx"), "utf8")));
-    is("and rendered by calling it", (cardsSrc.match(/cardLine\(place\)/g) || []).length, 2);
+    // Called with the traveller's own themes since 25 Sep 2026, so a card can
+    // explain a place in terms of what this person came for. See cardLine's
+    // level 0.
+    is("and rendered by calling it", (cardsSrc.match(/cardLine\(place, undefined, \{ want \}\)/g) || []).length, 2);
 
     // No picture is no longer no card, when there is a question to ask.
     const askedNoShot = await card({ places: [noShot], ask });
@@ -76041,6 +76044,20 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     ok("and what it covers is spelled out", /\{estimateSays\(budgetEstimate\)\}/.test(app));
     // AND THE BRIEF READS THE ESTIMATE RATHER THAN A SECOND COPY OF IT.
     ok("the brief slot is the estimate", /const intakeBudgetText = estimateForBrief\(budgetEstimate\);/.test(app));
+    // ── AND NOTHING IS WELDED ONTO THE END OF IT ────────────────
+    //
+    // Oliver, 25 Sep 2026, reading his own brief: "Budget: about 350 to 510 kr
+    // a day per person, covering a bed and food. Estimated from what they
+    // picked... a day, and that has to cover where they sleep as well as
+    // everything else."
+    //
+    // A suffix written for a TYPED figure, where "450 kr" needed somebody to
+    // say what it had to cover. The slot now holds a whole sentence that says
+    // so itself, and the tail repeated the bed and put "a day" after a full
+    // stop.
+    ok("and nothing is appended to a sentence that is already complete",
+       /parts\.push\(`Budget: \$\{intakeBudgetText\.trim\(\)\}`\)/.test(app));
+    ok("the old typed-figure tail is gone", !/has to cover where they sleep as well as everything else/.test(app));
     ok("and nothing else can set it", !/setIntakeBudgetText/.test(app));
   }
 }
@@ -76145,19 +76162,30 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     is("and the same as staying put, because the riding is free", byBike.low, town.low);
   }
 
-  // ── AN ISLAND IS AN EXTRA, NOT A RATE ───────────────────────────
+  // ── AND THE MIDDLE SCOPE ADDS NO CROSSING AT ALL ────────────────
+  //
+  // This used to add a return ferry fare whenever the scope was the middle
+  // one, on the strength of its old label, "Stay on one island". Backwards:
+  // the option exists to keep a boat OUT of the trip, and its own sentence
+  // says so. The estimate was charging a traveller for the one thing they had
+  // just asked not to do.
+  //
+  // Caught by Oliver asking what the label meant, 25 Sep 2026: "I mean
+  // Zealand, Jutland, and Odense.. is land-area better?" Nothing in here could
+  // have caught it, because the code read the word on the chip and the word
+  // was wrong.
   {
-    const isle = estimateDay({ ...base, scope: "island", transport: ["🚆 Public transport"] });
-    // Twice each: out and back, for every person walking on. The default
-    // party is two until the who's-travelling box says otherwise.
-    is("a foot passenger crosses twice, each", isle.ferry.kr, FERRY_FARE.footLow * 2 * 2);
-    ok("and it is named rather than divided into the day", !/ferry/i.test(estimateSays(isle)));
-    // A CAR ON A FERRY IS A DIFFERENT TICKET, and the dearer one by far.
-    const byCar = estimateDay({ ...base, scope: "island", transport: ["🚗 Car"] });
-    ok("taking the car across costs more", byCar.ferry.kr > isle.ferry.kr);
-    const byBike = estimateDay({ ...base, scope: "island", transport: ["🚲 Bike"] });
-    ok("and a bicycle costs least", byBike.ferry.kr < isle.ferry.kr);
-    ok("with the operator named", /aeroe-ferry/.test(FERRY_FARE.source));
+    for (const t of [["🚗 Car"], ["🚆 Public transport"], ["🚲 Bike"]]) {
+      is(`staying in one part adds no crossing, by ${t[0]}`,
+         estimateDay({ ...base, scope: "island", transport: t }).ferry, null);
+    }
+    // AND NO OTHER SCOPE EVER DID. Stated so the removal cannot be read as a
+    // regression somewhere else.
+    is("nor does exploring", estimateDay({ ...base, scope: "explore", transport: ["🚗 Car"] }).ferry, null);
+    is("nor one town", estimateDay({ ...base, scope: "town", transport: ["🚗 Car"] }).ferry, null);
+    // The published fares stay, because the guide prices a real crossing once
+    // it knows which island. They are just not this panel's to guess at.
+    ok("the fares are still on file, with the operator", /aeroe-ferry/.test(FERRY_FARE.source));
   }
 
   // ── EXPLORING WITH NO WAY OF MOVING IS NOT A TRIP ───────────────
@@ -76348,15 +76376,13 @@ SOURCE: https://www.tripadvisor.com/whatever`;
        pair.parts.find(p => p.what === "food").low);
   }
 
-  // ── AND A FERRY IS ONE TICKET OR SEVERAL ────────────────────────
-  // A car crosses once whoever is in it. A foot passenger is one each, which
-  // is the case where a big party costs MORE rather than less.
+  // ── AND NO SCOPE PUTS A FERRY IN THE FIGURE ─────────────────────
+  // The middle scope exists to keep a boat OUT of the trip. See the block
+  // above: this used to charge a traveller for the one thing they had just
+  // asked not to do.
   {
-    const byCar = estimateDay({ ...base, scope: "island", transport: ["🚗 Car"], travellers: "family of 4" });
-    const onFoot = estimateDay({ ...base, scope: "island", transport: ["🚆 Public transport"], travellers: "family of 4" });
-    ok("the car crosses on one ticket", byCar.ferry.forParty);
-    ok("and four on foot pay four fares", !onFoot.ferry.forParty
-       && onFoot.ferry.kr > estimateDay({ ...base, scope: "island", transport: ["🚆 Public transport"], travellers: "2 people" }).ferry.kr);
+    is("a family staying in one part pays for no crossing",
+       estimateDay({ ...base, scope: "island", transport: ["🚗 Car"], travellers: "family of 4" }).ferry, null);
   }
 
   // ── AND THE BRIEF CARRIES THE COUNT ─────────────────────────────
@@ -76519,6 +76545,126 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   }
 }
 
+
+// ── PASS 117: THE CARD EXPLAINS THE THING THEY CAME FOR ────────────
+//
+// Oliver, 25 Sep 2026, reading a Skagen pin on a trip he had described to
+// Gemlyx as a nature loop. The card said:
+//
+//   "It suits people who want coastal walking and real art history away from a
+//    city; it's not for anyone after nightlife or…"
+//
+// "I like it but.. it should just explain why it's good for someone looking
+// for nature."
+//
+// The fit rule picked that sentence because it says "suits people who", and
+// with no reader in mind it is the right sentence. But there IS a reader: they
+// said nature, and the card handed them art history and a warning about
+// nightlife they never asked about.
+{
+  const { cardLine, cardLineSource, sentencesOf, themeSentence, briefThemes } = M;
+
+  const skagen = {
+    desc: "Skagen sits at Denmark's northern tip where two seas meet at Grenen. "
+        + "It suits people who want coastal walking and real art history away from a city; it's not for anyone after nightlife. "
+        + "The Skagen Painters worked here for the light, and Skagens Museum holds the best of them. "
+        + "Rabjerg Mile is a migrating dune you can climb, and the beaches either side run for miles.",
+  };
+  const parts = sentencesOf(skagen.desc);
+
+  // ── NOBODY SAID ANYTHING, NOTHING CHANGES ───────────────────────
+  // A preference nobody stated must not reorder anybody's card. This is
+  // character for character what the card showed before this level existed.
+  is("with no interests it is still the fit sentence", cardLineSource(skagen), "fit");
+  is("and passing an empty set changes nothing", cardLineSource(skagen, { want: new Set() }), "fit");
+  is("and the line itself is unchanged", cardLine(skagen), cardLine(skagen, undefined, { want: null }));
+
+  // ── AND WITH AN INTEREST, THE ENTRY'S OWN SENTENCE ABOUT IT ─────
+  {
+    const art = briefThemes("we're into art and museums", []);
+    is("an art traveller gets the art sentence", cardLineSource(skagen, { want: art }), "theme");
+    ok("which is the one about the painters", /Skagen Painters/.test(cardLine(skagen, 120, { want: art })));
+    const coast = briefThemes("we want beaches and the coast", []);
+    ok("and a coast traveller gets the dunes and the beaches",
+       /dune|beaches/.test(cardLine(skagen, 120, { want: coast })));
+  }
+
+  // ── THE BEST SENTENCE, NOT THE FIRST ────────────────────────────
+  //
+  // The first version took the earliest sentence containing any word of the
+  // theme, and on this entry it returned the generic one every time: "coastal
+  // walking and real art history" carries a word from four themes at once, so
+  // it won whatever had been asked for. The card changed its reason and never
+  // changed its sentence.
+  {
+    const coast = briefThemes("beaches", []);
+    const line = cardLine(skagen, 200, { want: coast });
+    ok("the generic sentence does not win on a keyword", !/suits people who/.test(line));
+  }
+
+  // ── AND NEVER THE FIT SENTENCE ITSELF ───────────────────────────
+  //
+  // If the ONLY sentence about what they asked for is the one that also
+  // mentions three other things, the entry has nothing specific to say, and
+  // the honest answer is the general sentence reached by the rule that owns
+  // it. Attribution matters here: "theme" must mean the card really changed.
+  {
+    const thin = { desc: "Somewhere sits in the middle of Jutland on a small river. It suits people who want forest walks and quiet; it is not for anyone after nightlife." };
+    const nature = briefThemes("nature and forests", []);
+    is("an entry with nothing specific falls through to the fit rule",
+       cardLineSource(thin, { want: nature }), "fit");
+    ok("and shows that sentence, rather than nothing", /suits people who/.test(cardLine(thin, 200, { want: nature })));
+  }
+
+  // ── A THEME THE ENTRY HAS NOTHING TO SAY ABOUT ──────────────────
+  // Skagen's own words never mention food. The card must not manufacture a
+  // reason, and must not go blank either.
+  {
+    const food = briefThemes("good food mostly", []);
+    is("a theme the entry is silent on falls back", cardLineSource(skagen, { want: food }), "fit");
+    ok("and still says something", cardLine(skagen, 120, { want: food }).length > 20);
+  }
+
+  // ── A FRAGMENT IS NOT A CARD ────────────────────────────────────
+  // The same floor the fit rule uses: a four word clause mentioning birds is a
+  // worse card than the general sentence it would displace.
+  {
+    const nature = briefThemes("birds", []);
+    is("a short clause is refused", themeSentence(["Birds nest here.", "A longer sentence that says nothing about the subject at all."], nature), "");
+  }
+
+  // ── AND THE VOCABULARY IS NOT WRITTEN IN THIS FILE ──────────────
+  //
+  // The first version typed out a regex per theme, which is a second answer to
+  // a question utils/interestFit.js already answers and, by this codebase's
+  // own count, the most expensive mistake available. Asserted on the source so
+  // it cannot quietly come back.
+  {
+    const src = readFileSync(join(root, "src/utils/cardLine.js"), "utf8");
+    ok("cardLine imports the one vocabulary", /import \{ rowThemeWords, saysWord \} from "\.\/interestFit"/.test(src));
+    ok("and declares none of its own", !/^(?:export )?const THEME_WORDS/m.test(stripNonCode(src)));
+  }
+
+  // ── AND EVERY SCREEN THAT SHOWS A CARD HANDS IT OVER ────────────
+  // An unwired reader is this codebase's signature defect: the module would be
+  // right and every card on the site would read exactly as it did before.
+  {
+    const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+    const cards = readFileSync(join(root, "src/components/ChatPlaceCards.jsx"), "utf8");
+    const mini = readFileSync(join(root, "src/components/ChatMiniMap.jsx"), "utf8");
+    const preview = readFileSync(join(root, "src/components/GuidePreviewScreen.jsx"), "utf8");
+    ok("the chat works out the traveller's themes once", /const chatThemes = useMemo\(/.test(app));
+    ok("from their own turns and the chips, through briefThemes", /briefThemes\(\(aiMessages \|\| \[\]\)/.test(app));
+    ok("and hands them to the map", /want=\{chatThemes\}/.test(app));
+    ok("the map hands them to the pin cards", /want=\{want\}/.test(mini));
+    ok("and to its own corner line", /cardLine\(newestDot\.place, undefined, \{ want \}\)/.test(mini));
+    ok("the cards read them", /cardLine\(place, undefined, \{ want \}\)/.test(cards));
+    // The preview screen already had the themes, computed from the same two
+    // inputs, so it is the same value rather than a second one.
+    ok("and the preview uses the themes it already had", /cardLine\(place, undefined, \{ want: themes \}\)/.test(preview));
+  }
+}
+
 // ── HOW FAR THEY WANT TO GO, ASKED RATHER THAN GUESSED ─────────────
 //
 // Oliver, 25 Sep 2026: "'Stay at one town' 'Stay at one Island' 'Explore
@@ -76533,7 +76679,74 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   const { TRIP_SCOPES, TRIP_SCOPE_KEYS, tripScopeOf: scopeOf, scopeSaid, scopeOffersOtherTowns, scopeAllowsTown, matchedPlaces, readBrief, briefBlock } = M;
 
   is("the three he asked for, in his order", TRIP_SCOPE_KEYS, ["town", "island", "explore"]);
-  ok("and the labels are his words", TRIP_SCOPES.map(s => s.label).join(" | ") === "Stay in one town | Stay on one island | Explore Denmark");
+  // ── AND THE MIDDLE ONE SAYS WHAT IT DOES ────────────────────────
+  //
+  // Oliver, 25 Sep 2026: "'Stay on one island'.. I mean Zealand, Jutland, and
+  // Odense.. is land-area better?" He was right to ask. The label said island,
+  // the file's own comment said "do not put a boat in my trip", and the gate
+  // compared which PART of the country each end sits in. Three rules that
+  // disagreed in both directions: Copenhagen to Odense was refused, which is
+  // the Great Belt BRIDGE, and Odense to Ærø was allowed, which is FERRY-ONLY.
+  //
+  // Jutland, the case he named, is not an island at all. It is a peninsula
+  // joined to Germany.
+  ok("and the labels say what they do", TRIP_SCOPES.map(s => s.label).join(" | ") === "Stay in one town | Stay in one part of Denmark | Explore Denmark");
+  ok("with no island left in the middle label, since two of the four parts are not one",
+     !/island/i.test(scopeOf("island").label));
+  // THE KEY IS UNCHANGED ON PURPOSE. A stored brief carries it, and renaming a
+  // value in other people's saved data to tidy a label is a migration with no
+  // reader-visible gain.
+  is("while the stored key is left alone", TRIP_SCOPE_KEYS[1], "island");
+  // AND THE MODEL IS TOLD THE RULE THE GATE ENFORCES, not a looser one. The
+  // old sentence said "fine as long as the trip never needs a boat", which
+  // would have had it offer Odense to somebody in Copenhagen and the preview
+  // would then have refused it.
+  ok("the sentence names the four parts", /Jutland, Funen, Zealand or Bornholm/.test(scopeSaid("island")));
+  ok("and rules out a bridge to another part", /even where a bridge would carry them/.test(scopeSaid("island")));
+  ok("and a ferry", /do not put a ferry in the trip/.test(scopeSaid("island")));
+
+  // ── AND THE GATE STOPS LETTING A BOAT THROUGH ───────────────────
+  {
+    const bridged = (n) => ["møn", "falster", "amager"].includes(String(n || "").toLowerCase());
+    // Ærø is in the Funen part and you cannot drive to it. The part check
+    // alone said yes, which is how a preference that exists to keep boats out
+    // of a trip was offering the one town that needs one.
+    ok("a ferry-only island in the same part is refused",
+       !scopeAllowsTown("island", { from: "Funen", to: "Funen", fromIsland: "", toIsland: "Ærø", bridged }));
+    // AND AN ISLAND WITH A ROAD ONTO IT IS NOT. Falster and Amager are islands
+    // and nobody books a boat to them, which is what ferryProblems already
+    // says about the same field.
+    ok("an island with a bridge behaves like the mainland",
+       scopeAllowsTown("island", { from: "Zealand", to: "Zealand", fromIsland: "", toIsland: "Møn", bridged }));
+    // Staying put on the ferry island they started on is the whole point.
+    ok("and staying on the island they started on is fine",
+       scopeAllowsTown("island", { from: "Funen", to: "Funen", fromIsland: "Ærø", toIsland: "Ærø", bridged }));
+    ok("while leaving it is not",
+       !scopeAllowsTown("island", { from: "Funen", to: "Funen", fromIsland: "Ærø", toIsland: "", bridged }));
+    // A different part is still a different part, bridge or no bridge: that is
+    // what the middle rung of the ladder means.
+    ok("another part is refused even with a bridge to it",
+       !scopeAllowsTown("island", { from: "Zealand", to: "Funen", bridged }));
+    // NOTHING KNOWN IS NOT A REASON TO REFUSE. An unplaced town is the app's
+    // own gap and a traveller should not pay for it with a shorter list.
+    ok("an unplaced town is let through", scopeAllowsTown("island", { from: "Zealand", to: "", bridged }));
+    // AND WITHOUT THE READER, AN ISLAND IS STILL AN ISLAND. No injected
+    // `bridged` means nothing is known to have a road, so the boat check errs
+    // towards refusing rather than towards a ferry nobody asked for.
+    ok("and with no bridge reader, an island is treated as one",
+       !scopeAllowsTown("island", { from: "Zealand", to: "Zealand", fromIsland: "", toIsland: "Møn" }));
+  }
+
+  // ── AND THE PREVIEW ANSWERS IT FROM HIS OWN DATA ────────────────
+  // Not a table of Danish bridges typed into a preference module, which would
+  // be a second answer to a question the published island entries already
+  // carry, and the one that goes stale.
+  {
+    const pm = readFileSync(join(root, "src/utils/previewMatch.js"), "utf8");
+    ok("the bridged islands are read off fixedLink", /_src === "island" && String\(q\.fixedLink \|\| ""\)\.trim\(\)/.test(pm));
+    ok("and handed to the gate", /bridged: bridgedIsland/.test(pm));
+    ok("along with each end's island", /fromIsland: namedIslandOf|toIsland: namedIslandOf/.test(pm));
+  }
   is("a scope nobody chose is nothing", scopeOf(""), null);
   is("and says nothing to the model", scopeSaid(""), "");
   is("and neither does one nobody has heard of", scopeSaid("interrail"), "");

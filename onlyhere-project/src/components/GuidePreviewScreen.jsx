@@ -1005,7 +1005,7 @@ export const GuidePreviewScreen = ({
                       paragraph that says who the town suits. cardLine asks the
                       entry for that sentence instead. utils/cardLine.js has
                       the whole story and falls back to this exact clip. */}
-                  <div style={{ fontSize: 12, color: C.light, lineHeight: 1.5, marginTop: 3 }}>{cardLine(place)}</div>
+                  <div style={{ fontSize: 12, color: C.light, lineHeight: 1.5, marginTop: 3 }}>{cardLine(place, undefined, { want: themes })}</div>
                   {/* ── THE BARS ON THIS STREET, BEHIND AN ARROW ─────────
                       Oliver, 22 Sep 2026: "make a '->' on the bar street. So
                       when you click it, those 3 pop out." Closed until asked,
@@ -1165,7 +1165,7 @@ export const GuidePreviewScreen = ({
                         {reason && (
                           <div style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, letterSpacing: 0.3, marginTop: 3 }}>{reason}</div>
                         )}
-                        <div style={{ fontSize: 12, color: C.light, lineHeight: 1.5, marginTop: 3 }}>{cardLine(place)}</div>
+                        <div style={{ fontSize: 12, color: C.light, lineHeight: 1.5, marginTop: 3 }}>{cardLine(place, undefined, { want: themes })}</div>
                       </div>
                       <button onClick={notTheFrame(() => setAskItem(place))}
                         style={{ flexShrink: 0, background: "none", border: `1px solid ${C.gold}55`, color: C.gold, borderRadius: 100, padding: "6px 11px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>

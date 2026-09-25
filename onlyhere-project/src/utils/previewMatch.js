@@ -22,7 +22,7 @@ import { townPointFor } from "./guideEnrichment";
 import { outOfBudget, budgetWarning } from "./budgetFit";
 import { routeOrder, reachBand, kmBetween, preferReachable, REACH_STRETCH, REACH_FAR } from "./routeOrder";
 import { scopeOffersOtherTowns, scopeAllowsTown } from "./tripScopeChoice";
-import { partOfCountry } from "./geography";
+import { partOfCountry, namedIslandOf } from "./geography";
 
 // ── WHAT THE PREVIEW SCREEN ACTUALLY HOLDS ON A CONVERSATION ────────
 //
@@ -1415,6 +1415,23 @@ export const matchedPlaces = (convoText, pools, { days = null, wanted = null, th
       const k = [...holdings.keys()].find(x => samePlaceName(x, parent)) || fold(parent);
       holdings.set(k, (holdings.get(k) || 0) + 1);
     }
+    // ── WHICH ISLANDS HAVE A ROAD ONTO THEM ─────────────────────
+    //
+    // Read off the published island entries' own `fixedLink`, which is the
+    // field ferryProblems already trusts for exactly this: "A bridged island
+    // is reached by road and owes nothing here. Falster and Amager are islands
+    // and nobody books a boat to them."
+    //
+    // Built from the pool rather than typed out here, so the founder adding a
+    // bridge to an entry is the whole of the change. A table of Danish bridges
+    // in this file would be a second answer to a question his own data already
+    // answers, and it would be the one that goes stale.
+    const bridgedNames = new Set(
+      list.filter(q => q?._src === "island" && String(q.fixedLink || "").trim())
+          .map(q => String(q.name || "").trim().toLowerCase())
+          .filter(Boolean)
+    );
+    const bridgedIsland = (name) => bridgedNames.has(String(name || "").trim().toLowerCase());
     const heldFor = (name) => {
       const k = [...holdings.keys()].find(x => samePlaceName(x, name));
       return k ? holdings.get(k) : 0;
@@ -1438,7 +1455,16 @@ export const matchedPlaces = (convoText, pools, { days = null, wanted = null, th
       // somebody in Ærøskøbing means Ærø. A town this app cannot place is let
       // through rather than refused: an unplaced row is the app's own gap and
       // a traveller should not pay for it with a shorter list.
-      if (!scopeAllowsTown(scope, { from: partOfCountry(startRow || {}), to: partOfCountry(p) })) continue;
+      // ── AND NOT ONTO A BOAT EITHER ────────────────────────
+      // The part check alone let Ærø through, which is in the Funen part and
+      // ferry-only. `bridged` is answered from the published island entries'
+      // own fixedLink, so an island with a road onto it behaves like the
+      // mainland it is joined to rather than being refused for being an island.
+      if (!scopeAllowsTown(scope, {
+        from: partOfCountry(startRow || {}), to: partOfCountry(p),
+        fromIsland: namedIslandOf(startRow || {}), toIsland: namedIslandOf(p),
+        bridged: bridgedIsland,
+      })) continue;
       const held = heldFor(p.name);
       // Kept on the candidate rather than recomputed below, because the reach
       // partition needs the same answer the score used and two calls to the

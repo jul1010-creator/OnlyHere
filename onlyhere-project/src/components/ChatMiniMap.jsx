@@ -175,7 +175,10 @@ export const isConsidered = (pin) => !pin?.confirmed;
 // 380px map is a wall. A card that opened itself on the newest pin was
 // considered and rejected for both reasons: it breaks the 12 Sep rule, and
 // choosing WHICH pin to open is the app choosing the trip.
-export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, height = 220, sayWhatFor = false, focus = null, ask = null, turnedDown = [], onRestore = null, phoneOpen = false, unsure = false, around = [] }) => {
+// `want` is the traveller's own themes, handed down to the pin cards so a pin
+// explains a place in terms of what this person came for. See cardLine's level
+// 0: Oliver read a Skagen pin on a nature trip and got art history.
+export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, height = 220, sayWhatFor = false, focus = null, ask = null, turnedDown = [], onRestore = null, phoneOpen = false, unsure = false, around = [], want = null }) => {
   // The published places a flight down brings with it. See placesAround.
   const aroundRef = useRef(around);
   aroundRef.current = around;
@@ -378,7 +381,7 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
   const corner = newestDot
     ? {
         name: newestDot.place?.name || "",
-        line: cardLine(newestDot.place) || "",
+        line: cardLine(newestDot.place, undefined, { want }) || "",
         more: Math.max(0, dots.length - 1),
       }
     : null;
@@ -1251,6 +1254,7 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
           C={C}
           onOpen={onOpen}
           lang={lang}
+          want={want}
           // Built per render, so a Yes shows as its state on the next paint
           // without the pins being redrawn. `h.asks` was decided when the pin
           // was made and `ask` is live: both have to hold, because the render

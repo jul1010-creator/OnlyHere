@@ -183,7 +183,12 @@ export const STRIP_CARD_W = 150;
 // steer only among the places that happen to have a licensed picture, which is
 // not a rule anybody chose. So in the pin layout, `ask` admits a place with no
 // photograph, and the card is then the name, the line and the question.
-export const ChatPlaceCards = ({ places = [], C, onOpen, lang = null, layout = "row", className = "", ask = null, onlyOnPhone = false }) => {
+// `want` is the traveller's own themes, from briefThemes: chips and free text
+// folded into the nine the library is tagged in. Passed in rather than read
+// here, the same way `lang` is, because this component renders a card and the
+// brief belongs to whoever owns the conversation. Null means nobody has said
+// anything, and then the card reads exactly as it always did.
+export const ChatPlaceCards = ({ places = [], C, onOpen, lang = null, layout = "row", className = "", ask = null, onlyOnPhone = false, want = null }) => {
   // One name for the two, because they were two until the side column stopped
   // carrying cards. Kept as a separate word rather than folded into `pin`
   // everywhere below, so the difference between "this is the column shape" and
@@ -382,8 +387,8 @@ export const ChatPlaceCards = ({ places = [], C, onOpen, lang = null, layout = "
             {/* The sentence the preview shows for this place, through the same
                 reader. Empty for a row with no usable text, and then nothing is
                 rendered here rather than a sentence made up to fill the gap. */}
-            {asking && cardLine(place) && (
-              <div style={{ fontSize: 10.5, color: C.light || C.text, lineHeight: 1.45, marginTop: 4, wordBreak: "break-word" }}>{cardLine(place)}</div>
+            {asking && cardLine(place, undefined, { want }) && (
+              <div style={{ fontSize: 10.5, color: C.light || C.text, lineHeight: 1.45, marginTop: 4, wordBreak: "break-word" }}>{cardLine(place, undefined, { want })}</div>
             )}
             {asking && (
               // stopPropagation on every button, because the card's own onClick

@@ -515,15 +515,22 @@ export const estimateDay = ({ stay = "", food = "", freeOnly = false, scope = ""
     partyLow: p.low, partyHigh: p.high,
   }));
 
-  // ── AND A CROSSING, WHICH IS NOT A DAILY RATE ───────────────────
-  // One out and one back whatever the trip's length, so it is named on top of
-  // the daily figure rather than divided into it. A car on a ferry is one
-  // ticket for the whole party; a foot passenger is one each.
-  const onAnIsland = clean(scope) === "island";
-  const carAcross = mode === "car" || mode === "camper";
-  const crossing = carAcross
-    ? FERRY_FARE.carLow * 2
-    : (mode === "bike" ? FERRY_FARE.bikeLow * 2 * people : FERRY_FARE.footLow * 2 * people);
+  // ── AND NO CROSSING, WHICH IS THE WHOLE POINT OF THAT OPTION ────
+  //
+  // 25 Sep 2026. This used to add a return ferry fare whenever the scope was
+  // the middle one, on the strength of its old label, "Stay on one island".
+  // That was backwards: the option exists to keep a boat OUT of the trip, and
+  // its own sentence says so. The estimate was charging a traveller for the
+  // one thing they had just asked not to do.
+  //
+  // Caught by Oliver asking what the label meant rather than by anything here,
+  // which is the argument for a label that says what it does: the code read
+  // the word on the chip and the word was wrong.
+  //
+  // A ferry a traveller chooses anyway is not free, and it is not this
+  // panel's to guess at either: it depends on which island, and the guide
+  // prices the real crossing once it knows. FERRY_FARE stays, because that is
+  // what it is for.
 
   const excludes = [
     freeOnly ? "" : EXCLUDED.entry,
@@ -556,7 +563,7 @@ export const estimateDay = ({ stay = "", food = "", freeOnly = false, scope = ""
     bedPaid: stayIsBooked(stay),
     moving: hops > 0 && hop ? { mode, hops } : null,
     note: movingNote(scope, transport),
-    ferry: onAnIsland ? { kr: crossing, forParty: carAcross, says: FERRY_FARE.says } : null,
+    ferry: null,
   };
 };
 
