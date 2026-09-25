@@ -227,6 +227,8 @@ import { readPromises, brokenPromises, promiseNote, rebuildKeptMore, promiseRetr
 import { swapIsAllowed } from "./utils/stopSwap";
 import { factCheckCopy } from "./utils/factCheckCopy";
 import { matchedPlaces, previewPools, wantedCategories, mentionsPlace } from "./utils/previewMatch";
+import { BUDGET_LABEL, BUDGET_PLACEHOLDER, MIN_DAY_DKK, readDailyBudget, budgetProblem } from "./utils/tripBudget";
+import { TRIP_SCOPES, scopeSaid } from "./utils/tripScopeChoice";
 import { weighAdd, addCaution, tripLoadBlock } from "./utils/weighAdd";
 import { isBookableTicketUrl, pickTicketUrl, describeTicketSearch, ticketQueries, ticketUrlSaysElsewhere, ticketAgentOf, reviewPastedTicketUrl, isTourUrl, typeHasAdmission, TICKET_FIELD, TOUR_FIELD } from "./utils/ticketLink";
 import { tourQuery, tourKindFor, tourTownFor, pickTourUrl, tourPhrase, tourCandidates, tourProposal, replaceTour, describeTourFindings, tourAliveVerdict, tourRemovalFor, TOUR_RESWEEP_DAYS, FOUND as TOUR_FOUND, GONE as TOUR_GONE, UNKNOWN as TOUR_UNKNOWN, ALIVE as TOUR_ALIVE } from "./utils/tourSweep";
@@ -19251,7 +19253,45 @@ If the conversation only covers a single day or a few stops with no explicit day
   const heroSetDeparture = (day) => setIntakeDeparture(day ? `${day}T${heroTimeOf(intakeDeparture)}` : "");
 
   const [intakeStartPoint, setIntakeStartPoint] = useState("");
+  const [intakeScope, setIntakeScope] = useState("");
   const [intakeBudgetText, setIntakeBudgetText] = useState("");
+  // ── AND WHAT THAT IS IN KRONER, WHEN IT IS NOT KRONER ──────────
+  //
+  // Oliver, 25 Sep 2026: "make it limit. So you can't write under like 300 ...
+  // And make people able to write in other currencies too."
+  //
+  // The rate comes from /api/fx, which is the one place in the app allowed to
+  // know one: that file forbids a fallback table in its own words, because a
+  // hardcoded rate is wrong by a little at first and by a lot later. So this
+  // holds what that endpoint answered and nothing else, and a currency it has
+  // not answered for converts to nothing, which the floor reads as "do not
+  // block". Refusing to plan a trip because a rate call failed is the worse
+  // answer. See utils/tripBudget.js.
+  //
+  // FETCHED ONCE PER CURRENCY, on the figure rather than on every keystroke:
+  // the endpoint answers "100 DKK = X EUR", so one krone per unit is 100/X.
+  const [fxToDkk, setFxToDkk] = useState({});
+  const budgetCurrency = readDailyBudget(intakeBudgetText)?.currency || "DKK";
+  useEffect(() => {
+    if (budgetCurrency === "DKK" || fxToDkk[budgetCurrency] !== undefined) return;
+    let alive = true;
+    (async () => {
+      try {
+        const r = await fetch(`/api/fx?to=${encodeURIComponent(budgetCurrency)}`);
+        if (!r.ok) throw new Error("no rate");
+        const d = await r.json();
+        const row = Array.isArray(d?.rates) ? d.rates.find(x => x?.to === budgetCurrency) : d;
+        const per100 = Number(row?.amount);
+        if (!alive) return;
+        // null rather than absent, so a currency that came back unanswerable is
+        // not asked for again on the next keystroke.
+        setFxToDkk(m => ({ ...m, [budgetCurrency]: per100 > 0 ? 100 / per100 : null }));
+      } catch { if (alive) setFxToDkk(m => ({ ...m, [budgetCurrency]: null })); }
+    })();
+    return () => { alive = false; };
+  }, [budgetCurrency, fxToDkk]);
+  const rateToDkk = (code) => (code === "DKK" ? 1 : fxToDkk[code] ?? null);
+  const budgetTooLow = budgetProblem(intakeBudgetText, rateToDkk);
   const [intakeInterest, setIntakeInterest] = useState([]);
   const [intakeGemPref, setIntakeGemPref] = useState(null);
   // Danish speaker, non speaker, or unanswered. See the panel for why it is
@@ -20171,7 +20211,7 @@ If the conversation only covers a single day or a few stops with no explicit day
     // stop.
     const modeForWhy = readBrief({
       travellerText: saidByTravellerOnly,
-      intake: { transport: intakeTransport },
+      intake: { transport: intakeTransport, scope: intakeScope },
     }).known.transport?.mode || null;
     const budgetForWhy = travellerBudget([intakeBudgetText, saidByTravellerOnly].filter(Boolean).join("\n"));
     // `turnedDown` as well, since 13 Sep: the screen keeps a place tapped No
@@ -20179,7 +20219,7 @@ If the conversation only covers a single day or a few stops with no explicit day
     // line-versus-list contradiction one option over.
     const matchedForWhy = matchedPlaces(forMatch, previewPools({
       towns, islands, freeEntrance, foodSpots, nightlifeSpots, shops, craftItemsFallback, events, majorEvents,
-    }), { days, wanted, themes, mode: modeForWhy, budget: budgetForWhy, saidByTraveller: saidByTravellerOnly, turnedDown, startedAt: intakeStartPoint });
+    }), { days, wanted, themes, mode: modeForWhy, budget: budgetForWhy, saidByTraveller: saidByTravellerOnly, turnedDown, startedAt: intakeStartPoint, scope: intakeScope });
     // _notAsked as well as _leaving. A row held back is a row not on the
     // screen, and naming one of those is the same failure as naming one they
     // told you they are leaving.
@@ -29956,11 +29996,46 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   </button>
 
                   {intakeMoreOpen && (<div style={{ paddingTop: 14 }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Budget</div>
+                {/* ── AND IT HAS TO COVER A BED ──────────────────────
+                    Oliver, 25 Sep 2026: "if we're planning their trip, then
+                    it's unlikely they have booked a hotel somewhere (unless
+                    it's in Copenhagen), so we have to include that in the price
+                    too. Write that it includes accomodation."
+
+                    The label carries the whole of it. The field asked "Budget"
+                    and meant nothing in particular, so somebody typed 200 and
+                    got a plan that could not house them for a night. The line
+                    under the input is a refusal to a figure already typed, not
+                    a sentence explaining the control. */}
+                {/* ── HOW FAR THEY WANT TO GO ─────────────────
+                    Oliver, 25 Sep 2026: "'Stay at one town' 'Stay at one
+                    Island' 'Explore Denmark'."
+
+                    Every other way of bounding the preview's reach pass was a
+                    constant somebody had to invent, and the traveller already
+                    knows the answer. Tapping the chip again clears it, because
+                    a preference nobody can un-state is worse than none: the
+                    blank is the behaviour every brief had before this row. */}
+                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>How far do you want to go</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
+                  {TRIP_SCOPES.map(sc => {
+                    const on = intakeScope === sc.key;
+                    return (
+                      <button key={sc.key} onClick={() => setIntakeScope(on ? "" : sc.key)}
+                        style={{ background: on ? C.gold : "none", border: `1px solid ${on ? C.gold : C.border}`, color: on ? "#0A0F1E" : C.light, borderRadius: 100, padding: "8px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                        {sc.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>{BUDGET_LABEL}</div>
                 <div style={{ marginBottom: 14 }}>
                   <input value={intakeBudgetText} onChange={e => setIntakeBudgetText(e.target.value)}
-                    placeholder="e.g. 500 kr/day, or 'backpacker budget'"
-                    style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", fontSize: 13, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif", boxSizing: "border-box" }} />
+                    placeholder={BUDGET_PLACEHOLDER}
+                    style={{ width: "100%", background: C.bg, border: `1px solid ${budgetTooLow ? C.accent : C.border}`, borderRadius: 10, padding: "10px 12px", fontSize: 13, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif", boxSizing: "border-box" }} />
+                  {budgetTooLow && (
+                    <div style={{ fontSize: 11.5, color: C.accent, lineHeight: 1.5, marginTop: 6 }}>{budgetTooLow.say}</div>
+                  )}
                 </div>
 
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Into <span style={{ textTransform: "none", fontWeight: 400, color: C.muted }}>(pick as many as apply)</span></div>
@@ -30071,7 +30146,12 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
 
                 {(intakeArrival || intakeDeparture || intakeStartPoint.trim() || intakeBudgetText || intakeInterest.length || intakeGemPref || intakePlacePref || intakeTravelers.trim() || intakeTransport.length > 0) && (
                   <button
+                    disabled={!!budgetTooLow}
                     onClick={() => {
+                      // A figure that cannot buy a night is not a brief. The
+                      // line under the field already says so; this is the half
+                      // that stops a plan being built on it.
+                      if (budgetTooLow) return;
                       const parts = [];
                       if (intakeArrival) parts.push(`Arriving: ${new Date(intakeArrival).toLocaleString("en-GB", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}`);
                       if (intakeDeparture) parts.push(`Departing: ${new Date(intakeDeparture).toLocaleString("en-GB", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}`);
@@ -30096,9 +30176,16 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       const startIsHome = onlyACountry(intakeStartPoint);
                       parts.push(intakeStartPoint.trim() && !startIsHome ? `Starting point: ${intakeStartPoint.trim()}` : `Starting point: not specified, assume Copenhagen Airport`);
                       if (home) parts.push(`Travelling from: ${home.name} (their home country)`);
-                      if (intakeBudgetText.trim()) parts.push(`Budget: ${intakeBudgetText.trim()}`);
+                      // The field says what it covers, so the line the model reads says it too.
+                      // A daily figure that silently excluded the bed is what sent a
+                      // 200 DKK brief off to plan a trip it could not sleep on.
+                      if (intakeBudgetText.trim()) parts.push(`Budget: ${intakeBudgetText.trim()} a day, and that has to cover where they sleep as well as everything else`);
                       if (intakeInterest.length) parts.push(`Interests: ${intakeInterest.join(", ")}`);
                       if (intakeGemPref) parts.push(`Travel style: ${intakeGemPref}`);
+                      // The shape of the trip, in the traveller's own choice rather
+                      // than in a distance rule the app invented. See
+                      // utils/tripScopeChoice.js.
+                      if (scopeSaid(intakeScope)) parts.push(scopeSaid(intakeScope));
                       if (intakeDanish) parts.push(intakeDanish === "yes" ? `Language: speaks Danish` : `Language: does not speak Danish`);
                       if (intakePlacePref) parts.push(`Preference: ${intakePlacePref}`);
                       if (intakeTravelers.trim()) parts.push(`Who's traveling: ${intakeTravelers.trim()}`);
@@ -30109,7 +30196,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       sendAI(parts.join(" | "), { hidden: true });
                       setTimeout(() => document.getElementById("ai-helper-anchor")?.scrollIntoView({ behavior: "smooth", block: "end" }), 100);
                     }}
-                    style={{ display: "block", width: "100%", background: `linear-gradient(135deg, ${C.accent}, #C22A3C)`, border: "none", color: "#fff", borderRadius: 100, padding: "13px", fontSize: 13.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", boxShadow: "0 4px 16px rgba(226,59,78,0.26)", marginTop: 4 }}>
+                    style={{ display: "block", width: "100%", background: budgetTooLow ? C.surface : `linear-gradient(135deg, ${C.accent}, #C22A3C)`, border: budgetTooLow ? `1px solid ${C.border}` : "none", color: budgetTooLow ? C.muted : "#fff", borderRadius: 100, padding: "13px", fontSize: 13.5, fontWeight: 700, cursor: budgetTooLow ? "not-allowed" : "pointer", fontFamily: "'Inter', sans-serif", boxShadow: budgetTooLow ? "none" : "0 4px 16px rgba(226,59,78,0.26)", marginTop: 4 }}>
                     ✦ Build my trip
                   </button>
                 )}
@@ -32121,6 +32208,9 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           // both from here. Two readers of one box is how the line and the
           // list come to describe different trips.
           intakeStartPoint={intakeStartPoint}
+          // The shape of the trip, to the same screen the line above it
+          // describes. One value, both readers.
+          intakeScope={intakeScope}
           pickedEvents={pickedEvents}
           setPickedEvents={setPickedEvents}
           pickedExtras={pickedExtras}

@@ -160,6 +160,19 @@ export const BRIEF_SLOTS = [
   { key: "budget", label: "budget", tier: "optional",
     ask: "Roughly what are you happy to spend a day?",
     askDa: "Hvad vil du cirka bruge om dagen?" },
+  // ── AND HOW FAR THEY WANT TO GO ───────────────────
+  //
+  // Oliver, 25 Sep 2026: "'Stay at one town' 'Stay at one Island' 'Explore
+  // Denmark'." A tick row rather than a question, and OPTIONAL, because a trip
+  // is planned perfectly well without it and always has been.
+  //
+  // IT IS A SLOT RATHER THAN A FORM FIELD THE GUIDE READS, and that is the
+  // whole reason it is here. Without a slot the guide build could honour it
+  // while the chat could not, so Gemlyx would cheerfully offer a second island
+  // to somebody who had ticked one town. See utils/tripScopeChoice.js.
+  { key: "scope", label: "how far they want to go", tier: "optional",
+    ask: "Do you want to stay in one place, or move around the country?",
+    askDa: "Vil I blive \u00e9t sted, eller rundt i landet?" },
   // ── AND WHETHER THEY SPEAK DANISH ────────────────────
   //
   // Optional, and never asked unprompted. It is a tick box on the advanced
@@ -1344,6 +1357,9 @@ export const readBrief = ({ travellerText = "", travellerTurns = null, intake = 
   set("party", readParty(t, intake.travelers, intake.familyMode));
   set("interests", readInterests(t, intake.interest, turns, answering));
   set("transport", readTransport(t, intake.transport));
+  // Straight from the tick row: there is no sentence to read it out of, and
+  // inventing one would be a second reader of a value the form already holds.
+  if (clean(intake.scope)) set("scope", { value: clean(intake.scope), source: "intake" });
   set("stay", readStay(t, intake.stayBooked));
   // AFTER the stay slot and BEFORE the direct-answer pass, so a name and a span
   // written in the same sentence as the booking are both read from the sentence
@@ -2018,6 +2034,30 @@ export const briefBlock = (brief, conflicts = [], { picked = [], turnedDown = []
       const k = brief.known[s.key];
       lines.push(`  ${s.label}: ${k.value}${k.source === "intake" ? " (from the form they filled in)" : ""}`);
     });
+    // ── AND THE FORM CAN BE FILLED IN TWICE ─────────────────
+    //
+    // Oliver, 25 Sep 2026, on a five day preview: "I did not mention public
+    // transport at all. So why would it talk about the 750 public transport
+    // fine?"
+    //
+    // Because a re-filled intake APPENDS. Every "Build my trip" adds another
+    // hidden turn and none of the earlier ones are removed, so a conversation
+    // that was filled in three times carries three "Getting around:" lines and
+    // the model reads all of them. The slots above hold the CURRENT answer,
+    // resolved properly, and printing them was never the same as saying they
+    // win.
+    //
+    // THIS ALREADY HAPPENED ONCE, TO THE LENGTH. An 8 day brief was previewed
+    // as a one day Aalborg food trip because Gemlyx's own "Applied: Aalborg
+    // for one day" echo from the first intake outranked the second. That was
+    // fixed for `days` alone, in the preview's own prompt. Every other slot
+    // beside it had the same exposure and no guard, which is why this sits
+    // HERE, on the block every slot already goes through, rather than as a
+    // second sentence about a second field.
+    const fromForm = knownKeys.filter(s => brief.known[s.key]?.source === "intake");
+    if (fromForm.length) {
+      lines.push(`THE LINES MARKED (from the form they filled in) ARE WHAT THE TRAVELLER LAST TOLD THE FORM, and they beat anything earlier in this conversation that says otherwise, including a line Gemlyx itself wrote. A form filled in twice leaves the first echo standing in the transcript and that echo is not a correction of anything: it is an older answer to the same question. Never describe the trip by an earlier value of ${fromForm.map(s => s.label).join(", ")}, and never mention something that only follows from one, such as a fare, a fine, a pass or a hire, when the current answer does not call for it.`);
+    }
   }
   // ── AND WHAT THEY TICKED IS A BRIEF, NOT A RECORD ───────────────
   //

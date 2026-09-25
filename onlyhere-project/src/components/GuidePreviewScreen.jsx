@@ -329,6 +329,8 @@ export const GuidePreviewScreen = ({
   // transcript, so this screen and the line above it are looking at ONE value.
   // matchedPlaces says what it does with it and which report it came from.
   intakeStartPoint = "",
+  // How far they said they want to go. See utils/tripScopeChoice.js.
+  intakeScope = "",
   pickedEvents = null,
   setPickedEvents = () => {},
   // The places the traveller added back from a section their brief did not ask
@@ -495,7 +497,7 @@ export const GuidePreviewScreen = ({
   // pass opening on a region GEMLYX named. See matchedPlaces: his Aalborg brief
   // named no region at all, and Ribe arrived through the word "Jutland" in the
   // app's own reply.
-  const matched = matchedPlaces(convoText, previewPools({ towns, islands, freeEntrance, foodSpots, nightlifeSpots, shops, craftItemsFallback, events, majorEvents }), { days: win?.days ?? null, wanted, themes, mode, budget, saidByTraveller, turnedDown, startedAt: intakeStartPoint });
+  const matched = matchedPlaces(convoText, previewPools({ towns, islands, freeEntrance, foodSpots, nightlifeSpots, shops, craftItemsFallback, events, majorEvents }), { days: win?.days ?? null, wanted, themes, mode, budget, saidByTraveller, turnedDown, startedAt: intakeStartPoint, scope: intakeScope });
   // ── AND WHAT WAS LEFT OUT IS SAID, NOT SWALLOWED ──────────────────
   //
   // previewMatch.js has claimed since 26 Aug that "the guide says out loud
@@ -982,6 +984,9 @@ export const GuidePreviewScreen = ({
                           change nobody can check, so each town says how far it
                           is from the one before it, starting at the airport
                           they land at. See utils/routeOrder.js. */}
+                      {place._startKm != null && place._startFrom && (
+                        <span style={{ fontSize: 9, fontWeight: 700, color: C.muted, letterSpacing: 0.8, textTransform: "uppercase" }}>{place._startKm} km from {place._startFrom}</span>
+                      )}
                       {place._legKm != null && place._legFrom && (
                         <span style={{ fontSize: 9, fontWeight: 700, color: C.muted, letterSpacing: 0.8, textTransform: "uppercase" }}>{place._legKm} km from {place._legFrom}</span>
                       )}

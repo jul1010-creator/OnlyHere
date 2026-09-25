@@ -21,6 +21,8 @@ import { arrivalPoint, destinationPoint } from "./arrival";
 import { townPointFor } from "./guideEnrichment";
 import { outOfBudget, budgetWarning } from "./budgetFit";
 import { routeOrder, reachBand, kmBetween, preferReachable, REACH_STRETCH, REACH_FAR } from "./routeOrder";
+import { scopeOffersOtherTowns, scopeAllowsTown } from "./tripScopeChoice";
+import { partOfCountry } from "./geography";
 
 // ── WHAT THE PREVIEW SCREEN ACTUALLY HOLDS ON A CONVERSATION ────────
 //
@@ -982,7 +984,7 @@ const ANCHOR_FALLBACK_NAME = "where you are";
 // down with a tap onto this screen with a picture. It arrives as names and
 // joins the typed refusals at the one door they already go through, so a tap
 // and a sentence are honoured by the same filter.
-export const matchedPlaces = (convoText, pools, { days = null, wanted = null, themes = null, mode = null, budget = null, saidByTraveller = "", turnedDown = [], startedAt = "" } = {}) => {
+export const matchedPlaces = (convoText, pools, { days = null, wanted = null, themes = null, mode = null, budget = null, saidByTraveller = "", turnedDown = [], startedAt = "", scope = "" } = {}) => {
   // ── WHERE THEY LAND ─────────────────────────────────────────────
   // Read once, at the top, because two things below need it: the region pass
   // ranks by how reachable a town is from here, and the towns are handed back
@@ -1269,7 +1271,15 @@ export const matchedPlaces = (convoText, pools, { days = null, wanted = null, th
   // where they start, and offering them another town is the app arguing with
   // them. This is the guard the first version of the fix did not have, and
   // its absence is what turned a Copenhagen city break into a trip to Aarhus.
+  // ── AND THE TRAVELLER CAN SHUT THIS DOOR THEMSELVES ────────
+  //
+  // Oliver, 25 Sep 2026: "'Stay at one town' 'Stay at one Island' 'Explore
+  // Denmark'." Every other way of bounding this reach pass was a constant I
+  // would have had to invent, and the traveller already knows the answer. A
+  // screen that offers a second town to somebody who ticked one town is the
+  // app arguing with them. See utils/tripScopeChoice.js.
   const fillFromReach = !wantedRegions.length && stayingTowns.length === 0
+    && scopeOffersOtherTowns(scope)
     && (leavingTowns.length > 0 || (startTowns.length > 0 && !goingTo));
   // ── AND THE TOWN THEY ARE LEAVING IS WHERE THEY ARE ───────────────
   // arrivalPoint reads "flying into X" and "the ferry into X", which is the
@@ -1304,8 +1314,26 @@ export const matchedPlaces = (convoText, pools, { days = null, wanted = null, th
   //
   // It only fills a hole. A spoken arrival or destination still wins, because
   // `anchor` is read first, so every brief that worked before works the same.
-  const startPoint = startedAt ? townPointFor(startedAt) : null;
+  // ── AND IT HAS TO BE ABLE TO SAY ITS OWN NAME ──────────────
+  // townPointFor answers with {key, lat, lon} and no `name`, so a card measured
+  // from here printed "186 km from where you are" where it could have printed
+  // "186 km from Aalborg". The row that was matched carries the published
+  // spelling, which is the one a reader recognises, and the box is the fallback
+  // because a traveller reads back what they typed.
+  const startPoint = startedAt
+    ? (() => {
+        const pt = townPointFor(startedAt);
+        if (!pt) return null;
+        const row = startTowns[0] || matched.find(p => p._src === "town" && p._startPoint);
+        return { ...pt, name: row?.name || String(startedAt).trim() };
+      })()
+    : null;
   const from = anchor || startPoint || (leavingTowns.length ? townPointFor(leavingTowns[0].name) : null);
+  // The published row for where they start, so "one island" can ask which
+  // landmass that is. Resolved once rather than per candidate.
+  const startRow = startTowns[0] || leavingTowns[0]
+    || (anchor ? matched.find(p => p._src === "town" && samePlaceName(p.name, anchor.said || anchor.name || "")) : null)
+    || null;
   if (wantedRegions.length || fillFromReach) {
     // ── AND WHICH SIX, WHICH IS THE WHOLE QUESTION ────────────────
     // Oliver's screenshot, 15 Aug 2026. The region pass worked, and for a two
@@ -1404,6 +1432,13 @@ export const matchedPlaces = (convoText, pools, { days = null, wanted = null, th
       // Gemlyx's own bottom tier is a statement that this is not worth planning
       // around, so it is never offered to somebody choosing where to go.
       if (tierOf(p)?.id === TOO_WEAK_FOR_A_REGION_PICK) continue;
+      // ── AND NOT ACROSS WATER, IF THEY SAID SO ─────────────
+      // "Stay on one island" is the traveller saying do not put a boat in my
+      // trip, which for somebody starting in Aalborg means Jutland and for
+      // somebody in Ærøskøbing means Ærø. A town this app cannot place is let
+      // through rather than refused: an unplaced row is the app's own gap and
+      // a traveller should not pay for it with a shorter list.
+      if (!scopeAllowsTown(scope, { from: partOfCountry(startRow || {}), to: partOfCountry(p) })) continue;
       const held = heldFor(p.name);
       // Kept on the candidate rather than recomputed below, because the reach
       // partition needs the same answer the score used and two calls to the
@@ -1650,12 +1685,41 @@ export const matchedPlaces = (convoText, pools, { days = null, wanted = null, th
   if (from && towns.length > 1) {
     const { ordered, legs } = routeOrder(towns, { from });
     const byName = new Map(legs.map(l => [l.to, l]));
+    // ── AND HOW FAR IT IS FROM WHERE THEY ARE STANDING ─────────
+    //
+    // Oliver, 25 Sep 2026, reading a five day preview out of Aalborg that
+    // labelled Copenhagen "141 KM FROM ODENSE": "why is the entire trip almost
+    // planned from the beginning?" Odense was itself a suggestion he had not
+    // accepted, so measuring one suggestion from another presents an itinerary
+    // nobody agreed to, on a screen whose job is to offer options.
+    //
+    // Asked whether to measure from the start instead, he said: "Perhaps
+    // measure both? Because one might want to know both of them." So both. The
+    // leg distance says what the order costs, the start distance says what the
+    // town costs from where they actually are, and the two answer different
+    // questions.
+    //
+    // THE START ITSELF GETS NEITHER. "0 KM FROM THE START" was on the Aalborg
+    // card in his own screenshot, which is a measurement of a town from itself.
+    // The single-town branch above has refused a rounded zero since it was
+    // written; this branch never did.
+    const startName = from.name || from.said || ANCHOR_FALLBACK_NAME;
     const inOrder = ordered.map(p => {
       const leg = byName.get(p.name);
+      const fromStart = kmBetween(from, placePoint(p));
+      const startKm = fromStart == null ? null : Math.round(fromStart);
+      const out = { ...p };
       // Stamped so the card can say "49 km from Billund Airport" and the order
       // is legible rather than merely correct. A silent reordering is a change
       // nobody can check.
-      return leg ? { ...p, _legKm: leg.km, _legFrom: leg.from } : p;
+      if (leg && leg.km > 0) { out._legKm = leg.km; out._legFrom = leg.from; }
+      // Only when it says something the leg does not. A town measured from the
+      // start by a leg that STARTS at the start would print the same number
+      // twice under one card.
+      if (startKm != null && startKm > 0 && !(leg && leg.km === startKm && leg.from === startName)) {
+        out._startKm = startKm; out._startFrom = startName;
+      }
+      return out;
     });
     const rest = matched.filter(p => p._src !== "town");
     return keep([...inOrder, ...rest]);

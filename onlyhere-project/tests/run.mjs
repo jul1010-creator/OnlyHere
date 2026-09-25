@@ -281,6 +281,8 @@ writeFileSync(entry, `
   export { guideClaims, guideClaimNote } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { resolveStopCoords } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { festivalScale } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
+  export { TRIP_SCOPES, TRIP_SCOPE_KEYS, scopeOf as tripScopeOf, scopeSaid, scopeOffersOtherTowns, scopeAllowsTown } from ${JSON.stringify(join(root, "src/utils/tripScopeChoice.js"))};
+  export { MIN_DAY_DKK, BUDGET_LABEL, BUDGET_PLACEHOLDER, BUDGET_CURRENCIES, readDailyBudget, dailyInDkk, budgetProblem } from ${JSON.stringify(join(root, "src/utils/tripBudget.js"))};
   export { matchedPlaces, previewPools, mentionsPlace, parentTownOf, isDeparturePlace, isRejectedPlace, onlyAskedAbout, isPassedThrough, regionsNamed, placeIsInRegion, REGION_TOWN_CAP, regionPickLimit } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
   export { wantedCategories, groupKeyOf, foodIsPlanned } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
   export { saysWord, briefThemes, fitsBrief, rankOffers, offerReason, profilePull, THEME_WORDS, MODE_WORDS, THEMES_WITHOUT_WORDS, OFFER_LIMIT, essentialsForTrip, essentialsBlock, reservedEssential, nightlifeWanted, nightlifeNotAsked, RESERVED_THEME, ESSENTIALS_IN_GUIDE } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
@@ -11214,7 +11216,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   {
     const appStart = readFileSync(join(root, "src/App.jsx"), "utf8");
     ok("the line above the list is told the same thing",
-      /saidByTraveller: saidByTravellerOnly, turnedDown, startedAt: intakeStartPoint \}\);/.test(appStart));
+      /saidByTraveller: saidByTravellerOnly, turnedDown, startedAt: intakeStartPoint, scope: intakeScope \}\);/.test(appStart));
     ok("and the screen is handed it from the same state",
       /intakeStartPoint=\{intakeStartPoint\}/.test(appStart));
   }
@@ -11672,6 +11674,40 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     is("eight, said out loud, is taken", [eight.known.days?.value, eight.known.days?.source], [8, "said"]);
     ok("and the model is told eight", /THE TRIP IS 8 DAYS AND THAT IS THE ONLY LENGTH/.test(briefBlock(eight)));
     is("with no conflict raised over it", briefConflicts(eight).length, 0);
+    // ── AND A FORM FILLED IN TWICE LEAVES THE FIRST LINE STANDING ──
+    //
+    // Oliver, 25 Sep 2026, reading a five day preview: "I did not mention
+    // public transport at all. So why would it talk about the 750 public
+    // transport fine?" Every "Build my trip" APPENDS a hidden intake turn and
+    // removes none, so a conversation filled in three times carries three
+    // "Getting around:" lines and the model reads all of them. The slots hold
+    // the current answer; printing them was never the same as saying they win.
+    //
+    // Fixed once already, for the LENGTH alone, after an 8 day brief previewed
+    // as a one day Aalborg food trip. Every slot beside it had the same
+    // exposure and no guard, so the rule now sits on the block every slot goes
+    // through rather than being written out a second time for a second field.
+    {
+      const block = briefBlock(his);
+      ok("the form's own answers are marked as the form's", /\(from the form they filled in\)/.test(block));
+      ok("and the model is told they beat an older line in the same conversation",
+         /beat anything earlier in this conversation that says otherwise/.test(block));
+      ok("and that an earlier intake is not a correction",
+         /leaves the first echo standing in the transcript and that echo is not a correction of anything/.test(block));
+      // THE HALF THE REPORT WAS ABOUT. A fine, a fare or a pass follows from a
+      // mode, so naming one is describing the trip by that mode.
+      ok("and told not to carry a fare or a fine over from one",
+         /never mention something that only follows from one, such as a fare, a fine, a pass or a hire/.test(block));
+      // NAMED, so the sentence cannot be true in general and vague in practice.
+      ok("and the slots it covers are named", /Never describe the trip by an earlier value of [^`]*how long/.test(block));
+    }
+    // A BRIEF WITH NOTHING FROM THE FORM SAYS NONE OF IT, because there is no
+    // older line for a form value to beat.
+    {
+      const spokenOnly = readBrief({ travellerText: "We are two of us, four days in Aarhus in June, we like history.", intake: {} });
+      ok("a conversation with no form behind it gets no such rule",
+         !/beat anything earlier in this conversation/.test(briefBlock(spokenOnly)));
+    }
     // A BARE "8" TOO, which is what a person types under "seven or eight?".
     // The code never records a `days` ask over a filled form, so this turn
     // answers nothing on record, which is the state the export left him in.
@@ -26733,6 +26769,32 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   is("and every one after it from the stop before", rows.find(p => p.name === "Ribe")?._legFrom, "Billund");
   is("so the card shows the drive that is actually made", rows.find(p => p.name === "Ribe")?._legKm, 49);
   is("and the last leg too", rows.find(p => p.name === "Aalborg")?._legFrom, "Aarhus");
+  // ── AND HOW FAR IT IS FROM WHERE THEY ARE STANDING, TOO ──────
+  //
+  // Oliver, 25 Sep 2026, on a preview out of Aalborg that labelled Copenhagen
+  // "141 KM FROM ODENSE": "why is the entire trip almost planned from the
+  // beginning?" Odense was a suggestion he had not accepted, so one suggestion
+  // measured from another reads as an itinerary nobody agreed to. Asked whether
+  // to measure from the start instead, he said "Perhaps measure both? Because
+  // one might want to know both of them."
+  //
+  // So the leg stays, saying what the ORDER costs, and the start distance joins
+  // it, saying what the TOWN costs from where they are.
+  is("a later stop also says how far it is from the start",
+    rows.find(p => p.name === "Aalborg")?._startFrom, "Billund Airport");
+  ok("and that is a different number from the leg",
+    rows.find(p => p.name === "Aalborg")?._startKm !== rows.find(p => p.name === "Aalborg")?._legKm);
+  // AND IT IS NOT PRINTED TWICE. The first stop's leg already starts at the
+  // start, so a start distance under it would be the same number under one card.
+  ok("the first stop does not say the same thing twice",
+    rows.find(p => p.name === "Billund")?._startKm == null);
+  // AND THE SCREEN HAS TO DRAW IT, because an unstamped flag is this
+  // codebase's signature defect.
+  {
+    const prevSrc = readFileSync(join(root, "src/components/GuidePreviewScreen.jsx"), "utf8");
+    ok("and the card renders the start distance",
+      /\{place\._startKm\} km from \{place\._startFrom\}/.test(prevSrc));
+  }
   // Held content must no longer be able to outrank being near the airport.
   ok("the town holding the most no longer leads", order[0] !== "Aalborg");
   // Food rows must NOT be reordered: a restaurant is read under its town, not
@@ -44416,7 +44478,11 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // filled in is a plainer statement than a phrase read out of a sentence.
   // See the 24 Sep "it seems to stick to the location" report.
   ok("and the stated starting point fills the hole when neither was said",
-     /const startPoint = startedAt \? townPointFor\(startedAt\) : null;/.test(pm));
+     /const startPoint = startedAt\s*\n\s*\? \(\(\) => \{\s*\n\s*const pt = townPointFor\(startedAt\);/.test(pm));
+  // AND IT CARRIES A NAME, because townPointFor answers {key, lat, lon} and a
+  // card measured from here read "186 km from where you are".
+  ok("and it can say its own name on a card",
+     /name: row\?\.name \|\| String\(startedAt\)\.trim\(\)/.test(pm));
   // The anchor is where they land OR where they are going, in that order, and it
   // is computed before the first pass because the first pass needs it: a town
   // that appears only in Gemlyx's replies and is out of honest reach is not in
@@ -44426,7 +44492,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // The gate, written out in full: matching the fill alone would survive a
   // mutation opening it on every brief, because the fill is still there.
   ok("and the second door opens only when every named town is one they are leaving or the one they start in",
-     /const fillFromReach = !wantedRegions\.length && stayingTowns\.length === 0\s*\n\s*&& \(leavingTowns\.length > 0 \|\| \(startTowns\.length > 0 && !goingTo\)\);/.test(pm));
+     /const fillFromReach = !wantedRegions\.length && stayingTowns\.length === 0\s*\n\s*&& scopeOffersOtherTowns\(scope\)\s*\n\s*&& \(leavingTowns\.length > 0 \|\| \(startTowns\.length > 0 && !goingTo\)\);/.test(pm));
   // AND THE SECOND KEY IS REFUSED THE MOMENT THEY SAY WHERE THE TRIP IS.
   // "Four days in Copenhagen" with Copenhagen in the box is somebody staying
   // put, and the first version of this opened the door on them: it offered a
@@ -45201,6 +45267,24 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     const alone = matchedPlaces("user: I am going to Aalborg.", previewPools({ towns: [TOWNS[0]] }),
       { days: 3, saidByTraveller: "I am going to Aalborg." });
     ok("a town does not report the distance to itself", !alone.some(p => p._legKm === 0));
+  // ── AND NEITHER DOES THE TOWN THEY START IN ──────────────
+  // "0 KM FROM THE START" was on the Aalborg card in his own screenshot, 25 Sep
+  // 2026. The single-town branch has refused a rounded zero since it was
+  // written; the multi-town branch never did, and the Starting point box made
+  // that the common path rather than a rare one.
+  {
+    const P = [{ name: "Aalborg", _src: "town", tier: "Worth a Detour" },
+               { name: "Aarhus", _src: "town", tier: "Worth a Detour" },
+               { name: "Odense", _src: "town", tier: "Worth a Detour" }];
+    const FORM = "Exact trip length: 5 days | Starting point: Aalborg | Interests: History | Getting around: Public transport";
+    const got = matchedPlaces(FORM, P, { days: 5, mode: "public transport", startedAt: "Aalborg" });
+    const start = got.find(p => p.name === "Aalborg");
+    ok("the start town carries no distance to itself", start?._legKm == null && start?._startKm == null);
+    // AND THE LABEL NAMES THE TOWN. townPointFor answers with no `name`, so this
+    // read "186 km from where you are" where it could name the place.
+    const other = got.find(p => p._src === "town" && p.name !== "Aalborg" && p._startFrom);
+    if (other) is("and the others are measured from it by name", other._startFrom, "Aalborg");
+  }
     // 5. Æ, Ø AND Å AT THE START OF A NAME. Without the `u` flag, \b is defined
     //    by ASCII \w, so there is no boundary between a space and Æ.
     is("a destination starting with Æ is read", destinationPoint("we are going to Ærøskøbing for a week", tp)?.name, "Ærøskøbing");
@@ -75449,6 +75533,187 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   // the label wears them.
   ok("a refusal says so on the label", /your browser said no/.test(appS));
   ok("and so does a failure", /that did not work/.test(appS));
+}
+
+// ── A DAILY BUDGET THAT HAS TO COVER A BED ─────────────────────────
+//
+// Oliver, 25 Sep 2026: "make it limit. So you can't write under like 300.
+// Because if we're planning their trip, then it's unlikely they have booked a
+// hotel somewhere (unless it's in Copenhagen), so we have to include that in
+// the price too. Write that it includes accomodation. And make people able to
+// write in other currencies too."
+//
+// He arrived there by asking what the field meant, and the answer was nothing:
+// travellerBudget turned it into a tier and nothing added anything up, so a
+// traveller typed 200 and got a plan that could not house them for one night.
+{
+  const { MIN_DAY_DKK, BUDGET_LABEL, BUDGET_PLACEHOLDER, readDailyBudget, dailyInDkk, budgetProblem } = M;
+  // A rate reader standing in for /api/fx, which is the only thing in the app
+  // allowed to know one. The figures here are a fixture and never ship.
+  const RATE = (c) => ({ DKK: 1, EUR: 7.46, USD: 6.9, GBP: 8.7, SEK: 0.68 })[c] ?? null;
+
+  is("the floor is his number", MIN_DAY_DKK, 300);
+  ok("and the label says what it covers", /where you sleep/i.test(BUDGET_LABEL));
+  ok("and the placeholder shows more than one currency",
+     /kr/i.test(BUDGET_PLACEHOLDER) && /EUR/.test(BUDGET_PLACEHOLDER) && /USD/.test(BUDGET_PLACEHOLDER));
+
+  // ── WHAT A PERSON ACTUALLY TYPES ────────────────────────────────
+  is("a bare number is kroner, because the form is about Denmark",
+     [readDailyBudget("200").amount, readDailyBudget("200").currency], [200, "DKK"]);
+  ok("and it says the currency was assumed", readDailyBudget("200").assumedCurrency === true);
+  is("kr is read", [readDailyBudget("450 kr").amount, readDailyBudget("450 kr").currency], [450, "DKK"]);
+  is("and kroner spelled out", readDailyBudget("500 kroner pr. dag").currency, "DKK");
+  is("a symbol before the number", [readDailyBudget("\u20ac40").amount, readDailyBudget("\u20ac40").currency], [40, "EUR"]);
+  is("a code after it", readDailyBudget("70 USD").currency, "USD");
+  is("and a symbol with words round it", readDailyBudget("$50 a day").currency, "USD");
+  is("pounds too", readDailyBudget("\u00a325").currency, "GBP");
+  // A RANGE TAKES ITS LOW END, because a floor is about the worst case somebody
+  // is planning for.
+  is("a range is read at its low end", readDailyBudget("300-500 kr").amount, 300);
+  // A DANISH THOUSANDS SEPARATOR IS NOT A DECIMAL POINT. "1.500 kr" is fifteen
+  // hundred, and reading it as one and a half would block every Danish figure.
+  is("a thousands separator is not a decimal point", readDailyBudget("1.500 kr").amount, 1500);
+  is("words with no figure are not a budget", readDailyBudget("backpacker budget"), null);
+  is("and neither is nothing", readDailyBudget(""), null);
+
+  // ── THE FLOOR ───────────────────────────────────────────────────
+  ok("200 kroner a day is refused", !!budgetProblem("200", RATE));
+  ok("and 450 is not", !budgetProblem("450 kr", RATE));
+  ok("exactly the floor passes", !budgetProblem(`${MIN_DAY_DKK} kr`, RATE));
+  ok("one krone under it does not", !!budgetProblem(`${MIN_DAY_DKK - 1} kr`, RATE));
+  // CONVERTED, so a traveller is held to the same floor in their own money.
+  ok("40 euros is under it once converted", !!budgetProblem("40 eur", RATE));
+  ok("and 60 euros is over", !budgetProblem("60 EUR", RATE));
+  is("and the refusal names both figures", true, /40 EUR, about 298 DKK/.test(budgetProblem("40 eur", RATE).say));
+  ok("and says why the bed is in it", /have not booked/.test(budgetProblem("200", RATE).say));
+
+  // ── AND A RATE NOBODY COULD FETCH DOES NOT BLOCK ANYBODY ────────
+  // api/fx.js forbids a fallback table in its own words, so a currency the
+  // endpoint has not answered for converts to nothing. Refusing to plan a trip
+  // because a rate call failed is the worse answer.
+  is("an unconvertible currency is not refused", budgetProblem("20 CHF", RATE), null);
+  is("and neither is one with no reader at all", budgetProblem("20 EUR", null), null);
+  is("but kroner still work without a reader", budgetProblem("100 kr", null)?.dkk, 100);
+  // Words alone were never a figure and must never start being one.
+  is("a tier in words is left alone", budgetProblem("backpacker budget", RATE), null);
+
+  // ── AND THE FORM HAS TO ACT ON IT ───────────────────────────────
+  // An unrendered check is this codebase's signature defect: the module would
+  // be right and the button would still build the trip.
+  {
+    const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+    ok("the field is labelled from the module", /\{BUDGET_LABEL\}/.test(app));
+    ok("and takes its placeholder from it", /placeholder=\{BUDGET_PLACEHOLDER\}/.test(app));
+    ok("the refusal is shown under the field", /\{budgetTooLow\.say\}/.test(app));
+    ok("and the build button refuses it", /disabled=\{!!budgetTooLow\}/.test(app));
+    ok("and returns rather than building", /if \(budgetTooLow\) return;/.test(app));
+    // AND THE MODEL IS TOLD WHAT THE FIGURE COVERS, or the brief means what it
+    // meant before, which was nothing in particular.
+    ok("the line the model reads says the bed is in it",
+       /has to cover where they sleep as well as everything else/.test(app));
+    // THE RATE COMES FROM THE ONE PLACE ALLOWED TO KNOW ONE.
+    ok("the rate is fetched from the fx endpoint", /\/api\/fx\?to=\$\{encodeURIComponent\(budgetCurrency\)\}/.test(app));
+    ok("and no rate table was added anywhere",
+       !/EUR:\s*7\.4|USD:\s*6\.9/.test(readFileSync(join(root, "src/utils/tripBudget.js"), "utf8")));
+  }
+}
+
+// ── HOW FAR THEY WANT TO GO, ASKED RATHER THAN GUESSED ─────────────
+//
+// Oliver, 25 Sep 2026: "'Stay at one town' 'Stay at one Island' 'Explore
+// Denmark'."
+//
+// This row exists because every other way of bounding the preview's reach pass
+// was a constant somebody had to invent. The screen had been wrong in both
+// directions inside one day: stuck on the start town when no origin reader
+// could see a form-filled starting point, then offering Copenhagen at 326 km
+// to a five day family trip on 200 DKK a day once the origin was wired in.
+{
+  const { TRIP_SCOPES, TRIP_SCOPE_KEYS, tripScopeOf: scopeOf, scopeSaid, scopeOffersOtherTowns, scopeAllowsTown, matchedPlaces, readBrief, briefBlock } = M;
+
+  is("the three he asked for, in his order", TRIP_SCOPE_KEYS, ["town", "island", "explore"]);
+  ok("and the labels are his words", TRIP_SCOPES.map(s => s.label).join(" | ") === "Stay in one town | Stay on one island | Explore Denmark");
+  is("a scope nobody chose is nothing", scopeOf(""), null);
+  is("and says nothing to the model", scopeSaid(""), "");
+  is("and neither does one nobody has heard of", scopeSaid("interrail"), "");
+  ok("a chosen one names itself to the model", /Stay in one town/.test(scopeSaid("town")));
+
+  // ── THE DOOR ────────────────────────────────────────────────────
+  ok("one town shuts the second door", !scopeOffersOtherTowns("town"));
+  ok("one island leaves it open", scopeOffersOtherTowns("island"));
+  ok("explore leaves it open", scopeOffersOtherTowns("explore"));
+  // AND NO SCOPE BEHAVES AS EVERY BRIEF DID BEFORE THIS ROW EXISTED.
+  ok("no scope leaves it open", scopeOffersOtherTowns(""));
+
+  // ── AND WHICH TOWNS GET THROUGH IT ──────────────────────────────
+  // "One island" is the traveller saying do not put a boat in my trip, which
+  // for somebody in Aalborg means Jutland and for somebody in Ærøskøbing means
+  // Ærø. Same landmass passes, a different one does not.
+  ok("the same landmass passes", scopeAllowsTown("island", { from: "Jutland", to: "Jutland" }));
+  ok("a different one does not", !scopeAllowsTown("island", { from: "Jutland", to: "Funen" }));
+  // A TOWN THIS APP CANNOT PLACE IS LET THROUGH. An unplaced row is the app's
+  // own gap and a traveller should not pay for it with a shorter list.
+  ok("an unplaced town is not refused", scopeAllowsTown("island", { from: "Jutland", to: "" }));
+  ok("nor an unplaced start", scopeAllowsTown("island", { from: "", to: "Funen" }));
+  // AND THE OTHER TWO SCOPES FILTER NOTHING HERE, because the door above is
+  // where they are decided.
+  ok("explore filters nothing", scopeAllowsTown("explore", { from: "Jutland", to: "Zealand" }));
+  ok("and no scope filters nothing", scopeAllowsTown("", { from: "Jutland", to: "Zealand" }));
+
+  // ── THE WHOLE THING, ON ONE BRIEF ───────────────────────────────
+  // Measured on real coordinates, because partOfCountry reads a coordinate and
+  // a fixture carrying a region STRING silently passes every town: found by
+  // running this before the assertion existed.
+  {
+    const town = (n, lat, lon) => ({ name: n, _src: "town", tier: "Worth a Detour", __lat: lat, __lon: lon });
+    const POOL = [
+      town("Aalborg", 57.048, 9.919), town("Skagen", 57.721, 10.583), town("Aarhus", 56.153, 10.210),
+      town("Odense", 55.396, 10.389), town("Copenhagen", 55.676, 12.568),
+    ];
+    const FORM = "Exact trip length: 6 days | Starting point: Aalborg | Interests: History | Getting around: \ud83d\ude97 Car";
+    const run = (scope) => matchedPlaces(FORM, POOL, { days: 6, mode: "car", startedAt: "Aalborg", scope })
+      .filter(p => p._src === "town").map(p => p.name);
+    is("one town is one town", run("town"), ["Aalborg"]);
+    // JUTLAND ONLY. Odense is on Funen and Copenhagen is on Zealand, and both
+    // need a bridge or a boat.
+    const isl = run("island");
+    ok("one island stays on the landmass they start on",
+       isl.includes("Aalborg") && isl.includes("Skagen") && isl.includes("Aarhus"));
+    ok("and leaves the ones across water off", !isl.includes("Odense") && !isl.includes("Copenhagen"));
+    // EXPLORE REACHES, and no scope behaves exactly as explore does, which is
+    // what every brief before this row got.
+    ok("explore reaches across the country", run("explore").includes("Copenhagen"));
+    is("and no scope is the same screen as explore", run(""), run("explore"));
+  }
+
+  // ── AND THE CHAT CAN REASON ABOUT IT, NOT ONLY THE GUIDE ────────
+  // The reason this is a brief slot rather than a value the build reads: with
+  // no slot, Gemlyx would offer a second island to somebody who ticked one town.
+  {
+    const b = readBrief({ travellerText: "Four days, we like history.", intake: { scope: "town" } });
+    is("the tick reaches the brief", b.known.scope?.value, "town");
+    is("and is marked as coming from the form", b.known.scope?.source, "intake");
+    ok("and the model is told", /how far they want to go: town/i.test(briefBlock(b)));
+    // OPTIONAL, so a brief without it is not held back waiting for an answer.
+    const none = readBrief({ travellerText: "Four days, we like history.", intake: {} });
+    is("and a brief without it has no scope at all", none.known.scope, undefined);
+  }
+
+  // ── AND THE SCREEN HAS TO CARRY IT ──────────────────────────────
+  // An unrendered option is this codebase's signature defect: the module would
+  // be right and the form would have no way to say so.
+  {
+    const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+    ok("the row is drawn from the module", /TRIP_SCOPES\.map\(sc =>/.test(app));
+    ok("tapping the same chip clears it", /setIntakeScope\(on \? "" : sc\.key\)/.test(app));
+    ok("and the model is told in the intake line", /scopeSaid\(intakeScope\)/.test(app));
+    // BOTH READERS OF THE SCREEN GET IT, or the line and the list describe
+    // different trips, which this file already carries several comments about.
+    ok("the line above the list is told", /startedAt: intakeStartPoint, scope: intakeScope \}\);/.test(app));
+    ok("and the screen is handed it", /intakeScope=\{intakeScope\}/.test(app));
+    const prev = readFileSync(join(root, "src/components/GuidePreviewScreen.jsx"), "utf8");
+    ok("and the screen passes it to the matcher", /scope: intakeScope \}\);/.test(prev));
+  }
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
