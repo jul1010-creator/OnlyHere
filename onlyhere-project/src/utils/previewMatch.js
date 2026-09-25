@@ -984,7 +984,7 @@ const ANCHOR_FALLBACK_NAME = "where you are";
 // down with a tap onto this screen with a picture. It arrives as names and
 // joins the typed refusals at the one door they already go through, so a tap
 // and a sentence are honoured by the same filter.
-export const matchedPlaces = (convoText, pools, { days = null, wanted = null, themes = null, mode = null, budget = null, saidByTraveller = "", turnedDown = [], startedAt = "", scope = "" } = {}) => {
+export const matchedPlaces = (convoText, pools, { days = null, wanted = null, themes = null, mode = null, budget = null, saidByTraveller = "", turnedDown = [], startedAt = "", scope = "", food = "" } = {}) => {
   // ── WHERE THEY LAND ─────────────────────────────────────────────
   // Read once, at the top, because two things below need it: the region pass
   // ranks by how reachable a town is from here, and the towns are handed back
@@ -1640,9 +1640,33 @@ export const matchedPlaces = (convoText, pools, { days = null, wanted = null, th
       // it just must not be offered as if it were tonight's dinner. An unknown
       // price is never treated as an expensive one — see utils/budgetFit.js.
       const overBudget = outOfBudget(p, budget);
-      const held = !askedCategory || !fit.fits || overBudget;
+      // ── AND SOMEBODY EATING OUT OF A SUPERMARKET IS NOT EATING OUT ─
+      //
+      // Oliver, 25 Sep 2026, after a live run where he had ticked Cheapest, the
+      // grocery tier, and the preview answered with six Aalborg restaurants
+      // including a French bistro: "you can have an 'add food'. But it should
+      // mean default 'NO FOOD'."
+      //
+      // ONLY THE SELF-CATERING TIER. Cheap is kebabs and burger bars and
+      // Gemlyx publishes plenty of those, so that traveller is served by these
+      // rows rather than contradicted by them; Flexible obviously is. It is the
+      // one tier whose whole answer is "I am not buying meals" that must not be
+      // handed a list of places to buy meals.
+      //
+      // BEHIND THE DOOR, NOT DELETED, the same as a category nobody asked
+      // about and a restaurant over budget. Somebody self-catering for five
+      // days may still want one dinner out, and the section already carries an
+      // "Add places to eat" door for exactly this. Taking the rows off the
+      // screen entirely would be deciding that for them.
+      const selfCatering = String(food || "") === "self" && groupKeyOf(p) === "food";
+      const held = !askedCategory || !fit.fits || overBudget || selfCatering;
       matched.push(held
-        ? { ...p, _notAsked: true, _held: overBudget ? "budget" : (askedCategory ? "fit" : "category"), _fit: fit, ...(overBudget ? { _overBudget: budgetWarning(p, budget) } : {}) }
+        ? { ...p, _notAsked: true,
+            // `tier` ranks below budget, because an over-budget restaurant is
+            // over budget whichever way they are eating, and the section's line
+            // should say the sharper of the two reasons.
+            _held: overBudget ? "budget" : (selfCatering ? "tier" : (askedCategory ? "fit" : "category")),
+            _fit: fit, ...(overBudget ? { _overBudget: budgetWarning(p, budget) } : {}) }
         : { ...p, _fit: fit });
     }
   }

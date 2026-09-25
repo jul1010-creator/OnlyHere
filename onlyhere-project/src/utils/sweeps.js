@@ -59,9 +59,10 @@
 
 import { enforceScope } from "./correction";
 import { PLACE_KINDS } from "./placeKind";
-import { PLACE_THEMES, cleanThemes, MAX_THEMES } from "./placeThemes";
+import { PLACE_THEMES, cleanThemes, MAX_THEMES, TIER_VALUES } from "./placeThemes";
 import { soldOutClaim, soldOutContradiction, restampAfterRewrite } from "./tickets";
 import { citationUrls } from "./aiClient";
+import { needsTier, proposeTiers, missedByPass } from "./tierBackfill";
 
 const clean = (v) => String(v == null ? "" : v).trim();
 const lower = (v) => clean(v).toLowerCase();
@@ -168,6 +169,39 @@ AND A SALE THAT HAS NOT OPENED CANNOT BE SOLD OUT. Neither can one whose early b
 
 Give: ticketInfo as the price list as a reader would want it, ticketStatus as one of free, on_sale, limited, sold_out, unknown, and ticketPricedFor as the four-digit year or empty.`,
   },
+  {
+    id: "tier",
+    label: "How far it is worth going",
+    blurb: "Fills the tier on free attractions that carry none, so the cards, the region picker and the trip planner have something to rank them on. Judged across the whole set in one pass rather than one place at a time.",
+    types: ["free"],
+    fields: ["tier"],
+    // Every free attraction there is, in one run. A cap would be actively
+    // WRONG here in a way it is not for the others: this is a relative
+    // judgement, and forty of forty-six ranked against each other and six
+    // ranked against a different forty is not one scale, it is two.
+    cap: 200,
+    // ── AND THE ONES WITH A TIER NOBODY CAN READ ──────────────────
+    // Not `missing`, which sees an empty field. A stored tier of "Amazing" is
+    // not empty and matches nothing on the scale, so tierLabel refuses to
+    // print it and the card shows no rank at all. tierOf is the one thing that
+    // already knows the difference, so it is what picks the rows.
+    fillWhen: (payload) => needsTier(payload),
+    // ── THE TWO RESOLVERS BELOW IT ARE SKIPPED BY NAME ────────────
+    // Tier 2 reads one entry and checks a quote against it, which is exactly
+    // the per-row shape a ranking cannot use. Tier 3 would send a judgement
+    // out to be researched, and a search result saying Rundetaarn is popular
+    // is not an answer to how far out of your way it is worth going. Said
+    // here rather than left to fail quietly forty-six times.
+    noEntry: true,
+    noResearch: true,
+    // The whole set, once, ranked against itself. See tierBackfill.js.
+    wholeSet: proposeTiers,
+    // A relative judgement is the one thing worth being able to re-sort: A to
+    // Z to work down the list, by tier to see whether the top of the scale has
+    // been handed out too freely.
+    sortable: true,
+    question: "How far out of their way should somebody go for this, judged against every other free attraction Gemlyx publishes?",
+  },
 ];
 
 export const sweepById = (id) => SWEEPS.find(s => s.id === id) || null;
@@ -233,6 +267,22 @@ export const selectRows = (rows, sweep, { revise = false } = {}) => {
     // KIND of row; this says which of them, and the sold-out sweep is the whole
     // reason it exists: a status, not a missing field, is what picks them.
     if (typeof sweep.only === "function" && !sweep.only(r.payload)) return false;
+    // ── WHEN "EMPTY" IS NOT THE SAME QUESTION AS "NEEDS THIS" ────
+    //
+    // `missing` asks whether a field is blank, which is the right question for
+    // almost everything. It is the wrong one for a CLOSED LIST: a stored tier
+    // of "Amazing" is not blank and matches nothing on the scale, so tierLabel
+    // refuses to print it and the card shows no rank at all. That row needs
+    // the sweep exactly as much as a blank one does and `missing` cannot see
+    // it, while `only` runs before this and can narrow the set but never widen
+    // it. So a sweep may answer the question itself.
+    //
+    // The two modes stay disjoint, which is the property that makes "18 to
+    // fill, 54 to look at again" two honest numbers: revise takes exactly the
+    // rows fill does not.
+    if (typeof sweep.fillWhen === "function") {
+      return revise ? !sweep.fillWhen(r.payload) : sweep.fillWhen(r.payload);
+    }
     const need = sweep.missing || sweep.fields;
     return revise
       ? need.every(f => clean(r.payload[f]))
@@ -463,10 +513,18 @@ export const quoteIsInEntry = (payload, quote) => {
 //   ✅  read out of the entry, with the words that said so
 //   🔎  looked up, with the source
 //   ❓  nothing settled it. LEFT ALONE, and reported.
-export const MARKS = { deterministic: "⚙", entry: "✅", research: "🔎", unresolved: "❓" };
+export const MARKS = { deterministic: "⚙", entry: "✅", research: "🔎", judged: "⚖", unresolved: "❓" };
 // Least certain first. A row's summary mark is the weakest of its values,
 // because a row is only as trustworthy as the worst thing in it.
-const MARK_ORDER = [MARKS.unresolved, MARKS.research, MARKS.entry, MARKS.deterministic];
+//
+// ── AND A JUDGEMENT SITS BELOW A RESEARCHED FACT ────────────────────
+// Not because it is likelier to be wrong, but because there is nothing to
+// check it against. ✅ means a sentence in the entry was quoted and the quote
+// was verified; 🔎 means a page said so and the link is on the row. ⚖ means
+// Gemlyx decided, and the only thing standing behind it is the reasoning
+// printed beside it. That is a real difference to somebody deciding whether to
+// tick the box, so it does not borrow a mark that promises a check it never had.
+const MARK_ORDER = [MARKS.unresolved, MARKS.judged, MARKS.research, MARKS.entry, MARKS.deterministic];
 export const weakestMark = (marks) => {
   const used = (marks || []).filter(Boolean);
   if (!used.length) return MARKS.unresolved;
@@ -510,6 +568,18 @@ export const cleanPatch = (raw, fields, knownPlaces) => {
     if (f === "placeKind") {
       if (!PLACE_KINDS.includes(v.toLowerCase())) continue;
       out[f] = v.toLowerCase();
+      continue;
+    }
+    // A closed list, checked here as well as where the answer was read. tierOf
+    // matches on the stored string and tierLabel prints NOTHING when it does
+    // not recognise it, so a tier off the list is a field that is full and a
+    // card that is blank, which is the state this sweep exists to end. Matched
+    // case-insensitively and written in the scale's own spelling, because
+    // "can't miss out" is the right answer typed wrong.
+    if (f === "tier") {
+      const known = TIER_VALUES.find(t => t.toLowerCase() === v.toLowerCase());
+      if (!known) continue;
+      out[f] = known;
       continue;
     }
     if (RELATION_FIELDS.includes(f)) {
@@ -638,6 +708,32 @@ export const proposeSweep = async ({ sweep, rows, knownPlaces, revise = false, d
   const proposals = [];
   const places = knownPlaces instanceof Map ? knownPlaces : new Map();
 
+  // ── TIER 0: THE QUESTION THAT CANNOT BE ASKED ONE ROW AT A TIME ──
+  //
+  // Every resolver below is per row, which is right for a fact. A RANKING is
+  // not a fact: what tier an attraction deserves depends entirely on the other
+  // forty-five, and a model shown one place at a time will put most of them
+  // near the top every run. tierBackfill.js says the rest.
+  //
+  // One call, before the loop, answering for the whole batch at once. It
+  // returns an empty map rather than throwing when it cannot run, so a failed
+  // pass leaves every row unresolved and the table says so, which is the same
+  // thing that happens when a per-row resolver comes back with nothing.
+  let wholeSet = null;
+  const missedWholeSet = new Set();
+  if (typeof sweep.wholeSet === "function" && rows.length) {
+    onProgress?.({ done: 0, total: rows.length, name: `all ${rows.length} at once` });
+    const entries = rows.map(r => r.payload || {});
+    wholeSet = await sweep.wholeSet({ entries, deps });
+    if (!(wholeSet instanceof Map)) wholeSet = null;
+    // NAMED, not counted. One pass answers for the whole batch or it does not,
+    // so a row it left out is not a row that was researched and came back
+    // empty: it is a row the pass never reached an opinion about, and saying
+    // which ones is the difference between "six unresolved" and six rows he
+    // can go and set himself.
+    for (const name of missedByPass(entries, wholeSet || new Map())) missedWholeSet.add(name.toLowerCase());
+  }
+
   for (let i = 0; i < rows.length; i++) {
     if (isCancelled?.()) break;
     const row = rows[i];
@@ -650,6 +746,22 @@ export const proposeSweep = async ({ sweep, rows, knownPlaces, revise = false, d
     const sources = {};     // field -> url
     const notes = [];
     let hint = null;
+
+    // What the whole-set pass said about THIS row, looked up by its own name.
+    // A row the pass never answered for falls through with an empty patch and
+    // is reported unresolved, never pre-ticked.
+    const said = wholeSet?.get?.(clean(p.name).toLowerCase());
+    if (missedWholeSet.has(clean(p.name).toLowerCase())) {
+      notes.push("The pass ranked the others and left this one out, so it is still yours to set.");
+    }
+    if (said) {
+      const found = cleanPatch({ tier: said.tier }, sweep.fields, places);
+      for (const f of Object.keys(found)) {
+        patch[f] = found[f];
+        marks[f] = MARKS.judged;
+        evidence[f] = said.why || "Ranked against every other entry in this run.";
+      }
+    }
 
     // Tier 1. Free, instant, and either right or absent.
     if (sweep.id === "taxonomy") {

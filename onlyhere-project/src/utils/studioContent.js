@@ -277,7 +277,22 @@ const shapeForLiveFields = (type, t) => {
   // the writer said nothing about was filed as a HIDDEN GEM, which is a claim
   // about the world made by a fallback, and it is the claim this whole app is
   // built on. The booking branch already uses "" for the same field.
-  if (type === "free") return { name: t.name, popularityTag: t.popularityTag || "", city: t.city || "", type: t.type || "", emoji: t.emoji || "✨", desc: t.desc, website: t.website || "", color: t.color || "#2E7D32",
+  // ── AND AN ATTRACTION HAD NO TIER AT ALL ────────────────
+  // Oliver, 25 Sep 2026: "I just realised.. there is no tier.. on our
+  // attractions.."
+  //
+  // He is right, and it was the only published type without one. Towns,
+  // islands, bar streets, shopping streets, shops and festivals all carry
+  // `tier`; an attraction carried `popularityTag` instead, which answers a
+  // different question. Popular means a lot of people go. The tier is Gemlyx's
+  // own judgement that a place is worth somebody's day, and it is what the
+  // cards, the region picker and the trip planner rank on, so every attraction
+  // in the app has been ranking on nothing.
+  //
+  // BOTH FIELDS STAY. They are not two spellings of one thing: a Hidden Gem
+  // can be Can't Miss Out and a Popular place can be Worth Considering, and
+  // the pair is more useful than either alone.
+  if (type === "free") return { name: t.name, popularityTag: t.popularityTag || "", tier: t.tier || "", city: t.city || "", type: t.type || "", emoji: t.emoji || "✨", desc: t.desc, website: t.website || "", color: t.color || "#2E7D32",
     ticketsGlance: t.ticketsGlance || "", extraCosts: t.extraCosts || "", accessibility: t.accessibility || "", nearestStation: t.nearestStation || "", gemlyxFind: t.gemlyxFind || "",
     // ── WHETHER THE DOOR IS OPEN ──────────────────────────────────
     // The field the "Walk in, no booking" chip never had. It was a hardcoded

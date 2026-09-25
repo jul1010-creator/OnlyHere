@@ -281,6 +281,7 @@ writeFileSync(entry, `
   export { guideClaims, guideClaimNote } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { resolveStopCoords } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { festivalScale } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
+  export { needsTier, proposedTier, BACKFILL_SORTS, BACKFILL_SORT_DEFAULT, sortForBackfill, tierSpread, backfillPrompt, readBackfill, missedByPass, proposeTiers } from ${JSON.stringify(join(root, "src/utils/tierBackfill.js"))};
   export { STAY_CHOICES, STAY_KEYS, stayChoiceOf, stayIsBooked, stayProblem, staySaid } from ${JSON.stringify(join(root, "src/utils/stayChoice.js"))};
   export { TRIP_SCOPES, TRIP_SCOPE_KEYS, scopeOf as tripScopeOf, scopeSaid, scopeOffersOtherTowns, scopeAllowsTown } from ${JSON.stringify(join(root, "src/utils/tripScopeChoice.js"))};
   export { MIN_DAY_DKK, BUDGET_LABEL, BUDGET_PLACEHOLDER, BUDGET_CURRENCIES, readDailyBudget, dailyInDkk, budgetProblem } from ${JSON.stringify(join(root, "src/utils/tripBudget.js"))};
@@ -11217,7 +11218,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   {
     const appStart = readFileSync(join(root, "src/App.jsx"), "utf8");
     ok("the line above the list is told the same thing",
-      /saidByTraveller: saidByTravellerOnly, turnedDown, startedAt: intakeStartPoint, scope: intakeScope \}\);/.test(appStart));
+      /saidByTraveller: saidByTravellerOnly, turnedDown, startedAt: intakeStartPoint, scope: intakeScope, food: intakeFood \}\);/.test(appStart));
     ok("and the screen is handed it from the same state",
       /intakeStartPoint=\{intakeStartPoint\}/.test(appStart));
   }
@@ -11414,7 +11415,10 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // than a guess, the same way the empty-screen branch names no place.
   ok("and says nothing when there is no length to state",
     /const lengthForWhy = [\s\S]{0,900}?: "";/.test(appSrc));
-  ok("the block reaches the prompt", /\}\$\{lengthForWhy\} Respond with only the sentence/.test(appSrc));
+  // `foodForWhy` joined it on 25 Sep, so the length block is no longer the last
+  // thing before the sign-off. Both are asserted, in order, because a block
+  // computed and never interpolated is this codebase's signature defect.
+  ok("the block reaches the prompt", /\}\$\{lengthForWhy\}\$\{foodForWhy\} Respond with only the sentence/.test(appSrc));
 
   // ── AND A BAR OPENS WITHOUT LEAVING THE SCREEN ────────────────────
   //
@@ -23714,6 +23718,20 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // The same engine places shops inside streets and centres, so the same field
   // exists on the same terms rather than only on the type that found the bug.
   ok("a shop is asked the same question", /"street"/.test(String(prompts.shop || "")));
+  // ── AND AN ATTRACTION IS ASKED FOR ITS TIER ─────────────
+  // The field is worth nothing if the draft schema never asks, which is the
+  // nearestStation failure this file already records for three types.
+  ok("an attraction is asked for its tier", /"tier": "EXACTLY one of/.test(String(prompts.free || "")));
+  ok("and told it is not the same question as popularity",
+     /A DIFFERENT question from popularityTag and both are asked/.test(String(prompts.free || "")));
+  // AND TOLD WHAT THE TIERS MEAN. TIER_RULE exists because the model was
+  // picking them with no definition at all; a schema line naming the four
+  // values without it is the same gap one level down.
+  ok("and given the meanings, not just the words",
+     /HOW TO PICK THE TIER/.test(String(prompts.free || "")));
+  is("and it survives publish",
+     (shapeForLive("free", { name: "X", desc: "d", tier: "Can't Miss Out" }) || {}).tier, "Can't Miss Out");
+  is("empty on a row that did not say", (shapeForLive("free", { name: "X", desc: "d" }) || {}).tier, "");
   is("and its answer survives publish too",
     (shapeForLive("shop", { name: "S", desc: "d", town: "Aarhus", street: "Mejlgade" }) || {}).street, "Mejlgade");
   is("empty on a shop that did not say", (shapeForLive("shop", { name: "S", desc: "d", town: "Aarhus" }) || {}).street, "");
@@ -24423,6 +24441,60 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // AND AN EMPTY BOX CHANGES NOTHING AT ALL, which is every brief before today.
   is("an empty box is the same as no box",
     matchedPlaces(BRIEF, POOLS, { startedAt: "" }).map(p => p.name), matchedPlaces(BRIEF, POOLS).map(p => p.name));
+
+  // ── AND SOMEBODY EATING OUT OF A SUPERMARKET IS NOT EATING OUT ──
+  //
+  // Oliver, 25 Sep 2026, after a live run with Cheapest ticked, the grocery
+  // tier, whose preview came back with six Aalborg restaurants including a
+  // French bistro and all-you-can-eat sushi: "you can have an 'add food'. But
+  // it should mean default 'NO FOOD'."
+  //
+  // ASSERTED ON THE REASON, NOT ON VISIBILITY. Whether a food row reaches the
+  // screen at all is `foodIsPlanned`'s question and it is deliberately strict,
+  // since almost nobody mentions food and it must not fill their days with
+  // restaurants. This tier is a second, independent reason to hold one back,
+  // and the reason is what the door reads.
+  {
+    const EAT = "Four days in Copenhagen, we love museums, and somewhere good for dinner each night.";
+    const rows = (food) => matchedPlaces(EAT, POOLS, { days: 4, saidByTraveller: EAT, food })
+      .filter(p => p._src === "food");
+    const heldForTier = (food) => rows(food).filter(p => p._held === "tier").map(p => p.name);
+
+    ok("there are food rows to hold back at all", rows("").length > 0);
+    // THE GROCERY TIER HOLDS EVERY ONE OF THEM, and says why.
+    is("nothing is held for the tier reason when no tier was picked", heldForTier(""), []);
+    is("the grocery tier holds every place to eat", heldForTier("self").length, rows("self").length);
+    ok("and holds rather than deletes, so the door can still offer them",
+       rows("self").every(p => p._notAsked === true));
+    // ONLY THAT TIER. Cheap is kebabs and burger bars and Gemlyx publishes
+    // plenty of those, so that traveller is served by these rows rather than
+    // contradicted by them.
+    is("a kebab budget is not held for it", heldForTier("cheap"), []);
+    is("nor a flexible one", heldForTier("flex"), []);
+    // AND AN OVER-BUDGET RESTAURANT IS STILL OVER BUDGET, whichever way they
+    // eat, so that reason outranks this one and the door says the sharper of
+    // the two.
+    {
+      const tight = matchedPlaces(EAT, POOLS, { days: 4, saidByTraveller: EAT, food: "self", budget: "tight" })
+        .filter(p => p._src === "food" && p._held === "budget");
+      ok("budget still outranks the tier where both apply", tight.length === 0 || tight.every(p => p._held === "budget"));
+    }
+    // AND NOTHING ELSE MOVES. Towns and attractions are not food.
+    const towns = (food) => matchedPlaces(EAT, POOLS, { days: 4, saidByTraveller: EAT, food })
+      .filter(p => p._src === "town").map(p => p.name);
+    is("the grocery tier changes nothing about where they go", towns("self"), towns(""));
+  }
+  // AND THE DOOR HAS TO SAY THE REAL REASON. "Does not match what you asked
+  // for" is true of a category nobody named and wrong for somebody who told us
+  // they are not buying meals.
+  {
+    const prev = readFileSync(join(root, "src/components/GuidePreviewScreen.jsx"), "utf8");
+    ok("the door reads the tier reason", /cat\.offered\.every\(p => p\._held === "tier"\)/.test(prev));
+    ok("and says what they actually told us",
+       /You said you are eating out of a supermarket, so Gemlyx left the places to eat out of the plan/.test(prev));
+    ok("and still offers one night out of it", /if you want one night out of it/.test(prev));
+    ok("and the screen is told which tier", /food: intakeFood/.test(prev));
+  }
 
   // A TOWN THEY WANT IS STILL EXPANDED. The departure rule must not quietly
   // switch the second pass off for everybody.
@@ -41105,7 +41177,13 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // Oliver, 22 Sep 2026: a shop is ranked like everything else, and so is the
   // street or centre that holds it, which means both fall back like everything
   // else: to nothing, so the publish gate can refuse an unranked one.
-  is("every type that carries a tier still has a fallback there", (sc.match(/tier: t\.tier \|\|/g) || []).length, 6);
+  // ── AND SEVEN SINCE THE ATTRACTION, 25 SEP 2026 ───────────
+  // Oliver: "I just realised.. there is no tier.. on our attractions.." It was
+  // the last published type without one, carrying popularityTag instead, which
+  // answers how many people go rather than whether it is worth a day. Both are
+  // asked now, and the tier falls back to nothing like every other type so the
+  // publish gate can refuse an unranked one.
+  is("every type that carries a tier still has a fallback there", (sc.match(/tier: t\.tier \|\|/g) || []).length, 7);
   is("and it is the empty string, measured on the output", shapeForLive("town", { name: "X", tier: "" }).tier, "");
 
   const findings = auditEntry({ type: "festival", payload: shaped }).findings || [];
@@ -75790,10 +75868,10 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     ok("and the model is told in the intake line", /scopeSaid\(intakeScope\)/.test(app));
     // BOTH READERS OF THE SCREEN GET IT, or the line and the list describe
     // different trips, which this file already carries several comments about.
-    ok("the line above the list is told", /startedAt: intakeStartPoint, scope: intakeScope \}\);/.test(app));
+    ok("the line above the list is told", /startedAt: intakeStartPoint, scope: intakeScope, food: intakeFood \}\);/.test(app));
     ok("and the screen is handed it", /intakeScope=\{intakeScope\}/.test(app));
     const prev = readFileSync(join(root, "src/components/GuidePreviewScreen.jsx"), "utf8");
-    ok("and the screen passes it to the matcher", /scope: intakeScope \}\);/.test(prev));
+    ok("and the screen passes it to the matcher", /scope: intakeScope, food: intakeFood \}\);/.test(prev));
   }
 }
 
@@ -75856,6 +75934,26 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     ok("the stay reaches the intake line", /staySaid\(intakeStay, intakeStayName\)/.test(app));
     ok("the food tier reaches it by name", /What they eat: \$\{ft\.label\}/.test(app));
     ok("and the free-entry tick reaches it", /do not plan a stop that charges admission/.test(app));
+    // ── AND THE LINE OVER THE LIST HAS TO KNOW IT TOO ─────────
+    //
+    // Measured live on 25 Sep 2026: a five day Aalborg brief with Cheapest
+    // ticked got "Rugbrød and pålæg from a supermarket easily covers food for
+    // under 50 kr a day" from the chat, and then this from the preview line:
+    // "pairing easy, wallet-friendly meals like Burger Boom Aalborg and Grillen
+    // Burgerbar with a proper sit-down at places like Restaurant Provence".
+    //
+    // The chat prompt sees the hidden intake turn that carries the tier. The
+    // why-line's `convo` has hidden turns stripped, so it read the restaurant
+    // rows on the screen and wrote a food plan out of them. That is the trip
+    // length failure one field over, and the fix sits beside `lengthForWhy` for
+    // that reason.
+    ok("the preview line is told which food tier they picked", /const foodForWhy = foodTierForWhy/.test(app));
+    ok("and it is actually in the prompt, not merely computed",
+       /\$\{lengthForWhy\}\$\{foodForWhy\}/.test(app));
+    ok("and told the tier beats whatever restaurants are on the list",
+       /it beats whatever restaurants happen to be on the list above/.test(app));
+    ok("and told not to call the trip affordable because of them",
+       /do not call the trip affordable BECAUSE of the places to eat on the screen/.test(app));
     // AND THE BUTTON SAYS WHAT IS BEHIND IT, in his words.
     ok("the panel button is relabelled",
        /Click here for quick adjustment of budget and preferences/.test(app));
@@ -75867,6 +75965,261 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   // The tiers themselves are unchanged and still sourced, which is what makes
   // the row worth having rather than three words.
   is("the tiers are the ones already published", FOOD_TIERS.map(t => t.key), ["self", "cheap", "flex"]);
+}
+
+// ── BACKFILLING A TIER ONTO FORTY-SIX ATTRACTIONS ──────────────────
+//
+// Oliver, 25 Sep 2026, on being handed forty-six audit cards instead: "Much of
+// this is correct.. but this will take forever to independently edit." The
+// tray is how a gap is found; this is how it gets closed.
+//
+// And it is a SWEEP rather than a screen of its own, because sweeps.js already
+// holds the only safe bulk-write path this app has: a proposal table nothing
+// escapes, a snapshot that gates the write, and a re-read of every row
+// immediately before it is written.
+{
+  const { needsTier, proposedTier, BACKFILL_SORTS, BACKFILL_SORT_DEFAULT, sortForBackfill,
+          tierSpread, backfillPrompt, readBackfill, missedByPass, proposeTiers,
+          TIER_VALUES, SWEEPS, sweepById, selectRows, cleanPatch, proposeSweep, MARKS,
+          shapeForLive } = M;
+
+  const att = (name, extra = {}) => ({ name, city: "Aarhus", desc: "First sentence here. Second one.", ...extra });
+  // A sweep PROPOSAL, which is the shape the table really holds.
+  const prop = (name, tier, before = "") => ({ name, patch: tier ? { tier } : {}, before: { tier: before } });
+
+  // ── ONLY THE ONES MISSING IT ────────────────────────────────────
+  // A tier the founder already set outranks a fresh guess, every time.
+  ok("an attraction with no tier needs one", needsTier(att("A")));
+  ok("one that has a tier is left alone", !needsTier(att("B", { tier: "Can't Miss Out" })));
+  // ── AND A TIER NOBODY CAN READ IS A MISSING TIER ────────────────
+  // tierLabel prints NOTHING for a value off the scale, so a row storing
+  // "Quite Good" has a field that is full and a card that is blank. That is
+  // the state this sweep exists to end, so `missing` alone would not have
+  // found it and `only` is what does.
+  ok("and an unrecognised tier counts as missing, which is what tierOf already says",
+     needsTier(att("C", { tier: "Quite Good" })));
+
+  // ── IT IS IN THE REGISTRY, AND IT OBEYS THE REGISTRY'S RULES ────
+  {
+    const tier = sweepById("tier");
+    ok("the sweep exists", !!tier);
+    is("it works on free attractions", tier.types, ["free"]);
+    is("and writes exactly one field", tier.fields, ["tier"]);
+    // THE RULE THAT STOPS THIS BECOMING BUG #2. Asserted for every sweep
+    // further up as well; repeated here against the field this one writes,
+    // because a tier that shapeForLive dropped would save, render, and vanish
+    // the next time that row was redrafted.
+    ok("and shapeForLive really carries it", Object.keys(shapeForLive("free", { name: "X" })).includes("tier"));
+    // ── NO CAP WORTH HAVING ──────────────────────────────────────
+    // A cap is right for a sweep asking a question per row. Here it would be
+    // actively wrong: forty of forty-six ranked against each other and six
+    // ranked against a different forty is not one scale, it is two.
+    ok("the cap cannot split the set in an ordinary run", tier.cap >= 200);
+    // The two per-row resolvers are skipped BY NAME rather than left to fail
+    // forty-six times over.
+    ok("the entry resolver is skipped, since a ranking cannot be read off one entry", tier.noEntry);
+    ok("and research is skipped, since a judgement is not a fact to look up", tier.noResearch);
+    ok("it declares a whole-set pass", typeof tier.wholeSet === "function");
+    ok("and it is the only sweep that does", SWEEPS.filter(s => s.wholeSet).map(s => s.id).join() === "tier");
+
+    const rows = [
+      { id: 1, type: "free", payload: { name: "Jelling" } },
+      { id: 2, type: "free", payload: { name: "Moesgaard", tier: "Can't Miss Out" } },
+      { id: 3, type: "free", payload: { name: "Bunker", tier: "Quite Good" } },
+      { id: 4, type: "town", payload: { name: "Ribe" } },
+    ];
+    // ── AND THE SET IT PICKS IS NOT "THE EMPTY ONES" ─────────────
+    // Row 3 stores "Quite Good", which is not empty and is not on the scale.
+    // `missing` would call it finished and leave a card with no rank on it
+    // forever. fillWhen is what lets a sweep answer this itself.
+    is("the ones with no readable tier are taken", selectRows(rows, tier).map(r => r.id), [1, 3]);
+    ok("a town is not an attraction", !selectRows(rows, tier).some(r => r.id === 4));
+    ok("and a real tier is left alone", !selectRows(rows, tier).some(r => r.id === 2));
+    // THE TWO MODES STAY DISJOINT, which is what makes the counts honest.
+    // This sweep has not said it can be revised, so revise gives nothing at
+    // all rather than quietly running the fill pass under another name.
+    is("it has not said it can be revised", selectRows(rows, tier, { revise: true }), []);
+    // ...and the predicate really is the complement, for any sweep that does.
+    const asIf = { ...tier, revisable: true };
+    is("where a sweep does, revise takes exactly what fill does not",
+       selectRows(rows, asIf, { revise: true }).map(r => r.id), [2]);
+  }
+
+  // ── THE VALUE IS CHECKED AGAIN AT THE LAST GATE ─────────────────
+  // readBackfill validates what came back; cleanPatch is the last thing
+  // between a patch and the row. A tier off the list would be a field that is
+  // full and a card that is blank.
+  {
+    const f = ["tier"];
+    is("a real tier passes", cleanPatch({ tier: "Worth Considering" }, f, new Map()).tier, "Worth Considering");
+    is("and is written in the scale's own spelling", cleanPatch({ tier: "can't miss out" }, f, new Map()).tier, "Can't Miss Out");
+    is("an invented one does not pass", cleanPatch({ tier: "Quite Good" }, f, new Map()).tier, undefined);
+  }
+
+  // ── SORTING, BOTH WAYS, ALPHABETICAL BY DEFAULT ─────────────────
+  // "both should be able to get filtered. But make default alphabetic."
+  is("the default is alphabetical", BACKFILL_SORT_DEFAULT, "name");
+  is("and both are offered", BACKFILL_SORTS.map(s => s.key), ["name", "tier"]);
+  ok("and only the sweep proposing a ranking offers them", sweepById("tier").sortable
+     && !sweepById("taxonomy").sortable);
+  {
+    const rows = [
+      prop("Zoo", "Worth Considering"),
+      prop("Aarhus Ø", "Can't Miss Out"),
+      prop("Moesgaard", "Can't Miss Out"),
+      prop("Bunker", ""),
+    ];
+    // ── A TO Z MEANS THE DANISH A TO Z ──────────────────
+    // This uses daCompare, the app's ONE comparator, rather than a second call
+    // to localeCompare written here: two sorters is how one A to Z list comes
+    // to disagree with another about where Æ goes.
+    //
+    // Which means Danish collation, and Danish collation reads "Aa" as "Å", so
+    // Aarhus sorts AFTER Æ and Ø rather than under A. Surprising the first
+    // time and correct the second: it is what the islands list and every other
+    // A to Z in the app already does, and a local override here would make this
+    // the one screen that sorts differently.
+    is("A to Z is the Danish A to Z", sortForBackfill(rows).map(r => r.name), ["Bunker", "Moesgaard", "Zoo", "Aarhus Ø"]);
+    // TIERS IS ALREADY IN RANK ORDER, so grouping reads top-down without a
+    // second table saying which is higher.
+    is("by tier runs top down, and alphabetically inside each one",
+       sortForBackfill(rows, "tier").map(r => r.name), ["Moesgaard", "Aarhus Ø", "Zoo", "Bunker"]);
+    ok("and a row nothing could answer sinks to the bottom rather than the top",
+       sortForBackfill(rows, "tier").at(-1).name === "Bunker");
+    is("an unknown sort falls back to alphabetical", sortForBackfill(rows, "nonsense").map(r => r.name), sortForBackfill(rows).map(r => r.name));
+    // SORTING IS A VIEW, NOT AN EDIT. The list that gets written is the one
+    // that was proposed, so re-ordering the table cannot change what lands.
+    is("sorting keeps every row", sortForBackfill(rows, "tier").length, rows.length);
+
+    // ── A ROW WITH NOTHING PROPOSED STILL SORTS BY WHAT IT SHOWS ──
+    // An unresolved row keeps whatever is stored, so it sorts where a reader
+    // would expect to find it rather than dropping to the bottom under a value
+    // it does not have.
+    is("the proposal wins", proposedTier(prop("A", "Can't Miss Out", "Worth Considering")), "Can't Miss Out");
+    is("and what is already there is the fallback", proposedTier(prop("B", "", "Worth Considering")), "Worth Considering");
+
+    // ── AND THE SHAPE OF THE SCALE, WHICH NO ROW CAN SHOW ─────────
+    // TIER_RULE's warning is about the DISTRIBUTION, so it is unenforceable by
+    // eye without a count per tier.
+    const spread = tierSpread(rows);
+    is("the top tier is counted", spread.tiers[0].count, 2);
+    is("and the unranked are counted apart", spread.unset, 1);
+    is("and the total is every row", spread.total, 4);
+    is("the counts are in rank order", spread.tiers.map(t => t.value), TIER_VALUES);
+  }
+
+  // ── THE PASS SEES ALL OF THEM AT ONCE ───────────────────────────
+  // The tier is a RELATIVE judgement, so forty-six separate calls cannot
+  // honour "most places are not at the top": asked alone, almost anything
+  // comes back near the top.
+  const ENTRIES = [att("Jelling", { desc: "Runic stones.", whoFor: "History people.", realityCheck: "Small site." }),
+                   att("Bunker", { desc: "A bunker." })];
+  {
+    const prompt = backfillPrompt(ENTRIES);
+    ok("every entry is in the one prompt", /Jelling/.test(prompt) && /Bunker/.test(prompt));
+    ok("and it says to rank them against each other", /RANK THEM AGAINST EACH OTHER, not one at a time/.test(prompt));
+    // THE RULE IS HANDED OVER WHOLE, not summarised, because a second wording
+    // of a rule that already exists is the two-readers failure.
+    ok("the existing tier rule travels with it", /MOST PLACES ARE NOT AT THE TOP/.test(prompt));
+    ok("and the entry's own published words are what it judges",
+       /Runic stones\./.test(prompt) && /History people\./.test(prompt));
+    // AND NOTHING ELSE IS. A place the model happens to know is famous is not
+    // thereby better described, and the entry is all Gemlyx has said about it.
+    ok("what it knows about Denmark is ruled out", /and nothing else/.test(prompt));
+    // FREE ENTRY IS NOT PART OF THE JUDGEMENT, since every row here is free.
+    ok("and cost is ruled out of it", /cost is not part of the judgement/.test(prompt));
+    is("nothing to rank is no prompt", backfillPrompt([]), "");
+
+    // ── AND WHAT COMES BACK IS NOT TRUSTED ────────────────────────
+    const got = readBackfill({ picks: [
+      { name: "Jelling", tier: "Can't Miss Out", why: "ok" },
+      { name: "Bunker", tier: "Quite Good", why: "invented tier" },
+      { name: "Somewhere Else", tier: "Can't Miss Out", why: "not on the list" },
+      { name: "Jelling", tier: "Worth Considering", why: "a second answer for one row" },
+    ] }, ENTRIES);
+    is("a real row with a real tier lands", got.get("jelling")?.tier, "Can't Miss Out");
+    ok("a tier outside the closed list is dropped", !got.has("bunker"));
+    ok("a row nobody asked about cannot get a tier", !got.has("somewhere else"));
+    is("and the first answer for a row wins over a later one", got.get("jelling")?.why, "ok");
+    // THE ONES IT SKIPPED ARE NAMED, not counted: a founder saving a list needs
+    // to know which rows are still his to fill in.
+    is("the ones it missed are named", missedByPass(ENTRIES, got), ["Bunker"]);
+  }
+
+  // ── ONE CALL, AND A FAILURE THAT COSTS NOTHING BUT THE RUN ──────
+  {
+    let calls = 0, asked = "";
+    const askClaude = async (prompt) => { calls++; asked = prompt; return { text: JSON.stringify({ picks: [
+      { name: "Jelling", tier: "Can't Miss Out", why: "The stones are the founding document." },
+      { name: "Bunker", tier: "Best If You're Already Nearby", why: "One room, and the walk is longer than the visit." },
+    ] }) }; };
+    const got = await proposeTiers({ entries: ENTRIES, deps: { askClaude } });
+    is("two entries cost one call, not two", calls, 1);
+    ok("and both were in it", /Jelling/.test(asked) && /Bunker/.test(asked));
+    is("both come back ranked", [...got.keys()].sort(), ["bunker", "jelling"]);
+    is("with the reasoning kept, so he is reading a judgement rather than a verdict",
+       got.get("bunker").why, "One room, and the walk is longer than the visit.");
+
+    // A PASS THAT CANNOT RUN LEAVES THE ROWS ALONE. It does not throw: the
+    // table already knows how to say a row was not answered, and a throw would
+    // lose the run and the reason for it together.
+    is("a model error is an empty answer, not a crash",
+       (await proposeTiers({ entries: ENTRIES, deps: { askClaude: async () => ({ error: "429" }) } })).size, 0);
+    is("so is something that is not JSON",
+       (await proposeTiers({ entries: ENTRIES, deps: { askClaude: async () => ({ text: "sorry!" }) } })).size, 0);
+    is("and nothing to rank asks nothing", (await proposeTiers({ entries: [], deps: { askClaude } })).size, 0);
+    is("...which really was no extra call", calls, 1);
+  }
+
+  // ── AND IT REACHES THE PROPOSAL TABLE THE SAME WAY ──────────────
+  {
+    const rows = [{ id: 7, type: "free", payload: att("Jelling", { desc: "Runic stones." }) },
+                  { id: 8, type: "free", payload: att("Bunker", { desc: "A bunker." }) }];
+    let entryCalls = 0;
+    const proposals = await proposeSweep({
+      sweep: sweepById("tier"), rows, knownPlaces: new Map(),
+      deps: {
+        parseJSON: (t) => JSON.parse(t),
+        askPerplexity: async () => { throw new Error("a judgement must never be researched"); },
+        askClaude: async (prompt) => {
+          // ONE call, the whole-set one. If the per-row resolver ran it would
+          // land here too, which is what this counter is for.
+          if (!/RANK THEM AGAINST EACH OTHER/.test(prompt)) { entryCalls++; return { error: "should not happen" }; }
+          return { text: JSON.stringify({ picks: [{ name: "Jelling", tier: "Can't Miss Out", why: "The stones." }] }) };
+        },
+      },
+    });
+    is("the answered row carries the tier", proposals.find(p => p.rowId === 7).patch.tier, "Can't Miss Out");
+    is("and the reasoning is on the row he ticks", proposals.find(p => p.rowId === 7).detail[0].evidence, "The stones.");
+    // ── THE MARK SAYS WHAT KIND OF ANSWER THIS IS ────────────────
+    // Not ✅, which promises a quoted sentence that was verified, and not 🔎,
+    // which promises a link. A tier is Gemlyx's own judgement and the only
+    // thing standing behind it is the line printed beside it.
+    is("a judgement is marked as one", proposals.find(p => p.rowId === 7).detail[0].mark, MARKS.judged);
+    // AND A ROW THE PASS SKIPPED IS NOT PRE-TICKED.
+    const missed = proposals.find(p => p.rowId === 8);
+    is("the row it skipped proposes nothing", Object.keys(missed.patch).length, 0);
+    ok("and is not ticked for him", !missed.accepted);
+    // AND IT SAYS WHY, on the row rather than in a count. One pass answers for
+    // the whole batch or it does not, so a row left out was never researched
+    // and found wanting: it was never reached an opinion about.
+    ok("and says so on the row itself", missed.notes.some(n => /still yours to set/.test(n)));
+    ok("while the answered row carries no such note",
+       !proposals.find(p => p.rowId === 7).notes.some(n => /still yours to set/.test(n)));
+    is("no per-row call was made at all", entryCalls, 0);
+  }
+
+  // ── AND THE PANEL READS IT ──────────────────────────────────────
+  {
+    const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("the table is rendered in the chosen order", /\{shown\.map\(prop =>/.test(app));
+    ok("and the order is a view, not the list that gets written",
+       /const shown = canSort \? sortForBackfill\(sweepProposals, sweepSort\) : sweepProposals;/.test(app));
+    ok("the spread is shown wherever a tier is the field being proposed",
+       /tierSpread\(sweepProposals\)/.test(app));
+    ok("and both sorts are offered as buttons", /BACKFILL_SORTS\.map\(o =>/.test(app));
+    ok("starting alphabetical", /useState\(BACKFILL_SORT_DEFAULT\)/.test(app));
+  }
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

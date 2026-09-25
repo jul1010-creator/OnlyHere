@@ -717,6 +717,22 @@ export const auditEntry = (row) => {
   // here and is skipped. See utils/ferryDoor.js.
   if (type === "island") findings.push(...ferryProblems(p));
 
+  // ── AND EVERY ATTRACTION IS MISSING ITS TIER ──────────────
+  //
+  // Oliver, 25 Sep 2026: "I just realised.. there is no tier.. on our
+  // attractions.." It was the only published type without one, so the 46 rows
+  // already live all predate the field. This is what puts them on his worklist
+  // rather than leaving the gap to be rediscovered months later.
+  //
+  // MEDIUM, NOT HIGH. Nothing on the page is wrong and no reader is misled;
+  // what is missing is the judgement the cards and the trip planner rank on,
+  // so an attraction with no tier competes as though it were the weakest one.
+  // Flagging 46 rows as high would drown the tray and a tray that cries wolf
+  // is a tray somebody turns off inside a week.
+  if (type === "free" && !String(p.tier || "").trim()) {
+    add("medium", "tier", "No tier, so nothing ranks this against the other attractions: the cards, the region picker and the trip planner all read it, and an entry without one loses to any entry that has one. Popularity is not the same answer, since a Hidden Gem can still be worth the day and a Popular place can still be skippable.");
+  }
+
   if (body.length === 0) add("medium", "body", "No long-form body at all, so the page is just a card with no article behind it.");
   else if (words < 180) add("medium", "body", `Only about ${words} words in total, which is thin for a full entry.`);
   if (!p.photo) add("medium", "photo", "No hero photo, so it shows as a monogram plate in every list.");

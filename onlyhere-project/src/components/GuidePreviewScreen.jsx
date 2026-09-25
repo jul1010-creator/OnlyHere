@@ -331,6 +331,8 @@ export const GuidePreviewScreen = ({
   intakeStartPoint = "",
   // How far they said they want to go. See utils/tripScopeChoice.js.
   intakeScope = "",
+  // The food tier they picked. See the selfCatering branch in previewMatch.js.
+  intakeFood = "",
   pickedEvents = null,
   setPickedEvents = () => {},
   // The places the traveller added back from a section their brief did not ask
@@ -497,7 +499,7 @@ export const GuidePreviewScreen = ({
   // pass opening on a region GEMLYX named. See matchedPlaces: his Aalborg brief
   // named no region at all, and Ribe arrived through the word "Jutland" in the
   // app's own reply.
-  const matched = matchedPlaces(convoText, previewPools({ towns, islands, freeEntrance, foodSpots, nightlifeSpots, shops, craftItemsFallback, events, majorEvents }), { days: win?.days ?? null, wanted, themes, mode, budget, saidByTraveller, turnedDown, startedAt: intakeStartPoint, scope: intakeScope });
+  const matched = matchedPlaces(convoText, previewPools({ towns, islands, freeEntrance, foodSpots, nightlifeSpots, shops, craftItemsFallback, events, majorEvents }), { days: win?.days ?? null, wanted, themes, mode, budget, saidByTraveller, turnedDown, startedAt: intakeStartPoint, scope: intakeScope, food: intakeFood });
   // ── AND WHAT WAS LEFT OUT IS SAID, NOT SWALLOWED ──────────────────
   //
   // previewMatch.js has claimed since 26 Aug that "the guide says out loud
@@ -1094,9 +1096,18 @@ export const GuidePreviewScreen = ({
             {cat.offered.length > 0 && !openedExtras.includes(cat.label) && (
               <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", background: C.surface, border: `1px dashed ${C.border}`, borderRadius: 14, padding: "14px 14px" }}>
                 <div style={{ flex: 1, minWidth: 180, fontSize: 12, color: C.muted, lineHeight: 1.5 }}>
-                  {cat.items.length > 0
-                    ? `Gemlyx holds ${cat.offered.length} more here that ${cat.offered.length === 1 ? "does" : "do"} not match what you asked for.`
-                    : `You did not ask for these, so Gemlyx left them out. It holds ${cat.offered.length} ${cat.offered.length === 1 ? "place" : "places"} here if you want ${cat.offered.length === 1 ? "it" : "some"}.`}
+                  {/* ── AND THE REASON HAS TO BE THE REAL ONE ────────
+                      Somebody who ticked the grocery tier did not fail to ask
+                      for restaurants, they said they were not buying meals.
+                      "Does not match what you asked for" is true of a category
+                      nobody named and wrong here, and a door whose reason is
+                      wrong is a door people stop reading. See the selfCatering
+                      branch in utils/previewMatch.js. */}
+                  {cat.offered.every(p => p._held === "tier")
+                    ? `You said you are eating out of a supermarket, so Gemlyx left the places to eat out of the plan. It holds ${cat.offered.length} here if you want one night out of it.`
+                    : cat.items.length > 0
+                      ? `Gemlyx holds ${cat.offered.length} more here that ${cat.offered.length === 1 ? "does" : "do"} not match what you asked for.`
+                      : `You did not ask for these, so Gemlyx left them out. It holds ${cat.offered.length} ${cat.offered.length === 1 ? "place" : "places"} here if you want ${cat.offered.length === 1 ? "it" : "some"}.`}
                 </div>
                 <button onClick={() => setOpenedExtras(prev => [...prev, cat.label])}
                   style={{ flexShrink: 0, background: "none", border: `1px solid ${C.gold}55`, color: C.gold, borderRadius: 100, padding: "8px 14px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>

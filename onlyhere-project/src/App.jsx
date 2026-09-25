@@ -347,6 +347,7 @@ import { STREET_VIBES, STREET_VIBE_VALUES, vibeOf } from "./utils/streetVibe";
 import { shopKindOf, shopsInPlace, inShopPlace, SHOP_KINDS } from "./utils/shopping";
 import { EVENT_TYPE_LABEL, eventTypesOf, hasEventType, eventTypesPresent, eventTypeCounts } from "./utils/eventTypes";
 import { SWEEPS, sweepById, selectRows, applyCap, knownPlacesFor, proposeSweep, applySweepPatch, buildSnapshot, readSnapshot, snapshotFilename, MARKS } from "./utils/sweeps";
+import { BACKFILL_SORTS, BACKFILL_SORT_DEFAULT, sortForBackfill, tierSpread } from "./utils/tierBackfill";
 import { classifyFerry, ferryFindings, FERRY } from "./utils/transport";
 import { getSession, getStoredSession, captureRedirectSession, fetchSignupCarry, clearSignupCarry, signOut as authSignOut, deleteMyData } from "./utils/auth";
 import { fetchCloudSaves, pushCloudSaves, mergeSaves, savedGuideRow, guideFromSavedRow, savedGuideHasLink, syncFailureNote, SYNC } from "./utils/userSaves";
@@ -7312,7 +7313,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         code = `// This reads as a ${isMajor ? "MAJOR, well-known" : "LOCAL/smaller-scale"} festival — targeting the ${targetName} array. If that feels wrong, move the block below to the other array yourself.\n// 1) Ctrl+F for \`const ${targetName} = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, tier: ${J(t.tier)}, nearestStation: ${J(t.nearestStation)}, ticketInfo: ${J(t.ticketInfo)}, camping: ${J(t.camping)}, accommodationTip: ${J(t.accommodationTip)}, travelTime: ${J(t.travelTime)}, ticketStatus: ${J(t.ticketStatus)}, town: ${J(t.town)}, type: ${J(t.type || "Festival")}, emoji: ${J(t.emoji || "🎪")}, date: ${J(t.dateStart)}, dateEnd: ${J(t.dateEnd)}, photo: "/events/${slug}.jpg", desc: ${J(t.desc)}, mapHint: ${J(t.mapHint)}, website: ${J(t.website)}, verified: ${J(stamp)}, color: ${J(t.color || "#8E24AA")}, tags: ${JSON.stringify(Array.isArray(t.tags) ? t.tags.slice(0, 3) : [])}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Atmosphere", t.atmosphere], ["Who It's For", t.whoItsFor], ["The Reality Check", t.realityCheck]])}\n  ] },\n\n// 2) Add a photo at public/events/${slug}.jpg\n// 3) VERIFY dates, station, town/region and ticket info before committing. Empty date fields mean the research couldn't confirm them.`;
       } else if (sType === "free") {
         const nextId = Math.max(0, ...freeEntrance.map(x => x.id)) + 1;
-        code = `// 1) Ctrl+F for \`const freeEntrance = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, popularityTag: ${J(t.popularityTag)}, city: ${J(t.city)}, type: ${J(t.type)}, emoji: ${J(t.emoji || "✨")}, desc: ${J(t.desc)}, website: ${J(t.website)}, color: ${J(t.color || "#2E7D32")}, ticketsGlance: ${J(t.ticketsGlance)}, extraCosts: ${J(t.extraCosts)}, accessibility: ${J(t.accessibility)}, nearestStation: ${J(t.nearestStation)}, bookingNote: ${J(t.bookingNote)}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Being There", t.special], ["Who It's For", t.whoFor], ["The Reality Check", t.realityCheck]])}\n${bbBullets("Things to Know", t.thingsToKnow)}\n  ] },\n\n// 2) VERIFY the website URL and that entry is free before committing.`;
+        code = `// 1) Ctrl+F for \`const freeEntrance = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, popularityTag: ${J(t.popularityTag)}, tier: ${J(t.tier)}, city: ${J(t.city)}, type: ${J(t.type)}, emoji: ${J(t.emoji || "✨")}, desc: ${J(t.desc)}, website: ${J(t.website)}, color: ${J(t.color || "#2E7D32")}, ticketsGlance: ${J(t.ticketsGlance)}, extraCosts: ${J(t.extraCosts)}, accessibility: ${J(t.accessibility)}, nearestStation: ${J(t.nearestStation)}, bookingNote: ${J(t.bookingNote)}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Being There", t.special], ["Who It's For", t.whoFor], ["The Reality Check", t.realityCheck]])}\n${bbBullets("Things to Know", t.thingsToKnow)}\n  ] },\n\n// 2) VERIFY the website URL and that entry is free before committing.`;
       } else if (sType === "booking") {
         const nextId = Math.max(0, ...craftItems.map(x => x.id)) + 1;
         code = `// 1) Ctrl+F for \`const craftItemsFallback = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, type: ${J(t.type || "Local")}, what: ${JSON.stringify(Array.isArray(t.what) ? t.what : [t.what].filter(Boolean))}, rating: ${t.rating ? Number(t.rating).toFixed(1) : "null"}, location: ${J(t.location)}, price: ${J(t.price)}, priceNote: ${J(t.priceNote)}, travelTime: ${J(t.travelTime)}, bookingType: ${J(t.bookingType || "contact")}, popularityTag: ${J(t.popularityTag || "")}, transportWarning: ${t.transportWarning ? "true" : "false"}, emoji: ${J(t.emoji || "🔨")}, photo: "/craft/${slug}.jpg", color: ${J(t.color || "#8E6B1F")}, accessibility: ${J(t.accessibility)}, nearestStation: ${J(t.nearestStation)}, gemlyxFind: ${J(t.gemlyxFind)},\n  desc: ${J(t.desc)},\n  blogBody: [\n${bb([["Being There", t.special], ["Who It's For", t.whoFor], ["The Reality Check", t.realityCheck]])}\n${bbBullets("Things to Know", t.thingsToKnow)}\n  ] },\n\n// 2) Add a photo at public/craft/${slug}.jpg (or remove the photo field)\n// 3) rating is left null unless the research found a real one — leave it as null rather than inventing a number.\n// 4) VERIFY price, booking method, and that it still operates before committing.`;
@@ -12065,6 +12066,16 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
   // Off by default, and it resets with the sweep choice: a mode that survived a
   // switch between sweeps would run the wrong pass over the wrong rows.
   const [sweepRevise, setSweepRevise] = useState(false);
+  // ── AND WHICH ORDER THE TABLE IS READ IN ──────────────────────────
+  //
+  // Oliver, 25 Sep 2026, on backfilling the tier of forty-six attractions:
+  // "both should be able to get filtered. But make default alphabetic."
+  //
+  // Only for a sweep that says it wants it, which today is the one proposing a
+  // RANKING. The other two have an order that means something already: the
+  // sold-out sweep puts the rows it can prove are wrong at the top, and sorting
+  // that away would throw out the only prioritising this panel does.
+  const [sweepSort, setSweepSort] = useState(BACKFILL_SORT_DEFAULT);
   // ── THE FOURTEEN ENTRIES NOBODY CAN SEE ───────────────────────────
   // Oliver, 5 Sep 2026, on 52 events of which 28 are visible: "build whatever
   // you want to build". `chosen` is a set of row ids rather than a flag on each
@@ -20233,7 +20244,7 @@ If the conversation only covers a single day or a few stops with no explicit day
     // line-versus-list contradiction one option over.
     const matchedForWhy = matchedPlaces(forMatch, previewPools({
       towns, islands, freeEntrance, foodSpots, nightlifeSpots, shops, craftItemsFallback, events, majorEvents,
-    }), { days, wanted, themes, mode: modeForWhy, budget: budgetForWhy, saidByTraveller: saidByTravellerOnly, turnedDown, startedAt: intakeStartPoint, scope: intakeScope });
+    }), { days, wanted, themes, mode: modeForWhy, budget: budgetForWhy, saidByTraveller: saidByTravellerOnly, turnedDown, startedAt: intakeStartPoint, scope: intakeScope, food: intakeFood });
     // _notAsked as well as _leaving. A row held back is a row not on the
     // screen, and naming one of those is the same failure as naming one they
     // told you they are leaving.
@@ -20275,12 +20286,34 @@ If the conversation only covers a single day or a few stops with no explicit day
     //
     // Stated as the traveller's own, because that is what it is: the number
     // they last put in the form, which beats anything either side said earlier.
+    // ── AND HOW THEY SAID THEY WERE EATING ───────────────
+    //
+    // Measured live, 25 Sep 2026, on a five day Aalborg brief with Cheapest
+    // ticked, which is the supermarket tier: the chat replied "Rugbrød and
+    // pålæg from a supermarket easily covers food for under 50 kr a day" and
+    // this line, one screen later, wrote "pairing easy, wallet-friendly meals
+    // like Burger Boom Aalborg and Grillen Burgerbar with a proper sit-down at
+    // places like Restaurant Provence".
+    //
+    // Both were reading the same trip. The chat prompt gets the hidden intake
+    // turn that carries the tier; `convo` below has the hidden turns STRIPPED,
+    // so this line saw the restaurant rows on the screen and wrote a food plan
+    // out of them. Same shape as the trip length before `lengthForWhy`, one
+    // field over, which is why it sits beside it rather than somewhere else.
+    //
+    // It does not hide the rows. Whether picking Cheapest should also take the
+    // restaurants off the screen is a question about what the traveller wants;
+    // this only stops the SENTENCE describing an evening they did not choose.
+    const foodTierForWhy = FOOD_TIERS.find(t => t.key === intakeFood);
+    const foodForWhy = foodTierForWhy
+      ? `\n\nTHEY HAVE SAID HOW THEY ARE EATING: ${foodTierForWhy.label}. ${foodTierForWhy.what} That is the food plan, and it beats whatever restaurants happen to be on the list above. Do not describe them eating out, do not name a restaurant as part of how they will eat, and do not call the trip affordable BECAUSE of the places to eat on the screen. Those rows are there to be looked at, not to be the plan.`
+      : "";
     const lengthForWhy = Number.isFinite(days) && days > 0
       ? `\n\nTHIS TRIP IS ${days} ${days === 1 ? "DAY" : "DAYS"} LONG. That is what the traveller last told the form, and it beats any other length in the conversation, including one Gemlyx itself stated earlier: an intake filled in twice leaves the first echo standing and it is not a correction of anything. Never describe this trip as shorter or longer than ${days} ${days === 1 ? "day" : "days"}, and never write "for the day" or "your day" about a trip of more than one.`
       : "";
     (async () => {
       const r = await askClaude(
-        `Based ONLY on this Denmark trip conversation, write 1-2 short, warm sentences in second person explaining why the route being prepared fits THIS traveler specifically. Connect it to their actual stated interests, pace, budget, and travel companions from the conversation, never generic praise, never invented places or facts. Never use em dashes or en dashes.${onScreen.length ? `\n\nTHE SCREEN THIS SENTENCE SITS ON SHOWS EXACTLY THESE PAGES AND NOTHING ELSE: ${onScreen.join(", ")}. Your sentence must be true of that list. Do not name an interest of theirs that nothing on the list serves, and do not name a place that is not on it. If what they asked for and what is on the list only partly meet, write about the part that does.${leavingNames.length ? ` THEY ARE LEAVING ${leavingNames.join(" and ")}: that is where they START, and your sentence must not promise it as somewhere the trip keeps them. Write about where they are going.` : ""}` : `\n\nTHE SCREEN THIS SENTENCE SITS ON IS EMPTY. Gemlyx holds a page for nothing they have named yet, and it says so underneath you. So write about THEM and about how the trip will be put together, and name no place at all: not a town, not an island, not a region. A sentence promising "at least one island visit" over an empty list is the single worst thing this line can do, because the list is the evidence and there is none.`}${lengthForWhy} Respond with only the sentence(s), nothing else.\n\n${languageBlock()}\n\n${convo}`,
+        `Based ONLY on this Denmark trip conversation, write 1-2 short, warm sentences in second person explaining why the route being prepared fits THIS traveler specifically. Connect it to their actual stated interests, pace, budget, and travel companions from the conversation, never generic praise, never invented places or facts. Never use em dashes or en dashes.${onScreen.length ? `\n\nTHE SCREEN THIS SENTENCE SITS ON SHOWS EXACTLY THESE PAGES AND NOTHING ELSE: ${onScreen.join(", ")}. Your sentence must be true of that list. Do not name an interest of theirs that nothing on the list serves, and do not name a place that is not on it. If what they asked for and what is on the list only partly meet, write about the part that does.${leavingNames.length ? ` THEY ARE LEAVING ${leavingNames.join(" and ")}: that is where they START, and your sentence must not promise it as somewhere the trip keeps them. Write about where they are going.` : ""}` : `\n\nTHE SCREEN THIS SENTENCE SITS ON IS EMPTY. Gemlyx holds a page for nothing they have named yet, and it says so underneath you. So write about THEM and about how the trip will be put together, and name no place at all: not a town, not an island, not a region. A sentence promising "at least one island visit" over an empty list is the single worst thing this line can do, because the list is the evidence and there is none.`}${lengthForWhy}${foodForWhy} Respond with only the sentence(s), nothing else.\n\n${languageBlock()}\n\n${convo}`,
         200
       );
       if (run !== previewWhyRunRef.current) return;   // a later roll owns the screen now
@@ -26433,6 +26466,18 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         const unresolved = sweepProposals.filter(p => !Object.keys(p.patch).length);
                         const writing = !!sweepWriteState?.running;
                         const snapReady = !!sweepSnapshot && sweepSnapshot.sweep === sweepId;
+                        // Sorted for READING only. The list that is written is
+                        // sweepProposals itself, in whatever order it was
+                        // proposed, so changing the view cannot change what
+                        // lands or the order it lands in.
+                        const canSort = !!sweepById(sweepId)?.sortable;
+                        const shown = canSort ? sortForBackfill(sweepProposals, sweepSort) : sweepProposals;
+                        // Only where a tier is the thing being proposed. The
+                        // row list cannot show a DISTRIBUTION however it is
+                        // ordered, and the distribution is half of TIER_RULE:
+                        // four "Can't Miss Out" out of forty-six is a scale,
+                        // nineteen is decoration.
+                        const spread = sweepById(sweepId)?.fields.includes("tier") ? tierSpread(sweepProposals) : null;
                         return (
                           <div>
                             <div style={{ fontSize: 11, color: C.muted, marginBottom: 8, lineHeight: 1.6 }}>
@@ -26444,8 +26489,30 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                               )}
                             </div>
 
+                            {spread && (
+                              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 8, fontSize: 10.5, color: C.muted }}>
+                                {spread.tiers.map(t => (
+                                  <span key={t.value} style={{ border: `1px solid ${C.border}`, borderRadius: 100, padding: "3px 9px", color: t.count ? C.light : C.muted }}>
+                                    {t.mark ? `${t.mark} ` : ""}{t.label} <b style={{ color: t.count ? C.gold : C.muted }}>{t.count}</b>
+                                  </span>
+                                ))}
+                                {spread.unset > 0 && <span>{spread.unset} with no tier either way.</span>}
+                              </div>
+                            )}
+
+                            {canSort && (
+                              <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 8 }}>
+                                {BACKFILL_SORTS.map(o => (
+                                  <button key={o.key} onClick={() => setSweepSort(o.key)}
+                                    style={{ background: sweepSort === o.key ? `${C.gold}22` : "none", border: `1px solid ${sweepSort === o.key ? C.gold : C.border}`, color: sweepSort === o.key ? C.gold : C.muted, borderRadius: 100, padding: "4px 10px", fontSize: 10.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                    {o.label}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+
                             <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 420, overflowY: "auto", marginBottom: 10 }}>
-                              {sweepProposals.map(prop => {
+                              {shown.map(prop => {
                                 const has = prop.detail.length > 0;
                                 return (
                                   <div key={prop.rowId} style={{ background: C.bg, border: `1px solid ${prop.accepted && has ? `${C.gold}55` : C.border}`, borderRadius: 10, padding: "9px 11px", opacity: has ? 1 : 0.65 }}>
@@ -32287,6 +32354,9 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           // The shape of the trip, to the same screen the line above it
           // describes. One value, both readers.
           intakeScope={intakeScope}
+          // Which food tier, so the preview holds the restaurants back for
+          // somebody self-catering rather than offering them dinner.
+          intakeFood={intakeFood}
           pickedEvents={pickedEvents}
           setPickedEvents={setPickedEvents}
           pickedExtras={pickedExtras}
