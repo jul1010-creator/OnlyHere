@@ -62,7 +62,11 @@ import { swipeAxis, dragOffset, swipeTarget } from "./utils/swipe";
 import { placeSlug, townPath, findBySlug, COUNTRY, kindForSeg, entryUrlPath, isEntryUrl, entryPathForKind, parseEntryUrl } from "./utils/placeUrl";
 import { startRun, endRun, summarise, averageFor, describe, describeAverage, recentRuns, installFetchMeter } from "./utils/apiCost";
 import { cleanOffer, offerProblems, offerView, hasPaidPlan, OFFER_TEXT_MAX, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE } from "./utils/offer";
-import { aiDisclosureFor } from "./utils/aiDisclosure";
+import { aiDisclosureFor, aiImageNoteFor } from "./utils/aiDisclosure";
+// The app's one reader of how many people are coming. It already refuses a
+// number that is not a headcount ("2 weeks with friends" is not two people) and
+// caps the party, and the budget estimate reads the same box through it.
+import { partyOf } from "./utils/costLedger";
 import { SupportPage } from "./components/SupportPage";
 // ── THE PAGE THAT SAYS HOW THIS IS PAID FOR ─────────────────────────
 // Oliver, 9 Sep 2026: "make an 'affiliate' in the burgermenu where we list all
@@ -241,7 +245,7 @@ import { alertKey, describeWeatherChange, unseenAlerts, seenAlerts, markAlertSee
 import { placesNamedIn, cardsByMessage, rejectedIn, correctedTo } from "./utils/chatPlaces";
 import { mapPlaces, railCss, railMapCss, RAIL_CLASS, INLINE_CARDS_CLASS, MAP_CLASS, CHAT_PANEL_HEIGHT, MSG_ROW_CLASS, phoneMapShows, phoneMapOpen, MAP_TOGGLE_CLASS } from "./utils/chatRail";
 import { ChatMiniMap } from "./components/ChatMiniMap";
-import { readMapBeats, beatsDue, beatTarget, outHeldByOffer, MAP_DIRECTION_RULE } from "./utils/mapDirections";
+import { readMapBeats, beatsDue, beatTarget, outHeldByOffer, withoutRouteMoves, MAP_DIRECTION_RULE } from "./utils/mapDirections";
 import { briefProgress, progressLine, briefPercent, percentLine } from "./utils/briefPanel";
 import { EXAMPLE_GUIDE, EXAMPLE_GUIDE_PATH, hasExampleGuide } from "./data/exampleGuide";
 import { ChatPlaceCards } from "./components/ChatPlaceCards";
@@ -296,7 +300,7 @@ import { resolveUncertainties, CONFIRM_FORMAT } from "./utils/uncertaintyResolve
 import AccountAvatar from "./components/AccountAvatar";
 import ReadMore from "./components/ReadMore";
 import { dateClaimProblems } from "./utils/dateClaims";
-import { aiCredit } from "./utils/aiImages";
+import { aiCredit, isAiImage } from "./utils/aiImages";
 import { proposals as waitingProposals, describeProposals, writeFor, MOVE as WAIT_MOVE } from "./utils/undatedSweep";
 import { socialPlan as buildSocialPlan, describeSocialPlan, socialWriteFor, preTicked as socialPreTicked, describeFinding, canWrite as socialCanWrite, REQUESTS_PER_SEARCH } from "./utils/socialSweep";
 import { avatarUrl } from "./utils/accountAvatar";
@@ -21480,7 +21484,7 @@ Transport matters: if the person hasn't said how they're getting around, ask whi
 ASK BEFORE YOU PLAN, ONLY WHEN THEY HAVE ASKED FOR ONE. This applies specifically when someone asks for a plan, route, or itinerary, not to casual questions about Denmark ("what's Copenhagen like", "is X worth visiting", "what's the food scene like"). Casual questions get a real, substantive answer immediately. Never redirect a simple question into an intake questionnaire. Only when they are asking you to build a route or plan, and you don't yet know their STARTING POINT, budget, how much time they have, and roughly what they enjoy, ask ONE short, warm question that covers those things together. For example: "Happy to help! Where are you starting from, flying into Copenhagen/Kastrup, Billund, or somewhere else? Roughly how many days do you have, what's your budget looking like, and what do you enjoy most: real hidden gems, the well-known popular spots, or a mix?" A bare request like "I wanna go to Denmark, plan me something" gives you ZERO of those things. This is exactly the case that must trigger the question, not skip straight to a plan; don't treat "plan me something" as license to just start somewhere (Copenhagen by default is not a substitute for knowing what they want). STARTING POINT SPECIFICALLY IS NON-NEGOTIABLE: never build a real day-by-day plan without knowing where the trip begins. A guess here breaks the whole route, not just one detail. Keep it to one message, not a wall of separate questions, and don't re-ask anything they've already told you. ONCE YOU KNOW ENOUGH TO BUILD, BUILD. Do not ask one last confirming question first, and in particular never ask how detailed or how simple they want it. The interface puts that choice on its own screen right after they tap the button, and that screen is the only place the answer is ever read, so asking here buys a whole extra round trip and changes nothing about the guide that gets built.
 NEVER SEND A "WORKING ON IT" STALLING REPLY: THIS IS ABSOLUTE. You cannot do background work after sending a message. There is no "one moment, let me dive in" that leads anywhere; once your reply is sent, nothing further happens until the traveler does something next. So every single reply must be complete and immediately actionable on its own: either (1) the one clarifying question above, or (2) the FULL actual plan itself, written out completely, right now, in this message. Never write something like "Let me put together a detailed itinerary for you, one moment!" or "I'll get started on that now". That promises work that will never happen and leaves the person stuck looking at a dead end. If you have enough information to build, build the real thing immediately in this same reply. Don't announce it, don't preview it, just do it.
 IF SOMEONE NAMES A SPECIFIC PLACE, IT MUST BE IN THE PLAN: if the traveler explicitly says they want to visit somewhere specific (e.g. "I really want to see King's Garden"), that place is not optional. Work it into the itinerary for real, don't quietly drop it in favor of your own picks.
-IF A MESSAGE LOOKS LIKE STRUCTURED PREFERENCES (arrival/departure timestamps, starting point, budget, interests, travel style, preference, transport listed together, not written as a natural sentence). This came from someone ticking boxes on the intake form, not typing. NEVER ANSWER IT WITH A DAY-BY-DAY BREAKDOWN, because that belongs to the guide and not to this chat. Open with a short, warm "Applied: ..." line naturally restating what they picked (not robotic form-confirmation). WHAT COMES AFTER THAT LINE DEPENDS ENTIRELY ON WHETHER ANYTHING IS STILL MISSING. If a detail is missing or ambiguous AND knowing it would change the plan, ask ONE specific question about that detail and stop there. If nothing is missing, do NOT manufacture a question to fill the slot: go straight to the ready-to-build handoff in this same reply. Somebody who filled in every box has already told you what they want, and asking anyway is the single fastest way to make a planner feel like a form. The rule here used to force a question 100% of the time no matter how complete the boxes were, which meant the traveler who did the most work to be clear got the most friction, and that is backwards. A missing field is not the same as an ambiguous one: leaving budget blank is a real answer (no strong constraint), and "Starting point: not specified" is covered by the Copenhagen Airport default below, so neither of those on its own is a reason to ask anything. BE CURIOUS, NOT A FORM: never default to a stock closer like "Anything else you want me to know, or should I just plan you something?" repeated the same way every time. That's exactly the robotic pattern to avoid. Instead, engage with what's interesting or still unclear about THIS specific trip: ask about something relevant that hasn't been covered yet, or that would meaningfully shape the plan if you knew it, phrased differently each time, the way a real person curious about someone's trip would ask. Only fall back to a plain "want me to just plan it?" offer if you have nothing specific left worth asking. PROBE INFORMATION THAT MATTERS, DON'T JUST ACKNOWLEDGE IT: if something the traveler mentions could reshape the plan (a friend joining a few days late, kids in the group, a mobility limitation, a special occasion) and your reply doesn't yet reflect a real decision about how that changes things, ask ONE focused follow-up about its actual implication (e.g. "Want the itinerary split for those first two days before your friend arrives, or keep it light until everyone's together?") rather than just noting it and moving on as if it doesn't affect anything. Cap this at one extra round beyond the initial question, though. Don't turn this into an endless interview; if the traveler's follow-up reply doesn't add another must-ask detail, that's your signal everything's covered and you can offer to build. A QUESTION MAY CARRY A RECOMMENDATION, AND WHEN THEY SOUND UNSURE IT HAS TO. A menu of abstract categories ("history, nature, something low-key, or a mix?") hands the work back to the person who came here to have it done: those are labels rather than options, and somebody who does not already know what they want cannot answer them. Whenever you are about to offer categories, offer NAMED PLACES instead, two or three at most, each with the one line that says why it fits what they have already told you, and then ask which of those sounds more like them. "Ribe for the oldest town in the country, or Skagen where the two seas meet and the kids can stand in both at once. Which of those sounds more like your week?" is a question and a recommendation at once, and that is the shape to aim for. AND WHEN SOMEBODY IS PLAINLY UNSURE, DECIDE FOR THEM. "I don't know", "you pick", "whatever you think", "what would you do", "we're open to anything", or an answer with no shape to it, are all the same request: stop asking and recommend. Name the thing, say in one line why it suits them, and move the plan on from there. A local friend does not answer "I'm not sure" with another question. This is not a licence to interview. It REPLACES a question rather than adding one, and the cap above still holds. TRIP LENGTH is always exact. "Exact trip length" is computed directly from real arrival and departure timestamps, so never treat it as vague and never ask for a day count separately; just use the precise figure you're given. STARTING POINT: if a real one was given, use it. If the message says "Starting point: not specified, assume Copenhagen Airport", build the plan starting from Copenhagen Airport (Kastrup). Do NOT ask the traveler where they're starting from in this case, since leaving it blank was itself a deliberate choice covered by that default; this default only applies to the structured tick-box flow, not to a freeform typed message with zero starting-point info (that case still needs a real question). WHENEVER THE STARTING POINT IS COPENHAGEN AIRPORT (whether given explicitly or assumed by default), always weave in one practical, positively-framed transport tip early in the plan, for example suggesting a Copenhagen Card for easy unlimited transport plus free museum entry, or mentioning buying a ticket via the DOT/DSB app before boarding. Never a scary "you'll get fined" warning; frame it as a helpful insider tip, not a threat.
+IF A MESSAGE LOOKS LIKE STRUCTURED PREFERENCES (arrival/departure timestamps, starting point, budget, interests, travel style, preference, transport listed together, not written as a natural sentence). This came from someone ticking boxes on the intake form, not typing. NEVER ANSWER IT WITH A DAY-BY-DAY BREAKDOWN, because that belongs to the guide and not to this chat. Open with a short, warm "Applied: ..." line naturally restating what they picked (not robotic form-confirmation). NAME EVERY CHOICE THEY MADE, AND HOW FAR THEY WANT TO GO IS ONE OF THEM. Measured on two live runs: somebody ticked "Explore Denmark", it reached this brief, the route later obeyed it, and the Applied line listed the start, the car, the pace, the interests, the sleeping and the eating and never once said the traveller had chosen to roam. A pick that is silently obeyed is a pick they cannot tell you heard, and the one they are least sure about is the one they most want read back. So the line covers all of them: where they start, HOW FAR THEY WANT TO GO, how they are getting around, where they sleep, what they eat, free-entry-only if they asked for it, the pace and what they are into. And say what a choice MEANS rather than repeating its label: "happy to move around, so I am treating the whole country as fair game" is the pick read back, "Explore Denmark" is the form read aloud. WHAT COMES AFTER THAT LINE DEPENDS ENTIRELY ON WHETHER ANYTHING IS STILL MISSING. If a detail is missing or ambiguous AND knowing it would change the plan, ask ONE specific question about that detail and stop there. If nothing is missing, do NOT manufacture a question to fill the slot: go straight to the ready-to-build handoff in this same reply. Somebody who filled in every box has already told you what they want, and asking anyway is the single fastest way to make a planner feel like a form. The rule here used to force a question 100% of the time no matter how complete the boxes were, which meant the traveler who did the most work to be clear got the most friction, and that is backwards. A missing field is not the same as an ambiguous one: leaving budget blank is a real answer (no strong constraint), and "Starting point: not specified" is covered by the Copenhagen Airport default below, so neither of those on its own is a reason to ask anything. BE CURIOUS, NOT A FORM: never default to a stock closer like "Anything else you want me to know, or should I just plan you something?" repeated the same way every time. That's exactly the robotic pattern to avoid. Instead, engage with what's interesting or still unclear about THIS specific trip: ask about something relevant that hasn't been covered yet, or that would meaningfully shape the plan if you knew it, phrased differently each time, the way a real person curious about someone's trip would ask. Only fall back to a plain "want me to just plan it?" offer if you have nothing specific left worth asking. PROBE INFORMATION THAT MATTERS, DON'T JUST ACKNOWLEDGE IT: if something the traveler mentions could reshape the plan (a friend joining a few days late, kids in the group, a mobility limitation, a special occasion) and your reply doesn't yet reflect a real decision about how that changes things, ask ONE focused follow-up about its actual implication (e.g. "Want the itinerary split for those first two days before your friend arrives, or keep it light until everyone's together?") rather than just noting it and moving on as if it doesn't affect anything. Cap this at one extra round beyond the initial question, though. Don't turn this into an endless interview; if the traveler's follow-up reply doesn't add another must-ask detail, that's your signal everything's covered and you can offer to build. A QUESTION MAY CARRY A RECOMMENDATION, AND WHEN THEY SOUND UNSURE IT HAS TO. A menu of abstract categories ("history, nature, something low-key, or a mix?") hands the work back to the person who came here to have it done: those are labels rather than options, and somebody who does not already know what they want cannot answer them. Whenever you are about to offer categories, offer NAMED PLACES instead, two or three at most, each with the one line that says why it fits what they have already told you, and then ask which of those sounds more like them. "Ribe for the oldest town in the country, or Skagen where the two seas meet and the kids can stand in both at once. Which of those sounds more like your week?" is a question and a recommendation at once, and that is the shape to aim for. AND WHEN SOMEBODY IS PLAINLY UNSURE, DECIDE FOR THEM. "I don't know", "you pick", "whatever you think", "what would you do", "we're open to anything", or an answer with no shape to it, are all the same request: stop asking and recommend. Name the thing, say in one line why it suits them, and move the plan on from there. A local friend does not answer "I'm not sure" with another question. This is not a licence to interview. It REPLACES a question rather than adding one, and the cap above still holds. TRIP LENGTH is always exact. "Exact trip length" is computed directly from real arrival and departure timestamps, so never treat it as vague and never ask for a day count separately; just use the precise figure you're given. STARTING POINT: if a real one was given, use it. If the message says "Starting point: not specified, assume Copenhagen Airport", build the plan starting from Copenhagen Airport (Kastrup). Do NOT ask the traveler where they're starting from in this case, since leaving it blank was itself a deliberate choice covered by that default; this default only applies to the structured tick-box flow, not to a freeform typed message with zero starting-point info (that case still needs a real question). WHENEVER THE STARTING POINT IS COPENHAGEN AIRPORT (whether given explicitly or assumed by default), always weave in one practical, positively-framed transport tip early in the plan, for example suggesting a Copenhagen Card for easy unlimited transport plus free museum entry, or mentioning buying a ticket via the DOT/DSB app before boarding. Never a scary "you'll get fined" warning; frame it as a helpful insider tip, not a threat.
 
 TRAVEL STYLE AND PREFERENCE ARE TWO SEPARATE AXES, DON'T CONFLATE THEM. "Travel style" (Bucket-list classics / Relaxed / Wander yourself) is purely about PACING: how tightly scheduled the days are: bucket-list classics means a full, efficiently-packed day-by-day schedule hitting the major sights; relaxed means fewer things per day with real breathing room; wander yourself means a loose, open-ended town-to-town structure with minimal fixed planning. "Preference" (Mostly hidden gems / A mix of both / Mostly popular attractions) is purely about WHAT KIND OF PLACES get chosen, independent of pacing. Someone can absolutely want a tightly-scheduled bucket-list trip that's built almost entirely from hidden gems, or a loose wander-yourself trip through famous spots; don't assume one implies the other. If either is ticked, don't ask about it again, just apply it directly. If either is missing, fold asking for it into the combined question.
 
@@ -22591,7 +22595,33 @@ ${languageBlock()}`;
                                   // moves would yank the map away from whatever
                                   // the conversation is about now.
                                   const before = playedBeatsRef.current;
-                                  const { beat, played } = beatsDue(withBeats.beats, n, before);
+                                  // ── AND A ROUTE IS NOT A RECOMMENDATION ──
+                                  //
+                                  // Oliver, 25 Sep 2026: "Only make AI zoom in
+                                  // if it wants to make a special point." The
+                                  // rule already says that; the model flew
+                                  // down to one stop in the middle of summing
+                                  // up a six-day loop, which the same rule
+                                  // says stays wide. A sentence naming three
+                                  // of the map's own places is describing a
+                                  // week rather than putting one place
+                                  // forward, and a camera that picks one of
+                                  // three is picking at random.
+                                  //
+                                  // FILTERED HERE AND NOT AT RENDER, because
+                                  // the pins are what the map knows and
+                                  // `onMap` is built further down the tree.
+                                  // pinsRef is the ref that exists for exactly
+                                  // this, and beatTarget below reads the same
+                                  // one: at render it would still hold the
+                                  // previous paint's pins. See
+                                  // withoutRouteMoves.
+                                  const live = withoutRouteMoves({
+                                    clean: assistantText,
+                                    beats: withBeats.beats,
+                                    names: (pinsRef.current || []).map(p => p?.place?.name || p?.name).filter(Boolean),
+                                  });
+                                  const { beat, played } = beatsDue(live, n, before);
                                   if (!beat) return;
                                   playedBeatsRef.current = played;
                                   let target = beatTarget(beat, pinsRef.current);
@@ -22601,7 +22631,7 @@ ${languageBlock()}`;
                                   // and the OUT after it, revealed at once,
                                   // are the same zoom in and straight out.
                                   if (target?.kind === "out") {
-                                    const inTick = withBeats.beats.slice(before, played).filter(b => b.kind === "in").pop();
+                                    const inTick = live.slice(before, played).filter(b => b.kind === "in").pop();
                                     const inTarget = inTick ? beatTarget(inTick, pinsRef.current) : null;
                                     if (inTarget) lastInRef.current = inTarget;
                                     if (outHeldByOffer(lastInRef.current, pinsRef.current)) {
@@ -28861,6 +28891,27 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 sortOptions={EVENT_SORTS}
                 onSort={setEventSort}
               />
+              {/* ── AND WHY SO MANY OF THESE ARE NOT PHOTOGRAPHS ────
+                  Oliver, 26 Sep 2026: "you probably also have to make it clear
+                  on the 'event' navigation that many pictures are AI that
+                  adopts the vibe and atmosphere of the events."
+
+                  Every AI picture already carries its own label, per image,
+                  which is what the AI Act asks for. This is the half a label
+                  cannot do: WHY there are so many here. A festival that has
+                  not happened yet has no photographs of itself.
+
+                  ONLY WHEN THERE REALLY ARE SOME. A note about AI pictures on
+                  a grid of photographs is a disclosure about nothing, and it
+                  teaches a reader to skip the line that matters. Counted off
+                  the rows on screen, through the same isAiImage the per-image
+                  label uses. */}
+              {filteredEvents.some(e => isAiImage(e?.__photoCredit)) && (
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 9, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 13px", marginBottom: 16 }}>
+                  <span style={{ fontSize: 13, lineHeight: 1.5, flexShrink: 0 }}>✦</span>
+                  <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.6 }}>{aiImageNoteFor(typeof navigator === "undefined" ? null : navigator)}</div>
+                </div>
+              )}
               {filteredEvents.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "40px 0", color: C.muted }}>{uiT("empty.events", uiLang)}</div>
               ) : (
@@ -29055,54 +29106,25 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               </div>
             );
 
-            // ── "ASK IF THE BARS TAKE NIGHTPAY" ──────────────────
+            // ── AND NO NIGHTPAY TIP ──────────────────────────────
             //
-            // Oliver, 1 Sep 2026, on the Nightlife nav. Written ONCE and placed
-            // once, above the level branch, for the reason spotRow states two
-            // screens up: "Two copies of this markup is how the two levels start
-            // disagreeing." A reader drilling town → street keeps the same tip
-            // rather than meeting three versions of it.
+            // Oliver, 26 Sep 2026: "on nightlife, get rid of the nightpay tip.
+            // We already settled that."
             //
-            // The tab is looked up rather than typed. Nightpay is a Studio row
-            // whose kind is his to set, and he is moving it from Essentials to
-            // Tips — a hardcoded tab would break the moment he does, and break
-            // silently, landing on the right page with the row nowhere on it.
-            // No row, no link: the tip still shows, it just does not offer to
-            // explain itself from a page that cannot.
-            const nightpayTab = tabForEssential(essentials, "nightpay");
-            const nightpayTip = (
-              <div style={{ display: "flex", alignItems: "flex-start", gap: 9, background: `${C.gold}12`, border: `1px solid ${C.gold}33`, borderRadius: 10, padding: "10px 13px", marginBottom: 16 }}>
-                <span style={{ fontSize: 13, lineHeight: 1.5, flexShrink: 0 }}>💡</span>
-                <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6 }}>
-                  {/* ── THE NAME IS THE LINK ──────────────────────────
-                      Oliver, 6 Sep 2026: "put hyperlink on nightpay instead.
-                      And delete the what that is."
-
-                      It read "ask if the bars take Nightpay. What that is",
-                      which is two sentences to offer one thing, and the second
-                      one is not a sentence. The word a reader does not
-                      recognise is the word they would click, so that is what
-                      carries the link.
-
-                      NO ROW, NO LINK, unchanged: Nightpay is a Studio row whose
-                      kind is his to set, and tabForEssential returns nothing
-                      when it is not published anywhere. The tip still shows,
-                      the name is plain text, which is the same graceful
-                      fallback as before rather than a link to a page that
-                      cannot explain itself. */}
-                  <b style={{ color: C.gold }}>Tip:</b> ask if the bars take{" "}
-                  {nightpayTab ? (
-                    <span onClick={() => goTab(nightpayTab)} style={{ color: C.gold, fontWeight: 700, cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 2 }}>
-                      Nightpay
-                    </span>
-                  ) : "Nightpay"}.
-                </div>
-              </div>
-            );
-
+            // Settled on 24 Sep, in the entry's own words: the company behind
+            // it was fined for staged Trustpilot reviews where staff posed as
+            // regular users. The row still says so and still stands on its own
+            // page, where a reader who goes looking gets the catch with it.
+            //
+            // A TIP IS AN ENDORSEMENT, WHICH IS THE PART THAT HAD TO GO. This
+            // sat above every nightlife list on the site, unprompted, telling
+            // people to ask bars about one paid app. Gemlyx's own rule about
+            // paid links is to name the cost AND what it buys; a banner that
+            // names neither, for a company whose reviews were staged, is the
+            // site putting its name behind something it has already written a
+            // warning about.
             return (
             <div className={pageAnim} style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
-              {nightpayTip}
               {!nightlifeTownView ? (
                 // ── LEVEL 1: pick a town ──────────────────────────
                 <>
@@ -30533,7 +30555,25 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       if (intakeFreeOnly) parts.push(`Only attractions that are free to enter: do not plan a stop that charges admission, and say so if something they would expect to see is behind a ticket.`);
                       if (intakeDanish) parts.push(intakeDanish === "yes" ? `Language: speaks Danish` : `Language: does not speak Danish`);
                       if (intakePlacePref) parts.push(`Preference: ${intakePlacePref}`);
-                      if (intakeTravelers.trim()) parts.push(`Who's traveling: ${intakeTravelers.trim()}`);
+                      // ── AND HOW MANY THAT IS, COUNTED ONCE ──────
+                      //
+                      // Measured live, 26 Sep 2026: the box said "3 friends".
+                      // The panel priced three people in one room and said
+                      // "split between the 3 of you". The model read the same
+                      // words and opened "the four of you in a car". Both
+                      // readings are defensible from that text, which is the
+                      // problem: two readers, one box, and the traveller sees
+                      // both numbers on one screen.
+                      //
+                      // partyOf is the app's own reader and the one the budget
+                      // already uses, so its answer travels with the words
+                      // rather than leaving the model to re-guess. The raw
+                      // text goes too, because it carries what the count
+                      // cannot: who they are and when they join.
+                      if (intakeTravelers.trim()) {
+                        const counted = partyOf(intakeTravelers.trim());
+                        parts.push(`Who's traveling: ${intakeTravelers.trim()}${counted ? ` (that is ${counted.heads} ${counted.heads === 1 ? "person" : "people"} in total, counted from what they typed: use this number and do not work out your own)` : ""}`);
+                      }
                       if (intakeIncludeSaved && savedPlaces.length > 0) parts.push(`Also include these saved places: ${savedPlaces.map(p => p.town ? `${p.name} (${p.town})` : p.name).join(", ")}`);
                       if (intakeFamilyMode) parts.push(`Traveling with kids, family-friendly plan`);
                       if (intakeIncludeEvents) parts.push(`Include real events happening during the trip dates, if any fit`);

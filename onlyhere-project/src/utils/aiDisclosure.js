@@ -144,10 +144,18 @@ const BASE_ALIAS = { nb: "no", nn: "no" };
 // feature that did not work at all. Same defect this repository keeps finding in
 // itself: finished, correct, tested code that nothing can reach. The assertions
 // below call the function the way the render sites call it.
-export const aiDisclosure = (lang) => {
+// ── ONE NORMALISER, FOR EVERY SENTENCE THIS LAW REQUIRES ────────────
+//
+// Pulled out of aiDisclosure on 26 Sep 2026, when the image duty needed a
+// second sentence in the same nine languages. The alias, the script step and
+// the English fallback are the part that was hard to get right, and the bug
+// this file's own comment describes, six translations that no reader could
+// reach, happened once already. A second copy of this logic is how it happens
+// again in a table nobody is watching.
+export const inReaderLanguage = (table, lang) => {
   const raw = typeof lang === "string" ? lang : String(lang?.tag ?? "");
   const parts = String(raw || "").trim().split("-").filter(Boolean);
-  if (!parts.length) return AI_DISCLOSURE.en;
+  if (!parts.length) return table.en;
   const base = parts[0].toLowerCase();
   const keyBase = BASE_ALIAS[base] || base;
   // A script subtag is four letters (Hans, Hant). A region is two letters or
@@ -155,11 +163,13 @@ export const aiDisclosure = (lang) => {
   // languageName() makes one file over and for the same reason.
   const script = parts.slice(1).find(p => /^[A-Za-z]{4}$/.test(p));
   if (script) {
-    const scripted = AI_DISCLOSURE[`${keyBase}-${script.toLowerCase()}`];
+    const scripted = table[`${keyBase}-${script.toLowerCase()}`];
     if (scripted) return scripted;
   }
-  return AI_DISCLOSURE[keyBase] || AI_DISCLOSURE.en;
+  return table[keyBase] || table.en;
 };
+
+export const aiDisclosure = (lang) => inReaderLanguage(AI_DISCLOSURE, lang);
 
 // For a component that has a navigator rather than a resolved tag, so no render
 // site has to know how the language is worked out. Same reason languageBlock
@@ -178,3 +188,37 @@ export const AI_CHAT_SURFACES = [
   "src/pages/GuidePage.jsx",
   "src/App.jsx",
 ];
+
+
+// ── AND THE SAME DUTY, FOR A PAGE FULL OF PICTURES ──────────────────
+//
+// Oliver, 26 Sep 2026: "you probably also have to make it clear on the 'event'
+// navigation that many pictures are AI that adopts the vibe and atmosphere of
+// the events."
+//
+// Every AI picture already carries its own "AI impression" label, per image,
+// through utils/aiImages.js, and that is what Article 50(4) asks for. This is
+// the other half of his sentence and the part a label cannot do: WHY there are
+// so many of them here. A festival that has not happened yet has no
+// photographs of itself, so the picture is an impression of the atmosphere
+// rather than a record of the event, and a reader scrolling a grid of them
+// deserves to be told that once at the top rather than deducing it from a
+// caption repeated forty times.
+//
+// SAID AS A REASON, NOT AS A WARNING. It is not a disclaimer about quality: it
+// is what the picture IS, which is the same standard the per-image label is
+// held to.
+export const AI_IMAGE_NOTE = {
+  en: "Many pictures here are AI impressions of the atmosphere rather than photographs of the event. An event that has not happened yet has no photographs of itself.",
+  da: "Mange billeder her er AI-indtryk af stemningen frem for fotos af selve begivenheden. En begivenhed, der ikke har fundet sted endnu, har ingen billeder af sig selv.",
+  de: "Viele Bilder hier sind KI-Eindrücke der Atmosphäre und keine Fotos der Veranstaltung. Eine Veranstaltung, die noch nicht stattgefunden hat, hat keine Fotos von sich.",
+  nl: "Veel beelden hier zijn AI-impressies van de sfeer en geen foto's van het evenement zelf. Een evenement dat nog niet heeft plaatsgevonden, heeft geen foto's van zichzelf.",
+  sv: "Många bilder här är AI-intryck av stämningen snarare än foton av evenemanget. Ett evenemang som ännu inte ägt rum har inga foton av sig själv.",
+  no: "Mange bilder her er AI-inntrykk av stemningen framfor bilder av selve arrangementet. Et arrangement som ikke har funnet sted ennå, har ingen bilder av seg selv.",
+  zh: "此处许多图片是对现场氛围的 AI 呈现，而非活动照片。尚未举办的活动没有自己的照片。",
+  "zh-hans": "此处许多图片是对现场氛围的 AI 呈现，而非活动照片。尚未举办的活动没有自己的照片。",
+  "zh-hant": "此處許多圖片是對現場氛圍的 AI 呈現，而非活動照片。尚未舉辦的活動沒有自己的照片。",
+};
+
+export const aiImageNote = (lang) => inReaderLanguage(AI_IMAGE_NOTE, lang);
+export const aiImageNoteFor = (nav) => aiImageNote(readerLanguage(nav)?.tag || "en");

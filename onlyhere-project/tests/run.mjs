@@ -105,7 +105,7 @@ writeFileSync(entry, `
   export { licenseUrl, creditIsRequired } from ${JSON.stringify(join(root, "src/utils/imageCredits.js"))};
   export { STUDIO_VOICE } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
   export { cleanOffer, offerProblems, offerLive, offerView, hasPaidPlan, OFFER_TEXT_MAX, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE } from ${JSON.stringify(join(root, "src/utils/offer.js"))};
-  export { AI_DISCLOSURE, aiDisclosure, aiDisclosureFor, AI_CHAT_SURFACES } from ${JSON.stringify(join(root, "src/utils/aiDisclosure.js"))};
+  export { AI_DISCLOSURE, aiDisclosure, aiDisclosureFor, AI_CHAT_SURFACES, AI_IMAGE_NOTE, aiImageNote, inReaderLanguage } from ${JSON.stringify(join(root, "src/utils/aiDisclosure.js"))};
   export { splitReport, sortReports, filterReports, reportAge, isHandled, unhandledCount, INBOX_SETUP_SQL, FILTERS as INBOX_FILTERS, topicLabel as inboxTopicLabel } from ${JSON.stringify(join(root, "src/utils/supportInbox.js"))};
   export { SUPPORT_TOPICS, REPORT_TOPIC, topicIds, topicLabel, isTopic, GOOD_FAITH_STATEMENT, messagePrompt, MESSAGE_MIN, MESSAGE_MAX, NAME_MAX, looksLikeEmail, looksLikeUrl, supportProblems, problemFor, supportReference, supportPayload, supportMailto, supportReceipt, SUPPORT_TABLE, SUPPORT_SETUP_SQL, SUPPORT_EMAIL, PRIVACY_EMAIL } from ${JSON.stringify(join(root, "src/utils/support.js"))};
   export { SAFETY_CLAIM_FIELDS, claimIsSupported, unsupportedSafetyClaims, safetyClaimNote } from ${JSON.stringify(join(root, "src/utils/safetyClaims.js"))};
@@ -181,7 +181,7 @@ writeFileSync(entry, `
   export { DETOUR_PATH, ME_PATH, LEGAL_PATH, TAB_HASH as TAB_HASH_WORDS } from ${JSON.stringify(join(root, "src/utils/tabUrl.js"))};
   export { mapPlaces, railCss, railMapCss, RAIL_CLASS, INLINE_CARDS_CLASS, RAIL_BREAKPOINT_PX, MAP_CLASS, POPUP_CLASS, MAP_PIN_CAP, CHAT_PANEL_HEIGHT, MSG_ROW_CLASS, LABEL_CLASS, LABEL_SIDES, LABEL_GAP, labelBox, labelSides, SPOT_PIN_ZOOM, isSpotPin, spotsShowAt, PHONE_MAP_PINS, phoneMapShows, placesAround, AROUND_KM, AROUND_CAP } from ${JSON.stringify(join(root, "src/utils/chatRail.js"))};
   export { homeCountryIn, onlyACountry, skyscannerBlock } from ${JSON.stringify(join(root, "src/utils/homeCountry.js"))};
-  export { readMapBeats, beatsDue, beatTarget, MAP_BEAT_CAP, MAP_DIRECTION_RULE, cameraArrive, cameraLanded, frameFor, SLIDE_HOLD_MS, makeCamera, unplayedBeat, outHeldByOffer } from ${JSON.stringify(join(root, "src/utils/mapDirections.js"))};
+  export { readMapBeats, beatsDue, beatTarget, MAP_BEAT_CAP, MAP_DIRECTION_RULE, withoutRouteMoves, namesIn, ROUTE_NAMES, cameraArrive, cameraLanded, frameFor, SLIDE_HOLD_MS, makeCamera, unplayedBeat, outHeldByOffer } from ${JSON.stringify(join(root, "src/utils/mapDirections.js"))};
   export { costLines, byUrgency, costAction, linkGaps, readPrice, readableFigure, refuseTicket, REFUSAL, COST_KIND, estimateFrom, describeEstimate, partyOf, partyFrom, describeGroup, stopHasADoor } from ${JSON.stringify(join(root, "src/utils/costLedger.js"))};
   export { freeButPriced, moneyProblems, LODGING_FLOOR_DKK } from ${JSON.stringify(join(root, "src/utils/moneyClaims.js"))};
   export { clampNote, NOTE_SHOW_WHOLE_MAX, NOTE_CLAMP_AT, NOTE_MIN_HIDDEN } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
@@ -61389,61 +61389,54 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
      /"nothing readable came back"/.test(appQ));
 }
 
-// ── "ASK IF THE BARS TAKE NIGHTPAY" ─────────────────────────────────
+// ── AND THEN NO NIGHTPAY TIP AT ALL ────────────────────────────────
 //
-// Oliver, 1 Sep 2026, asking for a tip at the top of the Nightlife nav.
+// Oliver, 26 Sep 2026: "on nightlife, get rid of the nightpay tip. We already
+// settled that."
+//
+// It went in on 1 Sep as a tip at the top of the Nightlife nav, and what was
+// settled since is in the entry's own words: the company behind it was fined
+// for staged Trustpilot reviews where staff posed as regular users.
+//
+// A TIP IS AN ENDORSEMENT, which is the part that had to go. It sat above
+// every nightlife list on the site, unprompted, telling people to ask bars
+// about one paid app. Gemlyx's rule for a paid link is to name the cost AND
+// what it buys; a banner that names neither, for a company whose reviews were
+// staged, is the site putting its name behind something it has already written
+// a warning about.
+//
+// THE ROW ITSELF STAYS. It is published, it carries its own catch, and a
+// reader who goes looking still finds it with the warning attached. tabForEssential
+// stays too: it is the general "which tab is this row on" reader and other
+// things use it. What is gone is the site volunteering it.
 {
   const { tabForEssential } = M;
   const appN = readFileSync(join(root, "src/App.jsx"), "utf8");
 
-  // ── THE TAB IS LOOKED UP, NOT TYPED ──────────────────────────────
-  //
-  // Nightpay is a Studio row whose kind is his to set, and he is moving it from
-  // Essentials to Tips. A hardcoded tab breaks the moment he does, and breaks
-  // SILENTLY: the link lands on the right page with the row nowhere on it.
-  is("a row filed as a tip sends the reader to Tips",
-     tabForEssential([{ name: "Nightpay", kind: "tip" }], "nightpay"), "tips");
-  is("and one still filed as an essential sends them to Essentials",
+  // ── THE BANNER IS GONE, ALL OF IT ────────────────────────────────
+  is("the tip is not defined", (appN.match(/const nightpayTip = \(/g) || []).length, 0);
+  is("nor placed", (appN.match(/\{nightpayTip\}/g) || []).length, 0);
+  ok("and the sentence is nowhere on the site", !/ask if the bars take/.test(appN));
+  // AND NOTHING WAS LEFT HALF-REMOVED. A lookup with no reader is the dead
+  // field this codebase keeps finding.
+  ok("with no orphaned lookup left behind", !/const nightpayTab = /.test(appN));
+
+  // ── THE READER STAYS, BECAUSE IT IS NOT ABOUT NIGHTPAY ───────────
+  // tabForEssential answers "which tab is this published row on" for any row,
+  // and deleting a general reader because one caller went is how the next
+  // caller ends up writing it again.
+  is("a row filed as a tip is on Tips", tabForEssential([{ name: "Nightpay", kind: "tip" }], "nightpay"), "tips");
+  is("and one filed as an essential is on Essentials",
      tabForEssential([{ name: "Nightpay", kind: "essential" }], "nightpay"), "essentials");
-  // An unplaced row takes the default, which is where a reader will actually
-  // find it — the same kindOf every other reader uses, not a second opinion.
   is("an unplaced row follows the default rather than guessing",
      tabForEssential([{ name: "Nightpay" }], "nightpay"), "essentials");
-  // NO ROW, NO LINK. The tip still shows; it just stops offering to explain
-  // itself from a page that cannot.
-  is("nothing published means no link", tabForEssential([], "nightpay"), "");
+  is("nothing published means no tab", tabForEssential([], "nightpay"), "");
   is("and a row that is not it is not it",
      tabForEssential([{ name: "Rejsekort", kind: "essential" }], "nightpay"), "");
   is("matching is case and whitespace insensitive, because a founder types names",
      tabForEssential([{ name: "  NightPay  ", kind: "tip" }], "nightpay"), "tips");
   is("an empty name matches nothing rather than the first row",
      tabForEssential([{ name: "Nightpay", kind: "tip" }], ""), "");
-
-  // ── AND IT IS WRITTEN ONCE, WHICH IS THIS FILE'S OWN RULE ────────
-  // spotRow's comment two screens above it: "Two copies of this markup is how
-  // the two levels start disagreeing about what a bar looks like." The tip sits
-  // above the level branch so a reader drilling town → street keeps one tip.
-  is("the tip is defined exactly once", (appN.match(/const nightpayTip = \(/g) || []).length, 1);
-  is("and placed exactly once", (appN.match(/\{nightpayTip\}/g) || []).length, 1);
-  ok("above the branch, so all three nightlife levels carry it",
-     appN.indexOf("{nightpayTip}") < appN.indexOf("{!nightlifeTownView ? ("));
-  ok("in his words", /<b style=\{\{ color: C\.gold \}\}>Tip:<\/b> ask if the bars take\{" "\}/.test(appN));
-  // ── AND THE NAME CARRIES THE LINK ───────────────────────────────
-  //
-  // Oliver, 6 Sep 2026: "put hyperlink on nightpay instead. And delete the what
-  // that is." It read "ask if the bars take Nightpay. What that is", which is
-  // two sentences to offer one thing and the second is not a sentence. The word
-  // a reader does not recognise is the word they would click.
-  ok("the word itself is what you click",
-     /goTab\(nightpayTab\)\}[\s\S]{0,200}?>\s*Nightpay\s*<\/span>/.test(appN));
-  ok("and the old second sentence is gone", !/>\s*What that is\s*</.test(appN));
-  ok("and the link goes to the tab the row is actually on",
-     /const nightpayTab = tabForEssential\(essentials, "nightpay"\);/.test(appN)
-     && /onClick=\{\(\) => goTab\(nightpayTab\)\}/.test(appN));
-  // NO ROW, NO LINK, and the tip still reads as a sentence: the name stays,
-  // as plain text, rather than the sentence losing its object.
-  ok("with no link rendered when nothing is published",
-     /\{nightpayTab \? \(/.test(appN) && /\) : "Nightpay"\}\./.test(appN));
 }
 
 // ── THE PIPELINE TALKING TO ITSELF IN FRONT OF A TRAVELLER ──────────
@@ -74625,7 +74618,11 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   const appZ = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
   ok("the chat asks before it pulls back", /if \(outHeldByOffer\(lastInRef\.current, pinsRef\.current\)\)/.test(appZ));
   ok("and forgets at the start of each reply", /playedBeatsRef\.current = 0;\s*lastInRef\.current = null;/.test(appZ));
-  ok("an IN and OUT revealed in one tick are the same zoom in", /withBeats\.beats\.slice\(before, played\)\.filter\(b => b\.kind === "in"\)\.pop\(\)/.test(appZ));
+  // Off `live` since 26 Sep 2026, which is withBeats.beats with the route
+  // listings taken out. It has to be the same list beatsDue was given or the
+  // slice indexes point into a different array: a dropped zoom would shift
+  // every beat after it by one.
+  ok("an IN and OUT revealed in one tick are the same zoom in", /live\.slice\(before, played\)\.filter\(b => b\.kind === "in"\)\.pop\(\)/.test(appZ));
   // "It does some jump jump jump when I have my mouse on it"
   const mapSrc = stripComments(readFileSync(join(root, "src/components/ChatMiniMap.jsx"), "utf8"));
   ok("hovering a pin whose card is open changes nothing", /if \(e\?\.type === "mouseover" && marker\.isPopupOpen\(\)\) return;/.test(mapSrc));
@@ -76663,6 +76660,153 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     // inputs, so it is the same value rather than a second one.
     ok("and the preview uses the themes it already had", /cardLine\(place, undefined, \{ want: themes \}\)/.test(preview));
   }
+}
+
+
+// ── PASS 118: FIVE THINGS OFF ONE LIVE RUN ─────────────────────────
+{
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+
+  // ── A ROUTE IS NOT A RECOMMENDATION ─────────────────────────────
+  //
+  // Oliver, 25 Sep 2026: "Maybe we should scrap the idea with zooming in
+  // always. Only make AI zoom in if it wants to make a special point. Like
+  // 'Ribe is the oldest Town in Denmark, and has some Viking history to it if
+  // you'd like to explore that?'"
+  //
+  // Read against his own transcript, the rule he asked for was already in
+  // MAP_DIRECTION_RULE, in capitals, with an example almost word for word the
+  // sentence he wrote. The map has no automatic zoom at all: every move comes
+  // from a marker the model writes. So this was the model disobeying a rule it
+  // had been given, in one shape, and the fix is a check rather than a third
+  // rewrite of the prompt.
+  {
+    const { readMapBeats, withoutRouteMoves, namesIn, ROUTE_NAMES } = M;
+    const names = ["Skagen", "Aarhus", "Aalborg", "Marselisborg Dyrehave", "Kalø Slotsruin", "Mols Bjerge National Park", "Ribe", "Billund"];
+    const survives = (text) => {
+      const r = readMapBeats(text);
+      return withoutRouteMoves({ clean: r.clean, beats: r.beats, names }).map(b => `${b.kind}:${b.place}`);
+    };
+
+    // HIS OWN REPLY, VERBATIM from the export he sent.
+    const real = "This is shaping into a proper nature loop rather than a single base: north to Skagen where the two seas meet at Grenen, then back down through the coast and lakes before finishing in the Aarhus area for Marselisborg Dyrehave, Kalø Slotsruin and Mols Bjerge National Park, all free entry, before looping back to Aalborg for your departure. [[MAP_IN:Skagen]]I'll fold in a couple of the quieter stops too.";
+    is("a sentence summing up a week loses its zoom", survives(real), []);
+
+    // AND THE SHAPE HE ASKED FOR KEEPS ITS MOVE. This is the whole point: the
+    // fix must not cost the one move the map is for.
+    is("the Ribe sentence he wrote keeps its zoom",
+       survives("Ribe is the oldest town in Denmark, and has some Viking history to it if you'd like to explore that? [[MAP_IN:Ribe]] The cathedral tower is climbable."),
+       ["in:Ribe"]);
+    // TWO PLACES IS A CHOICE, NOT AN ITINERARY, and the prompt asks for that
+    // shape by name: "Ribe or Skagen, which sounds more like your week".
+    is("and so does a two-way choice, which the prompt asks for",
+       survives("Ribe for the oldest town in the country, or Skagen where the two seas meet. [[MAP_IN:Ribe]] Which sounds more like your week?"),
+       ["in:Ribe"]);
+    is("three is where it turns into a route", ROUTE_NAMES, 3);
+
+    // AND A DROPPED IN DOES NOT LEAVE ITS OUT BEHIND. A pull-back from a place
+    // the camera never flew to is a move a reader sees for no reason.
+    is("an out that only undid a dropped zoom goes with it",
+       survives("North to Skagen, then Aarhus, then back to Aalborg. [[MAP_IN:Skagen]] [[MAP_OUT]] Anyway."), []);
+    // A REAL PULL-BACK IS NEVER WRONG in the middle of a route: it is what the
+    // rule asks for there, so an OUT on its own always survives.
+    is("but a pull-back on its own is never dropped",
+       survives("North to Skagen, then Aarhus, then back to Aalborg. [[MAP_OUT]]"), ["out:"]);
+
+    // The counter itself, which is the only thing this file knows about Denmark
+    // and it is handed in rather than known.
+    is("it counts the places it was given", namesIn("Skagen, then Aarhus, then Aalborg", names), 3);
+    is("and each one once", namesIn("Skagen and Skagen again", names), 1);
+    is("and nothing when it is given nothing", namesIn("Skagen", []), 0);
+
+    // AND THE CHAT APPLIES IT, or the module is right and the map still shakes.
+    ok("the chat filters the beats before playing them", /const live = withoutRouteMoves\(\{/.test(app));
+    ok("against the pins, which is what the map knows",
+       /names: \(pinsRef\.current \|\| \[\]\)\.map\(p => p\?\.place\?\.name \|\| p\?\.name\)/.test(app));
+    // FILTERED WHERE THE PINS ARE CURRENT. At render `onMap` is not built yet
+    // and pinsRef still holds the previous paint's pins, so a route move would
+    // be judged against the wrong list.
+    ok("and played from that same filtered list", /beatsDue\(live, n, before\)/.test(app));
+    ok("including the tick that decides whether an out was held",
+       /const inTick = live\.slice\(before, played\)/.test(app));
+  }
+
+  // ── AND THE PICK IT NEVER READ BACK ─────────────────────────────
+  //
+  // Measured twice on live runs: "Explore Denmark" was ticked, reached the
+  // brief, was obeyed by the route, and never appeared in the Applied line.
+  // A pick that is silently obeyed is a pick they cannot tell you heard.
+  {
+    ok("the rule names how far they want to go, in capitals",
+       /NAME EVERY CHOICE THEY MADE, AND HOW FAR THEY WANT TO GO IS ONE OF THEM/.test(app));
+    ok("and says it was measured rather than asserted", /Measured on two live runs/.test(app));
+    ok("and lists the rest so none of them can be the next one dropped",
+       /where they start, HOW FAR THEY WANT TO GO, how they are getting around, where they sleep, what they eat/.test(app));
+    // AND SAY WHAT IT MEANS, NOT WHAT THE BUTTON SAID. "Applied: Explore
+    // Denmark" is the form read aloud.
+    ok("and asks for the meaning rather than the label", /is the pick read back, "Explore Denmark" is the form read aloud/.test(app));
+  }
+
+  // ── AND THE HEADCOUNT THEY DISAGREED ABOUT ──────────────────────
+  //
+  // Live, 26 Sep 2026: the box said "3 friends". The panel priced three people
+  // in one room and said "split between the 3 of you". The model opened "the
+  // four of you in a car". Both readings are defensible from that text, which
+  // is the problem: two readers, one box, both numbers on one screen.
+  {
+    ok("the brief carries the app's own count", /const counted = partyOf\(intakeTravelers\.trim\(\)\);/.test(app));
+    ok("and tells the model to use it rather than working out its own",
+       /use this number and do not work out your own/.test(app));
+    // THE WORDS GO TOO. A count cannot carry "one joining a few days later",
+    // which is the thing that changes a plan.
+    ok("while the traveller's own words still travel with it",
+       /Who's traveling: \$\{intakeTravelers\.trim\(\)\}/.test(app));
+    // ONE READER, and it is the one the budget already uses.
+    ok("through partyOf, which the budget reads the same box with",
+       /import \{ partyOf \} from "\.\/utils\/costLedger"/.test(app));
+  }
+
+  // ── AND THE PICTURES THAT ARE NOT PHOTOGRAPHS ───────────────────
+  //
+  // Oliver, 26 Sep 2026: "you probably also have to make it clear on the
+  // 'event' navigation that many pictures are AI that adopts the vibe and
+  // atmosphere of the events."
+  {
+    const { AI_IMAGE_NOTE, aiImageNote, AI_DISCLOSURE, inReaderLanguage } = M;
+    // EVERY LANGUAGE THE TEXT DUTY ALREADY COVERS. A disclosure a reader
+    // cannot read is the bug this file found in itself once already: six
+    // translations shipped and every reader got the English one.
+    is("the image note covers the same languages as the text one",
+       Object.keys(AI_IMAGE_NOTE).sort(), Object.keys(AI_DISCLOSURE).sort());
+    ok("a Danish browser gets Danish", /AI-indtryk/.test(aiImageNote("da-DK")));
+    ok("a German one gets German", /KI-Eindr/.test(aiImageNote("de-DE")));
+    ok("and an unknown language is informed in English rather than not at all",
+       aiImageNote("xx") === AI_IMAGE_NOTE.en);
+    // ONE NORMALISER for both sentences, so the alias, script and fallback
+    // logic cannot drift between two tables.
+    is("both tables go through one normaliser", inReaderLanguage(AI_DISCLOSURE, "nb-NO"), AI_DISCLOSURE.no);
+    is("and the script subtag still works", inReaderLanguage(AI_IMAGE_NOTE, "zh-Hant-TW"), AI_IMAGE_NOTE["zh-hant"]);
+    // IT SAYS WHY, which is the half a per-image label cannot do.
+    ok("it gives the reason rather than only the fact",
+       /has no photographs of itself/.test(AI_IMAGE_NOTE.en));
+
+    // AND IT ONLY SHOWS WHERE THERE REALLY ARE SOME. A note about AI pictures
+    // over a grid of photographs is a disclosure about nothing, and it teaches
+    // a reader to skip the line that matters.
+    ok("the events page shows it only when an AI picture is on screen",
+       /filteredEvents\.some\(e => isAiImage\(e\?\.__photoCredit\)\)/.test(app));
+    // __photoCredit, which is the field the rows really carry. The first
+    // version read `photoCredit` and could never have fired once.
+    ok("off the field the rows actually carry", !/isAiImage\(e\?\.photoCredit\)/.test(app));
+    ok("and through the same reader the per-image label uses",
+       /import \{ aiCredit, isAiImage \} from "\.\/utils\/aiImages"/.test(app));
+    ok("in the reader's own language", /\{aiImageNoteFor\(typeof navigator === "undefined" \? null : navigator\)\}/.test(app));
+  }
+
+  // ── AND NO NIGHTPAY TIP ─────────────────────────────────────────
+  // Covered in full further up, where the tip used to be asserted. Repeated
+  // here as one line because it was part of the same pass.
+  ok("the nightlife page volunteers nothing about Nightpay", !/ask if the bars take/.test(app));
 }
 
 // ── HOW FAR THEY WANT TO GO, ASKED RATHER THAN GUESSED ─────────────

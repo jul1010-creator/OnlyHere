@@ -120,6 +120,112 @@ export const readMapBeats = (text) => {
   return { clean, beats };
 };
 
+
+// ── AND A ROUTE IS NOT A RECOMMENDATION ─────────────────────────────
+//
+// Oliver, 25 Sep 2026: "Maybe we should scrap the idea with zooming in always.
+// Only make AI zoom in if it wants to make a special point. Like 'Ribe is the
+// oldest Town in Denmark, and has some Viking history to it if you'd like to
+// explore that?'"
+//
+// Read against his own transcript, the rule he is asking for is already in
+// MAP_DIRECTION_RULE, in capitals: "A NAME IS NOT A REASON TO ZOOM", "most
+// early replies need no move at all", and an exception headed "AND A
+// RECOMMENDATION IS A REASON TO ZOOM" whose example is almost word for word
+// the Ribe sentence he wrote. The map has no automatic zoom at all; every move
+// comes from a marker the model wrote.
+//
+// So this is not a missing feature. It is the model disobeying a rule it was
+// given, in one specific shape:
+//
+//   "north to Skagen where the two seas meet at Grenen, then back down through
+//    the coast and lakes before finishing in the Aarhus area for Marselisborg
+//    Dyrehave, Kalo Slotsruin and Mols Bjerge National Park, all free entry,
+//    before looping back to Aalborg for your departure. [[MAP_IN:Skagen]]"
+//
+// Summing up a route is the case the rule says stays WIDE, and the camera flew
+// down to one stop in the middle of a week. Tightening the prompt again is the
+// cheap answer and it has already been tightened once; this is the checkable
+// one.
+//
+// ── THE TEST IS HOW MANY PLACES THE SENTENCE NAMES ──────────────────
+//
+// It is the difference between the two cases, stated as something code can
+// measure. "If you go to Billund I would send you to X" names ONE place and
+// means it. "North to Skagen, then Aarhus, then back to Aalborg" names three
+// and is describing the shape of a week. A reader cannot look at three places
+// at once, so a camera that picks one of them is picking at random.
+//
+// THREE, not two. Two is "Ribe or Skagen, which sounds more like your week",
+// which the prompt asks for by name and which deserves its move: it is a
+// recommendation with an alternative, not an itinerary.
+export const ROUTE_NAMES = 3;
+
+// The sentence a beat sits in, out of the clean text. Sentence rather than
+// paragraph: the prompt tells the model to put each marker INSIDE its own
+// sentence, on the word where the picture changes, so the sentence is the unit
+// the marker belongs to and a paragraph would swallow the ones around it.
+const sentenceAround = (clean, chars) => {
+  const text = String(clean || "");
+  const at = Math.max(0, Math.min(text.length, Number(chars) || 0));
+  const before = text.slice(0, at);
+  const start = Math.max(
+    before.lastIndexOf(". "), before.lastIndexOf("! "), before.lastIndexOf("? "), before.lastIndexOf("\n"),
+  );
+  const rest = text.slice(at);
+  const endRel = rest.search(/[.!?\n]/);
+  return text.slice(start + 1, endRel === -1 ? text.length : at + endRel + 1);
+};
+
+// How many of the places the map knows are named in one stretch of text.
+// Counted on the names the caller hands over, which are the pins, for the
+// reason everything geographic in this codebase is injected: this file knows
+// about markers and words, and nothing about Denmark.
+export const namesIn = (text, names) => {
+  const hay = String(text || "").toLowerCase();
+  const seen = new Set();
+  for (const n of Array.isArray(names) ? names : []) {
+    const name = String(n || "").trim().toLowerCase();
+    if (!name || seen.has(name)) continue;
+    if (hay.includes(name)) seen.add(name);
+  }
+  return seen.size;
+};
+
+// ── WHICH MOVES SURVIVE ─────────────────────────────────────────────
+//
+// Only INs are judged. An OUT is a pull-back to the country and is never the
+// wrong thing to do in the middle of a route: if anything it is what the rule
+// asks for there.
+//
+// AND A DROPPED IN DOES NOT DRAG THE OUT AFTER IT. An OUT that was only ever
+// there to undo the IN would leave the camera pulling back from a place it
+// never flew to, which is a move a reader sees for no reason. So an OUT that
+// immediately follows a dropped IN, with no surviving move between them, goes
+// with it.
+export const withoutRouteMoves = ({ clean = "", beats = [], names = [] } = {}) => {
+  const list = Array.isArray(beats) ? beats : [];
+  if (!list.length) return list;
+  const words = String(clean || "").split(/(\s+)/).filter(t => /\S/.test(t));
+  // atWord counts words; sentenceAround needs characters. Rebuilt from the
+  // same split the beats were measured with, so the two cannot disagree.
+  const charsAt = (atWord) => words.slice(0, atWord).join(" ").length;
+  const out = [];
+  let droppedIn = false;
+  for (const b of list) {
+    if (b.kind === "in") {
+      const sentence = sentenceAround(clean, charsAt(b.atWord));
+      if (namesIn(sentence, names) >= ROUTE_NAMES) { droppedIn = true; continue; }
+      droppedIn = false;
+      out.push(b);
+      continue;
+    }
+    if (droppedIn) { droppedIn = false; continue; }
+    out.push(b);
+  }
+  return out;
+};
+
 // ── WHICH BEATS HAVE BECOME DUE ─────────────────────────────────────
 //
 // Given the reveal position and how many have already been played, the ones now
