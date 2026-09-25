@@ -158,7 +158,21 @@ export const TILE_STYLES = {
 // detailed version is that style with layers added rather than a different
 // mechanism, and OpenFreeMap is still the only source that is free, keyless and
 // allowed commercially. This line is the switch.
-export const DEFAULT_TILE_STYLE = "dark";
+// ── AND IT GOES BACK, 25 SEP 2026 ──────────────────────────────────
+//
+// Oliver, on the raster: "I also hate this.. it looks so dull and dead." He is
+// right, and the cause was one value: the inversion carries saturate(0.35),
+// which throws away two thirds of the colour of an already darkened image, so
+// the land comes out near-black and the water grey. Nothing was broken. It was
+// tuned to be unobtrusive and it overshot.
+//
+// The paragraph above says the raster was a holding position "while that gets
+// built properly", and what was missing is now built: the drawn style has place
+// names, in Danish first, and roads that read at a glance rather than at 0.2
+// opacity. So the switch goes back, and the raster stays exactly where it was
+// designed to be, at the end of the fallback chain for the day OpenFreeMap
+// declines.
+export const DEFAULT_TILE_STYLE = "navy";
 
 // ── WHAT DECIDES WHETHER THE CHART IS AVAILABLE ─────────────────────
 //

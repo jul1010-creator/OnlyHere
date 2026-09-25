@@ -229,6 +229,8 @@ import { factCheckCopy } from "./utils/factCheckCopy";
 import { matchedPlaces, previewPools, wantedCategories, mentionsPlace } from "./utils/previewMatch";
 import { BUDGET_LABEL, BUDGET_PLACEHOLDER, MIN_DAY_DKK, readDailyBudget, budgetProblem } from "./utils/tripBudget";
 import { TRIP_SCOPES, scopeSaid } from "./utils/tripScopeChoice";
+import { STAY_CHOICES, stayIsBooked, stayProblem, staySaid } from "./utils/stayChoice";
+import { FOOD_TIERS } from "./utils/mealsEstimate";
 import { weighAdd, addCaution, tripLoadBlock } from "./utils/weighAdd";
 import { isBookableTicketUrl, pickTicketUrl, describeTicketSearch, ticketQueries, ticketUrlSaysElsewhere, ticketAgentOf, reviewPastedTicketUrl, isTourUrl, typeHasAdmission, TICKET_FIELD, TOUR_FIELD } from "./utils/ticketLink";
 import { tourQuery, tourKindFor, tourTownFor, pickTourUrl, tourPhrase, tourCandidates, tourProposal, replaceTour, describeTourFindings, tourAliveVerdict, tourRemovalFor, TOUR_RESWEEP_DAYS, FOUND as TOUR_FOUND, GONE as TOUR_GONE, UNKNOWN as TOUR_UNKNOWN, ALIVE as TOUR_ALIVE } from "./utils/tourSweep";
@@ -19254,6 +19256,18 @@ If the conversation only covers a single day or a few stops with no explicit day
 
   const [intakeStartPoint, setIntakeStartPoint] = useState("");
   const [intakeScope, setIntakeScope] = useState("");
+  // ── AND THE REST OF THE PANEL HE ASKED FOR, 25 SEP 2026 ────────
+  // "Accomodation: Cheapest Location / Best Location ... Food: 'Ultra cheap'
+  // 'Cheap' 'Flexible'" plus "include only free attractions". Each one is a
+  // preference the traveller states rather than a figure the app invents, and
+  // each fills a slot Gemlyx would otherwise have to ask about. The food keys
+  // are FOOD_TIERS' own, so the panel and the guide's cost block cannot come
+  // to name the tiers differently. See utils/stayChoice.js.
+  const [intakeStay, setIntakeStay] = useState("");
+  const [intakeStayName, setIntakeStayName] = useState("");
+  const [intakeFood, setIntakeFood] = useState("");
+  const [intakeFreeOnly, setIntakeFreeOnly] = useState(false);
+  const stayNeedsName = stayProblem(intakeStay, intakeStayName);
   const [intakeBudgetText, setIntakeBudgetText] = useState("");
   // ── AND WHAT THAT IS IN KRONER, WHEN IT IS NOT KRONER ──────────
   //
@@ -29990,7 +30004,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         heading. The word optional stays, because it is the
                         thing that makes skipping it an informed choice, and it
                         moves to the line underneath where it belongs. */}
-                    <span style={{ fontSize: 13, fontWeight: 700, color: C.gold }}>✦ Click here for advanced options</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: C.gold }}>✦ Click here for quick adjustment of budget and preferences</span>
                     <span style={{ fontSize: 11, color: C.muted }}>optional, skip it and Gemlyx still plans</span>
                     <span style={{ marginLeft: "auto", fontSize: 12, color: C.gold, transform: intakeMoreOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s ease", display: "inline-block" }}>▾</span>
                   </button>
@@ -30028,6 +30042,60 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     );
                   })}
                 </div>
+                {/* ── WHERE THEY SLEEP ──────────────────────
+                    "Already booked" is the option that makes this row safe
+                    rather than the one that completes it: `stay` is a BLOCKING
+                    brief slot, so a row offering only the two unbooked choices
+                    would fill it with the app's own assumption. See
+                    utils/stayChoice.js. */}
+                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Where you sleep</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: stayIsBooked(intakeStay) ? 8 : 14 }}>
+                  {STAY_CHOICES.map(ch => {
+                    const on = intakeStay === ch.key;
+                    return (
+                      <button key={ch.key} onClick={() => { setIntakeStay(on ? "" : ch.key); if (on) setIntakeStayName(""); }}
+                        style={{ background: on ? C.gold : "none", border: `1px solid ${on ? C.gold : C.border}`, color: on ? "#0A0F1E" : C.light, borderRadius: 100, padding: "8px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                        {ch.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                {stayIsBooked(intakeStay) && (
+                  <div style={{ marginBottom: 14 }}>
+                    <input value={intakeStayName} onChange={e => setIntakeStayName(e.target.value)}
+                      placeholder="Which hotel? e.g. Hotel Jutlandia, Danhostel Aarhus"
+                      style={{ width: "100%", background: C.bg, border: `1px solid ${stayNeedsName ? C.accent : C.border}`, borderRadius: 10, padding: "10px 12px", fontSize: 13, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif", boxSizing: "border-box" }} />
+                    {stayNeedsName && (
+                      <div style={{ fontSize: 11.5, color: C.accent, lineHeight: 1.5, marginTop: 6 }}>{stayNeedsName.say}</div>
+                    )}
+                  </div>
+                )}
+
+                {/* ── AND WHAT THEY EAT ─────────────────────
+                    FOOD_TIERS' own keys and labels, not a second set written
+                    here: the panel and the guide's cost block have to name the
+                    tiers identically or a traveller picks Cheap on one screen
+                    and reads a different word on the next. */}
+                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>What you eat</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
+                  {FOOD_TIERS.map(t => {
+                    const on = intakeFood === t.key;
+                    return (
+                      <button key={t.key} onClick={() => setIntakeFood(on ? "" : t.key)}
+                        title={t.what}
+                        style={{ background: on ? C.gold : "none", border: `1px solid ${on ? C.gold : C.border}`, color: on ? "#0A0F1E" : C.light, borderRadius: 100, padding: "8px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                        {t.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <label style={{ display: "inline-flex", alignItems: "center", gap: 7, marginBottom: 14, fontSize: 12.5, color: intakeFreeOnly ? C.gold : C.light, cursor: "pointer" }}>
+                  <input type="checkbox" checked={intakeFreeOnly} onChange={e => setIntakeFreeOnly(e.target.checked)}
+                    style={{ accentColor: C.gold, cursor: "pointer" }} />
+                  Only attractions that are free to enter
+                </label>
+
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>{BUDGET_LABEL}</div>
                 <div style={{ marginBottom: 14 }}>
                   <input value={intakeBudgetText} onChange={e => setIntakeBudgetText(e.target.value)}
@@ -30186,6 +30254,14 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       // than in a distance rule the app invented. See
                       // utils/tripScopeChoice.js.
                       if (scopeSaid(intakeScope)) parts.push(scopeSaid(intakeScope));
+                      if (staySaid(intakeStay, intakeStayName)) parts.push(staySaid(intakeStay, intakeStayName));
+                      // The tier by NAME, so the guide's cost block and the chat
+                      // are talking about the same one. See utils/mealsEstimate.js.
+                      {
+                        const ft = FOOD_TIERS.find(t => t.key === intakeFood);
+                        if (ft) parts.push(`What they eat: ${ft.label}. ${ft.what}`);
+                      }
+                      if (intakeFreeOnly) parts.push(`Only attractions that are free to enter: do not plan a stop that charges admission, and say so if something they would expect to see is behind a ticket.`);
                       if (intakeDanish) parts.push(intakeDanish === "yes" ? `Language: speaks Danish` : `Language: does not speak Danish`);
                       if (intakePlacePref) parts.push(`Preference: ${intakePlacePref}`);
                       if (intakeTravelers.trim()) parts.push(`Who's traveling: ${intakeTravelers.trim()}`);

@@ -281,6 +281,7 @@ writeFileSync(entry, `
   export { guideClaims, guideClaimNote } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { resolveStopCoords } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { festivalScale } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
+  export { STAY_CHOICES, STAY_KEYS, stayChoiceOf, stayIsBooked, stayProblem, staySaid } from ${JSON.stringify(join(root, "src/utils/stayChoice.js"))};
   export { TRIP_SCOPES, TRIP_SCOPE_KEYS, scopeOf as tripScopeOf, scopeSaid, scopeOffersOtherTowns, scopeAllowsTown } from ${JSON.stringify(join(root, "src/utils/tripScopeChoice.js"))};
   export { MIN_DAY_DKK, BUDGET_LABEL, BUDGET_PLACEHOLDER, BUDGET_CURRENCIES, readDailyBudget, dailyInDkk, budgetProblem } from ${JSON.stringify(join(root, "src/utils/tripBudget.js"))};
   export { matchedPlaces, previewPools, mentionsPlace, parentTownOf, isDeparturePlace, isRejectedPlace, onlyAskedAbout, isPassedThrough, regionsNamed, placeIsInRegion, REGION_TOWN_CAP, regionPickLimit } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
@@ -318,7 +319,7 @@ writeFileSync(entry, `
   export { mergeForecasts, agreementNote, SPREAD_DISAGREES_C, weatherIsStale, weatherChanges, WEATHER_STALE_HOURS, dayWeather } from ${JSON.stringify(join(root, "src/utils/weather.js"))};
   export { WIND_FRESH, WIND_STRONG, WIND_GALE, WIND_STORM, RAIN_WET, RAIN_HEAVY, COLD_WET_C, FROST_C, HARD_FROST_C, HEAT_C, forecastWarnings, normalsWarnings, beltCrossing, dayCrossings, crossingWarning, dayWarnings, tripWeatherWarning, GREAT_BELT_TRAILER_MS, GREAT_BELT_CLOSED_MS } from ${JSON.stringify(join(root, "src/utils/weatherWarn.js"))};
   export { TILE_STYLES, tileConfig, tileCss, DEFAULT_TILE_STYLE, addTileLayer, styleRefused, __resetRefusedStyles, __setVectorLoader, TILE_ERROR_LIMIT, readRefusedMemo, writeRefusedMemo, REFUSED_TTL_MS } from ${JSON.stringify(join(root, "src/utils/mapTiles.js"))};
-  export { BASEMAP_STYLE, OPENFREEMAP_TILEJSON, OPENFREEMAP_ATTRIBUTION, OPENMAPTILES_LAYERS } from ${JSON.stringify(join(root, "src/utils/mapStyle.js"))};
+  export { BASEMAP_STYLE, OPENFREEMAP_TILEJSON, OPENFREEMAP_GLYPHS, OPENFREEMAP_ATTRIBUTION, OPENMAPTILES_LAYERS } from ${JSON.stringify(join(root, "src/utils/mapStyle.js"))};
   export { coverageByPart, thinnestParts, coverageSummary, discoveryFraming, isAlreadyCovered, splitAlreadyCovered } from ${JSON.stringify(join(root, "src/utils/discovery.js"))};
   export { DISCOVERY_TARGETS, targetById, coverageByTarget, framingForTarget, placeFromText, candidateFitsTarget, splitOffTarget, describeOffTarget, DISCOVERY_MONTHS, monthById, yearForMonth, framingForMonth, splitOffMonth, describeOffMonth, streetFraming, splitOffStreet, describeOffStreet } from ${JSON.stringify(join(root, "src/utils/discovery.js"))};
   export { checkPlan, planProblemsForPrompt, titlePromises, MAX_DAY_KM, dayCeilingKm } from ${JSON.stringify(join(root, "src/utils/planGate.js"))};
@@ -13265,7 +13266,11 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // father did not know it could be clicked, which the border and the chevron
   // fixed; what was still missing is the VERB, because "Optional: fine-tune the
   // plan" names what is behind the door and never says to open it.
-  ok("the panel says to click it", /✦ Click here for advanced options/.test(appSrc));
+  // RELABELLED 25 SEP 2026, on his own wording: "Click here for quick
+  // adjustment of budget and preferences". The verb is what both reports were
+  // about and it is still the first thing in the label; what changed is that
+  // the label now names the budget, because that is what the panel became.
+  ok("the panel says to click it", /✦ Click here for quick adjustment of budget and preferences/.test(appSrc));
   // The word stays, because it is what makes skipping it an informed choice.
   ok("and still says it is optional", /optional, skip it and Gemlyx still plans/.test(appSrc));
   ok("and says what skipping it costs", /skip it and Gemlyx still plans/.test(appSrc));
@@ -41766,14 +41771,19 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // style in mapStyle.js. The inverted raster stays as the LAST fallback, so a
   // bad night at OpenFreeMap degrades to the map the app shipped with rather
   // than to a dark box.
-  const { BASEMAP_STYLE, OPENFREEMAP_TILEJSON, OPENFREEMAP_ATTRIBUTION, OPENMAPTILES_LAYERS, __setVectorLoader, tileCss } = M;
+  const { BASEMAP_STYLE, OPENFREEMAP_TILEJSON, OPENFREEMAP_GLYPHS, OPENFREEMAP_ATTRIBUTION, OPENMAPTILES_LAYERS, __setVectorLoader, tileCss } = M;
   // ── AND THE DEFAULT WENT BACK, 14 SEP 2026 ──────────────────────
   // "I don't like that map though.. I do like a detailed map." The drawn style
   // is Denmark as a shape with no words on it, which answers the complaint
   // before it by removing the map. The raster is the default again while a
   // detailed dark style is built on the same vector source, and every row,
   // loader and fallback below stays exactly where it is.
-  is("the default row is the raster again", DEFAULT_TILE_STYLE, "dark");
+  // ── AND IT WENT BACK AGAIN, 25 SEP 2026 ─────────────────────────
+  // "I also hate this.. it looks so dull and dead." The raster was always a
+  // holding position while a detailed dark style got built on the same vector
+  // source, and the thing that was missing, words on the map, is now drawn.
+  is("the default row is the drawn map", DEFAULT_TILE_STYLE, "navy");
+  ok("and the raster is still there for the day OpenFreeMap declines", !!TILE_STYLES.dark);
   ok("and the drawn one is still there to go back to", !!TILE_STYLES.navy);
   ok("and it is drawn, not fetched as pictures", TILE_STYLES.navy.glStyle === BASEMAP_STYLE);
   is("from OpenFreeMap", TILE_STYLES.navy.url, OPENFREEMAP_TILEJSON);
@@ -41803,6 +41813,59 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // and a drawn row at the end could fail to start (no WebGL2, no chunk) with
     // nowhere to go, which is a dark box with pins on it.
     ok(`and ends on a raster row`, !TILE_STYLES[at].glStyle);
+  }
+  // ── THE WORDS, WHICH ARE WHY IT COMES BACK ──────────────────────
+  //
+  // "Denmark as a shape with no words on it" was the complaint that sent the
+  // default back to the raster. A symbol layer is the one kind that fails
+  // SILENTLY: no glyphs endpoint, or a font the host does not serve, and the
+  // text never appears while nothing errors. Both are pinned here.
+  {
+    const symbols = BASEMAP_STYLE.layers.filter(l => l.type === "symbol");
+    ok("the drawn map has place names now", symbols.length > 0);
+    ok("and a glyphs endpoint to draw them with", !!BASEMAP_STYLE.glyphs);
+    is("read off OpenFreeMap's own style, not guessed", BASEMAP_STYLE.glyphs, OPENFREEMAP_GLYPHS);
+    ok("which carries MapLibre's two placeholders",
+       /\{fontstack\}/.test(BASEMAP_STYLE.glyphs) && /\{range\}/.test(BASEMAP_STYLE.glyphs));
+    ok("and needs no key either", !/key|token/i.test(BASEMAP_STYLE.glyphs));
+    // A FONT THE HOST DOES NOT SERVE IS THE SAME SILENT FAILURE.
+    const FONTS = new Set(["Noto Sans Regular", "Noto Sans Bold", "Noto Sans Italic"]);
+    for (const l of symbols) {
+      const fonts = l.layout?.["text-font"] || [];
+      ok(`${l.id} asks for a font OpenFreeMap serves`, fonts.length > 0 && fonts.every(f => FONTS.has(f)));
+      ok(`${l.id} reads from a schema layer`, OPENMAPTILES_LAYERS.includes(l["source-layer"]));
+      ok(`${l.id} has something to say`, !!l.layout?.["text-field"]);
+    }
+    // ── DANISH FIRST, WHICH IS THE WHOLE POINT ────────────────────
+    // OpenFreeMap's own positron style writes coalesce(name_en, name), English
+    // first, and foreign names over Danish ones is what got the labels removed
+    // in the first place. The order here is the other way round.
+    const cityField = JSON.stringify(symbols.find(l => l.id === "place-city")?.layout?.["text-field"] || []);
+    ok("a place asks for its Danish name first", /"name:da"/.test(cityField));
+    ok("and never prefers an English one", !/name_en|name:en/.test(cityField));
+    ok("falling back to the local name, which in Denmark is the Danish one", /"name"/.test(cityField));
+    // AND THE LIST THINS AS IT ZOOMS OUT, or a national view is every village
+    // in the country piled on Copenhagen.
+    const byId = (id) => symbols.find(l => l.id === id);
+    ok("a city is named before a town", byId("place-city").minzoom < byId("place-town").minzoom);
+    ok("and a town before a village", byId("place-town").minzoom < byId("place-village").minzoom);
+    // THE WORDS GO LAST, so a road or a building cannot paint over a name.
+    const firstSymbol = BASEMAP_STYLE.layers.findIndex(l => l.type === "symbol");
+    ok("and every label sits above every drawn layer",
+       BASEMAP_STYLE.layers.slice(firstSymbol).every(l => l.type === "symbol"));
+  }
+  // AND THE ROADS READ. They were tuned to be unobtrusive at 0.2 opacity and
+  // overshot, which is half of "dull and dead".
+  {
+    const roads = BASEMAP_STYLE.layers.filter(l => /^road-/.test(l.id));
+    ok("there are roads at all", roads.length >= 4);
+    // Lifted from 0.2-0.3, which was half of "dull and dead", but kept under the
+    // half-opacity ceiling the assertion further down sets so the gold route
+    // still wins. The labels are what carry "detailed" now, not the tarmac.
+    ok("and none of them is a rumour", roads.every(l => Number(l.paint["line-opacity"]) >= 0.25));
+    // A MOTORWAY OUTRANKS A SERVICE ROAD, or the hierarchy is noise.
+    const op = (id) => Number(roads.find(l => l.id === id).paint["line-opacity"]);
+    ok("a motorway reads stronger than a minor road", op("road-motorway") > op("road-minor"));
   }
   ok("no drawn style carries the raster inversion", !TILE_STYLES.navy.filter);
   ok("so the css has no rule for it", !/gemlyx-tiles-navy/.test(tileCss()));
@@ -41916,7 +41979,11 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       ok("while the chart layer did get one", typeof layer.handlers.tileerror === "function");
       is("so the whole chain now resolves to the raster", tileConfig("chart").style, "dark");
       is("for a map that asked for nothing in particular too", tileConfig().style, "dark");
-      is("which is what the default is again", DEFAULT_TILE_STYLE, "dark");
+      // The walk above ENDS on the raster, which is its job as the last row.
+      // That is not the same as the raster being the default, and since 25 Sep
+      // it is not: the default is the drawn map and this chain is what happens
+      // when the drawn map is refused.
+      is("the raster is where a refused chain lands, not where it starts", DEFAULT_TILE_STYLE, "navy");
       __resetRefusedStyles();
       ok("the chart is offered again once the refusal is cleared", !styleRefused("chart"));
       // ── AND THE DEFAULT IS THE RASTER AGAIN, 14 SEP 2026 ────────
@@ -42193,16 +42260,30 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       ok("ferries are drawn", passes("ferry", { class: "ferry" }));
     }
     is("it is a version 8 style", BASEMAP_STYLE.version, 8);
-    // NOT ONE WORD. The whole complaint was the words. A symbol layer is the
-    // only way a MapLibre style can draw text or an icon, and glyphs and a
-    // sprite are the only way it could fetch a font or an icon sheet.
-    is("the style draws no symbol layer", BASEMAP_STYLE.layers.filter(l => l.type === "symbol").map(l => l.id), []);
-    ok("and asks for no glyphs and no sprite", !("glyphs" in BASEMAP_STYLE) && !("sprite" in BASEMAP_STYLE));
+    // ── AND THEN THE WORDS CAME BACK, 25 SEP 2026 ──────────────
+    // This pinned "not one word", written when the complaint was foreign names
+    // shouting over Danish ones. Removing every label answered that by removing
+    // the map, which is what the next complaint was about: "I don't like that
+    // map though.. I do like a detailed map", and then "it looks so dull and
+    // dead" of the raster that replaced it. The answer to both is words IN
+    // DANISH, not no words. The Danish-first assertion is with the label block
+    // above.
+    ok("the style draws place names", BASEMAP_STYLE.layers.some(l => l.type === "symbol"));
+    ok("and asks for the glyphs it needs to draw them", "glyphs" in BASEMAP_STYLE);
+    // STILL NO SPRITE. Nothing in this style draws an icon, and a sprite sheet
+    // nothing reads is a fetch on every map load for no pixels.
+    ok("and still asks for no sprite", !("sprite" in BASEMAP_STYLE));
     ok("every layer reads a layer OpenMapTiles publishes",
        BASEMAP_STYLE.layers.every(l => l.type === "background" || OPENMAPTILES_LAYERS.includes(l["source-layer"])));
     ok("from the one source", BASEMAP_STYLE.layers.every(l => l.type === "background" || l.source === "openmaptiles"));
-    ok("and no layer is a label layer of the schema",
-       BASEMAP_STYLE.layers.every(l => !/_name$|^place$|^poi$|^housenumber$|_label$/.test(l["source-layer"] || "")));
+    // `place` is read on purpose now, and only `place`. The rest of the schema's
+    // label layers stay out: road names, water names, house numbers and POIs are
+    // the detail that turned this into the wall of words the labels came off
+    // for. A traveller reads towns off a map of a country, not street names.
+    ok("and the only label layer it reads is place",
+       BASEMAP_STYLE.layers.every(l => !/_name$|^poi$|^housenumber$|_label$/.test(l["source-layer"] || "")));
+    ok("place is read only by symbol layers",
+       BASEMAP_STYLE.layers.every(l => l["source-layer"] !== "place" || l.type === "symbol"));
     is("layer ids are unique", new Set(BASEMAP_STYLE.layers.map(l => l.id)).size, BASEMAP_STYLE.layers.length);
     // The palette is the dark theme's. The sea is the page background; the land
     // is between the theme's surface and its border, so the map sits inside the
@@ -58713,7 +58794,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
         // more clear.. like 'click here for advanced options'." Second report
         // on this control: his father did not know it could be clicked, which
         // the border fixed, and the label still never said to open it.
-        ok("the label starts with the verb", /✦ Click here for advanced options/.test(appD));
+        ok("the label starts with the verb", /✦ Click here for quick adjustment of budget and preferences/.test(appD));
         ok("and optional moves to the line under it, where it still says skipping is fine",
            /optional, skip it and Gemlyx still plans/.test(appD));
       }
@@ -75714,6 +75795,78 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     const prev = readFileSync(join(root, "src/components/GuidePreviewScreen.jsx"), "utf8");
     ok("and the screen passes it to the matcher", /scope: intakeScope \}\);/.test(prev));
   }
+}
+
+// ── THE REST OF THE BUDGET PANEL ───────────────────────────────────
+//
+// Oliver, 25 Sep 2026: "Accomodation: Cheapest Location / Best Location ...
+// Food: 'Ultra cheap' 'Cheap' 'Flexible'" and "include only free attractions",
+// with the whole panel relabelled "quick adjustment of budget and preferences".
+{
+  const { STAY_CHOICES, STAY_KEYS, stayIsBooked, stayProblem, staySaid, FOOD_TIERS, readBrief } = M;
+
+  is("the three he asked for, plus the one that makes it safe", STAY_KEYS, ["cheapest", "best", "booked"]);
+  ok("only the booked one is a booking", stayIsBooked("booked") && !stayIsBooked("cheapest") && !stayIsBooked("best"));
+  ok("and nothing ticked is not a booking", !stayIsBooked(""));
+  // HIS LIMIT ON "CHEAPEST", in his own words: "not outside the city, but just
+  // a little further out from center". A bed an hour out of town is a different
+  // trip with a commute in it.
+  ok("cheapest says how far out is too far",
+     /still in the town and still walkable or a short ride in, never out in the country/.test(staySaid("cheapest", "")));
+
+  // ── A BOOKING WITH NO NAME IS NOT A BOOKING ─────────────────────
+  // `stay` is a BLOCKING brief slot. Ticked with the box empty, the app has
+  // filled a blocking slot with "somewhere", which is less than it knew before
+  // the tick.
+  ok("booked with no name is refused", !!stayProblem("booked", ""));
+  ok("and with a name is not", !stayProblem("booked", "Hotel Jutlandia"));
+  ok("whitespace is not a name", !!stayProblem("booked", "   "));
+  // AND THE UNBOOKED ONES ARE NEVER ASKED FOR A NAME.
+  is("cheapest needs no name", stayProblem("cheapest", ""), null);
+  is("and nothing ticked needs nothing", stayProblem("", ""), null);
+
+  // ── WHAT THE MODEL IS TOLD ──────────────────────────────────────
+  is("an untouched row says nothing at all", staySaid("", ""), "");
+  ok("a named booking reaches the model by name", /Hotel Jutlandia/.test(staySaid("booked", "Hotel Jutlandia")));
+  ok("and the days are told to build around it",
+     /Build the days around Hotel Jutlandia rather than proposing anywhere else to stay/.test(staySaid("booked", "Hotel Jutlandia")));
+  // BOTH UNBOOKED CHOICES SAY SO OUT LOUD, because that is the half that fills
+  // the blocking slot honestly rather than by assumption.
+  ok("cheapest states that nothing is booked", /have not booked anywhere/.test(staySaid("cheapest", "")));
+  ok("and so does best location", /have not booked anywhere/.test(staySaid("best", "")));
+
+  // ── AND THE FORM CARRIES ALL OF IT ──────────────────────────────
+  {
+    const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+    ok("the stay row is drawn from the module", /STAY_CHOICES\.map\(ch =>/.test(app));
+    ok("the name box only appears on a booking", /\{stayIsBooked\(intakeStay\) && \(/.test(app));
+    ok("and unticking a booking clears the name", /if \(on\) setIntakeStayName\(""\);/.test(app));
+    ok("the refusal is shown under the box", /\{stayNeedsName\.say\}/.test(app));
+    // THE FOOD ROW USES FOOD_TIERS' OWN KEYS AND LABELS. A second set written
+    // in the form would let a traveller pick Cheap on one screen and read a
+    // different word on the next.
+    ok("the food row is drawn from the tiers", /FOOD_TIERS\.map\(t =>/.test(app));
+    // Comments quote his words for these ("Ultra cheap"), so this reads the
+    // CODE only: what matters is that no tier label is hand-written into the
+    // row beside the ones FOOD_TIERS already publishes.
+    ok("and no second set of tier labels was written",
+       !/Ultra cheap/.test(stripComments(app)));
+    ok("the free-entry tick is there", /Only attractions that are free to enter/.test(app));
+    // ALL FOUR REACH THE MODEL.
+    ok("the stay reaches the intake line", /staySaid\(intakeStay, intakeStayName\)/.test(app));
+    ok("the food tier reaches it by name", /What they eat: \$\{ft\.label\}/.test(app));
+    ok("and the free-entry tick reaches it", /do not plan a stop that charges admission/.test(app));
+    // AND THE BUTTON SAYS WHAT IS BEHIND IT, in his words.
+    ok("the panel button is relabelled",
+       /Click here for quick adjustment of budget and preferences/.test(app));
+    ok("and the old label is gone", !/Click here for advanced options/.test(app));
+    // THE WORD OPTIONAL STAYS. It is what makes skipping an informed choice
+    // BEFORE the panel is opened, which nothing inside it can do.
+    ok("and skipping is still an informed choice", /optional, skip it and Gemlyx still plans/.test(app));
+  }
+  // The tiers themselves are unchanged and still sourced, which is what makes
+  // the row worth having rather than three words.
+  is("the tiers are the ones already published", FOOD_TIERS.map(t => t.key), ["self", "cheap", "flex"]);
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

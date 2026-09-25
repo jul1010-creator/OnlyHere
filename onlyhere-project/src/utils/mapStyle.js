@@ -14,8 +14,11 @@
 //
 // A vector tile can, because the words are a layer the style chooses to draw
 // or not. This file is that style: MapLibre style spec version 8, against
-// OpenFreeMap's OpenMapTiles-schema planet tiles, and it draws NO symbol layer
-// of any kind. No glyphs, no sprite, no place names, no road names.
+// OpenFreeMap's OpenMapTiles-schema planet tiles. It drew NO symbol layer of any
+// kind until 25 Sep 2026, which is why the default went back to the raster: a
+// map with no words on it is not a detailed map. It now draws place names, in
+// Danish first, and no road names, because a road name is not what a traveller
+// reads off a map of a country.
 //
 // ── WHY OPENFREEMAP ─────────────────────────────────────────────────
 // Measured from the live origin on 13 Sep 2026, in the same session:
@@ -46,6 +49,10 @@
 // map. mapTiles.js also reports this as the style's `url`, so the constant
 // lives here and both read it.
 export const OPENFREEMAP_TILEJSON = "https://tiles.openfreemap.org/planet";
+// The font endpoint from the same host, taken from OpenFreeMap's own style
+// rather than assumed. {fontstack} and {range} are MapLibre's placeholders and
+// are filled in by the renderer.
+export const OPENFREEMAP_GLYPHS = "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf";
 
 // The credit OpenFreeMap asks for, in their own words: "OpenFreeMap © OpenMapTiles
 // Data from OpenStreetMap". The links are theirs too. Rendered through Leaflet's
@@ -104,6 +111,20 @@ const ROAD = "#7C88A6";
 const MINOR = "#5A6A8C";
 const RAIL = "#A6B0C6";
 const BORDER = "#7C88A6";
+// ── AND THE WORDS, WHICH THE STYLE DID NOT HAVE ────────────
+//
+// Oliver, 14 Sep 2026, on the drawn map: "I don't like that map though.. I do
+// like a detailed map." The style answered a complaint about foreign region
+// names shouting over Danish ones by removing every label, which answers it by
+// removing the map. This is the other half, added 25 Sep.
+//
+// Light enough to read off LAND at 1.7:1, with a halo in the land colour so a
+// name crossing a road or a coastline still has an edge. Towns sit a step
+// quieter than cities so a national view reads as a hierarchy rather than a
+// wall of equal words.
+const LABEL = "#E8ECF6";
+const LABEL_QUIET = "#B9C2D8";
+const HALO = "#1B2440";
 
 // Line widths grow with the zoom the way MapLibre's own styles do, base 1.4
 // per zoom level, so a road is a hairline at national zoom and a real stroke
@@ -132,9 +153,49 @@ export const OPENMAPTILES_LAYERS = [
   "transportation_name", "place", "housenumber", "poi", "aerodrome_label",
 ];
 
+// ── A PLACE NAME, IN DANISH FIRST ─────────────────────
+//
+// OpenFreeMap's own positron style writes its city labels as
+// `coalesce(name_en, name)`, English first. That is precisely the thing Oliver
+// objected to when the labels came off: foreign names over Danish ones. So the
+// order is reversed here, `name:da` and then `name`, and in Denmark `name` is
+// already the Danish one because OSM's `name` is the local name. An English
+// exonym can only appear where nothing Danish exists at all.
+const placeName = ["coalesce", ["get", "name:da"], ["get", "name"]];
+const label = (id, classes, minzoom, color, size, extra = {}) => ({
+  id,
+  type: "symbol",
+  source: "openmaptiles",
+  "source-layer": "place",
+  minzoom,
+  filter: ["in", ["get", "class"], ["literal", classes]],
+  layout: {
+    "text-field": placeName,
+    "text-font": ["Noto Sans Regular"],
+    "text-size": size,
+    "text-max-width": 7,
+    "text-padding": 4,
+    ...(extra.layout || {}),
+  },
+  paint: {
+    "text-color": color,
+    // A halo in the land colour rather than black: a name crossing the coast
+    // keeps its edge without a dark smear following it out over the water.
+    "text-halo-color": HALO,
+    "text-halo-width": 1.3,
+    "text-halo-blur": 0.4,
+  },
+});
+
 export const BASEMAP_STYLE = {
   version: 8,
   name: "Gemlyx navy",
+  // ── WITHOUT THIS, EVERY LABEL BELOW DRAWS NOTHING ─────────
+  // A symbol layer with no glyphs endpoint is not an error MapLibre raises: the
+  // text simply never appears, which looks exactly like the data missing. Read
+  // off OpenFreeMap's own published style rather than guessed, along with the
+  // font name, which has to be one they actually serve.
+  glyphs: OPENFREEMAP_GLYPHS,
   sources: {
     openmaptiles: { type: "vector", url: OPENFREEMAP_TILEJSON },
   },
@@ -240,10 +301,10 @@ export const BASEMAP_STYLE = {
       filter: ["in", ["get", "class"], ["literal", ["path", "track"]]],
       paint: { "line-color": MINOR, "line-opacity": 0.18, "line-width": 0.8, "line-dasharray": [2, 2] },
     },
-    road("road-minor", ["minor", "service"], 13, MINOR, 0.25, grows(13, 0.5, 18, 3)),
-    road("road-secondary", ["secondary", "tertiary"], 10, ROAD, 0.2, grows(10, 0.5, 18, 4)),
-    road("road-primary", ["primary"], 8, ROAD, 0.24, grows(8, 0.5, 18, 5)),
-    road("road-motorway", ["motorway", "trunk"], 6, ROAD, 0.3, grows(6, 0.6, 18, 6)),
+    road("road-minor", ["minor", "service"], 13, MINOR, 0.28, grows(13, 0.5, 18, 3)),
+    road("road-secondary", ["secondary", "tertiary"], 10, ROAD, 0.32, grows(10, 0.5, 18, 4)),
+    road("road-primary", ["primary"], 8, ROAD, 0.38, grows(8, 0.5, 18, 5)),
+    road("road-motorway", ["motorway", "trunk"], 6, ROAD, 0.46, grows(6, 0.6, 18, 6)),
     {
       id: "building",
       type: "fill",
@@ -266,5 +327,19 @@ export const BASEMAP_STYLE = {
         ["!=", ["to-number", ["get", "maritime"]], 1]],
       paint: { "line-color": BORDER, "line-opacity": 0.3, "line-width": grows(4, 0.8, 12, 1.6), "line-dasharray": [3, 2] },
     },
+    // ── THE WORDS, LAST, SO THEY SIT OVER EVERYTHING ────────
+    //
+    // Four steps rather than one, so zooming out thins the list instead of
+    // piling every village on top of Copenhagen. minzoom is what does the
+    // thinning: a village only earns a name once the reader is close enough
+    // for it to mean something.
+    label("place-city", ["city"], 4, LABEL, grows(4, 11, 10, 17), {
+      layout: { "text-font": ["Noto Sans Bold"], "text-transform": "none" },
+    }),
+    label("place-town", ["town"], 7, LABEL, grows(7, 10, 12, 14)),
+    label("place-village", ["village"], 10, LABEL_QUIET, grows(10, 9.5, 14, 12)),
+    // Neighbourhoods only at street zoom, where they are the thing a traveller
+    // is standing in rather than a word on a country.
+    label("place-suburb", ["suburb", "neighbourhood"], 13, LABEL_QUIET, grows(13, 9.5, 17, 12)),
   ],
 };
