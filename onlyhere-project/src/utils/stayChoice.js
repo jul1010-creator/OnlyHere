@@ -65,7 +65,7 @@ export const stayIsBooked = (key) => !!stayChoiceOf(key)?.booked;
 // blocking slot filled with "somewhere".
 //
 // So this returns a problem rather than letting it through, and the row says
-// so where they can see it. Same shape as budgetProblem in utils/tripBudget.js.
+// so where they can see it.
 export const stayProblem = (key, name) => {
   if (!stayIsBooked(key)) return null;
   if (clean(name)) return null;

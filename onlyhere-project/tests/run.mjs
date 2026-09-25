@@ -284,7 +284,7 @@ writeFileSync(entry, `
   export { needsTier, proposedTier, BACKFILL_SORTS, BACKFILL_SORT_DEFAULT, sortForBackfill, tierSpread, backfillPrompt, readBackfill, missedByPass, proposeTiers } from ${JSON.stringify(join(root, "src/utils/tierBackfill.js"))};
   export { STAY_CHOICES, STAY_KEYS, stayChoiceOf, stayIsBooked, stayProblem, staySaid } from ${JSON.stringify(join(root, "src/utils/stayChoice.js"))};
   export { TRIP_SCOPES, TRIP_SCOPE_KEYS, scopeOf as tripScopeOf, scopeSaid, scopeOffersOtherTowns, scopeAllowsTown } from ${JSON.stringify(join(root, "src/utils/tripScopeChoice.js"))};
-  export { MIN_DAY_DKK, BUDGET_LABEL, BUDGET_PLACEHOLDER, BUDGET_CURRENCIES, readDailyBudget, dailyInDkk, budgetProblem } from ${JSON.stringify(join(root, "src/utils/tripBudget.js"))};
+  export { BED_TIERS, bedTier, EXCLUDED, estimateDay, estimateShort, estimateSays, estimateForBrief, ENABLE_LABEL, ENABLE_SAYS } from ${JSON.stringify(join(root, "src/utils/budgetEstimate.js"))};
   export { matchedPlaces, previewPools, mentionsPlace, parentTownOf, isDeparturePlace, isRejectedPlace, onlyAskedAbout, isPassedThrough, regionsNamed, placeIsInRegion, REGION_TOWN_CAP, regionPickLimit } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
   export { wantedCategories, groupKeyOf, foodIsPlanned } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
   export { saysWord, briefThemes, fitsBrief, rankOffers, offerReason, profilePull, THEME_WORDS, MODE_WORDS, THEMES_WITHOUT_WORDS, OFFER_LIMIT, essentialsForTrip, essentialsBlock, reservedEssential, nightlifeWanted, nightlifeNotAsked, RESERVED_THEME, ESSENTIALS_IN_GUIDE } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
@@ -75780,86 +75780,184 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   ok("and so does a failure", /that did not work/.test(appS));
 }
 
-// ── A DAILY BUDGET THAT HAS TO COVER A BED ─────────────────────────
+// ── A DAILY BUDGET, COMPUTED RATHER THAN TYPED ─────────────────────
 //
-// Oliver, 25 Sep 2026: "make it limit. So you can't write under like 300.
-// Because if we're planning their trip, then it's unlikely they have booked a
-// hotel somewhere (unless it's in Copenhagen), so we have to include that in
-// the price too. Write that it includes accomodation. And make people able to
-// write in other currencies too."
+// Oliver, 25 Sep 2026, retiring the field he had asked for that morning:
+// "remove this and put up the budget thing on the right side that I told you
+// earlier. Make a 'darkening' of everything that can change the budget. So you
+// have to click on the screen 'enable budget-estimate' or something. Like a
+// lockout."
 //
-// He arrived there by asking what the field meant, and the answer was nothing:
-// travellerBudget turned it into a tier and nothing added anything up, so a
-// traveller typed 200 and got a plan that could not house them for one night.
+// It is the better half of his own earlier idea, "make Gemlyx predict the
+// budget WHILE they tick off". A typed figure asked a traveller to price a
+// country they have not been to; the ticks ask what they want, and the pricing
+// is ours. It also retires the 300 kr floor without losing what the floor was
+// for: the bed is IN the figure by construction, so the number can no longer
+// be one that cannot buy a night.
 {
-  const { MIN_DAY_DKK, BUDGET_LABEL, BUDGET_PLACEHOLDER, readDailyBudget, dailyInDkk, budgetProblem } = M;
-  // A rate reader standing in for /api/fx, which is the only thing in the app
-  // allowed to know one. The figures here are a fixture and never ship.
-  const RATE = (c) => ({ DKK: 1, EUR: 7.46, USD: 6.9, GBP: 8.7, SEK: 0.68 })[c] ?? null;
+  const { estimateDay, estimateShort, estimateSays, estimateForBrief, BED_TIERS,
+          bedTier, ENABLE_LABEL, tierDayRate, GROCERY_DAY } = M;
 
-  is("the floor is his number", MIN_DAY_DKK, 300);
-  ok("and the label says what it covers", /where you sleep/i.test(BUDGET_LABEL));
-  ok("and the placeholder shows more than one currency",
-     /kr/i.test(BUDGET_PLACEHOLDER) && /EUR/.test(BUDGET_PLACEHOLDER) && /USD/.test(BUDGET_PLACEHOLDER));
+  // ── NOTHING UNTIL BOTH HALVES ARE ANSWERED ──────────────────────
+  // Half a day's costs shown as a day's is worse than no figure, because it
+  // reads as complete. The panel asks for the two ticks instead.
+  {
+    is("no bed and no food is no figure", estimateDay({}).ready, false);
+    is("and it names both", estimateDay({}).need, ["where you sleep", "what you eat"]);
+    is("a bed alone is not a day", estimateDay({ stay: "cheapest" }).ready, false);
+    is("and it names the half that is missing", estimateDay({ stay: "cheapest" }).need, ["what you eat"]);
+    is("food alone is not either", estimateDay({ food: "cheap" }).ready, false);
+    is("a stay nobody offers is not a stay", estimateDay({ stay: "palace", food: "cheap" }).ready, false);
+    ok("and the three real ones are the three on the buttons",
+       ["cheapest", "best", "booked"].every(k => !!bedTier(k)));
+  }
 
-  // ── WHAT A PERSON ACTUALLY TYPES ────────────────────────────────
-  is("a bare number is kroner, because the form is about Denmark",
-     [readDailyBudget("200").amount, readDailyBudget("200").currency], [200, "DKK"]);
-  ok("and it says the currency was assumed", readDailyBudget("200").assumedCurrency === true);
-  is("kr is read", [readDailyBudget("450 kr").amount, readDailyBudget("450 kr").currency], [450, "DKK"]);
-  is("and kroner spelled out", readDailyBudget("500 kroner pr. dag").currency, "DKK");
-  is("a symbol before the number", [readDailyBudget("\u20ac40").amount, readDailyBudget("\u20ac40").currency], [40, "EUR"]);
-  is("a code after it", readDailyBudget("70 USD").currency, "USD");
-  is("and a symbol with words round it", readDailyBudget("$50 a day").currency, "USD");
-  is("pounds too", readDailyBudget("\u00a325").currency, "GBP");
-  // A RANGE TAKES ITS LOW END, because a floor is about the worst case somebody
-  // is planning for.
-  is("a range is read at its low end", readDailyBudget("300-500 kr").amount, 300);
-  // A DANISH THOUSANDS SEPARATOR IS NOT A DECIMAL POINT. "1.500 kr" is fifteen
-  // hundred, and reading it as one and a half would block every Danish figure.
-  is("a thousands separator is not a decimal point", readDailyBudget("1.500 kr").amount, 1500);
-  is("words with no figure are not a budget", readDailyBudget("backpacker budget"), null);
-  is("and neither is nothing", readDailyBudget(""), null);
+  // ── A BAND, NEVER ONE NUMBER ────────────────────────────────────
+  // Every input is a band at its source: a Danhostel double is 600 to 700 by
+  // season and a durum is 53 to 87. One figure would invent a precision
+  // nobody measured, and a traveller who budgets to a midpoint and meets the
+  // top of the band is the person this panel exists to protect.
+  {
+    const est = estimateDay({ stay: "cheapest", food: "cheap" });
+    ok("a bed and food make a figure", est.ready);
+    ok("and the low end is under the high one", est.low < est.high);
+    ok("the bed is in it", est.parts.some(p => p.what === "a bed" && p.low === BED_TIERS.cheapest.low));
+    ok("and so is the food", est.parts.some(p => p.what === "food"));
+    ok("it reads as a band, per day", /to/.test(estimateShort(est)) && /kr a day/.test(estimateShort(est)));
+    // THE UNIT IS SAID EVERY TIME. A number in a corner with no unit is the
+    // one somebody reads as the trip total and budgets a week against.
+    ok("and never as a bare number", /a day/.test(estimateShort(est)));
+    is("nothing ready prints nothing", estimateShort(estimateDay({})), "");
+  }
 
-  // ── THE FLOOR ───────────────────────────────────────────────────
-  ok("200 kroner a day is refused", !!budgetProblem("200", RATE));
-  ok("and 450 is not", !budgetProblem("450 kr", RATE));
-  ok("exactly the floor passes", !budgetProblem(`${MIN_DAY_DKK} kr`, RATE));
-  ok("one krone under it does not", !!budgetProblem(`${MIN_DAY_DKK - 1} kr`, RATE));
-  // CONVERTED, so a traveller is held to the same floor in their own money.
-  ok("40 euros is under it once converted", !!budgetProblem("40 eur", RATE));
-  ok("and 60 euros is over", !budgetProblem("60 EUR", RATE));
-  is("and the refusal names both figures", true, /40 EUR, about 298 DKK/.test(budgetProblem("40 eur", RATE).say));
-  ok("and says why the bed is in it", /have not booked/.test(budgetProblem("200", RATE).say));
+  // ── THE FOOD HALF IS NOT RE-PRICED HERE ─────────────────────────
+  //
+  // mealsEstimate.js already answers what a day of each tier costs, with its
+  // own sources and its own answer to how often somebody eats. A second set of
+  // meal numbers in the estimator is the two-readers failure this codebase has
+  // paid for more than any other.
+  {
+    const cheap = estimateDay({ stay: "booked", food: "cheap" });
+    is("the food figure is the one the meals module already gives",
+       cheap.parts.find(p => p.what === "food").low, tierDayRate("cheap"));
+    // The grocery tier has no dayRate, because a basket is bought once rather
+    // than daily. Its day figure is Danmarks Statistik's full self-catering
+    // day, which the tier's own text already names as what a day costs when
+    // dinner is cooked too.
+    const self = estimateDay({ stay: "booked", food: "self" });
+    is("and the grocery tier tops out at the full self-catering day",
+       self.parts.find(p => p.what === "food").high, GROCERY_DAY.kr);
+    ok("which is cheaper than eating out", self.high < cheap.high);
+  }
 
-  // ── AND A RATE NOBODY COULD FETCH DOES NOT BLOCK ANYBODY ────────
-  // api/fx.js forbids a fallback table in its own words, so a currency the
-  // endpoint has not answered for converts to nothing. Refusing to plan a trip
-  // because a rate call failed is the worse answer.
-  is("an unconvertible currency is not refused", budgetProblem("20 CHF", RATE), null);
-  is("and neither is one with no reader at all", budgetProblem("20 EUR", null), null);
-  is("but kroner still work without a reader", budgetProblem("100 kr", null)?.dkk, 100);
-  // Words alone were never a figure and must never start being one.
-  is("a tier in words is left alone", budgetProblem("backpacker budget", RATE), null);
+  // ── A BED ALREADY PAID FOR IS NOT A COST ────────────────────────
+  {
+    const booked = estimateDay({ stay: "booked", food: "cheap" });
+    const paying = estimateDay({ stay: "cheapest", food: "cheap" });
+    ok("booked costs less than unbooked", booked.low < paying.low);
+    is("because the bed is nothing", BED_TIERS.booked.high, 0);
+    ok("and the sentence says why", /bed already/i.test(estimateSays(booked)));
+    ok("while an unbooked one says the bed is in it", /A bed and food/.test(estimateSays(paying)));
+    // BEST LOCATION IS DEARER THAN CHEAPEST, which is the one ordering this
+    // whole row promises and the only one a reader can check by eye.
+    ok("and a central room beats a budget one",
+       estimateDay({ stay: "best", food: "cheap" }).low > paying.low);
+  }
 
-  // ── AND THE FORM HAS TO ACT ON IT ───────────────────────────────
+  // ── AND WHAT IT LEAVES OUT IS NAMED ─────────────────────────────
+  //
+  // A bed and food fall every day whatever the trip does. Getting between
+  // towns and getting into places do not: one depends on a route nobody has
+  // built and the other on stops nobody has chosen. An estimate that says what
+  // it leaves out is worth more than a bigger one that does not.
+  {
+    const est = estimateDay({ stay: "cheapest", food: "cheap" });
+    ok("getting between towns is named as excluded", est.excludes.includes("getting between towns"));
+    ok("so are flights", est.excludes.includes("flights"));
+    ok("and entry, while it is unknown", est.excludes.includes("getting into places"));
+    ok("the sentence lists them", /leaves out/.test(estimateSays(est)));
+    // THE ONE TICK THAT MAKES IT MORE COMPLETE RATHER THAN CHEAPER. Free-only
+    // does not remove a cost from the total, it settles one at zero.
+    const free = estimateDay({ stay: "cheapest", food: "cheap", freeOnly: true });
+    ok("free attractions only turns entry from unknown into nothing",
+       !free.excludes.includes("getting into places") && free.entryFree);
+    ok("and the sentence says so", /Entry is nothing/.test(estimateSays(free)));
+    is("without changing the figure, because free is free", free.low, est.low);
+  }
+
+  // ── EVERY BED FIGURE CARRIES ITS SELLER ─────────────────────────
+  // The standard mealsEstimate.js set: a price a named seller charges on a
+  // stated day, never an average of Gemlyx's own library, which is a sample of
+  // places Oliver found interesting rather than a sample of Danish prices.
+  {
+    for (const key of ["cheapest", "best"]) {
+      const t = BED_TIERS[key];
+      ok(`${key} says where its figure came from`, /^https:\/\//.test(t.source));
+      ok(`${key} says when it was checked`, /^\d{4}-\d{2}-\d{2}$/.test(t.checkedAt));
+      ok(`${key} says it in words`, t.says.length > 40);
+      ok(`${key} is a band`, t.low < t.high && t.low > 0);
+    }
+    // The soft one is ADMITTED as soft rather than presented level with the
+    // other. No Danish body publishes a room rate a traveller can cite.
+    ok("and the softest figure says it is the softest", /softest/.test(BED_TIERS.best.says));
+  }
+
+  // ── WHAT THE PLANNER IS TOLD IS THE SAME FIGURE ─────────────────
+  //
+  // Everything downstream already reads a budget SENTENCE rather than a
+  // number, so the estimate fills the slot the field used to. One value, one
+  // reader: the panel and the brief cannot disagree because there is nothing
+  // left to disagree with.
+  {
+    const est = estimateDay({ stay: "cheapest", food: "cheap" });
+    const said = estimateForBrief(est);
+    ok("the brief gets the same kroner the corner shows",
+       said.includes(String(Math.round(est.low / 10) * 10)));
+    // AND IT IS MARKED AS AN ESTIMATE. A figure the traveller never stated
+    // must not reach the model as a limit they gave, or the guide will hold
+    // them to a number they never said.
+    ok("and it is marked as ours rather than theirs", /rather than a figure they gave/.test(said));
+    is("nothing ready tells the brief nothing", estimateForBrief(estimateDay({})), "");
+  }
+
+  // ── AND THE PANEL HAS TO ACT ON ALL OF IT ───────────────────────
   // An unrendered check is this codebase's signature defect: the module would
-  // be right and the button would still build the trip.
+  // be right and the screen would still show the old field.
   {
     const app = readFileSync(join(root, "src/App.jsx"), "utf8");
-    ok("the field is labelled from the module", /\{BUDGET_LABEL\}/.test(app));
-    ok("and takes its placeholder from it", /placeholder=\{BUDGET_PLACEHOLDER\}/.test(app));
-    ok("the refusal is shown under the field", /\{budgetTooLow\.say\}/.test(app));
-    ok("and the build button refuses it", /disabled=\{!!budgetTooLow\}/.test(app));
-    ok("and returns rather than building", /if \(budgetTooLow\) return;/.test(app));
-    // AND THE MODEL IS TOLD WHAT THE FIGURE COVERS, or the brief means what it
-    // meant before, which was nothing in particular.
-    ok("the line the model reads says the bed is in it",
-       /has to cover where they sleep as well as everything else/.test(app));
-    // THE RATE COMES FROM THE ONE PLACE ALLOWED TO KNOW ONE.
-    ok("the rate is fetched from the fx endpoint", /\/api\/fx\?to=\$\{encodeURIComponent\(budgetCurrency\)\}/.test(app));
-    ok("and no rate table was added anywhere",
-       !/EUR:\s*7\.4|USD:\s*6\.9/.test(readFileSync(join(root, "src/utils/tripBudget.js"), "utf8")));
+    // THE FIELD IS GONE, and with it the floor and the rate fetch it needed.
+    ok("the typed budget field is gone", !/BUDGET_LABEL|BUDGET_PLACEHOLDER/.test(app));
+    ok("and nothing is refused on a figure any more", !/budgetTooLow/.test(app));
+    // THE MODULE IT NEEDED IS UNREACHABLE. Asserted as "nothing imports it"
+    // rather than "the file is gone", because those are different claims and
+    // only the first is the one that matters: a file nothing imports is not in
+    // the bundle and cannot change what a traveller sees. It is also the only
+    // one that can be true on every machine at once, since a checkout that
+    // still has the file on disk is not a broken checkout.
+    ok("and nothing imports the module it needed",
+       !/from "\.\/utils\/tripBudget"|from "\.\/tripBudget"/.test(app)
+       && !readdirSync(join(root, "src/utils")).some(f =>
+            /tripBudget/.test(readFileSync(join(root, "src/utils", f), "utf8")) && f !== "tripBudget.js"));
+    // THE LOCKOUT, dimmed AND inert. A control that looks off and still
+    // answers a click is worse than one that does neither.
+    ok("the section is dimmed until it is on", /opacity: budgetOn \? 1 :/.test(app));
+    ok("the mouse cannot reach it", /pointerEvents: budgetOn \? "auto" : "none"/.test(app));
+    ok("nor the keyboard", /inert=\{budgetOn \? undefined : ""\}/.test(app));
+    ok("and a screen reader is not read a panel of dead chips", /aria-hidden=\{budgetOn \? undefined : true\}/.test(app));
+    ok("it starts off", /useState\(false\)[^\n]*\n?/.test(app) && /const \[budgetOn, setBudgetOn\] = useState\(false\);/.test(app));
+    ok("and one deliberate act turns it on", /onClick=\{\(\) => setBudgetOn\(true\)\}/.test(app));
+    // THE LABEL SAYS BUDGET AND PREFERENCES, because that is what is behind
+    // it. A button reading "enable budget estimate" over a panel that also
+    // decides how far the trip goes would do more than it says.
+    ok("the switch is labelled from the module", /\{ENABLE_LABEL\}/.test(app));
+    ok("and says what it does", /\{ENABLE_SAYS\}/.test(app));
+    ok("and covers preferences, not the budget alone", /preferences/.test(ENABLE_LABEL));
+    // THE FIGURE SITS WHERE HE POINTED: the panel's top right.
+    ok("the figure is in the corner", /\{estimateShort\(budgetEstimate\)\}/.test(app));
+    ok("and what it covers is spelled out", /\{estimateSays\(budgetEstimate\)\}/.test(app));
+    // AND THE BRIEF READS THE ESTIMATE RATHER THAN A SECOND COPY OF IT.
+    ok("the brief slot is the estimate", /const intakeBudgetText = estimateForBrief\(budgetEstimate\);/.test(app));
+    ok("and nothing else can set it", !/setIntakeBudgetText/.test(app));
   }
 }
 
