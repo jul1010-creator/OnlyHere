@@ -284,7 +284,7 @@ writeFileSync(entry, `
   export { needsTier, proposedTier, BACKFILL_SORTS, BACKFILL_SORT_DEFAULT, sortForBackfill, tierSpread, backfillPrompt, readBackfill, missedByPass, proposeTiers } from ${JSON.stringify(join(root, "src/utils/tierBackfill.js"))};
   export { STAY_CHOICES, STAY_KEYS, stayChoiceOf, stayIsBooked, stayProblem, staySaid } from ${JSON.stringify(join(root, "src/utils/stayChoice.js"))};
   export { TRIP_SCOPES, TRIP_SCOPE_KEYS, scopeOf as tripScopeOf, scopeSaid, scopeOffersOtherTowns, scopeAllowsTown } from ${JSON.stringify(join(root, "src/utils/tripScopeChoice.js"))};
-  export { BED_TIERS, bedTier, EXCLUDED, estimateDay, estimateShort, estimateSays, estimateForBrief, ENABLE_LABEL, ENABLE_SAYS } from ${JSON.stringify(join(root, "src/utils/budgetEstimate.js"))};
+  export { BED_TIERS, EXCLUDED, estimateDay, estimateShort, estimateSays, estimateForBrief, ENABLE_LABEL, ENABLE_SAYS, HOPS_PER_DAY, STOREBAELT, TRAIN_HOP, HOP_KM, FERRY_FARE, movingMode, hopCost, movingProblem, movingNote, LONG_HAUL_MODES, ROOM_KR, ROOM_SLEEPS_MAX, HOTEL_SLEEPS, bedPerNight, RECOMMENDED, recommendedModes, recommendedWhy, isRecommended } from ${JSON.stringify(join(root, "src/utils/budgetEstimate.js"))};
   export { matchedPlaces, previewPools, mentionsPlace, parentTownOf, isDeparturePlace, isRejectedPlace, onlyAskedAbout, isPassedThrough, regionsNamed, placeIsInRegion, REGION_TOWN_CAP, regionPickLimit } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
   export { wantedCategories, groupKeyOf, foodIsPlanned } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
   export { saysWord, briefThemes, fitsBrief, rankOffers, offerReason, profilePull, THEME_WORDS, MODE_WORDS, THEMES_WITHOUT_WORDS, OFFER_LIMIT, essentialsForTrip, essentialsBlock, reservedEssential, nightlifeWanted, nightlifeNotAsked, RESERVED_THEME, ESSENTIALS_IN_GUIDE } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
@@ -13279,11 +13279,23 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("and still says it is optional", /optional, skip it and Gemlyx still plans/.test(appSrc));
   ok("and says what skipping it costs", /skip it and Gemlyx still plans/.test(appSrc));
 
-  // Getting around asks how you MOVE. A tent is where you sleep.
+  // ── GETTING AROUND ASKS HOW YOU MOVE, AND NOW ALSO WHAT IT COSTS ──
+  //
+  // The tent went in August because it answers where you SLEEP. Oliver took
+  // two more on 25 Sep 2026, "Remove camper van and walking", and the same
+  // argument lands harder now the row is priced: walking cannot move anybody
+  // between Danish towns, so there was no honest figure to put against it, and
+  // a camper is a bed as much as a vehicle.
+  //
+  // NOTHING LEFT THE PIPELINE. travelModeKey still reads both out of free
+  // text and hopCost still prices a camper like a car, so somebody who types
+  // it gets all of it. Three tick boxes went, no capability did.
   const row = appSrc.match(/\{\["🚲 Bike"[^\]]*\]/);
   ok("the transport row was found", !!row);
   ok("tent is gone from the transport row", !/Tent/.test(row[0]));
-  ok("camper van stays, it is a vehicle", /🚐 Camper van/.test(row[0]));
+  ok("and so are the camper and walking", !/Camper|Walking/.test(row[0]));
+  ok("leaving the three that can be priced",
+     /🚲 Bike/.test(row[0]) && /🚆 Public transport/.test(row[0]) && /🚗 Car/.test(row[0]));
   // AND THE CAPABILITY IS UNTOUCHED. Removing a tick box must not remove the
   // routing, or someone who types it gets a worse trip than before.
   ok("the tent routing rule survives in the prompt", /tent → same real-campsite guidance/.test(appSrc));
@@ -75796,7 +75808,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
 // be one that cannot buy a night.
 {
   const { estimateDay, estimateShort, estimateSays, estimateForBrief, BED_TIERS,
-          bedTier, ENABLE_LABEL, tierDayRate, GROCERY_DAY } = M;
+          bedPerNight, ENABLE_LABEL, tierDayRate, GROCERY_DAY } = M;
 
   // ── NOTHING UNTIL BOTH HALVES ARE ANSWERED ──────────────────────
   // Half a day's costs shown as a day's is worse than no figure, because it
@@ -75809,7 +75821,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     is("food alone is not either", estimateDay({ food: "cheap" }).ready, false);
     is("a stay nobody offers is not a stay", estimateDay({ stay: "palace", food: "cheap" }).ready, false);
     ok("and the three real ones are the three on the buttons",
-       ["cheapest", "best", "booked"].every(k => !!bedTier(k)));
+       ["cheapest", "best", "booked"].every(k => !!bedPerNight(k, 2)));
   }
 
   // ── A BAND, NEVER ONE NUMBER ────────────────────────────────────
@@ -75821,7 +75833,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     const est = estimateDay({ stay: "cheapest", food: "cheap" });
     ok("a bed and food make a figure", est.ready);
     ok("and the low end is under the high one", est.low < est.high);
-    ok("the bed is in it", est.parts.some(p => p.what === "a bed" && p.low === BED_TIERS.cheapest.low));
+    ok("the bed is in it", est.parts.some(p => p.what === "a bed" && p.partyLow === bedPerNight("cheapest", 2).low));
     ok("and so is the food", est.parts.some(p => p.what === "food"));
     ok("it reads as a band, per day", /to/.test(estimateShort(est)) && /kr a day/.test(estimateShort(est)));
     // THE UNIT IS SAID EVERY TIME. A number in a corner with no unit is the
@@ -75855,7 +75867,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     const booked = estimateDay({ stay: "booked", food: "cheap" });
     const paying = estimateDay({ stay: "cheapest", food: "cheap" });
     ok("booked costs less than unbooked", booked.low < paying.low);
-    is("because the bed is nothing", BED_TIERS.booked.high, 0);
+    is("because the bed is nothing", bedPerNight("booked", 2).high, 0);
     ok("and the sentence says why", /bed already/i.test(estimateSays(booked)));
     ok("while an unbooked one says the bed is in it", /A bed and food/.test(estimateSays(paying)));
     // BEST LOCATION IS DEARER THAN CHEAPEST, which is the one ordering this
@@ -75892,10 +75904,11 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   {
     for (const key of ["cheapest", "best"]) {
       const t = BED_TIERS[key];
+      const room = bedPerNight(key, 2);
       ok(`${key} says where its figure came from`, /^https:\/\//.test(t.source));
       ok(`${key} says when it was checked`, /^\d{4}-\d{2}-\d{2}$/.test(t.checkedAt));
       ok(`${key} says it in words`, t.says.length > 40);
-      ok(`${key} is a band`, t.low < t.high && t.low > 0);
+      ok(`${key} is a band`, room.low < room.high && room.low > 0);
     }
     // The soft one is ADMITTED as soft rather than presented level with the
     // other. No Danish body publishes a room rate a traveller can cite.
@@ -75958,6 +75971,416 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     // AND THE BRIEF READS THE ESTIMATE RATHER THAN A SECOND COPY OF IT.
     ok("the brief slot is the estimate", /const intakeBudgetText = estimateForBrief\(budgetEstimate\);/.test(app));
     ok("and nothing else can set it", !/setIntakeBudgetText/.test(app));
+  }
+}
+
+
+// ── PASS 113: AND GETTING THERE, WHICH TWO ROWS DECIDE ─────────────
+//
+// Oliver, 25 Sep 2026, looking at the panel he had just asked for: "Shouldn't
+// this change too? If you decide to travel to another part of Zealand, then
+// you might add.. no? Calculating flixbus/kombardo/orange, that will be a
+// small extra." Then: "Bike Walking Public transport Car this also changes
+// budget.."
+//
+// Both right, and together they caught something worse than a missing number.
+// Those two rows sat inside a lockout whose whole promise is "everything that
+// can change the budget", and neither changed it.
+{
+  const { estimateDay, estimateSays, HOPS_PER_DAY, STOREBAELT, TRAIN_HOP, HOP_KM,
+          FERRY_FARE, movingMode, hopCost, movingProblem, movingNote, LONG_HAUL_MODES,
+          EXCLUDED, fuelCost, MODE_DAY_KM } = M;
+
+  const base = { stay: "cheapest", food: "cheap" };
+
+  // ── HOW OFTEN THEY MOVE IS THE SCOPE'S ANSWER ───────────────────
+  is("staying in one town, never", HOPS_PER_DAY.town, 0);
+  is("exploring, a hop every second day", HOPS_PER_DAY.explore, 0.5);
+  // AN ISLAND IS NOT A DAILY RATE AT ALL. One crossing out and one back
+  // whatever the trip's length, so dividing it by days would price a
+  // fortnight on Ærø as cheaper per day than a weekend on it.
+  is("and an island has no daily rate", HOPS_PER_DAY.island, undefined);
+
+  // ── WHAT A MOVE COSTS IS THE OTHER ROW'S ────────────────────────
+  {
+    // travelModeKey, not strings written in the estimator: the chips read
+    // "🚗 Car" and free text reads "jeg kører i bil", and one function in this
+    // app already knows those are the same answer.
+    is("a chip is read as its mode", movingMode(["🚗 Car"]), "car");
+    is("and so is Danish free text", movingMode(["jeg kører i bil"]), "car");
+    // SEVERAL TICKED MEANS THE DEAREST PAYS. Somebody with a car and a bike
+    // drives the long hops, so the car is what the hops cost.
+    is("a car and a bike is a car trip", movingMode(["🚲 Bike", "🚗 Car"]), "car");
+    is("nothing ticked is no mode", movingMode([]), null);
+  }
+
+  // ── A TRAIN, PRICED WHERE DSB PUBLISHES IT ──────────────────────
+  {
+    const hop = hopCost("public transport");
+    is("the low end is an Orange ticket", hop.low, TRAIN_HOP.low);
+    is("and the high end is short of walking up on the day", hop.high, TRAIN_HOP.high);
+    ok("and it is well under the walk-up fare", hop.high < TRAIN_HOP.walkUp);
+    ok("with DSB named", /dsb\.dk/.test(hop.source));
+  }
+
+  // ── A CAR, PRICED RATHER THAN QUOTED ────────────────────────────
+  //
+  // fuel.js holds the pump price and the consumption figure with their own
+  // sources. A second copy of either in the estimator is how two halves of one
+  // app come to disagree about the same drive.
+  {
+    const hop = hopCost("car");
+    const petrol = fuelCost({ measuredKm: HOP_KM }).kr;
+    // HELD AS WHAT IT IS AND NOT DIVIDED HERE. A tank of petrol is bought per
+    // car and a train ticket per person, and the division happens once, at the
+    // end, where it can be seen.
+    is("a car hop is a party cost", hop.per, "party");
+    is("the cheap end is the petrol, whole", hop.low, petrol);
+    // AND THE BRIDGE IS THE PART NOBODY EXPECTS. A traveller who has budgeted
+    // petrol has almost never budgeted 205 kr each way for the Storebælt.
+    is("and the dear end is the one that crosses the belt", hop.high, petrol + STOREBAELT.cash);
+    is("while a train ticket is bought one each", hopCost("public transport").per, "person");
+    ok("which is named, with the operator", /storebaelt\.dk/.test(hop.source) && /BroBizz/.test(hop.says));
+    // A camper is a vehicle on the road whatever else it is, so it prices like
+    // one even though the chip is gone.
+    is("a camper still prices like a car in free text", hopCost("camper").low, hop.low);
+  }
+
+  // ── A BIKE COSTS NOTHING AND WALKING IS NOT A HOP ───────────────
+  is("your own legs are free", hopCost("bike").high, 0);
+  // Pricing a walk at nothing would say a walking tour of the country is free
+  // rather than that it is not a trip anybody takes between Danish towns.
+  is("and nobody walks between towns", hopCost("walk"), null);
+
+  // ── WHICH ROLLS UP INTO THE DAY ─────────────────────────────────
+  {
+    const town = estimateDay({ ...base, scope: "town", transport: ["🚗 Car"] });
+    const explore = estimateDay({ ...base, scope: "explore", transport: ["🚗 Car"] });
+    ok("exploring costs more than staying put", explore.low > town.low);
+    ok("and the extra is named on the row", explore.parts.some(p => p.what === "getting between towns"));
+    ok("while staying put adds nothing for it", !town.parts.some(p => p.what === "getting between towns"));
+    // AND THE LIST OF WHAT IS LEFT OUT KEEPS UP. Saying a total leaves out
+    // what it has just added is how an honest list stops being read.
+    ok("a town trip still says travel is out", town.excludes.includes(EXCLUDED.travel));
+    ok("and an exploring one does not", !explore.excludes.includes(EXCLUDED.travel));
+    // LOCAL TRAVEL IS ALWAYS OUT, because the panel does not know the town: a
+    // Copenhagen day pass is 160 kr and most Danish town centres are walked.
+    ok("buses inside a town are out either way",
+       town.excludes.includes(EXCLUDED.local) && explore.excludes.includes(EXCLUDED.local));
+
+    // THE TWO MODES REALLY DO DIFFER, which is the whole point of the row.
+    const byBike = estimateDay({ ...base, scope: "explore", transport: ["🚲 Bike"] });
+    ok("exploring by bike costs less than by car", byBike.low < explore.low);
+    is("and the same as staying put, because the riding is free", byBike.low, town.low);
+  }
+
+  // ── AN ISLAND IS AN EXTRA, NOT A RATE ───────────────────────────
+  {
+    const isle = estimateDay({ ...base, scope: "island", transport: ["🚆 Public transport"] });
+    // Twice each: out and back, for every person walking on. The default
+    // party is two until the who's-travelling box says otherwise.
+    is("a foot passenger crosses twice, each", isle.ferry.kr, FERRY_FARE.footLow * 2 * 2);
+    ok("and it is named rather than divided into the day", !/ferry/i.test(estimateSays(isle)));
+    // A CAR ON A FERRY IS A DIFFERENT TICKET, and the dearer one by far.
+    const byCar = estimateDay({ ...base, scope: "island", transport: ["🚗 Car"] });
+    ok("taking the car across costs more", byCar.ferry.kr > isle.ferry.kr);
+    const byBike = estimateDay({ ...base, scope: "island", transport: ["🚲 Bike"] });
+    ok("and a bicycle costs least", byBike.ferry.kr < isle.ferry.kr);
+    ok("with the operator named", /aeroe-ferry/.test(FERRY_FARE.source));
+  }
+
+  // ── EXPLORING WITH NO WAY OF MOVING IS NOT A TRIP ───────────────
+  //
+  // Oliver, 25 Sep 2026: "if someone picks 'explore Denmark' then transport HAS
+  // TO ADD public transport or car."
+  {
+    const stuck = estimateDay({ ...base, scope: "explore", transport: [] });
+    is("nothing ticked and exploring is a question, not a figure", stuck.ready, false);
+    ok("and it says what to pick", /public transport, a car/.test(stuck.problem.say));
+    // ASKED BEFORE ANYTHING IS ADDED UP. Putting a confident daily cost on a
+    // trip nobody can take is the panel agreeing to plan it.
+    is("and no figure is produced at all", stuck.low, undefined);
+    is("staying in one town needs no mode", movingProblem("town", []), null);
+    is("nor does an island", movingProblem("island", []), null);
+  }
+
+  // ── BUT A BIKE ALONE IS A CYCLE TOUR, NOT A MISTAKE ─────────────
+  //
+  // He asked the question himself: "You can't bicycle from Copenhagen to
+  // Aalborg.. do you think? Or I guess some might want to do that?"
+  //
+  // They can. VisitDenmark promotes eleven signed NATIONAL cycle routes and N2
+  // is literally "Hanstholm - København", 439 km. N3, the Hærvejsruten, runs
+  // 449 km up the spine of Jutland. A hard rule would have refused one of the
+  // more Danish trips there is, and this app already plans for it: MODE_DAY_KM
+  // puts a bike at 60 km a day and modeReachKm already stops a cyclist being
+  // offered somewhere 400 km away for an afternoon.
+  {
+    is("a bike alone is allowed to explore", movingProblem("explore", ["🚲 Bike"]), null);
+    const note = movingNote("explore", ["🚲 Bike"]);
+    ok("and gets a sentence rather than a refusal", !!note && /cycle tour/.test(note.say));
+    ok("saying how far a day of riding goes", note.say.includes(String(MODE_DAY_KM.bike)));
+    // A WARNING TEACHES A CYCLIST NOTHING. A distance lets them decide whether
+    // the trip they want fits the days they have.
+    ok("and never that they cannot", !/cannot|can't|not possible/i.test(note.say));
+    is("a car needs no such note", movingNote("explore", ["🚗 Car"]), null);
+    is("nor a bike with a train beside it", movingNote("explore", ["🚲 Bike", "🚆 Public transport"]), null);
+    is("and neither does staying in one town", movingNote("town", ["🚲 Bike"]), null);
+    // The estimate carries it, or the module is right and the screen is silent.
+    ok("and the estimate carries it", !!estimateDay({ ...base, scope: "explore", transport: ["🚲 Bike"] }).note);
+    ok("the long-haul list is the two he named, plus the camper that prices like one",
+       LONG_HAUL_MODES.includes("public transport") && LONG_HAUL_MODES.includes("car")
+       && !LONG_HAUL_MODES.includes("bike") && !LONG_HAUL_MODES.includes("walk"));
+  }
+
+  // ── AND THE PANEL HAS TO SHOW ALL OF IT ─────────────────────────
+  {
+    const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+    // THE ROW MOVED INSIDE THE LOCKOUT. It used to sit below the fold, outside
+    // a switch that promises to cover everything that changes the figure.
+    const locked = app.slice(app.indexOf("const [budgetOn"), 0) || "";
+    const openAt = app.indexOf('<div style={{ position: "relative", marginBottom: budgetOn ? 0 : 14 }}>');
+    const closeAt = app.indexOf("{!budgetOn && (", openAt);
+    const inside = app.slice(openAt, closeAt);
+    ok("getting around is inside the lockout", /Getting around/.test(inside));
+    ok("and so is how far they want to go", /How far do you want to go/.test(inside));
+    // TWO CHIPS GONE. Walking cannot move anybody between Danish towns and a
+    // camper is a bed as much as a vehicle.
+    ok("walking and the camper are off the row",
+       !/🚶 Walking/.test(app) && !/🚐 Camper van/.test(app));
+    ok("and the three that are left are the three that price",
+       /\["🚲 Bike", "🚆 Public transport", "🚗 Car"\]/.test(app));
+    // THE ESTIMATE IS GIVEN BOTH ROWS, or the module is right and the panel
+    // hands it nothing to be right about.
+    ok("the estimate is given the scope and the transport",
+       /scope: intakeScope, transport: intakeTransport/.test(app));
+    ok("the refusal is shown", /\{budgetEstimate\.problem\.say\}/.test(app));
+    ok("so is the cycle-tour line", /\{budgetEstimate\.note\.say\}/.test(app));
+    ok("and the crossing, named on top", /budgetEstimate\.ferry\.kr/.test(app));
+  }
+}
+
+
+// ── PASS 114: A CAR IS STATIC AND SO, NEARLY, IS A ROOM ────────────
+//
+// Oliver, 25 Sep 2026, reading his own panel: "Arh true.. if you're 3 people,
+// then obviously car won't move in price.. It's static.."
+//
+// He is right, and once said out loud it was the wrong assumption in two
+// places rather than one. Everything here had been divided by a hardcoded two:
+// a party of three was told a car cost them more than it does, and a family of
+// four was told their beds cost nearly twice what they do.
+{
+  const { estimateDay, estimateSays, estimateForBrief, bedPerNight, ROOM_KR,
+          ROOM_SLEEPS_MAX, HOTEL_SLEEPS, hopCost, partyOf } = M;
+  const base = { stay: "cheapest", food: "cheap", scope: "explore", transport: ["🚗 Car"] };
+
+  // ── THE HEADCOUNT IS READ, NOT PARSED AGAIN ─────────────────────
+  //
+  // partyOf in costLedger.js already does this, already refuses a number that
+  // is not a headcount, and already caps the party. A second parse of the same
+  // sentence is the failure this codebase has paid for more than any other.
+  {
+    is("the box is read", estimateDay({ ...base, travellers: "3 friends" }).heads, 3);
+    is("and a family too", estimateDay({ ...base, travellers: "family of 4" }).heads, 4);
+    is("and travelling alone", estimateDay({ ...base, travellers: "just me" }).heads, 1);
+    // A NUMBER THAT IS NOT A HEADCOUNT IS NOT ONE HERE EITHER. "2 weeks with
+    // friends" is not two people, and partyOf already refuses it.
+    is("a number about something else is not a party", partyOf("2 weeks with friends"), null);
+    const vague = estimateDay({ ...base, travellers: "2 weeks with friends" });
+    is("so the estimate falls back", vague.heads, 2);
+    is("and says it was not told", vague.headsCounted, false);
+    ok("out loud, in the sentence", /say how many you are/.test(estimateSays(vague)));
+    ok("while a counted one says the number", /the 3 of you/.test(
+       estimateSays(estimateDay({ ...base, travellers: "3 friends" }))));
+  }
+
+  // ── A ROOM IS BOUGHT BY THE ROOM ────────────────────────────────
+  //
+  // Danhostel Nykøbing Mors publishes the curve and it is the clearest
+  // evidence in the file: a third person adds 75 kr to a room, not half of it
+  // again. So the per-head figure falls off a cliff as the party grows.
+  {
+    for (let n = 2; n < ROOM_SLEEPS_MAX; n++) {
+      const here = ROOM_KR[n], next = ROOM_KR[n + 1];
+      ok(`a ${n + 1}th bed costs more than a ${n}th room`, next.low > here.low);
+      // AND NOT MUCH MORE. That is the whole point: if an extra bed cost a
+      // whole extra room's worth there would be nothing to model.
+      ok(`but nothing like another room`, next.low < here.low * 1.5);
+    }
+    const alone = bedPerNight("cheapest", 1);
+    const two = bedPerNight("cheapest", 2);
+    const four = bedPerNight("cheapest", 4);
+    ok("one room holds a party of four", four.rooms === 1);
+    ok("and four pay far less each than two do", four.high / 4 < two.high / 2);
+    ok("while two pay far less each than one does", two.high / 2 < alone.high);
+    // PAST THE LARGEST PUBLISHED ROOM, ANOTHER ROOM. Pretending a party of
+    // eight fits in one would price them at almost nothing.
+    const six = bedPerNight("cheapest", ROOM_SLEEPS_MAX + 1);
+    is("six take two rooms", six.rooms, 2);
+    ok("and pay more in total than five do", six.low > bedPerNight("cheapest", ROOM_SLEEPS_MAX).low);
+    // A SOLO TRAVELLER TAKES A DORM, NOT A SINGLE. Pricing this branch at the
+    // single alone would say the cheapest bed in Denmark costs 550 kr.
+    ok("and one person's band reaches down to a dorm bed", ROOM_KR[1].low < ROOM_KR[2].low);
+  }
+
+  // ── AND A HOTEL ROOM DOES NOT STRETCH ───────────────────────────
+  // Which is what makes the middle tier behave differently: the hostel curve
+  // rewards a big party and the hotel one does not.
+  {
+    is("a hotel room sleeps two", HOTEL_SLEEPS, 2);
+    is("so three people take two rooms", bedPerNight("best", 3).rooms, 2);
+    const three = bedPerNight("best", 3), four = bedPerNight("best", 4);
+    is("and four take the same two", four.rooms, 2);
+    ok("so the third person is the expensive one", three.low / 3 > four.low / 4);
+    // THE HOSTEL TIER DOES NOT DO THAT, and the difference is real rather than
+    // an artefact: it is why one row is called cheapest and the other best.
+    ok("while a hostel keeps getting cheaper a head",
+       bedPerNight("cheapest", 3).low / 3 > bedPerNight("cheapest", 4).low / 4);
+  }
+
+  // ── WHICH MOVES THE FIGURE, WHICH IS THE POINT ──────────────────
+  {
+    const alone = estimateDay({ ...base, travellers: "just me" });
+    const pair = estimateDay({ ...base, travellers: "2 people" });
+    const four = estimateDay({ ...base, travellers: "family of 4" });
+    // ── EXCEPT AT THE BOTTOM OF THE BAND, AND THAT IS REAL ────────
+    //
+    // My own expectation here was wrong and the code was right. A solo
+    // traveller on the cheap tier takes a DORM BED, and a dorm is cheaper per
+    // head than half of a private double. So travelling alone is dearest at
+    // the top of the band, where both are private rooms, and cheapest at the
+    // bottom, where one of them is a bunk in a shared room.
+    //
+    // Asserting the other way round would have hidden a true and useful fact
+    // behind a tidy-looking rule.
+    ok("travelling alone is dearest a head, once both are private rooms", alone.high > pair.high);
+    ok("but a dorm bed undercuts half a double", alone.low < pair.low);
+    ok("and a family cheapest", four.low < pair.low);
+    // THE CAR IS THE STATIC ONE, and the sentence says so where he can read it.
+    ok("the car says it does not move with the headcount",
+       /same whoever is in it/.test(hopCost("car").says));
+    // EVERY PART SAYS WHICH KIND IT IS, so the division is inspectable rather
+    // than buried in one number.
+    const bed = four.parts.find(p => p.what === "a bed");
+    const food = four.parts.find(p => p.what === "food");
+    is("a bed is a party cost", bed.per, "party");
+    is("food is a person cost", food.per, "person");
+    ok("and a party cost keeps its undivided figure", bed.partyLow > bed.low);
+    is("while a person cost is already per person", food.partyLow, food.low);
+    // FOOD DOES NOT GET CHEAPER IN A CROWD. A traveller who saw every line
+    // fall with the headcount would rightly stop believing the figure.
+    is("food costs the same each however many there are",
+       four.parts.find(p => p.what === "food").low,
+       pair.parts.find(p => p.what === "food").low);
+  }
+
+  // ── AND A FERRY IS ONE TICKET OR SEVERAL ────────────────────────
+  // A car crosses once whoever is in it. A foot passenger is one each, which
+  // is the case where a big party costs MORE rather than less.
+  {
+    const byCar = estimateDay({ ...base, scope: "island", transport: ["🚗 Car"], travellers: "family of 4" });
+    const onFoot = estimateDay({ ...base, scope: "island", transport: ["🚆 Public transport"], travellers: "family of 4" });
+    ok("the car crosses on one ticket", byCar.ferry.forParty);
+    ok("and four on foot pay four fares", !onFoot.ferry.forParty
+       && onFoot.ferry.kr > estimateDay({ ...base, scope: "island", transport: ["🚆 Public transport"], travellers: "2 people" }).ferry.kr);
+  }
+
+  // ── AND THE BRIEF CARRIES THE COUNT ─────────────────────────────
+  {
+    ok("the planner is told how many it is for",
+       /for 4/.test(estimateForBrief(estimateDay({ ...base, travellers: "family of 4" }))));
+    ok("and is not told a number nobody gave",
+       !/for 2\b/.test(estimateForBrief(estimateDay({ ...base, travellers: "" }))));
+  }
+
+  // ── AND THE PANEL HANDS THE BOX OVER ────────────────────────────
+  // An unread field is this codebase's signature defect: the module would be
+  // right and the screen would still divide everything by two.
+  {
+    const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+    ok("the who's-travelling box reaches the estimate", /travellers: intakeTravelers/.test(app));
+    ok("and the crossing says who it is for", /budgetEstimate\.ferry\.forParty/.test(app));
+  }
+}
+
+
+// ── PASS 115: WHICH OF THE THREE FITS THE TRIP THEY DESCRIBED ──────
+//
+// Oliver, 25 Sep 2026: "transport has to be under 'How far do you want to
+// go'.. what transport is recommended. Public transport and Bike is obviously
+// recommended most places. And staying in one place is always a major place
+// like Aalborg, Copenhagen, Aarhus, or Odense."
+//
+// The second half is what makes the first answerable. A one-town trip is not a
+// trip to any of the 31 towns Gemlyx publishes: somebody spending a week in
+// one place picks a city with enough in it, and in Denmark that is four names.
+// In all four a car is the worst answer on the row.
+{
+  const { RECOMMENDED, recommendedModes, recommendedWhy, isRecommended, TRIP_SCOPE_KEYS,
+          movingProblem } = M;
+
+  // ── ONE ANSWER PER SCOPE, AND NONE WITHOUT ONE ──────────────────
+  ok("every scope has a recommendation", TRIP_SCOPE_KEYS.every(k => recommendedModes(k).length > 0));
+  ok("and every one says why", TRIP_SCOPE_KEYS.every(k => recommendedWhy(k).length > 40));
+  is("and no scope chosen recommends nothing", recommendedModes(""), []);
+  is("nor explains anything", recommendedWhy(""), "");
+
+  // ── A CITY TRIP IS NOT A CAR TRIP ───────────────────────────────
+  {
+    is("one town means the train and the bike", recommendedModes("town"), ["public transport", "bike"]);
+    ok("and not the car", !recommendedModes("town").includes("car"));
+    // The reason is the part that makes it a recommendation rather than taste.
+    ok("with the four cities named", /Copenhagen, Aarhus, Odense or Aalborg/.test(RECOMMENDED.town.why));
+    ok("and what a car costs you there", /parking/.test(RECOMMENDED.town.why));
+  }
+
+  // ── AN ISLAND IS THE CLEAREST CASE, AND THE FERRY AGREES ────────
+  {
+    is("an island means a bicycle", recommendedModes("island"), ["bike"]);
+    ok("and the fare is the argument", /25 kr for a bicycle and 142 for a car/.test(RECOMMENDED.island.why));
+  }
+
+  // ── AND EXPLORING IS THE ONE THAT WANTS A CAR OR A TRAIN ────────
+  {
+    const modes = recommendedModes("explore");
+    ok("both long-haul modes are recommended", modes.includes("car") && modes.includes("public transport"));
+    ok("and the bike is not, for crossing the country", !modes.includes("bike"));
+    // IT AGREES WITH THE RULE THAT REFUSES. A row recommending one thing while
+    // the check beside it demands another is two answers to one question.
+    ok("which is the same pair the check asks for",
+       modes.every(m => !movingProblem("explore", [m])));
+    // AND IT SAYS WHICH IS CHEAPER FOR WHOM, off the model rather than a mood.
+    ok("with the headcount as the deciding fact", /three of you/.test(RECOMMENDED.explore.why));
+  }
+
+  // ── THE CHIP'S OWN LABEL IS WHAT THE PANEL HAS ──────────────────
+  // travelModeKey again, so the panel does not have to know that
+  // "🚆 Public transport" is a mode key.
+  {
+    ok("a chip is matched by its label", isRecommended("town", "🚆 Public transport"));
+    ok("and so is the bike", isRecommended("island", "🚲 Bike"));
+    ok("while the car is not, on an island", !isRecommended("island", "🚗 Car"));
+    ok("and nothing is recommended before a scope is picked", !isRecommended("", "🚲 Bike"));
+  }
+
+  // ── A RECOMMENDATION, NOT A RESTRICTION ─────────────────────────
+  //
+  // Every chip stays pickable in every scope. Somebody driving to Copenhagen
+  // with a boot full of camping gear has a reason this panel cannot see, and a
+  // form that greys out their answer has stopped asking and started deciding.
+  {
+    const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+    const row = app.match(/\{\["🚲 Bike"[\s\S]{0,400}?\)\)\}/)[0];
+    ok("the recommended chips are marked", /isRecommended\(intakeScope, tr\)/.test(row));
+    ok("but none of them is disabled", !/disabled/.test(row));
+    ok("and the reason is printed once, under the row", /recommendedWhy\(intakeScope\)/.test(app));
+    // AND IT SITS UNDER THE SCOPE ROW, which is what he asked for: the two are
+    // one question and the recommendation only means anything in that order.
+    ok("the transport row comes after how far they want to go",
+       app.indexOf("How far do you want to go") < app.indexOf("Getting around"));
+    ok("and before where they sleep",
+       app.indexOf("Getting around") < app.indexOf("Where you sleep"));
   }
 }
 

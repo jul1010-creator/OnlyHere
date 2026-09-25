@@ -227,7 +227,7 @@ import { readPromises, brokenPromises, promiseNote, rebuildKeptMore, promiseRetr
 import { swapIsAllowed } from "./utils/stopSwap";
 import { factCheckCopy } from "./utils/factCheckCopy";
 import { matchedPlaces, previewPools, wantedCategories, mentionsPlace } from "./utils/previewMatch";
-import { estimateDay, estimateShort, estimateSays, estimateForBrief, ENABLE_LABEL, ENABLE_SAYS } from "./utils/budgetEstimate";
+import { estimateDay, estimateShort, estimateSays, estimateForBrief, isRecommended, recommendedWhy, ENABLE_LABEL, ENABLE_SAYS } from "./utils/budgetEstimate";
 import { TRIP_SCOPES, scopeSaid } from "./utils/tripScopeChoice";
 import { STAY_CHOICES, stayIsBooked, stayProblem, staySaid } from "./utils/stayChoice";
 import { FOOD_TIERS } from "./utils/mealsEstimate";
@@ -19333,8 +19333,9 @@ If the conversation only covers a single day or a few stops with no explicit day
   // The ticks ask what they want, which is a question they can answer, and the
   // pricing is ours. See utils/budgetEstimate.js.
   const budgetEstimate = budgetOn
-    ? estimateDay({ stay: intakeStay, food: intakeFood, freeOnly: intakeFreeOnly })
-    : { ready: false, need: [] };
+    ? estimateDay({ stay: intakeStay, food: intakeFood, freeOnly: intakeFreeOnly,
+                    scope: intakeScope, transport: intakeTransport, travellers: intakeTravelers })
+    : { ready: false, need: [], problem: null };
   const intakeBudgetText = estimateForBrief(budgetEstimate);
   const [intakeInterest, setIntakeInterest] = useState([]);
   const [intakeGemPref, setIntakeGemPref] = useState(null);
@@ -30156,6 +30157,50 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     );
                   })}
                 </div>
+                {/* ── AND HOW THEY MOVE, WHICH IS HALF OF WHAT IT COSTS ──
+                    Oliver, 25 Sep 2026: "Bike Walking Public transport Car
+                    this also changes budget.."
+
+                    It does, and this row used to sit below the panel's fold,
+                    outside a lockout that promises to cover everything that can
+                    change the figure. How FAR they go and HOW they go are one
+                    question with one price, and neither row can answer it
+                    alone: exploring by bike is nearly free and exploring by car
+                    crosses a toll bridge twice. So it moved up here, next to
+                    the row it is multiplied by. */}
+                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Getting around <span style={{ textTransform: "none", fontWeight: 400, color: C.muted }}>(pick as many as apply)</span></div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 16 }}>
+                  {/* ── THREE, AND THE ROW IS A COST NOW ──────────────
+                      Oliver, 25 Sep 2026: "Remove camper van and walking."
+
+                      Same argument that took the tent out of here a month ago,
+                      and it lands harder now that this row is priced. Walking
+                      cannot move anybody between Danish towns, so ticking it
+                      described a trip nobody takes and there was no honest
+                      figure to put against it. A camper is a bed as much as a
+                      vehicle, and this row does not ask where you sleep.
+
+                      NOTHING WAS REMOVED FROM THE PIPELINE. travelModeKey still
+                      reads "camper", "vandrerhjem" and every Danish spelling
+                      out of free text, and hopCost still prices a camper like a
+                      car, so somebody who types it still gets all of it. This
+                      deletes two tick boxes, not two capabilities. */}
+                  {["🚲 Bike", "🚆 Public transport", "🚗 Car"].map(tr => (
+                    <Pill key={tr} label={isRecommended(intakeScope, tr) ? `${tr} ✓` : tr} active={intakeTransport.includes(tr)} onClick={() => setIntakeTransport(intakeTransport.includes(tr) ? intakeTransport.filter(x => x !== tr) : [...intakeTransport, tr])} />
+                  ))}
+                </div>
+                {/* ── WHY THOSE ONES, ONCE, UNDER THE ROW ────────────
+                    A tick on a chip with no reason beside it is the app
+                    asserting taste. This says what most people do in the trip
+                    they just described, and every chip stays pickable: somebody
+                    driving to Copenhagen has a reason this panel cannot see. */}
+                {recommendedWhy(intakeScope) && (
+                  <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.55, marginTop: -10, marginBottom: 16 }}>
+                    ✓ {recommendedWhy(intakeScope)}
+                  </div>
+                )}
+
+
                 {/* ── WHERE THEY SLEEP ──────────────────────
                     "Already booked" is the option that makes this row safe
                     rather than the one that completes it: `stay` is a BLOCKING
@@ -30233,10 +30278,32 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     about any travel estimate is whether the bed is counted. */}
                 {budgetOn && (
                   <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", marginBottom: 14, background: C.bg }}>
-                    {budgetEstimate.ready ? (
+                    {budgetEstimate.problem ? (
+                      // ── A CONTRADICTION IS NOT A FIGURE ──────────
+                      // Exploring with no way of moving is a trip nobody can
+                      // take, so the panel asks rather than costing it.
+                      <div style={{ fontSize: 11.5, color: C.accent, lineHeight: 1.55 }}>{budgetEstimate.problem.say}</div>
+                    ) : budgetEstimate.ready ? (
                       <>
                         <div style={{ fontSize: 13, fontWeight: 700, color: C.gold, marginBottom: 3 }}>{estimateShort(budgetEstimate)}</div>
                         <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.55 }}>{estimateSays(budgetEstimate)}</div>
+                        {/* ── A CYCLE TOUR IS A PLAN, NOT A MISTAKE ──
+                            Denmark has eleven signed national cycle routes and
+                            the long ones run past 400 km. This says how far a
+                            day of riding goes rather than warning somebody off
+                            a trip the country is built for. */}
+                        {budgetEstimate.note && (
+                          <div style={{ fontSize: 11, color: C.light, lineHeight: 1.55, marginTop: 6 }}>{budgetEstimate.note.say}</div>
+                        )}
+                        {/* A crossing happens twice a trip whatever its length,
+                            so it is named on top rather than divided into a
+                            daily rate that would price a fortnight on Ærø as
+                            cheaper per day than a weekend on it. */}
+                        {budgetEstimate.ferry && (
+                          <div style={{ fontSize: 11, color: C.light, lineHeight: 1.55, marginTop: 6 }}>
+                            Plus about {budgetEstimate.ferry.kr} kr for the crossing there and back, {budgetEstimate.ferry.forParty ? "for the car" : `for the ${budgetEstimate.heads} of you`}, once for the whole trip. {budgetEstimate.ferry.says}
+                          </div>
+                        )}
                       </>
                     ) : (
                       <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.55 }}>
@@ -30306,28 +30373,6 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   <input value={intakeTravelers} onChange={e => setIntakeTravelers(e.target.value)}
                     placeholder="e.g. 4 friends, or 2 people + 1 joining a few days later"
                     style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", fontSize: 13, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif", boxSizing: "border-box" }} />
-                </div>
-
-                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Getting around <span style={{ textTransform: "none", fontWeight: 400, color: C.muted }}>(pick as many as apply)</span></div>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 16 }}>
-                  {/* ⛺ TENT IS GONE FROM THIS ROW. It was answering a different
-                      question: "Getting around" asks how you MOVE, and a tent is
-                      where you SLEEP, which this form never asks about. That
-                      mismatch is what made it read as awkward, not camping
-                      itself. Camper van stays, because it is a vehicle and a
-                      real answer here, and one that changes routing:
-                      it needs a car ferry for an island crossing and campsite
-                      overnight parking rather than hotels.
-
-                      NOTHING WAS REMOVED FROM THE PIPELINE. The system prompt
-                      still carries the full tent rule (real campsites only,
-                      Denmark allows no roadside camping, and flag when a day is
-                      walkable or bikeable between campsites), so a traveler who
-                      types "we're tenting it" still gets all of that. This
-                      deletes a tick box, not a capability. */}
-                  {["🚲 Bike", "🚶 Walking", "🚆 Public transport", "🚗 Car", "🚐 Camper van"].map(tr => (
-                    <Pill key={tr} label={tr} active={intakeTransport.includes(tr)} onClick={() => setIntakeTransport(intakeTransport.includes(tr) ? intakeTransport.filter(x => x !== tr) : [...intakeTransport, tr])} />
-                  ))}
                 </div>
 
                 <div style={{ display: "flex", gap: 20, marginBottom: 16, flexWrap: "wrap" }}>

@@ -42,6 +42,16 @@
 
 import { tierDayRate, foodTier, GROCERY_DAY, MEALS_A_DAY_DEFAULT } from "./mealsEstimate";
 import { stayIsBooked } from "./stayChoice";
+// The one reader of what a kilometre costs. fuel.js holds the pump price and
+// the consumption figure with their own sources, and a second copy of either
+// here is how two halves of one app come to disagree about the same drive.
+import { fuelCost } from "./fuel";
+import { travelModeKey, MODE_DAY_KM } from "./routeOrder";
+// The one reader of how many people are coming. costLedger.js already parses
+// that free-text box, refuses a number that is not a headcount, and caps the
+// party. A second parse of the same sentence here is the failure this codebase
+// keeps paying for.
+import { partyOf } from "./costLedger";
 
 const clean = (s) => String(s ?? "").trim();
 
@@ -73,28 +83,341 @@ const clean = (s) => String(s ?? "").trim();
 // mid-range room at 1,200 to 1,800. That is 600 to 900 a head.
 //
 // ALREADY BOOKED is nothing, and it is the only certain number in this file.
+// ── AND THE ROOM IS NEARLY STATIC TOO ───────────────────────────────
+//
+// Oliver, 25 Sep 2026, on the car: "if you're 3 people, then obviously car
+// won't move in price.. It's static.."
+//
+// Right, and once said out loud it is the wrong assumption in two places, not
+// one. A room is bought by the ROOM, and Danhostel Nykobing Mors publishes what
+// that really means by size, which is the clearest evidence in this file:
+//
+//   Low season  550 (1p)  600 (2p)  675 (3p)  700 (4p)  750 (5p)
+//   High season 650       700       775       800       850
+//
+// A third person adds 75 kr to a room, not half of it again. So the per-head
+// figure falls off a cliff as the party grows, 550 alone against 150 for five,
+// and a panel that divided one fixed "per person" number by nothing was telling
+// a family of four almost twice what their beds cost.
+//
+// PRICED PER ROOM HERE, DIVIDED AT THE END. The whole point of his correction
+// is that some costs do not answer to the headcount, so they are held as party
+// costs for as long as possible and turned into a per-person figure once, in
+// one place, where the division can be seen.
+export const ROOM_KR = {
+  // ── AND ONE PERSON DOES NOT TAKE A SINGLE ROOM ──────────────────
+  // A Danhostel single is 550 to 650 and a solo traveller on the cheap tier
+  // takes a dorm bed, which Copenhagen hostels sell from about 145. Pricing
+  // this branch at the single alone would tell somebody travelling by
+  // themselves that the cheapest bed in Denmark costs 550 kr, which is the
+  // figure for a room they did not ask for. The band spans both because both
+  // are real and the choice is theirs.
+  1: { low: 200, high: 650 },
+  2: { low: 575, high: 700 },
+  3: { low: 675, high: 775 },
+  4: { low: 700, high: 800 },
+  5: { low: 750, high: 850 },
+};
+// Past five, another room. A Danish hostel's largest published room is five,
+// and pretending a party of eight fits in one would price them at nothing.
+export const ROOM_SLEEPS_MAX = 5;
+
+// A hotel room sleeps two, so a party of three takes two of them and pays for
+// four beds. That is what makes the middle tier behave differently from the
+// hostel one: the hostel's curve rewards a big party and the hotel's does not.
+export const HOTEL_SLEEPS = 2;
+
 export const BED_TIERS = {
   cheapest: {
-    low: 200, high: 350,
-    source: "https://www.cabinn.com/",
+    perRoom: (heads) => ROOM_KR[Math.min(Math.max(1, heads), ROOM_SLEEPS_MAX)],
+    sleeps: ROOM_SLEEPS_MAX,
+    source: "https://danhostelmors.dk/priser/",
     checkedAt: "2026-09-25",
-    says: "CABINN publishes rooms from 575 kr a night, about 290 a head for two. A Danhostel double runs 600 to 700 by season plus 75 for linen. A Copenhagen dorm bed starts around 145.",
+    says: "Danhostel publishes 600 to 700 for a double by season, rising only 50 to 75 kr for each extra bed, plus 75 for linen, so a big party pays very little a head. CABINN sells rooms from 575 across Copenhagen, Aarhus, Odense and Aalborg, and a Copenhagen dorm bed starts around 145.",
   },
   best: {
-    low: 600, high: 900,
+    perRoom: () => ({ low: 1200, high: 1800 }),
+    sleeps: HOTEL_SLEEPS,
     source: "https://www.budgetyourtrip.com/denmark",
     checkedAt: "2026-09-25",
-    says: "A Danish double at about 1,215 kr a room on traveller-reported spend, and a central Copenhagen mid-range room at 1,200 to 1,800. Halved for two sharing. No Danish body publishes a room rate to cite, so this is the softest figure here.",
+    says: "A Danish double at about 1,215 kr a room on traveller-reported spend, and a central Copenhagen mid-range room at 1,200 to 1,800. A room sleeps two, so a third person is a second room. No Danish body publishes a room rate to cite, so this is the softest figure here.",
   },
   booked: {
-    low: 0, high: 0,
+    perRoom: () => ({ low: 0, high: 0 }),
+    sleeps: 1,
     source: "",
     checkedAt: "",
     says: "You have paid for it already, so it is not in this figure.",
   },
 };
 
-export const bedTier = (stay) => BED_TIERS[clean(stay)] || null;
+// What the whole party pays for its beds in a night, before anybody divides it.
+export const bedPerNight = (stay, heads = 2) => {
+  const tier = BED_TIERS[clean(stay)];
+  if (!tier) return null;
+  const people = Math.max(1, Math.floor(Number(heads)) || 1);
+  const rooms = Math.ceil(people / tier.sleeps);
+  // Everybody in full rooms but the last, which takes whoever is left. A party
+  // of six in hostel rooms is a five and a one, and the one pays a single.
+  const inLast = people - (rooms - 1) * tier.sleeps;
+  const full = tier.perRoom(tier.sleeps);
+  const last = tier.perRoom(inLast);
+  return {
+    low: (rooms - 1) * full.low + last.low,
+    high: (rooms - 1) * full.high + last.high,
+    rooms,
+    per: "party",
+    source: tier.source,
+    says: tier.says,
+  };
+};
+
+
+
+
+// ── AND GETTING THERE, WHICH TWO ROWS DECIDE BETWEEN THEM ───────────
+//
+// Oliver, 25 Sep 2026, looking at the panel: "Shouldn't this change too? If you
+// decide to travel to another part of Zealand, then you might add.. no?
+// Calculating flixbus/kombardo/orange, that will be a small extra." Then, a
+// minute later: "Bike Walking Public transport Car this also changes budget.."
+//
+// Both right, and together they catch something worse than a missing number.
+// Those two rows sat inside a lockout whose whole promise is "everything that
+// can change the budget", and neither of them changed it. A control behind
+// that switch that moves nothing is the switch lying about what it covers.
+//
+// THE COST IS A PRODUCT OF THE TWO ROWS AND NEITHER ALONE. How far they want
+// to go says how OFTEN they move. How they get around says what a move COSTS.
+// Exploring by bike is nearly free and exploring by car crosses a toll bridge,
+// and no single row can tell those apart.
+//
+// ── HOW OFTEN, WHICH IS THE ASSUMPTION AND IS SAID OUT LOUD ─────────
+//
+// Staying in one town, never. Exploring, a hop every second day: that is what
+// the word means, and a figure resting on it should say so rather than present
+// itself as measured. An island is the one that does not fit a daily rate at
+// all, and it is handled below.
+export const HOPS_PER_DAY = { town: 0, explore: 0.5 };
+
+// ── WHAT ONE HOP COSTS, PER PERSON ──────────────────────────────────
+//
+// PUBLIC TRANSPORT is the best sourced thing in this file, because DSB
+// publishes it. Copenhagen to Aarhus, the longest hop anybody makes here, is
+// an Orange ticket from 119 kr on DSB's own route page and 99 to 199 in
+// practice, against 400 to 500 walking up on the day. Flixbus and Kombardo
+// Expressen undercut the train on the same route, so the low end is if
+// anything generous. Most hops are shorter than this one.
+//
+// A CAR is priced rather than quoted, off fuel.js and a toll. A hop between
+// two Danish regions runs about 150 km, which fuel.js turns into litres and
+// kroner at the pump price it already holds.
+//
+// AND THE BRIDGE IS THE PART NOBODY EXPECTS. Storebælt is 205 kr one way with
+// a BroBizz and 235 paying by card, per CAR, in 2026. A trip that crosses
+// between Zealand and the rest of the country pays it twice, and a traveller
+// who has budgeted petrol has almost never budgeted that.
+//
+// A CAR COST IS PER CAR AND THE FIGURE IS PER PERSON, so it is halved for two
+// sharing, the same halving the hotel rows already make and for the same
+// reason. Somebody driving alone pays the whole car, and the sentence says so.
+export const STOREBAELT = {
+  bizz: 205, cash: 235,
+  source: "https://storebaelt.dk/priser-rabatter/privat/",
+  checkedAt: "2026-09-25",
+  says: "205 kr one way with a BroBizz and 235 by card in 2026, per car. A trip between Zealand and the rest of Denmark pays it both ways.",
+};
+
+export const TRAIN_HOP = {
+  low: 99, high: 199, walkUp: 450,
+  source: "https://www.dsb.dk/togture-i-danmark/kobenhavn-aarhus/",
+  checkedAt: "2026-09-25",
+  says: "DSB sells Copenhagen to Aarhus, the longest hop in the country, as an Orange ticket from 119 kr, and 99 to 199 in practice against 400 to 500 walking up on the day. Flixbus and Kombardo Expressen undercut it on the same route.",
+};
+
+// A typical hop between two Danish regions. Not a measured route: the panel
+// knows nothing about where they are going yet, and the guide measures the
+// real one later. Stated as the assumption it is.
+export const HOP_KM = 150;
+
+// ── AND A CROSSING, WHICH IS NOT A DAILY RATE ───────────────────────
+//
+// An island trip is one crossing out and one back, whatever its length, so
+// folding it into a figure per day would need a trip length the panel does not
+// always have and would price a fortnight on Aero as cheaper per day than a
+// weekend on it. It is named as an extra on top instead, with what a crossing
+// really costs.
+//
+// PUBLISHED, BOTH OF THEM, on the operators' own 2026 price pages. Aero is 68
+// for a foot passenger, 25 for a bicycle and 142 for a car under six metres.
+// The Aarhus to Samso fast ferry is 112 on foot and 37 with a bike. Bornholm
+// and the long crossings run higher, which is why this is a band and why the
+// guide prices the real one once it knows which island.
+export const FERRY_FARE = {
+  footLow: 68, footHigh: 112, bikeLow: 25, bikeHigh: 37, carLow: 142,
+  source: "https://aeroe-ferry.dk/en/prices",
+  checkedAt: "2026-09-25",
+  says: "Aero charges 68 kr for a foot passenger, 25 for a bicycle and 142 for a car under six metres. The Aarhus to Samso fast ferry is 112 on foot. Bornholm and the long crossings run higher.",
+};
+
+// travelModeKey, not a set of strings written here: the chips read "🚗 Car"
+// and free text reads "jeg korer i bil", and that function is already the one
+// thing in this app that knows they are the same answer.
+//
+// SEVERAL TICKED MEANS THE DEAREST ONE PAYS, which is the opposite of how
+// routeOrder picks a mode for distance and is right for the same reason.
+// Somebody with a car and a bike drives the long hops, so the car is what the
+// hops cost, and tickedTravelMode already picks the fastest, which here is
+// also the dearest.
+const MODE_ORDER = ["car", "camper", "public transport", "bike", "walk"];
+export const movingMode = (transport) => {
+  const list = Array.isArray(transport) ? transport : [transport];
+  const keys = [...new Set(list.map(t => travelModeKey(t)).filter(Boolean))];
+  if (!keys.length) return null;
+  return MODE_ORDER.find(k => keys.includes(k)) || keys[0];
+};
+
+// Per person, for one hop between towns. Null when the mode cannot make one:
+// nobody walks between Danish towns, and pricing it at nothing would say a
+// walking tour of the country is free rather than that it is not a trip.
+// ── HELD AS WHAT IT IS, NOT DIVIDED HERE ────────────────────────────
+//
+// A train ticket is bought per person and a tank of petrol is bought per car,
+// and the difference is the whole of Oliver's correction. So each cost says
+// which it is and the division happens once, at the end, where it can be seen.
+// The first version divided inside this function and defaulted to two, which
+// is how a party of three got told a car cost them more than it does.
+export const hopCost = (mode) => {
+  const key = travelModeKey(mode) || mode;
+  if (key === "walk") return null;
+  if (key === "bike") {
+    return { low: 0, high: 0, per: "person", says: "Your own legs, so a hop costs nothing but the day it takes." };
+  }
+  if (key === "public transport") {
+    return { low: TRAIN_HOP.low, high: TRAIN_HOP.high, per: "person", says: TRAIN_HOP.says, source: TRAIN_HOP.source };
+  }
+  if (key === "car" || key === "camper") {
+    const fuel = fuelCost({ measuredKm: HOP_KM });
+    const petrol = fuel?.kr ?? 0;
+    return {
+      low: petrol,
+      // The dear end of a car hop is the one that crosses the belt, and it is
+      // the whole reason this branch is worth having.
+      high: petrol + STOREBAELT.cash,
+      per: "party",
+      says: `About ${petrol} kr of petrol for a ${HOP_KM} km hop. ${STOREBAELT.says} A car costs the same whoever is in it, so this is the one that gets cheaper the more of you there are.`,
+      source: STOREBAELT.source,
+    };
+  }
+  return null;
+};
+
+// ── AND EXPLORING NEEDS SOMETHING THAT COVERS THE DISTANCE ──────────
+//
+// Oliver, 25 Sep 2026: "if someone picks 'explore Denmark' then transport HAS
+// TO ADD public transport or car. You can still include bicycle. But you need
+// one of those two."
+//
+// Half of that is right and the half that is not is worth writing down,
+// because he asked the question himself a minute later: "You can't bicycle
+// from Copenhagen to Aalborg.. do you think? Or I guess some might want to do
+// that?"
+//
+// They can, and it is not a fringe thing. VisitDenmark promotes eleven signed
+// NATIONAL cycle routes, and N2 is literally "Hanstholm - Kobenhavn", 439 km
+// from north-west Jutland to the capital. N3, the Haervejsruten, runs 449 km
+// up the spine of Jutland from Padborg to Frederikshavn. This app already
+// plans for it: MODE_DAY_KM puts a bike at 60 km a day, so a route like that
+// is a week of riding rather than an impossibility, and modeReachKm already
+// stops a cyclist being offered somewhere 400 km away for an afternoon.
+//
+// So a hard rule would have refused one of the more Danish trips there is.
+//
+// ── WHICH LEAVES THE HALF THAT IS RIGHT ─────────────────────────────
+//
+// Exploring with NOTHING ticked is the real problem, and it is a different
+// one: the planner has no idea how fast this person moves, so it cannot build
+// a route at all and cannot cost one. That gets asked.
+//
+// Bike only gets a SENTENCE rather than a refusal. It is a cycle tour, it
+// covers less ground, and saying so is worth more than a wrong "no".
+export const LONG_HAUL_MODES = ["public transport", "car", "camper"];
+
+export const movingProblem = (scope, transport) => {
+  if (clean(scope) !== "explore") return null;
+  const keys = (Array.isArray(transport) ? transport : [transport])
+    .map(t => travelModeKey(t)).filter(Boolean);
+  if (keys.length) return null;
+  return { say: "Exploring Denmark means moving between towns, so say how: public transport, a car, or a bike if you are riding it." };
+};
+
+// Not a problem, and not shown as one. A cyclist reading a warning about their
+// own plan learns nothing; a cyclist reading how far a day's riding goes can
+// decide whether the trip they want fits the days they have.
+export const movingNote = (scope, transport) => {
+  if (clean(scope) !== "explore") return null;
+  const keys = (Array.isArray(transport) ? transport : [transport])
+    .map(t => travelModeKey(t)).filter(Boolean);
+  if (!keys.length || keys.some(k => LONG_HAUL_MODES.includes(k))) return null;
+  if (!keys.includes("bike")) return null;
+  return {
+    say: `A cycle tour, then. Denmark has eleven signed national routes and the long ones run 400 km and more, so reckon on about ${MODE_DAY_KM.bike} km a day and a trip that covers less ground than the same days in a car. Add public transport as well if you would rather ride some days and train the others.`,
+  };
+};
+
+
+// ── AND WHICH OF THEM FITS THE TRIP THEY JUST DESCRIBED ─────────────
+//
+// Oliver, 25 Sep 2026: "transport has to be under 'How far do you want to
+// go'.. what transport is recommended. Public transport and Bike is obviously
+// recommended most places. And staying in one place is always a major place
+// like Aalborg, Copenhagen, Aarhus, or Odense."
+//
+// The second half is the part that makes this answerable. A one-town trip is
+// not a trip to any of the 31 towns Gemlyx publishes: somebody who wants a
+// whole holiday in one place picks a city with enough in it, which in Denmark
+// is a very short list. And in those four a car is the worst answer available.
+// Copenhagen's centre is a zone system with paid street parking, the other
+// three are compact enough to cross on foot, and every one of them has a metro,
+// a letbane or a bus network a visitor can use from their phone.
+//
+// AN ISLAND IS THE CLEAREST CASE OF THE FOUR. Taking a car across costs 142 kr
+// each way on Aero against 25 for a bicycle, and the islands worth a week are
+// the ones people cycle.
+//
+// EXPLORING IS THE ONLY ONE THAT WANTS A CAR OR A TRAIN, and it wants one of
+// them rather than preferring either: movingProblem already says so.
+//
+// ── A RECOMMENDATION, NOT A RESTRICTION ─────────────────────────────
+//
+// Every chip stays pickable in every scope. Somebody driving to Copenhagen
+// with a boot full of camping gear has a reason this panel cannot see, and a
+// form that greys out their answer has stopped asking and started deciding.
+// The mark says what most people do; the tick is still theirs.
+export const RECOMMENDED = {
+  town: {
+    modes: ["public transport", "bike"],
+    why: "A one-town trip means somewhere with enough in it for the week, so Copenhagen, Aarhus, Odense or Aalborg. All four are walkable in the middle and have a metro, a letbane or buses you can use from your phone, and a car in any of them is parking charges and a zone map you did not come here for.",
+  },
+  island: {
+    modes: ["bike"],
+    why: "Islands are what Denmark does best on two wheels, and the ferry agrees: Aero charges 25 kr for a bicycle and 142 for a car.",
+  },
+  explore: {
+    modes: ["public transport", "car"],
+    why: "Crossing the country needs one of these. A train is cheaper on your own and a car is cheaper once there are three of you, since the petrol and the bridge cost the same whoever is in it.",
+  },
+};
+
+export const recommendedModes = (scope) => RECOMMENDED[clean(scope)]?.modes || [];
+export const recommendedWhy = (scope) => RECOMMENDED[clean(scope)]?.why || "";
+
+// Whether a particular chip is one of them. Takes the chip's own label, so the
+// panel does not have to know that "🚆 Public transport" is a mode key.
+export const isRecommended = (scope, chip) => {
+  const key = travelModeKey(chip);
+  return !!key && recommendedModes(scope).includes(key);
+};
 
 // ── WHAT THE FIGURE IS NOT ──────────────────────────────────────────
 //
@@ -104,6 +427,10 @@ export const bedTier = (stay) => BED_TIERS[clean(stay)] || null;
 export const EXCLUDED = {
   entry: "getting into places",
   travel: "getting between towns",
+  // Buses and metros inside one town, which is the one travel cost this cannot
+  // reach: a Copenhagen City Pass is 160 kr a day and most Danish town centres
+  // are walkable, and the panel does not know which town yet.
+  local: "buses and metros inside a town",
   flights: "flights",
 };
 
@@ -118,13 +445,31 @@ export const EXCLUDED = {
 // NULL UNTIL BOTH HALVES ARE ANSWERED. A bed with no food, or food with no
 // bed, is half a day's costs shown as a day's, which is worse than no figure:
 // it reads as complete. The panel asks for the two ticks instead.
-export const estimateDay = ({ stay = "", food = "", freeOnly = false, meals = MEALS_A_DAY_DEFAULT } = {}) => {
-  const bed = bedTier(stay);
+export const estimateDay = ({ stay = "", food = "", freeOnly = false, scope = "", transport = [], travellers = "", heads = null, meals = MEALS_A_DAY_DEFAULT } = {}) => {
+  // ── HOW MANY OF THEM, READ ONCE ─────────────────────────────────
+  //
+  // partyOf, not a second parse of the same sentence: it already refuses a
+  // number that is not a headcount ("2 weeks with friends" is not two people)
+  // and caps the party. An unreadable box falls back to two and the sentence
+  // says so, because two is the commonest trip and a silent assumption is the
+  // thing this whole panel exists to stop.
+  const said = partyOf(travellers);
+  const people = Math.max(1, Math.floor(Number(heads ?? said?.heads ?? 2)) || 1);
+  const counted = !!(heads ?? said?.heads);
+
+  const bed = bedPerNight(stay, people);
   const tier = clean(food) ? foodTier(food) : null;
+  // ── A CONTRADICTION IS NOT A FIGURE ─────────────────────────────
+  // Asked before anything is added up. Exploring with no way to cross the
+  // country is a trip nobody can take, and putting a confident daily cost on
+  // it would be the panel agreeing to plan it.
+  const cannot = movingProblem(scope, transport);
+  if (cannot) return { ready: false, need: [], problem: cannot };
   if (!bed || !tier) {
     return {
       ready: false,
       need: [!bed ? "where you sleep" : "", !tier ? "what you eat" : ""].filter(Boolean),
+      problem: null,
     };
   }
   // tierDayRate, not a second set of meal numbers. It returns null for the
@@ -135,25 +480,77 @@ export const estimateDay = ({ stay = "", food = "", freeOnly = false, meals = ME
   const rate = tierDayRate(tier.key, meals);
   const foodLow = rate == null ? Math.round(GROCERY_DAY.kr / 3) : rate;
   const foodHigh = rate == null ? GROCERY_DAY.kr : Math.round(rate * 1.6);
-  const parts = [
-    { what: "a bed", low: bed.low, high: bed.high, source: bed.source, says: bed.says },
-    { what: "food", low: foodLow, high: foodHigh, source: tier.source || "", says: tier.basis || "" },
+
+  const raw = [
+    { what: "a bed", low: bed.low, high: bed.high, per: "party", rooms: bed.rooms, source: bed.source, says: bed.says },
+    { what: "food", low: foodLow, high: foodHigh, per: "person", source: tier.source || "", says: tier.basis || "" },
   ];
+
+  // ── GETTING BETWEEN TOWNS ───────────────────────────────────────
+  // Only where the scope says they move at all, and only priced where the
+  // mode is known. Staying in one town adds nothing, which is the honest
+  // answer rather than a small number for the look of it.
+  const mode = movingMode(transport);
+  const hops = HOPS_PER_DAY[clean(scope)];
+  const hop = mode ? hopCost(mode) : null;
+  if (hops > 0 && hop) {
+    raw.push({
+      what: "getting between towns",
+      low: hop.low * hops,
+      high: hop.high * hops,
+      per: hop.per,
+      source: hop.source || "",
+      says: `${hop.says} Counted at a hop every second day, which is what exploring means here.`,
+    });
+  }
+
+  // ── AND THE ONE DIVISION, WHERE IT CAN BE SEEN ──────────────────
+  // A party cost becomes a person cost exactly here and nowhere else.
+  const parts = raw.map(p => ({
+    ...p,
+    low: p.per === "party" ? Math.round(p.low / people) : Math.round(p.low),
+    high: p.per === "party" ? Math.round(p.high / people) : Math.round(p.high),
+    partyLow: p.low, partyHigh: p.high,
+  }));
+
+  // ── AND A CROSSING, WHICH IS NOT A DAILY RATE ───────────────────
+  // One out and one back whatever the trip's length, so it is named on top of
+  // the daily figure rather than divided into it. A car on a ferry is one
+  // ticket for the whole party; a foot passenger is one each.
+  const onAnIsland = clean(scope) === "island";
+  const carAcross = mode === "car" || mode === "camper";
+  const crossing = carAcross
+    ? FERRY_FARE.carLow * 2
+    : (mode === "bike" ? FERRY_FARE.bikeLow * 2 * people : FERRY_FARE.footLow * 2 * people);
+
   const excludes = [
     freeOnly ? "" : EXCLUDED.entry,
-    EXCLUDED.travel,
+    // Named only where it is not already in the figure. Saying a total leaves
+    // out what it just added is how an honest list stops being read.
+    hops > 0 && hop ? "" : EXCLUDED.travel,
+    EXCLUDED.local,
     EXCLUDED.flights,
   ].filter(Boolean);
+
   return {
     ready: true,
     low: parts.reduce((n, p) => n + p.low, 0),
     high: parts.reduce((n, p) => n + p.high, 0),
     parts,
     excludes,
+    problem: null,
+    heads: people,
+    // Whether the headcount was read or assumed, because a figure resting on
+    // an assumption has to say which one.
+    headsCounted: counted,
+    rooms: bed.rooms,
     // Stated separately from `excludes` because it is the opposite fact: the
     // tick did not remove a cost, it settled one.
     entryFree: !!freeOnly,
     bedPaid: stayIsBooked(stay),
+    moving: hops > 0 && hop ? { mode, hops } : null,
+    note: movingNote(scope, transport),
+    ferry: onAnIsland ? { kr: crossing, forParty: carAcross, says: FERRY_FARE.says } : null,
   };
 };
 
@@ -179,8 +576,29 @@ export const estimateShort = (est) => {
 export const estimateSays = (est) => {
   if (!est?.ready) return "";
   const inIt = est.bedPaid ? "Food only, since you have your bed already" : "A bed and food";
+  // ── WHO IT IS DIVIDED BY, AND WHETHER WE KNEW ───────────────────
+  //
+  // The figure is per person and some of what is in it is not. A room and a
+  // car cost the same whoever is in them, so the headcount moves the answer a
+  // long way: a Danhostel room rises 75 kr for a third person and a tank of
+  // petrol does not rise at all. Saying "per person" without saying per how
+  // many people is how a family of four reads a figure that is nearly double
+  // what their beds cost.
+  // Travelling alone is not a division, and "split between the 1 of you" is
+  // the sentence a template writes when nobody checked. It is also the case
+  // where the figure is highest, so it is the one worth getting right.
+  const who = !est.headsCounted
+    ? "per person, reckoned on two of you sharing, so say how many you are and this changes"
+    : est.heads === 1
+      ? "for one, with nobody to share a room or a car with"
+      : `per person, split between the ${est.heads} of you`;
+  // Only once there are enough of them for the answer to be interesting, and
+  // the two answers are different facts: sharing one room is WHY it is cheap,
+  // and needing a second one is why the middle tier stops getting cheaper.
+  const beds = est.bedPaid || est.heads < 3 ? ""
+    : (est.rooms === 1 ? " You are all in one room." : ` That is ${est.rooms} rooms, since a hotel room sleeps two.`);
   const free = est.entryFree ? " Entry is nothing, since you asked for free attractions only." : "";
-  return `${inIt}, per person.${free} It leaves out ${est.excludes.join(", ")}, which the guide prices once it knows the route.`;
+  return `${inIt}, ${who}.${beds}${free} It leaves out ${est.excludes.join(", ")}. The guide prices those once it knows the route.`;
 };
 
 // ── WHAT THE PLANNER IS TOLD ────────────────────────────────────────
@@ -196,7 +614,8 @@ export const estimateForBrief = (est) => {
   const covers = est.bedPaid
     ? "a day per person for food, with the bed already paid for"
     : "a day per person, covering a bed and food";
-  return `${money} ${covers}. Estimated from what they picked rather than a figure they gave, so treat it as the shape of the trip they want rather than a limit they stated.`;
+  const who = est.headsCounted ? ` for ${est.heads}` : "";
+  return `${money} ${covers}${who}. Estimated from what they picked rather than a figure they gave, so treat it as the shape of the trip they want rather than a limit they stated.`;
 };
 
 // ── THE LOCKOUT ─────────────────────────────────────────────────────
