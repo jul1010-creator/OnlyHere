@@ -230,9 +230,31 @@ export const townInName = (name, town) => {
 //
 // Both spellings, and the KEY is what comes back, because every caller looks a
 // town point up by key.
+// ── AND ONE KEY CARRIES HIS OWN DISAMBIGUATOR IN BRACKETS ──────
+//
+// Oliver, 24 Sep 2026, asking for the "starting from my current location" tick
+// to be exercised. He lives in Nørresundby, and the tick reverse-geocodes a
+// browser fix to a town NAME. TOWN_COORDS keys that town "Nørresundby
+// (Aalborg)", because two towns face each other across the fjord and the
+// bracket says which one this is. townInName then asks whether the KEY stands
+// inside the NAME, and "nørresundby (aalborg)" does not stand inside
+// "nørresundby", so the lookup returned null and his own starting point had
+// no coordinate at all.
+//
+// The bracket is his disambiguator and never part of what anybody types or
+// what a geocoder returns. placeChoice's subjectCore already strips it for the
+// same reason and says so: "Parentheses go first. They are his own
+// disambiguator." This asks the bare key as well as the full one.
+//
+// THE KEY IS STILL WHAT COMES BACK, unchanged, because every caller looks a
+// point up by key. And longest-wins still decides, so a bare form can never
+// take a match away from a more specific key that also fits.
+const bareKey = (key) => String(key || "").replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim();
 export const townKeyFor = (name) =>
   Object.keys(TOWN_COORDS)
-    .filter(t => townInName(name, t) || variantsOf(t).some(v => v !== t && townInName(name, v)))
+    .filter(t => townInName(name, t) || variantsOf(t).some(v => v !== t && townInName(name, v))
+      || (bareKey(t) !== t && bareKey(t).length >= 3
+          && (townInName(name, bareKey(t)) || variantsOf(bareKey(t)).some(v => v !== bareKey(t) && townInName(name, v)))))
     .sort((a, b) => b.length - a.length)[0] || null;
 
 

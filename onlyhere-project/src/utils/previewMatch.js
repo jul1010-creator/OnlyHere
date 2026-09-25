@@ -982,7 +982,7 @@ const ANCHOR_FALLBACK_NAME = "where you are";
 // down with a tap onto this screen with a picture. It arrives as names and
 // joins the typed refusals at the one door they already go through, so a tap
 // and a sentence are honoured by the same filter.
-export const matchedPlaces = (convoText, pools, { days = null, wanted = null, themes = null, mode = null, budget = null, saidByTraveller = "", turnedDown = [] } = {}) => {
+export const matchedPlaces = (convoText, pools, { days = null, wanted = null, themes = null, mode = null, budget = null, saidByTraveller = "", turnedDown = [], startedAt = "" } = {}) => {
   // ── WHERE THEY LAND ─────────────────────────────────────────────
   // Read once, at the top, because two things below need it: the region pass
   // ranks by how reachable a town is from here, and the towns are handed back
@@ -1088,6 +1088,15 @@ export const matchedPlaces = (convoText, pools, { days = null, wanted = null, th
   // with it. `from` further down is this, or the town they said they are
   // leaving, which pass one has to run before it can know.
   const anchor = arrivedAt || goingTo;
+  // ── AND WHICH TOWN THE FORM SAID THEY START IN ──────────────
+  // The name test for the injected starting point, needed here because the
+  // first pass has to know it before it decides what a town gets. The
+  // coordinate half is further down, beside `from`, where the reason is
+  // written out in full. mentionsPlace as well as samePlaceName, because the
+  // box holds whatever the traveller typed or the location lookup returned:
+  // "Aarhus", "Aarhus, Denmark" and "Aalborg Kommune" all name one town.
+  const startedHere = (name) => !!startedAt && !!name
+    && (samePlaceName(startedAt, name) || mentionsPlace(startedAt, name));
   const seen = new Set();
   const matched = [];
   const list = Array.isArray(pools) ? pools : [];
@@ -1142,7 +1151,10 @@ export const matchedPlaces = (convoText, pools, { days = null, wanted = null, th
         && reachBand(kmBetween(anchor, placePoint(p)), days, mode) === REACH_FAR;
       const base = { ...p, ...(saidByThem ? { _saidByThem: true } : {}), ...(farFromTrip ? { _farFromTrip: true } : {}) };
       seen.add(key);
-      matched.push(isDeparturePlace(text, p.name) ? { ...base, _leaving: true } : base);
+      // A STATED STARTING POINT IS WHERE THEY START, and the badge on this
+      // flag has said those exact words since it was written. See startPoint
+      // above for the report this came from.
+      matched.push(isDeparturePlace(text, p.name) || startedHere(p.name) ? { ...base, _leaving: true } : base);
     }
   }
   // ── AND NOW IT IS KNOWABLE WHETHER ANYTHING ELSE SURVIVED ────────
@@ -1208,7 +1220,34 @@ export const matchedPlaces = (convoText, pools, { days = null, wanted = null, th
   // that needs it most, and every distance band collapses to the same value.
   // Their own words put them in a town; that town has a coordinate; it is the
   // most reliable origin on the screen and it was being ignored.
-  const from = anchor || (leavingTowns.length ? townPointFor(leavingTowns[0].name) : null);
+  // ── AND THE FORM HAS A BOX THAT SAYS IT OUTRIGHT ─────────────────
+  //
+  // Oliver, 24 Sep 2026, after ticking "starting from my current location":
+  // "enable the 'my location', because it seems to stick to the location when
+  // done so."
+  //
+  // It did stick, and the two readers above are the reason. arrivalPoint reads
+  // "flying into X", destinationPoint reads "a trip to X", and isDeparturePlace
+  // reads "out of X". The intake writes "Starting point: X", which is none of
+  // those three shapes, so the start town was matched as an ordinary town the
+  // traveller had named: it kept its whole inventory, it counted as a staying
+  // town so the reach door never opened, and `from` stayed null so reachBand
+  // returned the same band for every town in the country. Reproduced on an
+  // 8-day brief starting in Aalborg: the screen was Aalborg and five Aalborg
+  // rows, and the identical brief phrased "we want to get out of Aalborg"
+  // returned five towns. Same geography, opposite answer.
+  //
+  // INJECTED RATHER THAN PARSED OUT OF THE TRANSCRIPT. The value is already a
+  // field the traveller filled in; reading it back out of the sentence it was
+  // printed into would be a second reader of one value, which is the failure
+  // this codebase keeps finding. It is also why the stale-echo problem cannot
+  // reach it: the caller passes what the form holds NOW, not what an earlier
+  // turn said.
+  //
+  // It only fills a hole. A spoken arrival or destination still wins, because
+  // `anchor` is read first, so every brief that worked before works the same.
+  const startPoint = startedAt ? townPointFor(startedAt) : null;
+  const from = anchor || startPoint || (leavingTowns.length ? townPointFor(leavingTowns[0].name) : null);
   if (wantedRegions.length || fillFromReach) {
     // ── AND WHICH SIX, WHICH IS THE WHOLE QUESTION ────────────────
     // Oliver's screenshot, 15 Aug 2026. The region pass worked, and for a two

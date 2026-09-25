@@ -324,6 +324,11 @@ export const GuidePreviewScreen = ({
   // whether to offer a night out. See the nightlife door below.
   intakeFamilyMode = false,
   intakeBudgetText = "",
+  // ── AND THE BOX THAT SAYS WHERE THE TRIP BEGINS ─────────────
+  // The intake's starting point, handed down rather than read back out of the
+  // transcript, so this screen and the line above it are looking at ONE value.
+  // matchedPlaces says what it does with it and which report it came from.
+  intakeStartPoint = "",
   pickedEvents = null,
   setPickedEvents = () => {},
   // The places the traveller added back from a section their brief did not ask
@@ -490,7 +495,7 @@ export const GuidePreviewScreen = ({
   // pass opening on a region GEMLYX named. See matchedPlaces: his Aalborg brief
   // named no region at all, and Ribe arrived through the word "Jutland" in the
   // app's own reply.
-  const matched = matchedPlaces(convoText, previewPools({ towns, islands, freeEntrance, foodSpots, nightlifeSpots, shops, craftItemsFallback, events, majorEvents }), { days: win?.days ?? null, wanted, themes, mode, budget, saidByTraveller, turnedDown });
+  const matched = matchedPlaces(convoText, previewPools({ towns, islands, freeEntrance, foodSpots, nightlifeSpots, shops, craftItemsFallback, events, majorEvents }), { days: win?.days ?? null, wanted, themes, mode, budget, saidByTraveller, turnedDown, startedAt: intakeStartPoint });
   // ── AND WHAT WAS LEFT OUT IS SAID, NOT SWALLOWED ──────────────────
   //
   // previewMatch.js has claimed since 26 Aug that "the guide says out loud

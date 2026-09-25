@@ -20179,7 +20179,7 @@ If the conversation only covers a single day or a few stops with no explicit day
     // line-versus-list contradiction one option over.
     const matchedForWhy = matchedPlaces(forMatch, previewPools({
       towns, islands, freeEntrance, foodSpots, nightlifeSpots, shops, craftItemsFallback, events, majorEvents,
-    }), { days, wanted, themes, mode: modeForWhy, budget: budgetForWhy, saidByTraveller: saidByTravellerOnly, turnedDown });
+    }), { days, wanted, themes, mode: modeForWhy, budget: budgetForWhy, saidByTraveller: saidByTravellerOnly, turnedDown, startedAt: intakeStartPoint });
     // _notAsked as well as _leaving. A row held back is a row not on the
     // screen, and naming one of those is the same failure as naming one they
     // told you they are leaving.
@@ -32117,6 +32117,10 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           // GuidePreviewScreen.
           intakeFamilyMode={intakeFamilyMode}
           intakeBudgetText={intakeBudgetText}
+          // The same value the line above the list is built from, handed to
+          // both from here. Two readers of one box is how the line and the
+          // list come to describe different trips.
+          intakeStartPoint={intakeStartPoint}
           pickedEvents={pickedEvents}
           setPickedEvents={setPickedEvents}
           pickedExtras={pickedExtras}

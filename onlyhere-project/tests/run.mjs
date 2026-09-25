@@ -2042,6 +2042,23 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   is("no town in the name means no town", M.townKeyFor("Vejlebrovej coast viewpoint"), null);
   is("the reported stop now resolves to nothing rather than to Vejle", M.townKeyFor("Vejlebrovej coast viewpoint"), null);
   is("a genuine Vejle stop still finds Vejle", M.townKeyFor("Vejle Fjord bridge"), "Vejle");
+  // ── AND ONE KEY CARRIES A BRACKET NOBODY ELSE WRITES ────────
+  // Found exercising the "starting from my current location" tick, 24 Sep
+  // 2026. Oliver lives in Nørresundby, the tick turns a browser fix into a
+  // town NAME, and the gazetteer keys that town "Nørresundby (Aalborg)"
+  // because two towns face each other across the fjord. townInName asks
+  // whether the KEY stands inside the NAME, so the plain name matched nothing
+  // and his own starting point had no coordinate: the reach ranking, the
+  // return leg and the day-trip check all stood down in silence.
+  is("the bare name finds the key that carries his bracket", M.townKeyFor("Nørresundby"), "Nørresundby (Aalborg)");
+  is("and so does a geocoder's fuller answer", M.townKeyFor("Nørresundby, Nordjylland, Denmark"), "Nørresundby (Aalborg)");
+  ok("and it has a point now, which is the half that mattered", !!M.townPointFor("Nørresundby"));
+  // THE BRACKET IS NOT A LICENCE TO MATCH THE TOWN INSIDE IT. "Aalborg" is the
+  // disambiguator, not the place, so it must not drag the Nørresundby key back.
+  is("the town named in the bracket still answers as itself", M.townKeyFor("Aalborg"), "Aalborg");
+  // AND LONGEST-WINS IS UNTOUCHED, so a fuller key still beats the bare form.
+  is("the fuller key still wins", M.townKeyFor("Nørresundby (Aalborg) Havn"), "Nørresundby (Aalborg)");
+  is("and a name with no town in it is still nothing", M.townKeyFor("Vejlebrovej coast viewpoint"), null);
 
   // ZERO MINUTES IS NEVER AN ANSWER. The build applies this to whatever the
   // Directions API returns; the shape of the rule is pinned here.
@@ -11178,6 +11195,20 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // And the screen calls it rather than keeping a second copy that can drift.
   const previewSrc = readFileSync(join(root, "src/components/GuidePreviewScreen.jsx"), "utf8");
   ok("the preview screen calls the shared matcher", /matchedPlaces\(convoText, previewPools\(/.test(previewSrc));
+  // ── AND BOTH READERS OF THE BOX GET THE SAME BOX ───────────
+  // The screen and the italic line above it each call the matcher. A starting
+  // point handed to one and not the other is the line-versus-list
+  // contradiction this file already carries three comments about, so both call
+  // sites are asserted here rather than only the one that found the bug.
+  ok("the screen is told where the trip starts", /startedAt: intakeStartPoint/.test(previewSrc));
+  ok("and it takes it as a prop rather than re-reading the transcript", /intakeStartPoint = "",/.test(previewSrc));
+  {
+    const appStart = readFileSync(join(root, "src/App.jsx"), "utf8");
+    ok("the line above the list is told the same thing",
+      /saidByTraveller: saidByTravellerOnly, turnedDown, startedAt: intakeStartPoint \}\);/.test(appStart));
+    ok("and the screen is handed it from the same state",
+      /intakeStartPoint=\{intakeStartPoint\}/.test(appStart));
+  }
   ok("and no longer runs its own passes", !/matched\.push\(p\)/.test(stripNonCode(previewSrc)));
 }
 
@@ -24251,6 +24282,63 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   is("each one says why it is here", got.find(p => p.name === "Ribe")?._viaRegion, "Jutland");
   ok("and a town on another island is not", !names.includes("Odense"));
 
+  // ── AND THE FORM SAYS IT IN A BOX, NOT IN A SENTENCE ────────
+  //
+  // Oliver, 24 Sep 2026, having ticked "starting from my current location":
+  // "enable the 'my location', because it seems to stick to the location when
+  // done so."
+  //
+  // It stuck. The three readers above take "flying into X", "a trip to X" and
+  // "out of X", and the intake writes "Starting point: X", which is none of
+  // them. So the start town was an ordinary named town: it kept its whole
+  // inventory, it counted as a staying town so the reach door stayed shut, and
+  // `from` was null so every town in the country scored the same distance
+  // band. The pair below is the whole bug: one brief, two phrasings, and until
+  // the box was handed in they returned different screens.
+  {
+    const FORM = "Arriving: 25 September 2026 | Departing: 3 October 2026 | Exact trip length: 8 days | Starting point: Copenhagen | Interests: History | Getting around: \ud83d\ude97 Car";
+    const before = matchedPlaces(FORM, POOLS, { days: 8 });
+    ok("without the box, the start town is not marked as the start",
+      before.find(p => p.name === "Copenhagen")?._leaving !== true);
+    ok("and it drags its whole inventory onto the screen",
+      before.map(p => p.name).some(n => /Geranium|Amalienborg|Bones|Old Irish/.test(n)));
+
+    const after = matchedPlaces(FORM, POOLS, { days: 8, startedAt: "Copenhagen" });
+    const names = after.map(p => p.name);
+    ok("the box marks it as where they start", after.find(p => p.name === "Copenhagen")?._leaving === true);
+    ok("it stays on the screen, because it is still their starting point", names.includes("Copenhagen"));
+    is("and stops dragging its contents along", names.filter(n => /Amalienborg|Kobenhavns|Geranium|Bones|Old Irish/.test(n)), []);
+    // THE POINT OF THE WHOLE FIX: somewhere else to go.
+    ok("and the trip now reaches past the town it starts in",
+      after.filter(p => p._src === "town" && !p._leaving).length > 0);
+  }
+  // A TYPED STARTING POINT IS THE SAME BOX, so the fix is not about geolocation:
+  // the tick only fills a field a traveller can fill by hand.
+  {
+    const FORM = "Exact trip length: 4 days | Starting point: Aarhus | Interests: History";
+    const got = matchedPlaces(FORM, POOLS, { days: 4, startedAt: "Aarhus" });
+    ok("a hand-typed start is read the same way", got.find(p => p.name === "Aarhus")?._leaving === true);
+  }
+  // AND THE BOX HOLDS WHATEVER WAS TYPED OR LOOKED UP, so the name test is not
+  // an equality check: the location lookup can return a kommune, and a
+  // traveller types a country after the town.
+  {
+    const FORM = "Exact trip length: 4 days | Starting point: Aarhus, Denmark | Interests: History";
+    ok("a town with its country after it still matches",
+      matchedPlaces(FORM, POOLS, { days: 4, startedAt: "Aarhus, Denmark" }).find(p => p.name === "Aarhus")?._leaving === true);
+  }
+  // AND A SPOKEN ARRIVAL STILL WINS, because `anchor` is read first. Every
+  // brief that worked before this has to work the same afterwards.
+  {
+    const SAID = "We are flying into Copenhagen and want to get out of the city. We have heard about Jutland.";
+    const withBox = matchedPlaces(SAID, POOLS, { days: 3, saidByTraveller: SAID, startedAt: "Copenhagen" }).map(p => p.name);
+    const without = matchedPlaces(SAID, POOLS, { days: 3, saidByTraveller: SAID }).map(p => p.name);
+    is("the box changes nothing when their own words already said it", withBox, without);
+  }
+  // AND AN EMPTY BOX CHANGES NOTHING AT ALL, which is every brief before today.
+  is("an empty box is the same as no box",
+    matchedPlaces(BRIEF, POOLS, { startedAt: "" }).map(p => p.name), matchedPlaces(BRIEF, POOLS).map(p => p.name));
+
   // A TOWN THEY WANT IS STILL EXPANDED. The departure rule must not quietly
   // switch the second pass off for everybody.
   const wanted = matchedPlaces("Four days in Copenhagen, we love museums", POOLS).map(p => p.name);
@@ -24324,7 +24412,7 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // and Ribe, three hundred kilometres away, became a legal candidate.
   // The option, wherever it sits in the object, for the reason given above.
   ok("and the traveller's own turns reach it, for the region pass",
-     /budget, saidByTraveller(?:, \w+)* \}\);/.test(preview));
+     /budget, saidByTraveller(?:, \w+(?:: \w+)?)* \}\);/.test(preview));
   ok("and it is read from the budget box and their own words",
      /travellerBudget\(\[intakeBudgetText, saidByTraveller\]\.filter\(Boolean\)\.join\("\\n"\)\)/.test(preview));
   ok("the budget box is a prop", /intakeBudgetText = "",/.test(preview));
@@ -44278,7 +44366,13 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // brief that needs ranking most, and Skagen ranks beside Roskilde.
   const pm = readFileSync(join(root, "src/utils/previewMatch.js"), "utf8");
   ok("the departure town is used as the origin when no arrival was stated",
-     /const from = anchor \|\| \(leavingTowns\.length \? townPointFor\(leavingTowns\[0\]\.name\) : null\);/.test(pm));
+     /const from = anchor \|\| startPoint \|\| \(leavingTowns\.length \? townPointFor\(leavingTowns\[0\]\.name\) : null\);/.test(pm));
+  // AND THE FORM'S OWN BOX SITS BETWEEN THEM, after the anchor so a spoken
+  // arrival still wins, before the departure town because a box the traveller
+  // filled in is a plainer statement than a phrase read out of a sentence.
+  // See the 24 Sep "it seems to stick to the location" report.
+  ok("and the stated starting point fills the hole when neither was said",
+     /const startPoint = startedAt \? townPointFor\(startedAt\) : null;/.test(pm));
   // The anchor is where they land OR where they are going, in that order, and it
   // is computed before the first pass because the first pass needs it: a town
   // that appears only in Gemlyx's replies and is out of honest reach is not in
@@ -70026,7 +70120,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
        /const leftOut = ruledOutFor\(saidByTraveller, turnedDown\);/.test(preview));
     ok("and says what it left out, through excludedNote, which now has a caller",
        /\{excludedNote\(leftOut\) && \(/.test(preview) && /\{excludedNote\(leftOut\)\}/.test(preview));
-    ok("and hands the matcher the list", /saidByTraveller, turnedDown \}\);/.test(preview));
+    ok("and hands the matcher the list", /saidByTraveller, turnedDown(?:, \w+: \w+)* \}\);/.test(preview));
   }
 
   // ── 4. WHEN THE CARD ASKS, AND WHEN IT DOES NOT ──────────────────
