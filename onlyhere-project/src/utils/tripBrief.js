@@ -1348,6 +1348,36 @@ export const readBrief = ({ travellerText = "", travellerTurns = null, intake = 
   // answer. Falls back to splitting the join so every existing caller and every
   // existing assertion keeps working unchanged.
   const turns = Array.isArray(travellerTurns) ? travellerTurns : t.split("\n");
+  // ── AND THE FORM'S OWN TURN IS NOT SOMETHING THEY SAID ──────────────
+  //
+  // 26 Sep 2026, found by a review pass. The intake posts its answers into the
+  // conversation as a hidden turn so the model reads the ticks as context, and
+  // every slot below that scans prose was reading that turn as the traveller's
+  // words. Ticking a food tier filled the blocking `interests` slot with "food",
+  // so the chat never asked what kind of trip it was and the brief block told the
+  // model they had said food. The Cheapest stay line filled `origin`. The budget
+  // sentence filled `interests` and `budget` both.
+  //
+  // ── AND THE SPLIT IS NARROW, BECAUSE THE FORM CARRIES REAL ANSWERS ──
+  //
+  // The first version of this fix dropped the form's turn from every prose read
+  // and the suite caught what that costs: `origin` went missing from a
+  // conversation that had answered it, because the form's turn is WHERE the start
+  // point was stated for a caller that does not pass the whole intake object. The
+  // form's turn is the traveller's answers written down, so most of it is theirs.
+  //
+  // Two slots are different, and they are the two where the form's prose is
+  // MISREAD rather than read. `interests` is about what kind of trip they want, and
+  // a food TIER is a budget answer: "What they eat: Cheap. Kebab and hot dog
+  // stands" is not a food holiday, and it was filling a blocking slot so the chat
+  // stopped asking. `budget` is the same shape: the tier's own price range tripped
+  // the budget pattern. Both have their own field on the form and take it through
+  // `intake`, so prose is only ever the fallback there.
+  //
+  // `days` and `when` are MEANT to read the form's own length line, see readDays.
+  // isIntakeTurn in utils/tripEvents.js is the one reader of which turn is which.
+  const ownTurns = turns.filter(x => !isIntakeTurn(x));
+  const own = ownTurns.join("\n");
   const known = {};
   const set = (key, res) => { if (res) known[key] = res; };
 
@@ -1355,7 +1385,7 @@ export const readBrief = ({ travellerText = "", travellerTurns = null, intake = 
   set("days", readDays(t, intake.arrival, intake.departure, today, turns, answering));
   set("when", readWhen(t, turns, intake.arrival, intake.departure, today));
   set("party", readParty(t, intake.travelers, intake.familyMode));
-  set("interests", readInterests(t, intake.interest, turns, answering));
+  set("interests", readInterests(own, intake.interest, ownTurns, answering));
   set("transport", readTransport(t, intake.transport));
   // Straight from the tick row: there is no sentence to read it out of, and
   // inventing one would be a second reader of a value the form already holds.
@@ -1366,7 +1396,7 @@ export const readBrief = ({ travellerText = "", travellerTurns = null, intake = 
   // first and a bare answer can only fill what the sentence left empty. Same
   // rule, same reason, as every other slot here.
   set("stayWhen", readStayNights(t, { arrival: known.when?.value || null, today }));
-  set("budget", readBudget(t, intake.budgetText));
+  set("budget", readBudget(own, intake.budgetText));
   set("danish", readDanish(t, intake.danish));
 
   // ── AND THEN WHAT THEY SAID WHEN THEY WERE ASKED ──────────────────
@@ -2024,6 +2054,33 @@ const stillOpenCount = (brief) => openBlocking(brief).length;
 //
 // Both default to nothing, so every caller that does not have a map keeps the
 // block it had.
+// ── AND A DATE IS WRITTEN OUT, NOT PRINTED AS AN OBJECT ─────────────
+//
+// Found by a review pass, 26 Sep 2026. The `when` slot holds a Date, and this
+// block interpolated it straight, so the model was handed
+//
+//   when: Sat Jul 10 2027 00:00:00 GMT+0200 (Central European Summer Time)
+//
+// which is a JavaScript runtime artifact, complete with a timezone name and a
+// midnight nobody meant. It is the one line in this block a traveller might see
+// echoed back at them, and it made the model parse a string rather than read a
+// date. The range and the month precision the slot already carries were being
+// thrown away in the same breath.
+const MONTH_NAMES = ["January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December"];
+const writtenDay = (d) => `${d.getDate()} ${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`;
+export const briefValue = (slot) => {
+  const v = slot?.value;
+  if (!(v instanceof Date) || Number.isNaN(v.getTime())) return String(v ?? "");
+  // A month is a month. Saying "1 July 2027" to somebody who said "sometime in
+  // July" invents a day they did not give.
+  if (slot.precision === "month") return `${MONTH_NAMES[v.getMonth()]} ${v.getFullYear()}`;
+  const end = slot.end instanceof Date && !Number.isNaN(slot.end.getTime()) ? slot.end : null;
+  return end && end.getTime() !== v.getTime()
+    ? `${writtenDay(v)} to ${writtenDay(end)}`
+    : writtenDay(v);
+};
+
 export const briefBlock = (brief, conflicts = [], { picked = [], turnedDown = [] } = {}) => {
   if (!brief) return "";
   const lines = [];
@@ -2032,7 +2089,7 @@ export const briefBlock = (brief, conflicts = [], { picked = [], turnedDown = []
     lines.push("WHAT YOU ALREADY KNOW. Never ask about any of these again, in any wording:");
     knownKeys.forEach(s => {
       const k = brief.known[s.key];
-      lines.push(`  ${s.label}: ${k.value}${k.source === "intake" ? " (from the form they filled in)" : ""}`);
+      lines.push(`  ${s.label}: ${briefValue(k)}${k.source === "intake" ? " (from the form they filled in)" : ""}`);
     });
     // ── AND THE FORM CAN BE FILLED IN TWICE ─────────────────
     //

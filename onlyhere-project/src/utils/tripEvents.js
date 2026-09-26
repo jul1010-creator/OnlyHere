@@ -174,7 +174,23 @@ export const daysTheySaidFor = (arrival, departure, n) => {
 // agree with itself and call that a second opinion. Skipped wherever the real
 // timestamps are in hand; with no intake it is still the best line there is.
 const INTAKE_LENGTH_LINE = /\bExact trip length:\s*\d+\s*days?\b/i;
-export const isIntakeTurn = (turn) => INTAKE_LENGTH_LINE.test(String(turn || ""));
+
+// ── AND THE WHOLE TURN IS MARKED NOW, NOT JUST THAT ONE LINE ────────
+//
+// 26 Sep 2026, found by a review pass. The length line only appears when both
+// dates are filled in, so this could not recognise the form's turn most of the
+// time, and every reader that scans the transcript for what the traveller WANTS
+// was reading the form's own prose as their words. Ticking a food tier filled the
+// blocking "what kind of trip" slot with "food" and the chat stopped asking.
+//
+// So the turn carries a marker of its own. The length test stays for the turns
+// already sitting in conversations that were started before it did.
+export const INTAKE_TURN_MARK = "Trip form:";
+const MARK_RE = new RegExp(`^\\s*${INTAKE_TURN_MARK}`, "i");
+export const isIntakeTurn = (turn) => {
+  const t = String(turn || "");
+  return MARK_RE.test(t) || INTAKE_LENGTH_LINE.test(t);
+};
 
 // ── THE LENGTH THEY SPOKE, LAST WINS, PER TURN ──────────────
 //
@@ -414,7 +430,80 @@ const R_TWO_FULL = new RegExp(
 const R_TWO_FULL_MD = new RegExp(
   `(?:^|[^${LETTER}])(${MONTH_PATTERN_ABBR_TRAILING})${SP}+(\\d{1,2})${ORDINAL}?${RANGE_JOIN}(${MONTH_PATTERN_ABBR})${SP}+(\\d{1,2})${ORDINAL}?(?![${LETTER}\\d])`, "i");
 
+// ── AND A DEPARTURE IS A JOIN TOO, IN WORDS ─────────────────────────
+//
+// Found by a review pass, 26 Sep 2026, and it is the commonest way anybody
+// states a trip window. RANGE_JOIN knows "to", "till", "until" and a dash. It
+// does not know a CLAUSE, and people write clauses:
+//
+//   "We land in Copenhagen on 10 July and fly home on 17 July."   read as one date
+//   "We land 10 July and leave 17 July."                          read as one date
+//   "Arriving 10 July, departing 17 July."                        read as one date
+//   "vi ankommer 10. juli og rejser hjem 17. juli"                read as one date
+//
+// Every one of those left the brief's `when` slot holding a start with no end, so
+// nothing downstream could tell how long the trip was from the dates, and the
+// budget panel could not tell whether the trip crossed into high season.
+//
+// REWRITTEN INTO A JOIN RATHER THAN PARSED AGAIN. Every pattern below already
+// reads "10 July to 17 July" in both orderings, in two languages, with ordinals
+// and articles and abbreviations. A fifth pattern beside them would be a second
+// reader of the same sentence, which is the failure this codebase pays for most.
+//
+// ── AND THE FIRST VERSION OF THIS WAS WORSE THAN THE MISS ────────────
+//
+// A second review pass the same night, and it was right to go looking. The first
+// version let ANY one or two digit number start the range, so it latched onto
+// whatever number sat closest to the leaving word, which in a real sentence is
+// almost never the arrival date:
+//
+//   "Arriving 10 July, 5 people, leaving 17 July"   became 5 July to 17 July
+//   "We arrive 3 July with 2 kids and leave 10 July" became 2 July to 10 July
+//   "Ankomst 10. juli kl. 14, afrejse 17. juli"      became 14 to 17 July
+//   "10 days, then we leave 17 July"                 became 10 to 17 July
+//   "Room 12 is ours, we leave 17 July"              became 12 to 17 July
+//
+// A miss leaves the end date unread. That invented a trip. So three guards, and
+// each one is a thing the old version did not require:
+//
+//   THE START MUST BE A DATE. A month or an ordinal, never a bare number, so a
+//   headcount, an age, a room number, a night count and a clock time cannot open
+//   a range.
+//   THE END MUST LOOK LIKE ONE TOO. A month after it, an ordinal on it, or a
+//   clause ending right there, so "return to Nyhavn 17 times" is not a departure.
+//   AND IT ONLY RUNS WHEN NOTHING ELSE READ THE SENTENCE. A text that already
+//   holds a join word is parsed as written and never rewritten, so this can only
+//   ever turn a miss into a read.
+const LEAVE_WORD = "(?:leave|leaving|left|depart|departing|departure"
+  + "|fly(?:ing)?[^\\S\\n]+(?:home|out|back)|flew[^\\S\\n]+(?:home|out|back)"
+  + "|head(?:ing|ed)?[^\\S\\n]+(?:home|back)|go(?:ing)?[^\\S\\n]+home|went[^\\S\\n]+home"
+  + "|back[^\\S\\n]+home|return(?:ing|s|ed)?[^\\S\\n]+(?:home|hjem)"
+  + "|rejser[^\\S\\n]+(?:hjem|tilbage)|rejse[^\\S\\n]+hjem|hjem|afrejse|afrejser|slutter)";
+// A real date, never a bare number: an ordinal, a month, or both.
+const DATEISH = `\\d{1,2}(?:${ORDINAL}${SP}*(?:of${SP}+)?(?:${MONTH_PATTERN_ABBR})?|${SP}*(?:of${SP}+)?(?:${MONTH_PATTERN_ABBR}))`;
+// And an end that is a date rather than a count of something: a month after it,
+// an ordinal on it, or the clause finishing where it does.
+const END_DATEISH = `\\d{1,2}(?:${ORDINAL}|(?=${SP}*(?:of${SP}+)?(?:${MONTH_PATTERN_ABBR}))|(?=${SP}*(?:[.,;:!?)\\]]|$)))`;
+const R_LEAVE_CLAUSE = new RegExp(
+  `(${DATEISH})([^\\d]{0,40}?\\b${LEAVE_WORD}\\b[^\\d]{0,24}?)(${END_DATEISH})`, "i");
+
+export const asRangeText = (text) => {
+  const s = String(text || "");
+  return R_LEAVE_CLAUSE.test(s) ? s.replace(R_LEAVE_CLAUSE, "$1 to $3") : s;
+};
+
 export const dateRangeIn = (text, today = new Date()) => {
+  const asWritten = readRange(text, today);
+  if (asWritten) return asWritten;
+  // ── AND ONLY THEN, THE CLAUSE ───────────────────────────────────
+  // A sentence that already holds a join word is read as written. This can only
+  // turn a miss into a read, never one range into a different one, which is the
+  // guard the first version of asRangeText did not have.
+  const rewritten = asRangeText(text);
+  return rewritten === String(text || "") ? null : readRange(rewritten, today);
+};
+
+const readRange = (text, today = new Date()) => {
   const s = String(text || "");
   if (!s.trim()) return null;
   const floor = new Date(today.toDateString());

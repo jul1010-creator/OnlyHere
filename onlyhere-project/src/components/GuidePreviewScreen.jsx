@@ -17,7 +17,7 @@ import { cardLine } from "../utils/cardLine";
 import { buildPreviewReport, downloadReport, reportFilename } from "../utils/previewReport";
 import { readBrief } from "../utils/tripBrief";
 import { withoutTestBrief } from "../utils/chatThread";
-import { travellerBudget } from "../utils/accommodation";
+import { travellerBudget, saidByTraveller as ownWords } from "../utils/accommodation";
 import { previewCoverage, describeCoverage, COVERAGE_THIN, COVERAGE_MATCHER, COVERAGE_UNANSWERED, COVERAGE_UNCOUNTED } from "../utils/previewCoverage";
 import { AskGemlyx } from "./AskGemlyx";
 
@@ -407,7 +407,14 @@ export const GuidePreviewScreen = ({
   // that needed it. The window needs it now too, and it needs it FIRST, so it
   // moved up rather than being computed twice. Everything below reads the same
   // constant it always did.
-  const travellerTurns = aiMessages.slice(1).filter(m => m.role === "user").map(m => m.text || "");
+  // ── AND THE FORM'S OWN TURN IS NOT ONE OF THEIRS ────────────────
+  //
+  // 26 Sep 2026. The intake posts its answers as a hidden user turn, one line of
+  // which is "What they eat: Cheap." travellerBudget's tight pattern matches the
+  // bare word, so a traveller who ticked the Cheap food chip and the best hotel
+  // in town was read as a budget traveller on this screen too. saidByTraveller in
+  // utils/accommodation.js is the one reader of what a person typed.
+  const travellerTurns = ownWords(aiMessages.slice(1)).split("\n").filter(x => x.trim());
   const saidByTraveller = travellerTurns.join("\n");
   // Who is travelling, from the account when it says and from their own words
   // when it does not. Orders what is offered and nothing else. See
@@ -494,7 +501,7 @@ export const GuidePreviewScreen = ({
   // places include in budget." Read from their own turns and the budget box, same
   // rule as everything else on this screen. Null when they have not said, and null
   // rules nothing out.
-  const budget = travellerBudget([intakeBudgetText, saidByTraveller].filter(Boolean).join("\n"));
+  const budget = travellerBudget(saidByTraveller);
   // `saidByTraveller` goes in beside the rest, and it is what stops the region
   // pass opening on a region GEMLYX named. See matchedPlaces: his Aalborg brief
   // named no region at all, and Ribe arrived through the word "Jutland" in the

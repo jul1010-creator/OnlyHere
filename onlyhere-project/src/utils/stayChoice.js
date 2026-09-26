@@ -29,6 +29,21 @@
 
 const clean = (s) => String(s ?? "").trim();
 
+// ── AND THIS PROSE GOES INTO THE TRANSCRIPT, SO IT IS READ ──────────
+//
+// 26 Sep 2026. The Cheapest line used to end "still walkable or a short ride in".
+// The intake posts these sentences into the conversation as a hidden turn, and
+// travelModeKey reads a sentence and picks the SLOWEST mode in it, so the word
+// walkable made a traveller who had ticked Car into a walker. dayCeilingKm("walk")
+// is 15 km against 300 for a car, so the plan gate flagged and retried every
+// driving day of their trip.
+//
+// tickedTravelMode now answers for a single ticked chip, which is the real fix,
+// and this says the same thing without a mode word in it, which is the belt to
+// that braces: a traveller who ticks NOTHING still must not be read as walking
+// because of where they chose to sleep. tests/run.mjs holds every line this file
+// and the budget panel can write to that turn against every mode reader, so the
+// next phrase anybody adds cannot do this again.
 export const STAY_CHOICES = [
   {
     key: "cheapest",
@@ -36,7 +51,7 @@ export const STAY_CHOICES = [
     booked: false,
     // His own words for it, and the limit matters: a bed an hour out of town is
     // not a saving, it is a different trip with a commute in it.
-    said: "They have not booked anywhere, and they want the cheaper end of the market: a little further out from the centre, still in the town and still walkable or a short ride in, never out in the country.",
+    said: "They have not booked anywhere, and they want the cheaper end of the market: a little further out from the centre, still in the town and still close enough to the middle to get there quickly, never out in the country.",
   },
   {
     key: "best",

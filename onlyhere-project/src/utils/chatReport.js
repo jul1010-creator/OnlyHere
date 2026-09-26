@@ -49,7 +49,7 @@ import { askedBeforeTurns } from "./directAnswer";
 import { briefConflicts, conflictLabel, conflictSlots } from "./briefConflicts";
 import { isReadyToBuild } from "./helpers";
 import { travelModeKey, tickedTravelMode } from "./routeOrder";
-import { travellerBudget } from "./accommodation";
+import { travellerBudget, saidByTraveller as ownWords } from "./accommodation";
 
 export const CHAT_REPORT_KIND = "gemlyx-chat-report";
 export const CHAT_REPORT_VERSION = 1;
@@ -159,6 +159,8 @@ export const intakeReport = (intake = {}) => ({
   interests: Array.isArray(intake.interest) ? intake.interest.length : 0,
   transport: Array.isArray(intake.transport) ? intake.transport.slice() : [],
   // The PARSED value, not the sentence: "tight" rather than whatever was typed.
+  // Off the box alone, which since 25 Sep holds a computed sentence rather than a
+  // typed figure, so this is null in practice and the read below is the live one.
   budgetLevel: travellerBudget(intake.budgetText) || null,
   budgetFilled: !!clean(intake.budgetText),
   familyMode: !!intake.familyMode,
@@ -276,7 +278,10 @@ export const buildChatReport = ({
     // disagree about what mode or budget the trip was planned on.
     read: {
       mode: tickedTravelMode(`Getting around: ${(intake.transport || []).join(", ")}`) || travelModeKey((intake.transport || []).join(", ")) || travelModeKey(travellerText) || null,
-      budget: travellerBudget([intake.budgetText, travellerText].filter(Boolean).join("\n")) || null,
+      // Their words only, the same as the screen: the hidden intake turn contains
+      // "What they eat: Cheap" and the tight pattern matched the bare word, so a
+      // report of what the trip was planned on was reporting the wrong level.
+      budget: travellerBudget(ownWords(list)) || null,
     },
     intake: intakeReport(intake),
     briefTimeline: briefTimeline(list, { intake, asked, today }),

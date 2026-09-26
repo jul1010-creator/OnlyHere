@@ -183,6 +183,36 @@ const BUDGET_LEVELS = [
 // word, but "we do not mind the cost, nothing fancy though" contains both, and the
 // one that decides the tier is the one about how much they will spend rather than
 // the one about taste.
+// ── AND ONLY WHAT THEY TYPED COUNTS AS SAYING IT ────────────────────
+//
+// Found by a review pass, 26 Sep 2026, and it is the worst thing in this file's
+// history because the claim it produced was FALSE and it was PERMANENT.
+//
+// The intake form posts its answers into the conversation as a user turn, marked
+// hidden, so the model reads the ticks as context. One of those lines is "What
+// they eat: Cheap. Kebab and hot dog stands, McDonald's, a pizza slice." The
+// tight pattern above matches the bare word `cheap`, so a traveller who ticked
+// the Cheap food chip AND the best hotel in town came out as a tight-budget
+// traveller. That put "THEY WANT A BUDGET TRIP" into the chat prompt and the
+// guide prompt, told the guide to have them sleep somewhere cheaper than the
+// hotel they picked, and wrote "they have described their budget as tight
+// before" into the learned profile, which every later conversation then read.
+//
+// They described nothing. They ticked a food tier, and the app quoted its own
+// menu back to itself as evidence about them.
+//
+// THE RULE IS THE ONE THIS FILE ALREADY ASSUMED AND NEVER ENFORCED. Every comment
+// in it says "their own words". saidByTraveller is what that means: the turns a
+// person typed, with the app's own hidden turn left out. Passing raw aiMessages
+// to travellerBudget is how the leak happened, so the filter lives here, beside
+// the pattern it protects, rather than at each of the five call sites.
+export const saidByTraveller = (messages) =>
+  (Array.isArray(messages) ? messages : [])
+    .filter(m => m?.role === "user" && !m?.hidden)
+    .map(m => m?.text || "")
+    .filter(Boolean)
+    .join("\n");
+
 export const travellerBudget = (text) => {
   const t = clean(text);
   if (!t) return null;

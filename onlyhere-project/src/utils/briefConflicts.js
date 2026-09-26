@@ -81,6 +81,15 @@ const kidsIn = (b) => {
 // would actually ask. The question is the whole output: it is what Gemlyx says
 // out loud, so it has to sound like somebody being helpful rather than like a
 // validator refusing a form.
+// ── WHAT A TASTING MENU COSTS, SO THE RULE HAS A THRESHOLD ──────────
+//
+// Geranium's own site put its menu at 3,200 kr a head and Alchemist at 4,900 in
+// 2026, and the cheapest Michelin-starred tasting menus in Copenhagen start
+// around 1,500. The low end is the one a conflict rule wants: a traveller whose
+// whole day is budgeted under the cheapest starred menu in the country has two
+// plans that do not fit in one week.
+const FINE_DINING_KR = 1500;
+
 export const CONFLICTS = [
   {
     key: "kids-nightlife",
@@ -164,10 +173,28 @@ export const CONFLICTS = [
     question: (b) => `Their dates give ${b.known.days.value} days and they have said ${b.known.days.said}. Say both numbers plainly and ask which is right, once. The plan follows the dates until they say otherwise, and if the dates are wrong they are changed in the form rather than argued over.`,
   },
   {
+    // ── AND THIS ONE COULD NOT FIRE FOR A DAY ─────────────────────
+    //
+    // It was written against the typed budget field, where a traveller could put
+    // the word "tight" in themselves. That field went out on 25 Sep and the slot
+    // now holds a computed sentence ("about 150 to 310 kr a day per person...")
+    // or the literal "said in the conversation", neither of which contains any of
+    // the three words. Found dead by a review pass, 26 Sep 2026.
+    //
+    // THE FIGURE IS WHAT IT READS NOW, which is the better test anyway: it does
+    // not depend on the traveller happening to use one of three adjectives. A
+    // tasting menu is 1,500 kr and up, so a day's budget under that is the
+    // conflict, whatever words anybody used.
     key: "budget-and-fine-dining",
-    when: (b) => saysAny(b.known?.budget?.value, ["tight", "cheap", "budget"])
-      && saysAny(b.known?.interests?.value, ["michelin", "fine dining", "tasting menu", "noma"]),
-    question: () => "They have named a tight budget and a Michelin-level meal. Both are plannable and not in the same week. Ask whether the meal is the one thing they are spending on, or whether they would rather it stayed everyday.",
+    when: (b) => {
+      const said = String(b.known?.budget?.value || "");
+      const top = /to\s+(\d[\d.,]*)\s*kr/.exec(said) || /about\s+(\d[\d.,]*)\s*kr/.exec(said);
+      const perDay = top ? Number(String(top[1]).replace(/[.,]/g, "")) : null;
+      const tight = Number.isFinite(perDay) && perDay < FINE_DINING_KR
+        || saysAny(said, ["tight", "cheap", "budget"]);
+      return tight && saysAny(b.known?.interests?.value, ["michelin", "fine dining", "tasting menu", "noma"]);
+    },
+    question: (b) => `Their budget works out at ${/\d/.test(String(b.known?.budget?.value || "")) ? String(b.known.budget.value).replace(/\..*$/, "") : "a tight one"} and they have asked for a Michelin-level meal, which starts around ${FINE_DINING_KR} kr a head. Both are plannable and not in the same week. Ask whether the meal is the one thing they are spending on, or whether they would rather it stayed everyday.`,
   },
 ];
 

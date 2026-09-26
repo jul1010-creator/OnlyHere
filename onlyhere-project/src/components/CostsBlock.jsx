@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { costLines, byUrgency, estimateFrom, describeEstimate, partyOf, partyFrom, describeGroup, costAction, bedsEstimate, tripEstimate, describeTrip, COST_KIND } from "../utils/costLedger";
-import { FOOD_TIERS, FOOD_TIER_DEFAULT, tierCost, describeTier, tierDayRate, BUDGET_WARNING, MEALS_A_DAY_OPTIONS, MEALS_A_DAY_DEFAULT } from "../utils/mealsEstimate";
+import { FOOD_TIERS, FOOD_TIER_DEFAULT, foodTier, tierCost, describeTier, tierDayRate, BUDGET_WARNING, MEALS_A_DAY_OPTIONS, MEALS_A_DAY_DEFAULT } from "../utils/mealsEstimate";
 import { partnerDisclosure, outboundLink } from "../utils/affiliates";
 import { tripDayDate } from "../utils/guideReading";
 
@@ -44,7 +44,13 @@ export const CostsBlock = ({ guide, C, rowFor, now = new Date(), doors = false, 
   // Oliver, 24 Sep 2026: "make 3 options you can click on." The figure under
   // this used to assume one restaurant meal a day and say so in small print,
   // which is a guess wearing a disclosure. See utils/mealsEstimate.js.
-  const [eatTier, setEatTier] = useState(FOOD_TIER_DEFAULT);
+  //
+  // AND IT OPENS ON THE ONE THEY TICKED. 26 Sep 2026: it opened on the default
+  // whatever the panel said, so a traveller who picked Flexible saw their week
+  // priced at Cheap until they clicked, and the two screens quoted different
+  // figures for one trip. foodTier validates the key, so a guide built before
+  // this existed still opens on the default.
+  const [eatTier, setEatTier] = useState(foodTier(guide?._food)?.key || FOOD_TIER_DEFAULT);
   // ── AND HOW OFTEN THEY EAT, WHICH MOVES IT MORE THAN THE TIER ─────
   // Oliver, 24 Sep 2026: "when I travel, I usually only eat twice a day. No
   // breakfast. Just lunch and dinner." Half again on every eating-out figure,

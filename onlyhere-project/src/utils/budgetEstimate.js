@@ -164,16 +164,60 @@ const seasonAt = (when) => {
 // A trip that straddles gets NO season, which puts the whole band back on screen
 // rather than picking the half the arrival happened to land in. That is the
 // honest answer: the traveller is paying both.
+// Winter and low are the same price column, so crossing between them is not a
+// straddle. June is.
+const samePriceColumn = (a, b) => a === b || (a !== "high" && b !== "high");
+
+// ── AND WHY THERE IS NO SEASON, WHICH IS TWO DIFFERENT FACTS ────────
+//
+// Found by a review pass hours after the straddle shipped. bedSeasonOf returns
+// null for a trip with no dates AND for a trip that crosses 1 June, and the
+// sentence built on it could not tell them apart, so a traveller who had filled
+// in both dates was told "No arrival date was given". The same prompt carried
+// their arrival date twice over in other blocks.
+//
+// Two facts, so two answers. Null with dates means they are paying both seasons;
+// null without means nobody has said yet.
+export const straddlesSeason = (arrival, departure = "") => {
+  const from = seasonAt(arrival);
+  const to = seasonAt(departure);
+  if (!from || !to) return false;
+  if (!samePriceColumn(from, to)) return true;
+  // ── AND A LONG TRIP CAN CONTAIN A SEASON IT DOES NOT TOUCH ──────
+  //
+  // Found by a review pass. Reading the two endpoints alone priced a trip from 28
+  // May to 3 September at low season, because both ends are low, while 92 of its
+  // 98 nights are June to August. Rare, and false when it happens.
+  const a = dayStart(arrival), b = dayStart(departure);
+  if (!a || !b) return false;
+  const [start, end] = a <= b ? [a, b] : [b, a];
+  // Walk the months it covers rather than the days: a trip is at most a few
+  // months and this is the cheapest way to ask whether it holds a June.
+  for (let d = new Date(start.getFullYear(), start.getMonth(), 1); d <= end; d = new Date(d.getFullYear(), d.getMonth() + 1, 1)) {
+    const m = d.getMonth() + 1;
+    if (BED_SEASON.high.includes(m) && from !== "high") return true;
+    if (!BED_SEASON.high.includes(m) && from === "high") return true;
+  }
+  return false;
+};
+
 export const bedSeasonOf = (arrival, departure = "") => {
   const from = seasonAt(arrival);
   if (!from) return null;
   const to = seasonAt(departure);
   if (!to) return from;
-  // Winter and low are the same price column, so crossing between them is not a
-  // straddle. June is.
-  const same = (a, b) => a === b || (a !== "high" && b !== "high");
-  return same(from, to) ? (from === "high" ? "high" : from) : null;
+  // ── AND ONE ANSWER, NOT TWO ─────────────────────────────────────
+  // straddlesSeason is the one reader of "is this trip in one season". This used
+  // to test the two endpoints itself and the two disagreed: a trip from 28 May to
+  // 3 September came back "low" from here and "straddles" from there, so the panel
+  // named March rates over a band that held both seasons.
+  return straddlesSeason(arrival, departure) ? null : from;
 };
+
+// Which way a straddling trip crossed, so the sentence can say which end of its
+// band is which. True where the trip begins outside summer and reaches into it.
+export const intoSummer = (arrival, departure = "") =>
+  seasonAt(arrival) !== "high" && straddlesSeason(arrival, departure);
 
 // What the season does to a band whose two ends are the two seasons. A known
 // season is one of them rather than a span across both; an unknown season is
@@ -698,9 +742,25 @@ export const movingNote = (scope, transport) => {
 // three are compact enough to cross on foot, and every one of them has a metro,
 // a letbane or a bus network a visitor can use from their phone.
 //
-// AN ISLAND IS THE CLEAREST CASE OF THE FOUR. Taking a car across costs 142 kr
-// each way on Aero against 25 for a bicycle, and the islands worth a week are
-// the ones people cycle.
+// ── AND THE MIDDLE ONE IS NOT AN ISLAND ANY MORE ────────────────────
+//
+// This block used to read "AN ISLAND IS THE CLEAREST CASE OF THE FOUR. Taking a
+// car across costs 142 kr each way on Aero against 25 for a bicycle." That was
+// the reasoning behind recommending a bicycle and nothing else for the middle
+// scope, and it stopped being true on 25 Sep when Oliver renamed that chip.
+//
+// He renamed it because the old label was wrong: "Stay on one island" meant
+// Zealand and Jutland, and he asked "I mean Zealand, Jutland, and Odense.. is
+// land-area better?" The scope's own sentence now says "Do not move them to
+// another part... and do not put a ferry in the trip." So the recommendation was
+// arguing from a ferry fare for a trip that forbids ferries, and it was telling
+// somebody covering Jutland, which is 300 km end to end, that a bicycle is the
+// recommended way round.
+//
+// A REGION IS A REGION OF TOWNS, so it wants what moving between towns wants.
+// Trains reach the whole of it and a bicycle is a real answer for the days
+// inside one area, which is both of them rather than one. Found by a review
+// pass, 26 Sep 2026; the label changed a day earlier and this did not.
 //
 // EXPLORING IS THE ONLY ONE THAT WANTS A CAR OR A TRAIN, and it wants one of
 // them rather than preferring either: movingProblem already says so.
@@ -717,8 +777,8 @@ export const RECOMMENDED = {
     why: "A one-town trip means somewhere with enough in it for the week, so Copenhagen, Aarhus, Odense or Aalborg. All four are walkable in the middle and have a metro, a letbane or buses you can use from your phone, and a car in any of them is parking charges and a zone map you did not come here for.",
   },
   island: {
-    modes: ["bike"],
-    why: "Islands are what Denmark does best on two wheels, and the ferry agrees: Aero charges 25 kr for a bicycle and 142 for a car.",
+    modes: ["public transport", "bike"],
+    why: "One part of the country is still a few towns apart: Jutland is 300 km end to end. A train or a bus links them and a bicycle is what the days inside one area are for, which is why both are marked. A car is the one that adds a cost this trip does not need, since the scope keeps you off the ferries anyway.",
   },
   explore: {
     modes: ["public transport", "car"],
@@ -753,7 +813,10 @@ export const EXCLUDED = {
   // Buses and metros inside one town, which is the one travel cost this cannot
   // reach: a Copenhagen City Pass is 160 kr a day and most Danish town centres
   // are walkable, and the panel does not know which town yet.
-  local: "buses and metros inside a town",
+  // Worded without a mode in it on purpose: this sentence goes into the brief,
+  // the brief goes into the transcript, and travelModeKey reads the transcript.
+  // "buses and metros inside a town" was read as public transport. See stayChoice.js.
+  local: "local fares inside a town",
   flights: "flights",
 };
 
@@ -794,6 +857,11 @@ export const estimateDay = ({ stay = "", food = "", freeOnly = false, scope = ""
   // pushing a season through the food half would invent a movement nobody
   // published.
   const season = bedSeasonOf(arrival, departure);
+  // Whether the band is wide because the trip crosses the boundary or because
+  // nobody has said when they are coming. See straddlesSeason.
+  const straddles = straddlesSeason(arrival, departure);
+  // Which way, because "crosses into summer" is false for a trip leaving it.
+  const crossingIntoSummer = intoSummer(arrival, departure);
   const bed = clean(stay) ? bedPerNight(stay, people, season) : null;
   const tier = clean(food) ? foodTier(food) : null;
   // ── A CONTRADICTION IS NOT A FIGURE ─────────────────────────────
@@ -926,6 +994,8 @@ export const estimateDay = ({ stay = "", food = "", freeOnly = false, scope = ""
     // OR the tier has no published calendar to read. bedPerNight decides, so the
     // panel cannot name a season that moved nothing.
     season: bed?.season ?? null,
+    straddles,
+    intoSummer: crossingIntoSummer,
     seasonal: !!bed?.seasonal,
     // Stated separately from `excludes` because it is the opposite fact: the
     // tick did not remove a cost, it settled one.
@@ -975,7 +1045,18 @@ export const estimateShort = (est, code = "DKK", rate = null) => {
 // question about any estimate is whether the bed is in it.
 export const estimateSays = (est) => {
   if (!est?.ready) return "";
-  const inIt = est.bedPaid ? "Food only, since you have your bed already" : "A bed and food";
+  // ── AND WHAT IS IN IT, INCLUDING THE PART THAT MOVES ─────────────
+  //
+  // Found by a review pass. Both sentences named a bed and food and stopped, on a
+  // figure that can also carry a hop between towns: a booked bed, cheap food and
+  // a car across the country came out 140 to 279, of which 40 to 99 is petrol and
+  // the bridge, and the sentence called all of it food. The excludes list was
+  // correctly dropping "getting between towns" at the same time, so the reader was
+  // told the figure does not leave travel out while being told it covers only food.
+  const moves = !!est.moving;
+  const inIt = est.bedPaid
+    ? (moves ? "Food and getting between towns, since you have your bed already" : "Food only, since you have your bed already")
+    : (moves ? "A bed, food and getting between towns" : "A bed and food");
   // ── WHO IT IS DIVIDED BY, AND WHETHER WE KNEW ───────────────────
   //
   // The figure is per person and some of what is in it is not. A room and a
@@ -1092,9 +1173,17 @@ export const estimateSays = (est) => {
           // A tier with no calendar says nothing here. The best tier's band is a
           // cheap central room against a dear one, not June against March, and
           // saying otherwise was the worst line this sentence ever printed.
-          : est.seasonal
-            ? " The bottom of the band is low season and the top is summer, so put your dates in and it narrows."
-            : "";
+          : !est.seasonal
+            ? ""
+            : est.straddles
+              // THEY DID PUT THEIR DATES IN. Telling them to is the panel failing
+              // to read its own inputs, which is the defect this whole night was
+              // about.
+              // WHICH WAY IT CROSSED. The first version said "crosses into summer"
+              // for a trip that crosses OUT of it, and told a late-August
+              // traveller their low end was the nights before June.
+              ? ` Your trip spans both seasons, so the band holds both: ${est.intoSummer ? "the cheap end is the nights before June and the top is the nights after it" : "the top is the nights up to the end of August and the cheap end is the ones after it"}.`
+              : " The bottom of the band is low season and the top is summer, so put your dates in and it narrows.";
   return `${inIt}, ${who}.${beds}${when}${eating}${free} It leaves out ${est.excludes.join(", ")}. The guide prices those once it knows the route.`;
 };
 
@@ -1108,10 +1197,60 @@ export const estimateSays = (est) => {
 export const estimateForBrief = (est) => {
   if (!est?.ready) return "";
   const money = est.low === est.high ? `about ${toTen(est.low)} kr` : `about ${toTen(est.low)} to ${toTen(est.high)} kr`;
+  const moves = !!est.moving;
   const covers = est.bedPaid
-    ? "a day per person for food, with the bed already paid for"
-    : "a day per person, covering a bed and food";
-  const who = est.headsCounted ? ` for ${est.heads}` : "";
+    ? `a day per person for food${moves ? " and getting between towns" : ""}, with the bed already paid for`
+    : `a day per person, covering ${moves ? "a bed, food and getting between towns" : "a bed and food"}`;
+  // "...already paid for for 1" reads as a stammer. The count goes in front of
+  // the clause on that branch instead.
+  const paidFor = est.bedPaid && est.headsCounted ? `, for ${est.heads},` : "";
+  // ── AND WHO IT IS DIVIDED BY, WHICH THE PLANNER NEEDS TOO ────────
+  //
+  // The panel says "reckoned on two of you sharing, so say how many you are" and
+  // the brief said nothing, while the figure was still divided by two. A planner
+  // that does not know the headcount was assumed cannot ask for it and cannot
+  // caveat the number it was handed.
+  // Only where something IS shared, the same test the panel makes. The brief told
+  // a traveller with a paid bed and no car that their groceries were "divided by
+  // an assumed two sharing", while the panel told them nothing in it was shared.
+  const shared = est.parts.some(p => p.per === "party" && p.high > 0);
+  const who = est.bedPaid && est.headsCounted ? ""
+    : est.headsCounted ? ` for ${est.heads}`
+    : shared ? ", divided by an assumed two sharing, because nobody said how many they are"
+    : ", and nothing in it is shared, so the headcount does not move it";
+  // ── AND WHAT KIND OF BED THAT BUYS ───────────────────────────────
+  //
+  // Found by a review pass, 26 Sep 2026, and it is the gap that mattered most.
+  // The cheapest tier's figure is a bunk in a shared room, and the planner was
+  // told only "covering a bed and food". The chip's own sentence says the
+  // traveller wants "the cheaper end of the market: a little further out from the
+  // centre", which is a statement about WHERE, so a guide could recommend a
+  // private room further out at 600 a night and contradict the figure it was
+  // handed without contradicting anything it was told.
+  //
+  // The panel has said this all along ("A dorm bed each, which is the cheapest
+  // bed in the country"). The traveller and the planner were reading different
+  // assumptions off the same number.
+  const asPlan = (p) => {
+    if (!p) return "";
+    const rooms = p.rooms || [];
+    const bunks = p.beds === 1 ? "one dorm bunk" : `${p.beds} dorm bunks`;
+    if (!rooms.length) return p.beds === 1 ? "a dorm bunk in a shared room" : "a dorm bunk each in a shared room";
+    const also = p.beds ? ` plus ${bunks}` : "";
+    if (rooms.length === 1) return `one private room for ${rooms[0]}${also}`;
+    return `${rooms.length} private rooms${also}`;
+  };
+  const bedKind = est.bedPaid || !est.lowPlan ? ""
+    : est.lowPlan.rooms.join(",") === est.highPlan.rooms.join(",") && est.lowPlan.beds === est.highPlan.beds
+      ? ` That bed figure is ${asPlan(est.highPlan)}.${est.bedsLow ? ` Do not price a private room against it: a private double runs ${ROOM_KR[2].low} to ${ROOM_KR[2].high} a night.` : ""}`
+      : ` The low end of that bed figure is ${asPlan(est.lowPlan)} and the high end is ${asPlan(est.highPlan)}, so say which you are assuming if you put a price on a night.`;
+  // ── AND WHAT IS NOT IN IT ────────────────────────────────────────
+  //
+  // The panel names these and the brief did not, while the system prompt asks the
+  // planner for "a rough per-day total". So it could hand a traveller this figure
+  // as their day's spending with no entry fees, no local transport and no travel
+  // between towns in it.
+  const out = est.excludes?.length ? ` It does NOT include ${est.excludes.join(", ")}, so add those separately rather than presenting this as a whole day's spending.` : "";
   // THE SEASON GOES WITH IT, because the planner is the half of this that can
   // act on it. A guide told the figure is a high-season one will not go looking
   // for a March price to contradict it, and one told no season was read knows
@@ -1123,9 +1262,18 @@ export const estimateForBrief = (est) => {
     : est.season === "high" ? " Priced in high season, June to August."
     : est.season === "winter" ? " Priced at low season, since Danish hostels do not publish a December to February rate."
     : est.season === "low" ? " Priced in low season, March to May and September to November."
-    : est.seasonal ? " No arrival date was given, so this spans low season and summer rather than picking one."
-    : "";
-  return `${money} ${covers}${who}.${when} Estimated from what they picked rather than a figure they gave, so treat it as the shape of the trip they want rather than a limit they stated.`;
+    // ── AND THE PLANNER IS NOT TOLD A DATE IS MISSING WHEN IT IS NOT ─
+    //
+    // This said "No arrival date was given" for a trip that straddles the
+    // boundary, while the same prompt carried the arrival date in two other
+    // blocks. And it cannot see a date typed in the chat rather than the picker,
+    // so it must not assert the absence of one at all: the brief has its own
+    // `when` slot, which reads both, and that is the block the planner is told
+    // overrides everything else.
+    : !est.seasonal ? ""
+    : est.straddles ? ` The trip spans both seasons, so this holds both: ${est.intoSummer ? "the cheap end is the nights before June and the top is the nights after it" : "the top is the nights up to the end of August and the cheap end is the ones after it"}.`
+    : " This spans low season and summer, because the figure had no trip dates to narrow it by. Go by the trip dates in this block rather than by the width of that band.";
+  return `${money} ${covers.replace(/, with the bed/, `${paidFor} with the bed`)}${who}.${bedKind}${when}${out} Estimated from what they picked rather than a figure they gave, so treat it as the shape of the trip they want rather than a limit they stated.`;
 };
 
 // ── THE LOCKOUT ─────────────────────────────────────────────────────

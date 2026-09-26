@@ -228,15 +228,33 @@ export const travelModeKey = (mode) => {
 // the chat itself told them.
 //
 // So when the intake's "Getting around:" line lists more than one mode, the
-// fastest one it lists moves them between places. One mode ticked, or no tick
-// line at all, and this says nothing: travelModeKey decides as before.
+// fastest one it lists moves them between places.
+//
+// ── AND ONE TICK IS AN ANSWER TOO, WHICH THIS USED TO REFUSE ─────────
+//
+// It said "One mode ticked, or no tick line at all, and this says nothing:
+// travelModeKey decides as before", on the assumption that travelModeKey over the
+// transcript would find the same single mode. It does not, and a review pass on 26
+// Sep 2026 found what that costs.
+//
+// travelModeKey reads a SENTENCE and picks the slowest mode in it, which is right
+// for "mostly walking, might rent bikes". The transcript it is handed contains the
+// intake's own hidden turn, and one line of that turn is the Cheapest location
+// sentence: "still walkable or a short ride in". So a traveller who ticked Car and
+// nothing else was read as WALKING, because the app's own prose about where they
+// sleep outranked the chip they pressed. dayCeilingKm("walk") is 15 km against 300
+// for a car, so the plan gate flagged and retried every driving day of their trip.
+//
+// A TICK LIST IS NOT A SENTENCE, which is what this function already says. With
+// one mode on it there is nothing to arbitrate: that mode is the answer, and
+// falling through to a regex over our own prose was never "deciding as before".
 const FASTEST_FIRST = ["car", "camper", "public transport", "bike", "tent", "walk"];
 export const tickedTravelMode = (text) => {
   const m = String(text || "").match(/Getting around:\s*([^|\n]+)/i);
   if (!m) return null;
   const keys = [...new Set(m[1].split(/,|\bog\b|\band\b/i).map(part => travelModeKey(part)).filter(Boolean))];
-  if (keys.length < 2) return null;
-  return FASTEST_FIRST.find(k => keys.includes(k)) || null;
+  if (!keys.length) return null;
+  return FASTEST_FIRST.find(k => keys.includes(k)) || keys[0] || null;
 };
 
 // How far out a place can sit and still be part of THIS trip. Half the days can

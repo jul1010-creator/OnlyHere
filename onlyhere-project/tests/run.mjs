@@ -187,7 +187,7 @@ writeFileSync(entry, `
   export { clampNote, NOTE_SHOW_WHOLE_MAX, NOTE_CLAMP_AT, NOTE_MIN_HIDDEN } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { budgetCharacterised } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
   export { sharperAsk } from ${JSON.stringify(join(root, "src/utils/tripBrief.js"))};
-  export { BRIEF_SLOTS, BLOCKING_SLOTS, HARD_SLOTS, readBrief, briefReady, nextAsks, asksThisTurn, briefBlock, buildBlockedNote, MAX_ASKS_AT_ONCE, enoughToRecommend, unsureWhatTheyWant, ACKNOWLEDGED_VALUE, namedStayIn, readStayNights, bookedDayNumbers } from ${JSON.stringify(join(root, "src/utils/tripBrief.js"))};
+  export { BRIEF_SLOTS, BLOCKING_SLOTS, HARD_SLOTS, readBrief, briefReady, nextAsks, asksThisTurn, briefBlock, briefValue, buildBlockedNote, MAX_ASKS_AT_ONCE, enoughToRecommend, unsureWhatTheyWant, ACKNOWLEDGED_VALUE, namedStayIn, readStayNights, bookedDayNumbers } from ${JSON.stringify(join(root, "src/utils/tripBrief.js"))};
   export { GREETING, openingThread, withTestBrief, withoutTestBrief, threadIsSound, TEST_BRIEF } from ${JSON.stringify(join(root, "src/utils/chatThread.js"))};
   export { CHAT_REPORT_KIND, CHAT_REPORT_VERSION, buildChatReport, chatReportFilename, turnReport, briefTimeline, intakeReport } from ${JSON.stringify(join(root, "src/utils/chatReport.js"))};
   export { RIGHTS_HOLDER, copyrightLine, GUIDE_RIGHTS_SHORT, GUIDE_RIGHTS_FULL, TDM_RESERVATION } from ${JSON.stringify(join(root, "src/utils/rights.js"))};
@@ -208,7 +208,7 @@ writeFileSync(entry, `
   export { isSameSpot, SAME_SPOT_KM, cityFromLocation, stopTown } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { withoutMismatchedStays } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
   export { capitalCostSaid, budgetCapitalBlock, BUDGET_CAPITAL_RULE, BUDGET_CAPITAL_GUIDE, wantsDanishFood, kebabSaid, budgetFoodBlock, budgetFoodGuide, BUDGET_FOOD_RULE, BUDGET_FOOD_GUIDE } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
-  export { travellerBudget, budgetTierMismatch, dayTripClaim, dayTripHonest, dayTripRadiusKm, withoutDayTripClaim, describeDayTripClaim, DAY_TRIP_FRACTION } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
+  export { travellerBudget, saidByTraveller, budgetTierMismatch, dayTripClaim, dayTripHonest, dayTripRadiusKm, withoutDayTripClaim, describeDayTripClaim, DAY_TRIP_FRACTION } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
   export { placedLibrary, nearbyPublished, describeLocation, distanceWords, walkMinutes, nearbyLabel, NEAR_KM, WALK_KMH, SAME_VISIT_KM, SAME_VISIT_LIMIT } from ${JSON.stringify(join(root, "src/utils/nearbyPlaces.js"))};
   export { TICKET_STATUS, TICKET_BADGE, ticketBadge, normaliseTicketStatus, statusFromCode, readTicketmasterEvent, appearances, otherDatesHere, alsoPlayingLine, describeAppearances, nameTokens, nameOverlap, daysApart, matchEvent, reconcileTickets, ticketsForPrompt, priceText, SAME_EDITION_DAYS, MIN_NAME_OVERLAP, stampTicketSource, ticketProvenance, isMeasured, statedAsFact, ticketCheckAgeDays, TICKET_STATUS_FRESH_DAYS, ticketPromptNote, ticketBookingWhy, ticketLabelLine, writtenStatusRule, lookupFailureNote, TICKET_SOURCES, TICKET_SOURCE_LABEL, isAncillaryListing, isSubEventListing, soldOutClaim, saleOpensLater, soldOutContradiction } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
   export { shouldOfferAccount, shouldAskProfile, noteDismiss, nudgeCopy, readNudge, EMPTY_NUDGE, MIN_SAVES, COOLDOWN_DAYS, MAX_ASKS, NUDGE_KEY, PROFILE_NUDGE_KEY } from ${JSON.stringify(join(root, "src/utils/accountNudge.js"))};
@@ -314,7 +314,7 @@ writeFileSync(entry, `
   export { launderedAbsence } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
   export { contradictedAbsence, sentences } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
   export { weighAdd, addCaution, tripLoadBlock, STOPS_A_DAY, mainTheme } from ${JSON.stringify(join(root, "src/utils/weighAdd.js"))};
-  export { tripWindow, tripDays, tripLastDay, DEPARTURE_DAY_ENDS_BY, daysTheySaidFor, latestSpokenLength, isIntakeTurn, tripEvents, eventPickLimit, overlapsTrip, eventWindow, hasEnded, overlapDays, interestScore, arrivalDateIn, dateRangeIn, dayCountIn, relativeDayIn, relativeAnswerIn, daysBetween, describePicks, monthOnlyIn, MAX_EVENT_PICKS, MAX_EVENTS_SHOWN } from ${JSON.stringify(join(root, "src/utils/tripEvents.js"))};
+  export { tripWindow, tripDays, tripLastDay, DEPARTURE_DAY_ENDS_BY, daysTheySaidFor, latestSpokenLength, isIntakeTurn, INTAKE_TURN_MARK, tripEvents, eventPickLimit, overlapsTrip, eventWindow, hasEnded, overlapDays, interestScore, arrivalDateIn, dateRangeIn, asRangeText, dayCountIn, relativeDayIn, relativeAnswerIn, daysBetween, describePicks, monthOnlyIn, MAX_EVENT_PICKS, MAX_EVENTS_SHOWN } from ${JSON.stringify(join(root, "src/utils/tripEvents.js"))};
   export { OPERATORS, operatorsForLeg, operatorNote, isLongLeg, LONG_LEG_KM, THRESHOLDS_ARE_ORDERED, isRegionCrossing } from ${JSON.stringify(join(root, "src/utils/operators.js"))};
   export { FORECAST_HORIZON_DAYS, FORECAST, NORMALS, weatherSourceFor, wetDayWords, normalsIcon, normalsLine, weatherBadge, normalsNote } from ${JSON.stringify(join(root, "src/utils/weather.js"))};
   export { mergeForecasts, agreementNote, SPREAD_DISAGREES_C, weatherIsStale, weatherChanges, WEATHER_STALE_HOURS, dayWeather } from ${JSON.stringify(join(root, "src/utils/weather.js"))};
@@ -11611,6 +11611,40 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     // And none of it bought by loosening what a date is. This sentence ends in a
     // full stop after a clock time, and a full stop is not an ordinal.
     is("a clock time is still not a trip", span("I am at work today till 5."), null);
+
+    // ── AND A DEPARTURE IS A JOIN TOO, IN WORDS ───────────────────
+    //
+    // 26 Sep 2026, found by a review pass, and it is the commonest way anybody
+    // states a trip window. RANGE_JOIN knows "to", "till", "until" and a dash. It
+    // does not know a CLAUSE, and people write clauses, so every one of these
+    // left the brief holding a start with no end: nothing downstream could get
+    // the trip's length from the dates, and the budget panel could not tell
+    // whether the trip crossed into high season.
+    const CLAUSES = [
+      "We land in Copenhagen on 14 September and fly home on 17 September.",
+      "We land 14 September and leave 17 September.",
+      "Arriving 14 September, departing 17 September.",
+      "We fly in 14 September and head back 17 September",
+      "vi ankommer 14. september og rejser hjem 17. september",
+      "we get there the 14th of September and go home the 17th",
+    ];
+    is("a departure clause reads as the end of the range",
+       CLAUSES.filter(x => span(x) !== "14-17").map(x => `${x} -> ${span(x)}`), []);
+    // AND NOTHING IS BOUGHT BY LOOSENING WHAT A RANGE IS. The clause may hold no
+    // digit, which is what stops it reaching past the second date, and a leaving
+    // word is required, so two numbers in a sentence are not a trip.
+    is("two ages are not a trip", span("I am 30 and my wife is 28"), null);
+    is("nor a count of people", span("10 people left on the 17th"), null);
+    is("nor a length with one date", span("We are there for 3 nights from the 10th"), null);
+    is("nor one date on its own", span("We leave on 17 September"), null);
+    // AND A SENTENCE THAT SAYS BOTH IS LEFT ALONE, so the rewrite cannot turn a
+    // real range into a different one.
+    is("a real join still wins", span("14 to 17 September, then we fly home"), "14-17");
+    {
+      const { asRangeText } = M;
+      is("and the rewrite leaves a plain range untouched",
+         asRangeText("14 September to 17 September"), "14 September to 17 September");
+    }
   }
 
   // ── AND A DAY OF THE WEEK, WHICH NOTHING COULD READ ───────────────
@@ -24712,8 +24746,17 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // The option, wherever it sits in the object, for the reason given above.
   ok("and the traveller's own turns reach it, for the region pass",
      /budget, saidByTraveller(?:, \w+(?:: \w+)?)* \}\);/.test(preview));
-  ok("and it is read from the budget box and their own words",
-     /travellerBudget\(\[intakeBudgetText, saidByTraveller\]\.filter\(Boolean\)\.join\("\\n"\)\)/.test(preview));
+  // ── AND OFF THEIR WORDS ALONE, WHICH IS THE FIX OF 26 SEP ───────
+  //
+  // This used to assert the budget box went in as well. The box holds a computed
+  // sentence now, and the turns it was joined with included the form's own hidden
+  // turn, one line of which reads "What they eat: Cheap". The tight pattern
+  // matches the bare word, so ticking a food chip made somebody a budget
+  // traveller on this screen and stripped hotels from what it offered.
+  ok("and it is read from their own words alone",
+     /travellerBudget\(saidByTraveller\)/.test(preview));
+  ok("and the box is not folded into that read",
+     !/travellerBudget\(\[intakeBudgetText/.test(preview));
   ok("the budget box is a prop", /intakeBudgetText = "",/.test(preview));
   // ── READ THROUGH THE BRIEF, NOT OVER THE WHOLE TRANSCRIPT ───────
   // 18 Aug, from an adversarial review. travelModeKey tests the modes in speed
@@ -24754,8 +24797,12 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // the same turns as an array, and saidByTraveller is its join. Both halves
   // are asserted: the filter is still role "user" and nothing else, and the
   // string is still derived from that one list rather than rebuilt beside it.
+  // THEIR TURNS, AND NOT THE FORM'S. ownWords is accommodation.js's saidByTraveller,
+  // which drops the hidden turn the intake posts. See the block above.
   ok("the interest is read from the traveller's turns only",
-    /const travellerTurns = aiMessages\.slice\(1\)\.filter\(m => m\.role === "user"\)/.test(preview));
+    /const travellerTurns = ownWords\(aiMessages\.slice\(1\)\)/.test(preview));
+  ok("and the form's own turn is not read as theirs",
+    !/filter\(m => m\.role === "user"\)\.map\(m => m\.text \|\| ""\);\n  const saidByTraveller/.test(preview));
   ok("and one list feeds both the string and the window",
     /const saidByTraveller = travellerTurns\.join/.test(preview));
   ok("and the place matcher still reads the whole conversation",
@@ -34883,7 +34930,70 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 {
   const { writeInLanguage } = M;
   const { guideLanguage, languageOfProse, ruledOutLanguages, languageBarNote, NO_DANISH_NOTE, EN_MARKERS, DA_MARKERS } = M;
-  const { travellerBudget, budgetCharacterised, stayProblems } = M;
+  const { travellerBudget, budgetCharacterised, stayProblems, saidByTraveller } = M;
+
+  // ── A TICK IS NOT A THING THEY SAID ─────────────────────────────
+  //
+  // 26 Sep 2026, found by a review pass, and the worst defect in this file's
+  // history because what it produced was FALSE and it was PERMANENT.
+  //
+  // The intake form posts its answers into the conversation as a user turn,
+  // marked hidden, so the model reads the ticks as context. One of those lines is
+  // "What they eat: Cheap. Kebab and hot dog stands, McDonald's, a pizza slice."
+  // The tight pattern matches the bare word `cheap`. So a traveller who ticked
+  // the Cheap food chip AND the best hotel in town came out a budget traveller:
+  // "THEY WANT A BUDGET TRIP" went into the chat prompt and the guide prompt, the
+  // guide was told to have them sleep somewhere cheaper than the hotel they had
+  // chosen, the preview screen stripped hotels from what it offered, and
+  // "they have described their budget as tight before" was written into the
+  // learned profile for every later conversation to read.
+  //
+  // They described nothing. They ticked a food tier, and the app quoted its own
+  // menu back to itself as evidence about them.
+  {
+    const { FOOD_TIERS } = M;
+    const cheapLine = `What they eat: Cheap. ${FOOD_TIERS.find(t => t.key === "cheap").what}`;
+    // The pattern still matches it, which is correct: `cheap` IS a budget word
+    // when a person types it. The fix is about whose text is read.
+    is("the form's own line still looks like a budget word", travellerBudget(cheapLine), "tight");
+    // SO THE HIDDEN TURN IS NOT READ AS THEIRS.
+    const turns = [
+      { role: "assistant", text: "Where in Denmark?" },
+      { role: "user", text: cheapLine, hidden: true },
+      { role: "user", text: "We want to see Aarhus and eat well." },
+    ];
+    is("their own words are all that is read", saidByTraveller(turns), "We want to see Aarhus and eat well.");
+    is("so a ticked chip is not a stated budget", travellerBudget(saidByTraveller(turns)), null);
+    // AND A PERSON WHO DOES SAY IT IS STILL HEARD.
+    is("while somebody who says it is",
+       travellerBudget(saidByTraveller([...turns, { role: "user", text: "we are on a tight budget" }])), "tight");
+    // AND NOTHING ELSE IN THE HIDDEN TURN LEAKS EITHER. Every line the form can
+    // write, checked against every level, so the next chip label cannot do this.
+    for (const t of FOOD_TIERS) {
+      const line = `What they eat: ${t.label}. ${t.what}`;
+      is(`the ${t.key} chip is not a budget statement`,
+         travellerBudget(saidByTraveller([{ role: "user", text: line, hidden: true }])), null);
+    }
+    // ── AND NO CALLER READS THE RAW TRANSCRIPT ANY MORE ───────────
+    // The filter lives beside the pattern it protects, so a new call site cannot
+    // reintroduce this by joining aiMessages itself.
+    {
+      const appB = readFileSync(join(root, "src/App.jsx"), "utf8");
+      const raw = appB.match(/travellerBudget\([^)]*\)/g) || [];
+      // Either the reader itself, or a local already built from it. writerSaid is
+      // the guide-build one and it is assigned saidByTraveller(aiMessages) a line
+      // above, so the check follows the assignment rather than the call site.
+      const viaLocal = (x) => {
+        const m = /travellerBudget\((\w+)\)/.exec(x);
+        return !!m && new RegExp(`const ${m[1]} = saidByTraveller\\(`).test(appB);
+      };
+      const bad = raw.filter(x => !/saidByTraveller/.test(x) && !viaLocal(x));
+      is("every budget read in App.jsx goes through their own words", bad.join(" | "), "");
+      // AND THE LEARNED PROFILE, which keeps it for every future conversation.
+      ok("the profile's money line is read the same way",
+         /spend: travellerBudget\(saidByTraveller\(aiMessages\)\)/.test(appB));
+    }
+  }
   const appL = readFileSync(join(root, "src/App.jsx"), "utf8");
   const da = writeInLanguage({ tag: "da-DK", name: "Danish" });
 
@@ -47221,7 +47331,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("nor a date regex", !/const dateRe\s*=/.test(code));
     ok("nor a day-count regex", !/dayCountMatch|weekWordMatch|singleWeekMatch|fortnightMatch/.test(code));
     ok("the shared readers are imported instead",
-       /import \{ tripWindow, tripDays, dayCountIn, arrivalDateIn, monthOnlyIn, latestRelativeAnswer \} from "\.\/utils\/tripEvents"/.test(appD));
+       /import \{ tripWindow, tripDays, dayCountIn, arrivalDateIn, monthOnlyIn, latestRelativeAnswer, INTAKE_TURN_MARK \} from "\.\/utils\/tripEvents"/.test(appD));
     // tripDays joined the list on 19 Sep, and it is the same rule: the length
     // of a trip is read in one place or it is read four ways. The form's own
     // "Exact trip length" line is a reader too, and it was the fourth.
@@ -48173,7 +48283,13 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // own turns reaches tripWindow, on both screens.
   const prev = readFileSync(join(root, "src/components/GuidePreviewScreen.jsx"), "utf8");
   ok("the preview screen passes the traveller's turns", /tripWindow\(\{[^}]*convoTurns:\s*travellerTurns/.test(prev));
-  ok("built from the user's messages only", /travellerTurns = aiMessages[\s\S]{0,80}m\.role === "user"/.test(prev));
+  // ── THEIR MESSAGES, MINUS THE ONE THE FORM WROTE ────────────────
+  // The filter moved into accommodation.js on 26 Sep so one reader answers "what
+  // did this person type", and the hidden intake turn stopped being read as
+  // something they said. See saidByTraveller there.
+  ok("built from the user's messages only", /travellerTurns = ownWords\(aiMessages\.slice\(1\)\)/.test(prev));
+  ok("and the reader it uses drops hidden turns",
+     /!m\?\.hidden/.test(readFileSync(join(root, "src/utils/accommodation.js"), "utf8")));
   ok("and saidByTraveller is derived from that one list rather than rebuilt",
      /saidByTraveller = travellerTurns\.join/.test(prev));
   const app2 = readFileSync(join(root, "src/App.jsx"), "utf8");
@@ -59004,9 +59120,12 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
            /\[\["yes", "I speak Danish"\], \["no", "No Danish"\]\]/.test(appD));
         ok("and the form says it in the hidden turn",
            /Language: speaks Danish.*Language: does not speak Danish/s.test(appD));
+        // Read as "every readBrief caller is given it", not as a field order: the
+        // literal pattern broke the moment two more intake keys were added below
+        // it, which is a check about formatting rather than about wiring.
         ok("the brief reads it on both paths",
            /intake: \{ arrival: intakeArrival, departure: intakeDeparture, danish: intakeDanish \}/.test(appD)
-           && /\s+danish: intakeDanish,\n\s+\},/.test(appD));
+           && (appD.match(/danish: intakeDanish,/g) || []).length >= 2);
         ok("and the community block is told",
            /communityBlock\(byDay, \{ danishSpeaker: guideBrief\.known\.danish\?\.speaks === true \}\)/.test(appD));
         // ── AND THE DOOR SAYS TO OPEN IT ──────────────────────────
@@ -74775,8 +74894,29 @@ SOURCE: https://www.tripadvisor.com/whatever`;
 {
   is("car, transit and bike ticked travel by car", M.tickedTravelMode("Budget: 100 dkk | Getting around: Car, Public transport, Bike"), "car");
   is("transit and bike by transit", M.tickedTravelMode("Getting around: Public transport, Bike"), "public transport");
-  is("one tick says nothing", M.tickedTravelMode("Getting around: Bike"), null);
+  // ── AND ONE TICK IS AN ANSWER, WHICH THIS USED TO REFUSE ────────
+  //
+  // 26 Sep 2026, found by a review pass. Returning null here left travelModeKey to
+  // read the transcript, and the transcript contains the form's OWN prose: the
+  // Cheapest location line said "still walkable or a short ride in", and
+  // travelModeKey picks the slowest mode in a sentence. So a traveller who ticked
+  // Car and nothing else was read as WALKING, and dayCeilingKm("walk") is 15 km
+  // against 300 for a car, so the plan gate flagged and retried every driving day
+  // of their trip.
+  //
+  // A tick list is not a sentence, which is what this function says. With one mode
+  // on it there is nothing to arbitrate.
+  is("one tick is that mode", M.tickedTravelMode("Getting around: Bike"), "bike");
+  is("a car ticked alone is a car", M.tickedTravelMode("Getting around: Car"), "car");
   is("and a sentence is still read slowest first", M.tickedTravelMode("mostly walking, might rent bikes one day"), null);
+  is("no tick line at all is still nothing", M.tickedTravelMode("we are driving"), null);
+  // AND THE CHIP BEATS OUR OWN PROSE, which is the failure it was written for.
+  {
+    const { staySaid } = M;
+    const withStay = `${staySaid("cheapest", "")} | Getting around: Car`;
+    is("the form's own stay line reads as walking on its own", M.travelModeKey(staySaid("cheapest", "")), null);
+    is("and a ticked car wins wherever it sits", M.tickedTravelMode(withStay) || M.travelModeKey(withStay), "car");
+  }
   const appT = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
   ok("the guide's primary mode asks the tick list first", /const primaryKey = tickedTravelMode\(saidByTravellerForGuide\) \|\| travelModeKey\(saidByTravellerForGuide\);/.test(appT));
   ok("and so does the plan gate", /const gateMode = tickedTravelMode\(saidByTravellerForGuide\) \|\| travelModeKey\(saidByTravellerForGuide\);/.test(appT));
@@ -76642,6 +76782,233 @@ SOURCE: https://www.tripadvisor.com/whatever`;
          /say how many you are/.test(estimateSays(estimateDay({ stay: "cheapest", food: "cheap", scope: "town", travellers: "2 weeks with friends" }))));
     }
 
+    // ── AND THE PLANNER IS TOLD WHAT KIND OF BED IT BOUGHT ───────
+    //
+    // The gap that mattered most, found by a review pass. The cheapest tier's
+    // figure is a bunk in a shared room and the planner was told only "covering a
+    // bed and food", while the stay chip's own sentence says the traveller wants
+    // "the cheaper end of the market: a little further out from the centre", which
+    // is a statement about WHERE. So a guide could offer a private room further
+    // out at 600 a night and contradict the figure it was handed without
+    // contradicting a word it was told. The panel had said it all along.
+    {
+      const bunks = estimateDay({ stay: "cheapest", food: "self", scope: "town", travellers: "2 people" });
+      ok("the planner is told the bed is a bunk", /dorm bunk each in a shared room/.test(estimateForBrief(bunks)));
+      ok("and told not to price a private room against it", /Do not price a private room against it/.test(estimateForBrief(bunks)));
+      // ── AND IT READS THE PLAN, NOT TWO BOOLEANS ─────────────────
+      //
+      // A review pass found this branching on bedsLow and bedsHigh while the panel
+      // beside it read the arrangement, so a party of six on the cheapest tier in
+      // July, which is a five-bed room plus one bunk, was described to the planner
+      // as "a private room, one room for the party". One room for six.
+      for (const n of [6, 7, 8, 11, 12]) {
+        for (const arrival of ["", "2026-07-10T12:00"]) {
+          const e = estimateDay({ stay: "cheapest", food: "self", scope: "town",
+            travellers: `${n} people`, arrival, departure: arrival ? "2026-07-17T12:00" : "" });
+          const line = estimateForBrief(e);
+          if (e.highPlan.beds && e.highPlan.rooms.length) {
+            ok(`${n} at ${arrival || "no date"}: the planner is told about the bunks too`, /dorm bunk/.test(line));
+            ok(`${n} at ${arrival || "no date"}: and it is not called one private room`,
+               !/is one private room for the party/.test(line));
+          }
+          // AND THE TWO SENTENCES NEVER DISAGREE ABOUT THE ARRANGEMENT.
+          const panel = estimateSays(e);
+          is(`${n} at ${arrival || "no date"}: panel and brief agree there are bunks`,
+             /dorm bed|dorm bunk/.test(panel), /dorm bunk/.test(line));
+        }
+      }
+      ok("and the panel and the brief agree about it",
+         /dorm bed each/.test(estimateSays(bunks)) && /dorm bunk/.test(estimateForBrief(bunks)));
+      // AND A PRIVATE ROOM IS NAMED AS ONE.
+      const room = estimateDay({ stay: "best", food: "self", scope: "town", travellers: "2 people" });
+      ok("a hotel figure is called a private room", /private room/.test(estimateForBrief(room)));
+      ok("and is not called a bunk", !/bunk/.test(estimateForBrief(room)));
+
+      // ── AND WHAT IS NOT IN THE FIGURE REACHES IT TOO ───────────
+      // The panel names the exclusions and the brief did not, while the system
+      // prompt asks for "a rough per-day total". So the planner could hand a
+      // traveller a day's spending with no entry, no local transport and no
+      // travel between towns in it.
+      ok("the exclusions reach the planner", /does NOT include/.test(estimateForBrief(bunks)));
+      // ── AND WHAT IS IN IT, INCLUDING THE PART THAT MOVES ────────
+      //
+      // A review pass found both sentences naming a bed and food over a figure
+      // that carries a hop between towns: a booked bed, cheap food and a car
+      // across the country came out 140 to 279, of which 40 to 99 is petrol and
+      // the bridge, and the sentence called all of it food. The excludes list was
+      // dropping "getting between towns" at the same time, so the reader was told
+      // the figure did not leave travel out while being told it covered only food.
+      {
+        const moving = estimateDay({ stay: "booked", food: "cheap", scope: "explore", transport: ["\u{1F697} Car"], travellers: "2 people" });
+        ok("the hop is in the figure", moving.parts.some(p => p.what === "getting between towns"));
+        ok("so the panel names it", /getting between towns/.test(estimateSays(moving)));
+        ok("and so does the brief", /getting between towns/.test(estimateForBrief(moving)));
+        ok("and neither calls it food only", !/Food only/.test(estimateSays(moving)) && !/for food, for 2/.test(estimateForBrief(moving)));
+        // AND A FIGURE WITH NO HOP IN IT STILL READS PLAINLY.
+        const still = estimateDay({ stay: "cheapest", food: "cheap", scope: "town", travellers: "2 people" });
+        ok("a one-town figure covers a bed and food", /covering a bed and food/.test(estimateForBrief(still)));
+        // Read the covers clause alone: the exclusions further down the same
+        // sentence name travel on purpose, so a greedy match here tests nothing.
+        ok("and does not claim travel it does not hold",
+           !/covering a bed, food and getting between towns/.test(estimateForBrief(still)));
+        // AND THE DIVISION CLAIM MATCHES THE PARTS, which the brief used to get
+        // wrong: it said "divided by an assumed two sharing" over a figure in
+        // which every part was per person.
+        const unshared = estimateDay({ stay: "booked", food: "cheap", scope: "town", travellers: "" });
+        ok("nothing shared, so the brief says so", /nothing in it is shared/.test(estimateForBrief(unshared)));
+        ok("and the panel agrees", /nothing in it is shared/.test(estimateSays(unshared)));
+        ok("while a figure with a room in it still asks",
+           /assumed two sharing/.test(estimateForBrief(estimateDay({ stay: "cheapest", food: "cheap", scope: "town", travellers: "" }))));
+      }
+      for (const part of bunks.excludes) {
+        ok(`and name ${part}`, estimateForBrief(bunks).includes(part));
+      }
+      ok("and it is told to add them rather than present this as the day",
+         /add those separately/.test(estimateForBrief(bunks)));
+
+      // ── AND THE ASSUMED TWO, WHICH THE BRIEF USED TO HIDE ──────
+      // The panel says "reckoned on two of you sharing, so say how many you are"
+      // and the brief said nothing while the figure was still divided by two.
+      ok("an uncounted party is declared to the planner",
+         /assumed two sharing/.test(estimateForBrief(estimateDay({ stay: "cheapest", food: "self", scope: "town", travellers: "" }))));
+      ok("and a counted one is given the number",
+         / for 4\b/.test(estimateForBrief(estimateDay({ stay: "cheapest", food: "self", scope: "town", travellers: "family of 4" }))));
+    }
+
+    // ── AND THE GUIDE'S COST BLOCK OPENS ON THE TIER THEY TICKED ──
+    //
+    // 26 Sep 2026. It opened on the default whatever the panel said, so somebody
+    // who ticked Flexible saw their week priced at Cheap until they clicked, and
+    // the two screens quoted different figures for one trip. Two readers of one
+    // tier, and the panel is the one the traveller answered.
+    {
+      const appF = readFileSync(join(root, "src/App.jsx"), "utf8");
+      const block = readFileSync(join(root, "src/components/CostsBlock.jsx"), "utf8");
+      ok("the guide carries the ticked tier", /_food: intakeFood \|\| ""/.test(appF));
+      ok("and the block opens on it", /useState\(foodTier\(guide\?\._food\)\?\.key \|\| FOOD_TIER_DEFAULT\)/.test(block));
+      // AND AN OLD GUIDE STILL OPENS, because foodTier validates the key and
+      // falls back rather than returning undefined.
+      const { foodTier, FOOD_TIER_DEFAULT } = M;
+      is("a guide built before this opens on the default", foodTier(undefined).key, FOOD_TIER_DEFAULT);
+      is("and so does one carrying nonsense", foodTier("not-a-tier").key, FOOD_TIER_DEFAULT);
+      is("while a real key is kept", foodTier("flex").key, "flex");
+    }
+
+    // ── AND THE FORM'S OWN PROSE IS NOT SOMETHING THEY SAID ───────
+    //
+    // 26 Sep 2026, and this is the shape of three separate defects found in one
+    // night. The intake posts its answers into the conversation as a hidden turn so
+    // the model reads the ticks as context. Every reader that scans the transcript
+    // for what the traveller WANTS was reading our own sentences as their words:
+    //
+    //   "What they eat: Cheap. Kebab and hot dog stands"  made them a tight-budget
+    //   traveller, in the chat prompt, the guide prompt, the preview screen and the
+    //   learned profile, even with the best hotel in town ticked.
+    //   The same line filled the BLOCKING "what kind of trip" slot with "food", so
+    //   the chat never asked.
+    //   "still walkable or a short ride in", from the stay chip, made a traveller
+    //   who ticked Car into a walker: a 15 km day ceiling on a 300 km trip.
+    //   "buses and metros inside a town", from the budget sentence, read as public
+    //   transport.
+    //
+    // ONE CHECK OVER EVERY LINE THE FORM CAN WRITE, against every reader that could
+    // misread it, so the next phrase anybody adds cannot do this again.
+    {
+      const { staySaid, scopeSaid, FOOD_TIERS, travelModeKey, travellerBudget,
+              estimateDay: ed, estimateForBrief: efb, readBrief: rb } = M;
+      const lines = [];
+      for (const k of ["cheapest", "best", "booked"]) {
+        const v = staySaid(k, "Hotel Alexandra");
+        if (v) lines.push([`stay ${k}`, v]);
+      }
+      for (const k of ["town", "island", "explore"]) {
+        const v = scopeSaid(k);
+        if (v) lines.push([`scope ${k}`, v]);
+      }
+      for (const t of FOOD_TIERS) lines.push([`food ${t.key}`, `What they eat: ${t.label}. ${t.what}`]);
+      for (const st of ["cheapest", "best", "booked"]) {
+        for (const fd of ["self", "cheap", "flex"]) {
+          for (const sc of ["town", "island", "explore"]) {
+            const line = efb(ed({ stay: st, food: fd, scope: sc, transport: ["\u{1F697} Car"], travellers: "2 people" }));
+            if (line) lines.push([`budget ${st}/${fd}/${sc}`, line]);
+          }
+        }
+      }
+      lines.push(["free only", "Only attractions that are free to enter: do not plan a stop that charges admission, and say so if something they would expect to see is behind a ticket."]);
+
+      // NOT A TRAVEL MODE. travelModeKey picks the slowest mode in a sentence, and
+      // a ticked chip has to be able to beat our own prose.
+      const asMode = lines.filter(([, text]) => travelModeKey(text)).map(([l, text]) => `${l} -> ${travelModeKey(text)}`);
+      is("no line the form writes reads as a travel mode", asMode, []);
+      // NOT A BUDGET LEVEL either, which is what the word "Cheap" was doing.
+      const asBudget = lines.filter(([, text]) => travellerBudget(text)).map(([l, text]) => `${l} -> ${travellerBudget(text)}`);
+      // The Cheap chip's own label still matches the pattern, which is correct: the
+      // fix is whose text is read, not the pattern. So this asserts the READER.
+      ok("and the word Cheap still looks like a budget word on its own",
+         asBudget.some(x => /^food cheap/.test(x)));
+      {
+        const appW = readFileSync(join(root, "src/App.jsx"), "utf8");
+        ok("but no reader is handed the transcript raw",
+           !/travellerBudget\(travellerTurns/.test(appW) && !/travellerBudget\(writerSaid\)|travellerBudget\(saidByTravellerForGuide\)/.test(appW)
+           || /const writerSaid = saidByTraveller\(/.test(appW));
+      }
+      // AND NOT A BLOCKING SLOT. The form's turn is marked, and the two slots it
+      // was filling wrongly read the traveller's own turns.
+      for (const [label, text] of lines) {
+        const marked = `${M.INTAKE_TURN_MARK} ${text}`;
+        const b = rb({ travellerText: marked, travellerTurns: [marked], today: new Date("2026-09-26") });
+        ok(`${label} does not fill what kind of trip`, !b.known.interests);
+        ok(`${label} does not fill the budget slot`, !b.known.budget);
+      }
+      // WHILE A TRAVELLER SAYING THE SAME THING IS STILL HEARD, which is the half
+      // of this that a blunter fix would have broken.
+      {
+        const said = "We are mostly here for the food, and we are on a tight budget.";
+        const b = rb({ travellerText: said, travellerTurns: [said], today: new Date("2026-09-26") });
+        ok("a traveller's own food interest still lands", /food/.test(String(b.known.interests?.value || "")));
+        is("and it is marked as theirs", b.known.interests.source, "said");
+      }
+      // AND THE MARK IS WHAT TELLS THEM APART, on the turn the form really sends.
+      {
+        const appM = readFileSync(join(root, "src/App.jsx"), "utf8");
+        ok("the form marks its own turn", /sendAI\(\[INTAKE_TURN_MARK, parts\.join\(" \| "\)\]\.join\(" "\), \{ hidden: true \}\)/.test(appM));
+        ok("and the mark is recognised", M.isIntakeTurn(`${M.INTAKE_TURN_MARK} anything at all`));
+        ok("while a real turn is not", !M.isIntakeTurn("We land on 10 July"));
+        // The old marker still works, for conversations started before this existed.
+        ok("and a turn from before the mark is still recognised",
+           M.isIntakeTurn("Exact trip length: 7 days | Getting around: Car"));
+      }
+    }
+
+    // ── AND A DATE IS WRITTEN OUT FOR THE MODEL ───────────────────
+    //
+    // The `when` slot holds a Date and the brief interpolated it straight, so the
+    // model was handed "Sat Jul 10 2027 00:00:00 GMT+0200 (Central European
+    // Summer Time)": a JavaScript runtime artifact with a timezone name and a
+    // midnight nobody meant, on the one line a traveller might see echoed back.
+    {
+      const { readBrief, briefBlock, briefValue } = M;
+      const whenLine = (opts) => {
+        const b = readBrief({ today: new Date("2026-09-26"), ...opts });
+        return (briefBlock(b).split("\n").find(l => /^\s+when:/.test(l)) || "").trim();
+      };
+      const picker = whenLine({ travellerText: "Two of us.", travellerTurns: ["Two of us."],
+        intake: { arrival: "2026-10-05T14:00", departure: "2026-10-12T09:00" } });
+      is("both dates are written out", picker, "when: 5 October 2026 to 12 October 2026 (from the form they filled in)");
+      const said = whenLine({ travellerText: "We land 10 July and leave 17 July.", travellerTurns: ["We land 10 July and leave 17 July."] });
+      is("and a range stated in the chat too", said, "when: 10 July 2027 to 17 July 2027");
+      const month = whenLine({ travellerText: "Sometime in August.", travellerTurns: ["Sometime in August."] });
+      // A MONTH STAYS A MONTH. Saying "1 August" to somebody who said "August"
+      // invents a day they did not give.
+      is("a month is not turned into a day", month, "when: August 2027");
+      // AND NO RUNTIME ARTIFACT REACHES THE MODEL, on any path.
+      for (const line of [picker, said, month]) {
+        ok(`no timezone name in "${line}"`, !/GMT|Summer Time|Standard Time/.test(line));
+        ok(`no midnight nobody meant in "${line}"`, !/00:00:00/.test(line));
+      }
+      is("and a plain string value is left alone", briefValue({ value: "said in the conversation" }), "said in the conversation");
+    }
+
     // ── AND A TRIP THAT CROSSES THE BOUNDARY IS NOT ONE SEASON ───
     //
     // The first version read the arrival day alone, so a trip landing 31 May and
@@ -76782,7 +77149,55 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     ok("and low season", /low season/.test(estimateSays(march)));
     ok("and says why the undated band is wide", /put your dates in/.test(estimateSays(unsaid)));
     ok("the planner is told the season too", /high season/.test(estimateForBrief(july)));
-    ok("and told when it was not read", /No arrival date/.test(estimateForBrief(unsaid)));
+    // ── AND IT DOES NOT ASSERT A DATE IS MISSING ─────────────────
+    //
+    // It said "No arrival date was given", which was false twice: for a trip that
+    // straddles the boundary, whose dates were both given, and for a date typed
+    // in the chat rather than the picker, which this function cannot see. The
+    // brief has its own `when` slot that reads both, so this points at that
+    // rather than claiming an absence it cannot know about.
+    ok("and says why the band is wide without claiming a date is missing",
+       /no trip dates to narrow it by/.test(estimateForBrief(unsaid))
+       && !/No arrival date/.test(estimateForBrief(unsaid)));
+    ok("and sends the planner to the block that does know",
+       /Go by the trip dates in this block/.test(estimateForBrief(unsaid)));
+    // A STRADDLING TRIP IS TOLD IT STRADDLES, not that nobody said.
+    {
+      const both = estimateDay({ stay: "cheapest", food: "self", scope: "town", arrival: "2026-05-30", departure: "2026-06-05" });
+      ok("a trip across the boundary is told so", /spans both seasons/.test(estimateForBrief(both)));
+      ok("and is not told a date is missing", !/no trip dates/.test(estimateForBrief(both)));
+      ok("and the panel says it too", /spans both seasons/.test(estimateSays(both)));
+      // ── AND IT SAYS WHICH WAY IT CROSSED ────────────────────────
+      //
+      // A review pass found the sentence saying "crosses into summer" for a trip
+      // that crosses OUT of it, and telling a late-August traveller that their
+      // cheap end was "the nights before June". 31 August is a boundary too, and
+      // BED_SEASON names it.
+      ok("a trip into summer says the cheap end is before June",
+         /cheap end is the nights before June/.test(estimateSays(both)));
+      {
+        const out = estimateDay({ stay: "cheapest", food: "cheap", scope: "town",
+          travellers: "2 people", arrival: "2026-08-28T12:00", departure: "2026-09-05T12:00" });
+        ok("the late-August trip straddles too", out.straddles);
+        is("and is marked as leaving summer, not entering it", out.intoSummer, false);
+        ok("so its dear end is the August nights",
+           /top is the nights up to the end of August/.test(estimateSays(out)));
+        ok("and it is never told its cheap end is before June",
+           !/before June/.test(estimateSays(out)) && !/before June/.test(estimateForBrief(out)));
+      }
+      // AND A TRIP LONG ENOUGH TO CONTAIN A SUMMER IT DOES NOT TOUCH IS NOT LOW
+      // SEASON. 28 May to 3 September is 98 nights, 92 of them in high season, and
+      // reading the two endpoints alone priced all of it at March rates.
+      {
+        const long = estimateDay({ stay: "cheapest", food: "cheap", scope: "town",
+          travellers: "2 people", arrival: "2026-05-28T12:00", departure: "2026-09-03T12:00" });
+        ok("a trip that contains the whole summer does not read as low season", long.straddles);
+        is("so it names no single season", long.season, null);
+        ok("and is not told it was priced in low season", !/Priced in low season/.test(estimateSays(long)));
+      }
+      ok("and does not tell them to enter dates they entered",
+         !/put your dates in/.test(estimateSays(both)));
+    }
     // THE FOOD HALF DOES NOT MOVE. A durum costs the same in February, and
     // tierDayRate's band is a counter price rather than a seasonal one, so
     // pushing a season through it would invent a movement nobody published.
@@ -76917,10 +77332,28 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     ok("and what a car costs you there", /parking/.test(RECOMMENDED.town.why));
   }
 
-  // ── AN ISLAND IS THE CLEAREST CASE, AND THE FERRY AGREES ────────
+  // ── AND THE MIDDLE ONE IS NOT AN ISLAND ANY MORE ────────────────
+  //
+  // This asserted a bicycle and nothing else, on the strength of an Aero ferry
+  // fare, for a scope whose own sentence says "do not put a ferry in the trip".
+  // Oliver renamed that chip on 25 Sep, from "Stay on one island" to "Stay in one
+  // part of Denmark", because the old label was wrong: "I mean Zealand, Jutland,
+  // and Odense". The label changed and this did not, so the panel was telling
+  // somebody covering Jutland, 300 km end to end, that a bicycle was the
+  // recommended way round. Found by a review pass, 26 Sep 2026.
   {
-    is("an island means a bicycle", recommendedModes("island"), ["bike"]);
-    ok("and the fare is the argument", /25 kr for a bicycle and 142 for a car/.test(RECOMMENDED.island.why));
+    is("one part of the country means the train and the bike", recommendedModes("island"), ["public transport", "bike"]);
+    ok("and not the car", !recommendedModes("island").includes("car"));
+    // AND THE REASON IS THE DISTANCE, not a fare on a crossing this scope
+    // forbids. A check on the argument, because the argument was the fault.
+    ok("with the distance as the argument", /300 km end to end/.test(RECOMMENDED.island.why));
+    ok("and no ferry fare arguing for a scope that has no ferry",
+       !/142|Aero|Aer\u00f8/.test(RECOMMENDED.island.why));
+    // AND IT AGREES WITH THE SCOPE'S OWN SENTENCE, which is the pair that drifted.
+    {
+      const said = M.scopeSaid ? M.scopeSaid("island") : "";
+      ok("the scope still forbids a ferry", /do not put a ferry in the trip/i.test(said));
+    }
   }
 
   // ── AND EXPLORING IS THE ONE THAT WANTS A CAR OR A TRAIN ────────
@@ -77604,8 +78037,14 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   // HIS LIMIT ON "CHEAPEST", in his own words: "not outside the city, but just
   // a little further out from center". A bed an hour out of town is a different
   // trip with a commute in it.
+  // ── AND IT SAYS IT WITHOUT A MODE WORD IN IT ──────────────────
+  // It used to say "still walkable or a short ride in". This prose goes into the
+  // transcript, and travelModeKey reads a sentence for its slowest mode, so the
+  // word walkable made a traveller who had ticked Car into a walker: a 15 km
+  // ceiling on a 300 km trip. Same limit, no mode in the words.
   ok("cheapest says how far out is too far",
-     /still in the town and still walkable or a short ride in, never out in the country/.test(staySaid("cheapest", "")));
+     /still in the town and still close enough to the middle to get there quickly, never out in the country/.test(staySaid("cheapest", "")));
+  is("and it does not read as a travel mode", M.travelModeKey(staySaid("cheapest", "")), null);
 
   // ── A BOOKING WITH NO NAME IS NOT A BOOKING ─────────────────────
   // `stay` is a BLOCKING brief slot. Ticked with the box empty, the app has
