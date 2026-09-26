@@ -135,13 +135,27 @@ export const HOUSE_FIT = { strong: "strong", yes: "yes" };
 // One season, compared end for end. Both bands must be the SAME season or the
 // comparison is a January house against a July bunk, which is the mistake this
 // whole file exists downstream of.
+// ── AND "YES" MEANS CHEAPER, NOT "CHEAPER IF EVERYTHING GOES RIGHT" ─
+//
+// The first rule here was house.low <= bunk.high: the CHEAPEST house against
+// the DEAREST bunk. That is the same mixing this file refuses across seasons,
+// committed inside one season across the price spread, and it showed. A pair
+// in July is 245 to 287 a head in a house against 218 to 248 in a dorm, and it
+// came out "recommended for your trip" on a three-kroner overlap between the
+// two extremes, over a sentence printing both bands. A traveller who can read
+// sees the recommendation argued against by its own numbers.
+//
+// So the middle of one band against the middle of the other: the house a
+// traveller is likely to get against the bunk they are likely to get. The
+// strong verdict is unchanged and is the strict one it always was, cheaper at
+// its dearest than a bunk at its cheapest.
 const fitInSeason = (heads, season, bunkPerHead) => {
   const house = housePerHeadNight(heads, season);
   if (!house || !bunkPerHead) return null;
   const lo = Number(bunkPerHead.low), hi = Number(bunkPerHead.high);
   if (!Number.isFinite(lo) || !Number.isFinite(hi)) return null;
   if (house.high <= lo) return HOUSE_FIT.strong;
-  return house.low <= hi ? HOUSE_FIT.yes : null;
+  return (house.low + house.high) <= (lo + hi) ? HOUSE_FIT.yes : null;
 };
 
 // ── AND WITH NO DATES, IT HAS TO WIN IN EVERY SEASON ────────────────

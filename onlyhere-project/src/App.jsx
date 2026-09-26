@@ -233,7 +233,7 @@ import { factCheckCopy } from "./utils/factCheckCopy";
 import { matchedPlaces, previewPools, wantedCategories, mentionsPlace } from "./utils/previewMatch";
 import { estimateDay, estimateShort, estimateSays, estimateForBrief, isRecommended, recommendedWhy, summerhouseFit, summerhouseWhy, SUMMERHOUSE_MARK, BUDGET_CURRENCIES, ENABLE_LABEL, ENABLE_SAYS } from "./utils/budgetEstimate";
 import { TRIP_SCOPES, scopeSaid } from "./utils/tripScopeChoice";
-import { STAY_CHOICES, stayIsBooked, stayProblem, staySaid } from "./utils/stayChoice";
+import { STAY_CHOICES, stayIsBooked, stayIsHouse, stayProblem, staySaid } from "./utils/stayChoice";
 import { FOOD_TIERS } from "./utils/mealsEstimate";
 import { weighAdd, addCaution, tripLoadBlock } from "./utils/weighAdd";
 import { isBookableTicketUrl, pickTicketUrl, describeTicketSearch, ticketQueries, ticketUrlSaysElsewhere, ticketAgentOf, reviewPastedTicketUrl, isTourUrl, typeHasAdmission, editionYearOf, TICKET_FIELD, TOUR_FIELD } from "./utils/ticketLink";
@@ -14667,7 +14667,22 @@ ${researchRules("festival", ev)}`
     return blocks.join("\n\n");
   };
 
-  const enrichGuideDays = async (days, travelMode, mixedModes, budgetSays = "", langBlock = "", bookedNights = [], bookedName = "") => {
+  // ── AND A SOMMERHUS IS A BASE, NOT A BED PER NIGHT ────────────────
+  //
+  // Oliver, 26 Sep 2026, asking the question that found this: "So when the guide
+  // builds.. how does the accomadation build?"
+  //
+  // This call runs once per day and recommends a place to sleep in that day's
+  // town, off that day's web search. That is right for a hostel or a hotel and
+  // wrong for a holiday house, which is ONE booking for the whole week, out on a
+  // coast rather than in a town centre. Without this the guide would offer seven
+  // different town hotels to somebody who has a house for all seven nights.
+  //
+  // The shape already existed for a booked stay, a few lines down: a fixed bed
+  // turns the question from "where should they sleep" into "how do they get back
+  // to it". A sommerhus is the same shape, and the only difference is that they
+  // have not booked one yet, so day one still names the area.
+  const enrichGuideDays = async (days, travelMode, mixedModes, budgetSays = "", langBlock = "", bookedNights = [], bookedName = "", stayKind = "") => {
     setGlancePending(days.length);
     const glances = new Array(days.length).fill(null);
     await Promise.all(days.map(async (day, idx) => {
@@ -14716,7 +14731,7 @@ THE LIST ABOVE COUNTS AS CONTEXT FOR recommendedStay, and it is the only list th
           // the guide writer's. It produces the "Where to stay" sentence and
           // every leg description, which are two of the most-read lines on the
           // page, so leaving it out means a Danish guide with English legs.
-          `${enrichPrompt}${idx + 1 >= days.length ? `\n\nTHIS DAY HAS NO NIGHT AFTER IT. It is the last day of the trip and they go home at the end of it, so there is no bed to recommend: return 'accommodation' as one sentence about the end of the day and the journey out, and return 'stayArea' and 'recommendedStay' as EMPTY STRINGS. A three day trip that offered a hotel on day 3 is the guide booking a room for a night the traveller is not in the country.` : ''}${(bookedNights || []).includes(idx + 1) ? `\n\nTHIS NIGHT IS ALREADY BOOKED. They are sleeping at ${bookedName || 'a place they have already booked'} on day ${idx + 1} and it is not in question. Return 'accommodation' as one sentence about getting back to it from this day's last stop, and return 'stayArea' and 'recommendedStay' as EMPTY STRINGS. Do not name anywhere else, do not compare it to anywhere else, and do not suggest they move.` : ''}\nEVERY PRICE YOU WRITE IS IN DKK. Never dollars, euros or pounds, and never a conversion in brackets: a traveller in Denmark is charged kroner and a converted figure matches nothing they will see. A price you can only give by converting is a price you do not have, so describe the place without one.${langBlock}\n\nRespond with ONLY the raw JSON object, no markdown code fences.\n\n${context || "No live search context available — use only safe general knowledge and 'Check Rejseplanen' fallbacks."}`,
+          `${enrichPrompt}${idx + 1 >= days.length ? `\n\nTHIS DAY HAS NO NIGHT AFTER IT. It is the last day of the trip and they go home at the end of it, so there is no bed to recommend: return 'accommodation' as one sentence about the end of the day and the journey out, and return 'stayArea' and 'recommendedStay' as EMPTY STRINGS. A three day trip that offered a hotel on day 3 is the guide booking a room for a night the traveller is not in the country.` : ''}${stayIsHouse(stayKind) && idx + 1 < days.length ? (idx === 0 ? `\n\nTHEY ARE TAKING A SOMMERHUS, A DANISH HOLIDAY HOUSE, FOR THE WHOLE WEEK. It is one booking, not a bed per night, and holiday houses sit on the coasts and in the countryside rather than in town centres. For THIS day only, return 'recommendedStay' as the AREA to take a house in rather than a hotel in this town: name the stretch of coast or the village, say which town it is near and how far, and say that it is booked by the week through a holiday-house agency. Never name a hotel or a hostel.` : `\n\nTHEY HAVE A SOMMERHUS FOR THE WHOLE WEEK AND IT IS THE SAME HOUSE TONIGHT. Do not recommend anywhere to sleep: return 'recommendedStay' as an empty string and write 'accommodation' as one sentence about getting back to the house from this day's last stop.`) : ""}${(bookedNights || []).includes(idx + 1) ? `\n\nTHIS NIGHT IS ALREADY BOOKED. They are sleeping at ${bookedName || 'a place they have already booked'} on day ${idx + 1} and it is not in question. Return 'accommodation' as one sentence about getting back to it from this day's last stop, and return 'stayArea' and 'recommendedStay' as EMPTY STRINGS. Do not name anywhere else, do not compare it to anywhere else, and do not suggest they move.` : ''}\nEVERY PRICE YOU WRITE IS IN DKK. Never dollars, euros or pounds, and never a conversion in brackets: a traveller in Denmark is charged kroner and a converted figure matches nothing they will see. A price you can only give by converting is a price you do not have, so describe the place without one.${langBlock}\n\nRespond with ONLY the raw JSON object, no markdown code fences.\n\n${context || "No live search context available — use only safe general knowledge and 'Check Rejseplanen' fallbacks."}`,
           // TOKEN BUMP 350 → 900 (Oliver: "why does the accommodation/booking
           // affiliation keep getting removed"): 350 max_tokens was genuinely too
           // tight for this response — a 5-stop day needs 4 leg objects PLUS the
@@ -18068,7 +18083,7 @@ If the conversation only covers a single day or a few stops with no explicit day
       const budgetSays = budgetSaid
         ? (budgetSaid.source === "intake" ? budgetSaid.value : `${travellerBudget(saidByTraveller(aiMessages)) || "not stated plainly"}`)
         : "";
-      const glances = await enrichGuideDays(parsed.days, travelMode, mixedModes, budgetSays, guideLangBlock, bookedNights, bookedName);
+      const glances = await enrichGuideDays(parsed.days, travelMode, mixedModes, budgetSays, guideLangBlock, bookedNights, bookedName, intakeStay);
       parsed.days = parsed.days.map((d, i) => (glances[i] ? { ...d, glance: glances[i] } : d));
 
       buildStage("Verifying exact locations and routes", 95);
@@ -19420,9 +19435,16 @@ If the conversation only covers a single day or a few stops with no explicit day
   // in sevens and nothing shorter, so a short trip cannot have one at any price.
   // tripDays is the one reader of how long the trip is; see utils/tripEvents.js.
   const houseNights = intakeArrival && intakeDeparture ? tripDays(intakeArrival, intakeDeparture) : 0;
-  const houseVerdict = budgetOn
-    ? summerhouseFit({ travellers: intakeTravelers, nights: houseNights, arrival: intakeArrival, departure: intakeDeparture })
-    : null;
+  // ── ONE SET OF FACTS, TWO SENTENCES ──────────────────────────────
+  //
+  // Built once and handed to BOTH the verdict and the sentence that explains
+  // it. It was two separate readings, and live on 26 September they disagreed:
+  // the chip was marked on the October in the date fields while its own
+  // explanation priced the house across every season, because the sentence was
+  // reading the season the BED was priced in and no bed had been picked yet.
+  // A mark and its reason that can answer differently is worse than no mark.
+  const houseAsked = { travellers: intakeTravelers, arrival: intakeArrival, departure: intakeDeparture };
+  const houseVerdict = budgetOn ? summerhouseFit({ ...houseAsked, nights: houseNights }) : null;
 
   // ── AND IN THEIR OWN MONEY ───────────────────────────────────────
   //
@@ -30362,7 +30384,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                        families: it is marked when it beats the cheapest bed
                        this panel otherwise offers, for this party, in this
                        season. See summerhouseFit in utils/budgetEstimate.js. */
-                    const mark = ch.key === "summerhouse" ? SUMMERHOUSE_MARK[houseVerdict] : "";
+                    const mark = stayIsHouse(ch.key) ? SUMMERHOUSE_MARK[houseVerdict] : "";
                     return (
                       <button key={ch.key} onClick={() => { setIntakeStay(on ? "" : ch.key); if (on) setIntakeStayName(""); }}
                         style={{ background: on ? C.gold : "none", border: `1px solid ${on ? C.gold : C.border}`, color: on ? "#0A0F1E" : C.light, borderRadius: 100, padding: "8px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
@@ -30377,7 +30399,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 {houseVerdict && (
                   <div style={{ fontSize: 11, color: C.light, lineHeight: 1.55, marginTop: -6, marginBottom: 12 }}>
                     <span style={{ color: C.gold, fontWeight: 700 }}>{SUMMERHOUSE_MARK[houseVerdict]}: </span>
-                    {summerhouseWhy(houseVerdict, { heads: budgetEstimate.heads || 2, season: budgetEstimate.season })}
+                    {summerhouseWhy(houseVerdict, houseAsked)}
                   </div>
                 )}
                 {stayIsBooked(intakeStay) && (

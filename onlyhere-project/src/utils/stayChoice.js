@@ -107,6 +107,7 @@ export const STAY_CHOICES = [
     key: "summerhouse",
     label: "A summerhouse",
     booked: false,
+    house: true,
     said: "They have not booked anywhere, and they want a sommerhus: a whole holiday house with a kitchen, booked by the week. Danish holiday houses are on the coasts and in the countryside rather than in town centres, so plan a base out there and day trips in rather than a town-centre itinerary, and say which town they are near. They are let Saturday to Saturday and cannot be taken for fewer than seven nights.",
   },
   {
@@ -120,6 +121,13 @@ export const STAY_CHOICES = [
 export const STAY_KEYS = STAY_CHOICES.map(s => s.key);
 export const stayChoiceOf = (key) => STAY_CHOICES.find(s => s.key === clean(key)) || null;
 export const stayIsBooked = (key) => !!stayChoiceOf(key)?.booked;
+// AND THE SAME SHAPE FOR THE HOUSE, rather than a bare string compare in
+// App.jsx. The per-day accommodation call has to behave differently for a
+// sommerhus: one booking for the week, not a bed a night. A compare against
+// the literal "summerhouse" over there would keep passing its own tests and
+// stop firing the day this key is renamed, which is exactly how "still
+// walkable" and the ferry chip went quiet. The flag lives with the key.
+export const stayIsHouse = (key) => !!stayChoiceOf(key)?.house;
 
 // ── AND A BOOKING WITH NO NAME IS NOT A BOOKING ─────────────────────
 //

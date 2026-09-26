@@ -1384,10 +1384,34 @@ export const bunkPerHeadIn = (season, heads) => {
   return bed ? { low: Math.round(bed.low / people), high: Math.round(bed.high / people) } : null;
 };
 
-export const summerhouseFit = ({ travellers = "", heads = null, nights = 0, arrival = "", departure = "" } = {}) => {
+// ── AND THE MARK AND ITS REASON READ THE SAME TWO THINGS ────────────
+//
+// Found live on 26 Sep 2026, with 10 to 17 October in the date fields and no
+// stay chip ticked: the chip was marked on OCTOBER prices and the sentence
+// under it read "105 to 287 kr a head a night", which is January's cheapest
+// against July's dearest, every season at once.
+//
+// The split: summerhouseFit derives the season from the two dates, and the
+// sentence was handed budgetEstimate.season, which is a different value with
+// a different job. That one is the season THE BED was priced in, and it is
+// null whenever no bed was priced, which is exactly the state a traveller is
+// in while they are still reading the row. Two readers of one value, the
+// oldest fault in this codebase.
+//
+// So both read this, and neither can answer differently from the other. The
+// party is here for the same reason: the verdict counted heads off the brief
+// while the sentence took the panel's, so a family of four could be marked on
+// four and have it explained on two.
+export const houseReading = ({ travellers = "", heads = null, arrival = "", departure = "" } = {}) => {
   const said = partyOf(travellers);
-  const people = Math.max(1, Math.floor(Number(heads ?? said?.heads ?? 2)) || 1);
-  const season = bedSeasonOf(arrival, departure);
+  return {
+    people: Math.max(1, Math.floor(Number(heads ?? said?.heads ?? 2)) || 1),
+    season: bedSeasonOf(arrival, departure),
+  };
+};
+
+export const summerhouseFit = ({ travellers = "", heads = null, nights = 0, arrival = "", departure = "" } = {}) => {
+  const { people, season } = houseReading({ travellers, heads, arrival, departure });
   return houseFit({
     heads: people,
     nights,
@@ -1403,9 +1427,9 @@ export const SUMMERHOUSE_MARK = {
   [HOUSE_FIT.strong]: "strongly recommended",
   [HOUSE_FIT.yes]: "recommended for your trip",
 };
-export const summerhouseWhy = (fit, { heads = 2, season = null } = {}) => {
+export const summerhouseWhy = (fit, { travellers = "", heads = null, arrival = "", departure = "" } = {}) => {
   if (!fit) return "";
-  const people = Math.max(1, Math.floor(Number(heads)) || 1);
+  const { people, season } = houseReading({ travellers, heads, arrival, departure });
   const house = housePerHead(people, season);
   const bunk = bunkPerHeadIn(season, people);
   if (!house || !bunk) return "";

@@ -35083,8 +35083,12 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // that never sees the writer's.
   ok("including the enrichment pass",
      /EVERY PRICE YOU WRITE IS IN DKK[\s\S]{0,400}\$\{langBlock\}/.test(appL));
+  // Pinned by ARGUMENT rather than by the whole list: the requirement is that
+  // the writer's own block is the one handed over, and an assertion that
+  // pinned every argument broke the day a later one was added, which teaches
+  // the next reader to loosen the check rather than to keep the requirement.
   ok("and it is handed the same one the writer used, not its own",
-     /enrichGuideDays\(parsed\.days, travelMode, mixedModes, budgetSays, guideLangBlock, bookedNights, bookedName\)/.test(appL));
+     /enrichGuideDays\(parsed\.days, travelMode, mixedModes, budgetSays, guideLangBlock[,)]/.test(appL));
   // The wrapper that read the browser and nothing else is gone, not merely unused.
   ok("nothing reaches for the navigator-only wrapper any more",
      !/guideLanguageBlock/.test(stripComments(appL)) &&
@@ -40780,11 +40784,63 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("and the per-day accommodation call is told which nights are already slept in",
      /THIS NIGHT IS ALREADY BOOKED/.test(stayApp));
   ok("which is the call that has to return nothing rather than recommend",
-     /enrichGuideDays\(parsed\.days, travelMode, mixedModes, budgetSays, guideLangBlock, bookedNights, bookedName\)/.test(stayApp));
+     /enrichGuideDays\([^)]*, bookedNights, bookedName[,)]/.test(stayApp));
   // AND THE HALF THAT IS THE WHOLE POINT: told nothing, it must say so rather
   // than put a check-in on day 1.
   ok("a booking with no dates makes the writer say so instead of deciding",
      /NOBODY HAS ASKED WHICH NIGHTS/.test(stayApp) && /DO NOT DECIDE/.test(stayApp));
+
+  // ── AND THE SAME QUESTION FOR THE HOUSE ──────────────────────────
+  //
+  // Oliver, 26 Sep 2026: "So when the guide builds.. how does the
+  // accomadation build?" Tracing it answered him and found the hole. The
+  // per-day call runs once per day, searches that day's town, and writes
+  // "Where to stay" from what it finds. That is right for a bed a night and
+  // wrong for a sommerhus, which is ONE booking for the whole week: the chip
+  // that says so was read by the budget panel and by nothing that writes the
+  // guide, so a family who ticked a summerhouse would have been offered seven
+  // town hotels, one a day, each with a price, in a country where holiday
+  // houses are on the coast and let Saturday to Saturday.
+  //
+  // The booked-stay clause above is the precedent and this is the same shape.
+  ok("the per-day call is told the stay they chose, not only what it costs",
+     /const glances = await enrichGuideDays\([^)]*, intakeStay\)/.test(stayApp));
+  ok("and it takes it as a parameter rather than reaching for the state",
+     /const enrichGuideDays = async \(days, travelMode, mixedModes, budgetSays = "", langBlock = "", bookedNights = \[\], bookedName = "", stayKind = ""\)/.test(stayApp));
+  // Day one answers with WHERE to take a house, because the area is the
+  // decision a house makes and the traveller cannot book one without it.
+  ok("day one of a sommerhus trip answers with an area, not a hotel",
+     /THEY ARE TAKING A SOMMERHUS[\s\S]{0,700}return 'recommendedStay' as the AREA/.test(stayApp));
+  ok("and it says the house is let by the week through an agency",
+     /THEY ARE TAKING A SOMMERHUS[\s\S]{0,700}booked by the week through a holiday-house agency/.test(stayApp));
+  ok("and forbids the two things the day's search will hand it",
+     /THEY ARE TAKING A SOMMERHUS[\s\S]{0,800}Never name a hotel or a hostel/.test(stayApp));
+  // Every day after it recommends NOTHING, which is the half that matters:
+  // one more bed in the itinerary is one more booking the traveller thinks
+  // they have to make.
+  ok("and every later day returns nothing rather than a second bed",
+     /IT IS THE SAME HOUSE TONIGHT[\s\S]{0,400}return 'recommendedStay' as an empty string/.test(stayApp));
+  ok("and writes the leg back to the house instead",
+     /IT IS THE SAME HOUSE TONIGHT[\s\S]{0,400}getting back to the house/.test(stayApp));
+  // AND IT STOPS AT THE LAST DAY. They check out the morning they fly home, so
+  // the last day's own clause is the one that has to win: two clauses on the
+  // same prompt, one saying "journey out" and the other "get back to the
+  // house", is the model being asked to write both.
+  ok("but not on the last day, which has its own answer",
+     /\$\{stayIsHouse\(stayKind\) && idx \+ 1 < days\.length \?/.test(stayApp));
+  {
+    // AND THE KEY IS NOT COMPARED BY HAND. A literal "summerhouse" over here
+    // keeps passing while the chip is renamed over there, which is how the
+    // ferry recommendation and "still walkable" both went quiet. The flag
+    // lives on the choice, next to the label that can change.
+    const stayChoiceSrc = readFileSync(join(root, "src/utils/stayChoice.js"), "utf8");
+    ok("the house is recognised by the choice's own flag",
+       /export const stayIsHouse = \(key\) => !!stayChoiceOf\(key\)\?\.house;/.test(stayChoiceSrc));
+    ok("and the guide builder asks it rather than matching a string",
+       /stayIsHouse\(stayKind\)/.test(stayApp) && !/stayKind === "summerhouse"/.test(stayApp));
+    ok("and exactly one choice carries it",
+       (stayChoiceSrc.match(/\n\s{4}house: true,/g) || []).length === 1);
+  }
 
   // ── 12. THE NUMBER NAMED AFTER THE INCIDENT REPORTED ZERO FOR IT ─
   // The first version judged every ready-claim against the FINAL brief, so a marker
@@ -78142,8 +78198,26 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     is("three friends, which a rule about families would have missed", week({ travellers: "3 friends" }), HOUSE_FIT.strong);
     is("a pair in January, which a rule about pairs would have hidden",
        week({ travellers: "2 people", arrival: "2027-01-09", departure: "2027-01-16" }), HOUSE_FIT.strong);
-    is("the same pair in July, where it only just wins",
-       week({ travellers: "2 people", arrival: "2027-07-10", departure: "2027-07-17" }), HOUSE_FIT.yes);
+    // AND THE SAME PAIR IN JULY IS NOT MARKED AT ALL, which this said the
+    // opposite of until 26 September. It read "where it only just wins", and
+    // the winning was a three-kroner overlap between the CHEAPEST house and
+    // the DEAREST bunk: 245 to 287 a head in a house against 218 to 248 in a
+    // dorm. That is the same mixing this file refuses across seasons, done
+    // inside one season across the spread, and it printed a recommendation
+    // over a sentence carrying both bands for anyone to read.
+    is("the same pair in July, where a house costs more",
+       week({ travellers: "2 people", arrival: "2027-07-10", departure: "2027-07-17" }), null);
+    {
+      const h = housePerHeadNight(2, "high"), b = bunkPerHeadIn("high", 2);
+      ok("and the arithmetic behind that, not just the verdict", h.low > b.low && h.high > b.high);
+    }
+    // A PAIR WITH NO DATES IS NOT MARKED EITHER, because July is one of the
+    // seasons they might be coming in and the weakest verdict is the answer.
+    // The mark appears when they say when, which is the honest way round.
+    is("nor an undated pair, who might be coming in July",
+       week({ travellers: "2 people" }), null);
+    is("but October says it plainly",
+       week({ travellers: "2 people", arrival: "2026-10-10", departure: "2026-10-17" }), HOUSE_FIT.yes);
     is("and one person, never", week({ travellers: "just me" }), null);
     // ── THE ONE HARD GATE IS THE WEEK ─────────────────────────────
     // A sommerhus is not sold by the night, so a short trip cannot have one at
@@ -78200,7 +78274,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     {
       const pair = housePerHeadNight(2, "high"), bunk2 = bunkPerHeadIn("high", 2);
       ok("a pair in July really is dearer in a house", pair.low > bunk2.low);
-      is("so the mark is the softer one", summerhouseFit({ travellers: "2 people", nights: 7, arrival: "2027-07-10", departure: "2027-07-17" }), HOUSE_FIT.yes);
+      is("so there is no mark on it", summerhouseFit({ travellers: "2 people", nights: 7, arrival: "2027-07-10", departure: "2027-07-17" }), null);
     }
   }
 
@@ -78240,10 +78314,44 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   {
     const appH = readFileSync(join(root, "src/App.jsx"), "utf8");
     ok("the verdict is computed from both dates",
-       /summerhouseFit\(\{ travellers: intakeTravelers, nights: houseNights, arrival: intakeArrival, departure: intakeDeparture \}\)/.test(appH));
+       /const houseAsked = \{ travellers: intakeTravelers, arrival: intakeArrival, departure: intakeDeparture \};/.test(appH) &&
+       /summerhouseFit\(\{ \.\.\.houseAsked, nights: houseNights \}\)/.test(appH));
     ok("and the nights come from tripDays", /const houseNights = intakeArrival && intakeDeparture \? tripDays\(intakeArrival, intakeDeparture\) : 0;/.test(appH));
     ok("the chip carries the mark", /SUMMERHOUSE_MARK\[houseVerdict\]/.test(appH));
-    ok("and the reason is shown under the row", /summerhouseWhy\(houseVerdict/.test(appH));
+    // ── AND THE REASON READS THE SAME FACTS THE VERDICT DID ───────
+    //
+    // Found live on 26 Sep 2026 with 10 to 17 October in the date fields: the
+    // chip was marked on October and the sentence under it said "105 to 287 kr
+    // a head", which is January's cheapest against July's dearest. The verdict
+    // took the season from the two dates; the sentence was handed
+    // budgetEstimate.season, which is the season THE BED was priced in and is
+    // null until a stay chip is ticked. Two readers of one value.
+    ok("and the reason is shown under the row", /summerhouseWhy\(houseVerdict, houseAsked\)/.test(appH));
+    ok("off the same facts, so the two cannot disagree",
+       !/summerhouseWhy\(houseVerdict, \{/.test(appH) && !/season: budgetEstimate\.season/.test(appH));
+    {
+      // AND THE SAME THING PROVED ON THE FUNCTIONS. A verdict of "strong" whose
+      // sentence prints a band spanning every season is the bug, whatever the
+      // call site looks like.
+      const asked = { travellers: "family of 4", arrival: "2026-10-10", departure: "2026-10-17" };
+      const verdict = summerhouseFit({ ...asked, nights: 7 });
+      const why = summerhouseWhy(verdict, asked);
+      ok("the October sentence prices October", /63 to 81 kr a head/.test(why));
+      ok("and not every season at once", !/53 to 143/.test(why) && !/105 to 287/.test(why));
+      const undated = summerhouseWhy(summerhouseFit({ travellers: "family of 4", nights: 7 }), { travellers: "family of 4" });
+      ok("and an undated trip still gets the whole band", /53 to 143 kr a head/.test(undated));
+      // AND THE PARTY COMES FROM ONE PLACE TOO: the verdict counted heads off
+      // the brief while the sentence took the panel's default of two, so a
+      // family could be marked on four and have it explained on two.
+      // The party comes from one place too. The verdict counted heads off the
+      // brief while the sentence took the panel's default of two, so a family
+      // of four could be marked on four and have it explained on two.
+      const pairWhy = summerhouseWhy(
+        summerhouseFit({ travellers: "2 people", arrival: "2026-10-10", departure: "2026-10-17", nights: 7 }),
+        { travellers: "2 people", arrival: "2026-10-10", departure: "2026-10-17" });
+      ok("a pair in the same week gets a pair's figure", /125 to 162 kr a head/.test(pairWhy));
+      ok("and the family is not explained with it", why !== pairWhy && !/125 to 162/.test(why));
+    }
   }
 }
 
