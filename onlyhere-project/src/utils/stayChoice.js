@@ -41,6 +41,8 @@
 // later, and that is where location is really decided. See bedsEstimate in
 // utils/costLedger.js for the figure that is real.
 
+import { hostelChipSays } from "./stayAwareness";
+
 const clean = (s) => String(s ?? "").trim();
 
 // ── AND THIS PROSE GOES INTO THE TRANSCRIPT, SO IT IS READ ──────────
@@ -81,7 +83,17 @@ export const STAY_CHOICES = [
     // The panel cannot price 31 towns. What it can do is stop the planner
     // repeating a number where the bed behind it does not exist, which is what
     // the last sentence here is for.
-    said: "They have not booked anywhere, and they want a bed in a hostel rather than a room of their own, the cheap end of the market. Central is fine: the cheapest beds in Copenhagen are in the middle of town. IMPORTANT: not every Danish town has a hostel with dormitories. Copenhagen and Aarhus do; Aalborg's hostel is private rooms only, from about 405 a night. If the town you are proposing has no hostel dorm, say so plainly and price the cheapest real bed there instead of repeating the figure in their budget.",
+    //
+    // ── AND NOW IT IS EVERY TOWN, NOT ONE ─────────────────────────
+    //
+    // Oliver, later the same day: "I think we should program it, so it has
+    // awareness of where the hostels are located." The Aalborg sentence was
+    // right and it was one town. Every hostel in the country has since been
+    // read on its own site, and the answer is starker than Aalborg: a bed in a
+    // shared room is sold in nine towns, and most Danish hostels sell rooms.
+    // The sentence is built from that list now, so it cannot name a town the
+    // list disagrees with. See utils/stayAwareness.js and data/stayPlaces.js.
+    said: `They have not booked anywhere, and they want a bed in a hostel rather than a room of their own, the cheap end of the market. Central is fine: the cheapest beds in Copenhagen are in the middle of town. ${hostelChipSays()}`,
   },
   {
     key: "best",

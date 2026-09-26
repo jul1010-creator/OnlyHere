@@ -284,6 +284,9 @@ writeFileSync(entry, `
   export { needsTier, proposedTier, BACKFILL_SORTS, BACKFILL_SORT_DEFAULT, sortForBackfill, tierSpread, backfillPrompt, readBackfill, missedByPass, proposeTiersWithReason, PASS_FAILED } from ${JSON.stringify(join(root, "src/utils/tierBackfill.js"))};
   export { HOUSE_WEEK, HOUSE_SIZES, HOUSE_NIGHTS, HOUSE_FIT, HOUSE_SOURCE, HOUSE_CHECKED_AT, HOUSE_SEASON_CHECK, houseFor, houseWeek, housePerHeadNight, houseFit, houseSays } from ${JSON.stringify(join(root, "src/utils/summerhouse.js"))};
   export { STAY_CHOICES, STAY_KEYS, stayChoiceOf, stayIsBooked, stayProblem, staySaid } from ${JSON.stringify(join(root, "src/utils/stayChoice.js"))};
+  export { HOSTELS, HOUSE_AREAS, STAY_TOWN_POINTS, STAY_PLACES_CHECKED_AT, HOSTEL_LIST_SOURCE, DORM } from ${JSON.stringify(join(root, "src/data/stayPlaces.js"))};
+  export { sellsDorm, dormForKids, hostelOpenOn, dormTowns, hostelTowns, roomsOnlyTowns, hostelChipSays, stayPointFor, dayPoints, hostelsNear, nearestDorm, hostelLine, hostelBlock, HOSTEL_NEAR_KM, HOSTEL_LINES, isFamilyPlace, familyPlacesNear, FAMILY_NEAR_KM, houseAreasFor, houseAreaLine, houseAreaBlock, HOUSE_AREA_PICKS, ONE_BASE_KM } from ${JSON.stringify(join(root, "src/utils/stayAwareness.js"))};
+  export { FIGURES, FIGURE_LIFE, figureAge, figureAges, figureAgeNote } from ${JSON.stringify(join(root, "src/utils/figureAge.js"))};
   export { TRIP_SCOPES, TRIP_SCOPE_KEYS, scopeOf as tripScopeOf, scopeSaid, scopeOffersOtherTowns, scopeAllowsTown } from ${JSON.stringify(join(root, "src/utils/tripScopeChoice.js"))};
   export { BED_TIERS, EXCLUDED, estimateDay, estimateShort, estimateSays, estimateForBrief, ENABLE_LABEL, ENABLE_SAYS, HOPS_PER_DAY, STOREBAELT, TRAIN_HOP, HOP_KM, movingMode, hopCost, movingProblem, movingNote, LONG_HAUL_MODES, ROOM_KR, DORM_KR, SUMMER_BED, DORM_SUMMER_PCT, BED_SEASON, bedSeasonOf, straddlesSeason, dormBand, HOSTEL_ROOM_SIZES, summerhouseFit, summerhouseWhy, SUMMERHOUSE_MARK, bunkPerHeadIn, ROOM_SLEEPS_MAX, HOTEL_SLEEPS, bedPerNight, RECOMMENDED, recommendedModes, recommendedWhy, isRecommended, showMoney, BUDGET_CURRENCIES, currencyOf } from ${JSON.stringify(join(root, "src/utils/budgetEstimate.js"))};
   export { matchedPlaces, previewPools, mentionsPlace, parentTownOf, isDeparturePlace, isRejectedPlace, onlyAskedAbout, isPassedThrough, regionsNamed, placeIsInRegion, REGION_TOWN_CAP, regionPickLimit } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
@@ -40804,9 +40807,9 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   //
   // The booked-stay clause above is the precedent and this is the same shape.
   ok("the per-day call is told the stay they chose, not only what it costs",
-     /const glances = await enrichGuideDays\([^)]*, intakeStay\)/.test(stayApp));
+     /const glances = await enrichGuideDays\([^)]*, bookedName, intakeStay, \{/.test(stayApp));
   ok("and it takes it as a parameter rather than reaching for the state",
-     /const enrichGuideDays = async \(days, travelMode, mixedModes, budgetSays = "", langBlock = "", bookedNights = \[\], bookedName = "", stayKind = ""\)/.test(stayApp));
+     /const enrichGuideDays = async \([^)]*, bookedName = "", stayKind = "",/.test(stayApp));
   // Day one answers with WHERE to take a house, because the area is the
   // decision a house makes and the traveller cannot book one without it.
   ok("day one of a sommerhus trip answers with an area, not a hotel",
@@ -78736,6 +78739,172 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     ok("and both sorts are offered as buttons", /BACKFILL_SORTS\.map\(o =>/.test(app));
     ok("starting alphabetical", /useState\(BACKFILL_SORT_DEFAULT\)/.test(app));
   }
+}
+
+// ── KNOWING WHERE THE BEDS ARE ──────────────────────────────────────
+//
+// Oliver, 26 Sep 2026: "I think we should program it, so it has awareness of
+// where the hostels are located and where summerhouses are located." Then:
+// "Just go through it all." See data/stayPlaces.js and utils/stayAwareness.js.
+{
+  const { HOSTELS, HOUSE_AREAS, STAY_TOWN_POINTS, DORM, TOWN_COORDS } = M;
+  const inDenmark = (p) => p.lat > 54.5 && p.lat < 57.8 && p.lon > 8.0 && p.lon < 15.2;
+
+  // ── THE DATA HOLDS ITS OWN RULES ──────────────────────────────────
+  ok("every hostel was read on a page, and says which", HOSTELS.every(h => /^https:\/\//.test(h.source)));
+  ok("every hostel's answer is one of the three", HOSTELS.every(h => Object.values(DORM).includes(h.dorm)));
+  ok("and carries the page's own words for it", HOSTELS.every(h => String(h.dormSays || "").length > 5));
+  ok("every hostel sits in Denmark", HOSTELS.every(inDenmark));
+  ok("no hostel is listed twice", new Set(HOSTELS.map(h => h.name)).size === HOSTELS.length);
+  ok("a season is a real window, from before to", HOSTELS.filter(h => h.season).every(h => /^\d\d-\d\d$/.test(h.season.from) && /^\d\d-\d\d$/.test(h.season.to) && h.season.from < h.season.to));
+  ok("an adults-only dorm carries the rule it came from", HOSTELS.filter(h => h.dormAdultsOnly).every(h => h.ageSays && h.dorm === DORM.yes));
+  ok("every area was confirmed on an agency's own page",
+     HOUSE_AREAS.every(a => /^https:\/\/www\.(sologstrand|dansommer|novasol|feriepartner)\.dk\//.test(a.source) && a.agencies.length > 0));
+  ok("every area sits in Denmark", HOUSE_AREAS.every(inDenmark));
+  ok("no area is listed twice", new Set(HOUSE_AREAS.map(a => a.name)).size === HOUSE_AREAS.length);
+  // NO PRICES IN EITHER LIST, which is the whole design: a price goes stale in
+  // weeks and has its own dated home. Where a bed is changes in years.
+  const priceKey = (o) => Object.keys(o).some(k => /kr|price|pris|cost|night/i.test(k));
+  ok("neither list carries a price", !HOSTELS.some(priceKey) && !HOUSE_AREAS.some(priceKey));
+  // THE REGISTER AGREES WITH THE APP'S OWN TOWNS where both know one. A second
+  // coordinate table beside TOWN_COORDS is only safe if the two cannot drift.
+  const overlap = Object.keys(STAY_TOWN_POINTS).filter(k => TOWN_COORDS[k]);
+  ok("the two coordinate tables share towns to compare", overlap.length >= 8);
+  const apart = overlap.filter(k => M.haversineKm(STAY_TOWN_POINTS[k], TOWN_COORDS[k]) > 5);
+  is("and no shared town is more than 5 km off", apart, []);
+
+  // ── WHAT IT FOUND ─────────────────────────────────────────────────
+  // Pinned, so a row edited by hand shows up as a change to this answer.
+  is("a bed in a shared room is sold in these towns and no others",
+     [...M.dormTowns()].sort(), ["Aarhus", "Copenhagen", "Fjaltring", "Frederikshavn", "Ribe", "Rødding", "Svendborg", "Tønder", "Vordingborg"]);
+  ok("his Aalborg finding holds, from the list rather than by hand", M.roomsOnlyTowns().includes("Aalborg"));
+  ok("and Odense has no checked hostel at all", !M.hostelTowns().includes("Odense"));
+  ok("an unclear page is never counted as rooms only", !M.roomsOnlyTowns().includes("Esbjerg") && !M.roomsOnlyTowns().includes("Horsens"));
+
+  // ── THE HOSTEL CHIP ───────────────────────────────────────────────
+  const says = M.hostelChipSays();
+  ok("the chip names every dorm town the list has", M.dormTowns().every(t => says.includes(t)));
+  ok("and names Aalborg because the list says so", /Aalborg/.test(says) && /private rooms only/.test(says));
+  ok("and Odense as having none", /no checked hostel at all in Odense/.test(says));
+  ok("and warns a family off the Copenhagen dorms", /adults only/.test(says));
+  ok("and reaches the planner through the chip", M.staySaid("cheapest", "").includes(says));
+  is("and still reads as no travel mode", M.travelModeKey(says), null);
+  ok("with no dash in it", !/[–—]/.test(says));
+
+  // ── WHERE A DAY IS ────────────────────────────────────────────────
+  ok("a town the app's own table never listed is placed", !!M.stayPointFor("Fjaltring"));
+  is("a street that spells a town is not the town", M.stayPointFor("Vejlebrovej"), null);
+  is("and a stop that only contains a town's name is not placed by it", M.stayPointFor("Ribe Domkirke"), null);
+  is("the injected resolver answers first",
+     M.dayPoints({ stops: [{ name: "X", town: "Ribe" }] }, () => ({ lat: 55.0, lon: 9.0 })), [{ lat: 55.0, lon: 9.0 }]);
+  ok("and the list's own towns answer when it cannot",
+     M.dayPoints({ stops: [{ name: "Somewhere", town: "Rødding" }] }, () => null).length === 1);
+
+  // ── THE HOSTEL BLOCK ──────────────────────────────────────────────
+  const aalborg = [{ lat: 57.048, lon: 9.919 }];
+  const aal = M.hostelBlock(aalborg, { wantsDorm: true });
+  ok("Aalborg on the hostel chip is told there is no dorm bed", /THERE IS NO DORM BED NEAR THIS DAY/.test(aal));
+  ok("and names the hostels that are there, as rooms", /Danhostel Aalborg/.test(aal) && /whole rooms only/.test(aal));
+  ok("and the nearest real dorm, with its distance", /Danhostel Frederikshavn City in Frederikshavn, about \d+ km away/.test(aal));
+  ok("and forbids the word it must not write", /Do not write hostel dorm, bunk or backpacker bed/.test(aal));
+  ok("the list is context the model may name from", /THIS LIST COUNTS AS CONTEXT FOR recommendedStay/.test(aal));
+  const cph = [{ lat: 55.676, lon: 12.568 }];
+  const young = M.hostelBlock(cph, { wantsDorm: true });
+  ok("Copenhagen on the hostel chip is not told there is no dorm", !/NO DORM BED/.test(young));
+  ok("and is capped rather than handed ten hostels", (young.match(/^- /gm) || []).length === M.HOSTEL_LINES && /of \d+ shown/.test(young));
+  const family = M.hostelBlock(cph, { wantsDorm: true, kids: true });
+  const firstLine = family.split("\n").find(l => l.startsWith("- "));
+  ok("a family's list leads with a bed a child may take", !/adults only/.test(firstLine));
+  ok("and says it where a dorm is adults only", /Its dorms are adults only/.test(family));
+  const nowhere = M.hostelBlock([{ lat: 56.95, lon: 8.38 }], { wantsDorm: true });
+  ok("a day with no hostel near says so rather than saying nothing", /none is within about \d+ km/.test(nowhere) && /NO DORM BED/.test(nowhere));
+  is("no stops, no block", M.hostelBlock([], { wantsDorm: true }), "");
+  // THE SEASON, only where the page printed one window.
+  const sandvig = M.HOSTELS.find(h => h.name === "Danhostel Sandvig");
+  is("Sandvig is shut in January", M.hostelOpenOn(sandvig, new Date("2027-01-10T12:00:00Z")), false);
+  is("and open in July", M.hostelOpenOn(sandvig, "2027-07-10"), true);
+  is("a hostel with no window is never read as closed", M.hostelOpenOn(M.HOSTELS.find(h => !h.season), "2027-01-10"), null);
+  ok("and a night outside the window is told so",
+     /falls outside/.test(M.hostelBlock([{ lat: 55.287, lon: 14.78 }], { date: new Date("2027-01-10T12:00:00Z") })));
+
+  // ── THE SOMMERHUS COASTS ──────────────────────────────────────────
+  const north = [{ lat: 57.048, lon: 9.919 }, { lat: 57.72, lon: 10.58 }, { lat: 57.37, lon: 9.72 }];
+  const farup = { name: "Fårup Sommerland", __lat: 57.271, __lon: 9.645 };
+  const picks = M.houseAreasFor(north, { places: [farup], kids: true });
+  ok("it picks from the checked areas and no others", picks.length === M.HOUSE_AREA_PICKS && picks.every(p => M.HOUSE_AREAS.some(a => a.name === p.name)));
+  ok("a north Jutland trip gets north Jutland coasts", picks.every(p => p.region === "North Jutland"));
+  const block = M.houseAreaBlock(north, { places: [farup], kids: true });
+  ok("the park is worked out from the published place, with a distance", /Fårup Sommerland \(about \d+ km\)/.test(block));
+  ok("and the model may only name an area on the list", /An area that is not on this list may not be named/.test(block));
+  ok("and is told to weigh the park for children", /There are children on this trip/.test(block));
+  ok("a place with no family theme and no family name is not a family place",
+     !M.isFamilyPlace({ name: "Aalborg Tower" }) && M.isFamilyPlace({ name: "Aalborg Tower", themes: ["family"] }) && M.isFamilyPlace({ name: "Aalborg Zoo" }));
+  is("a family place with no coordinate is not measured", M.familyPlacesNear({ lat: 57.25, lon: 9.58 }, [{ name: "Legoland" }]), []);
+  const wide = M.houseAreaBlock([{ lat: 55.676, lon: 12.568 }, { lat: 56.157, lon: 10.173 }], {});
+  ok("a trip too spread for one house is told so", /TOO FAR FOR ONE HOUSE/i.test(wide));
+  ok("a trip that fits one house is not", !/TOO FAR FOR ONE HOUSE/i.test(block));
+  // THE PULL IS BOUNDED: a park is worth a few kilometres, not a coast on the
+  // wrong side of the country. Without children, the park moves nothing.
+  const noKids = M.houseAreasFor(north, { places: [farup], kids: false }).map(a => a.name);
+  const plain = M.houseAreasFor(north, { places: [], kids: false }).map(a => a.name);
+  is("with no children the park changes no ranking", noKids, plain);
+
+  // ── AND THE GUIDE BUILD READS ALL OF IT ───────────────────────────
+  const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
+  ok("the per-day call takes what the call site knows",
+     /const enrichGuideDays = async \(days, travelMode, mixedModes, budgetSays = "", langBlock = "", bookedNights = \[\], bookedName = "", stayKind = "", stayAware = null\) =>/.test(app));
+  ok("the hostel block is for the hostel chip only", /const hostelSays = stayKind === "cheapest" && idx \+ 1 < days\.length && !\(bookedNights \|\| \[\]\)\.includes\(idx \+ 1\)/.test(app));
+  ok("the coast block is measured over the trip's nights, not one day",
+     /houseAreaBlock\(days\.slice\(0, Math\.max\(1, days\.length - 1\)\)\.flatMap\(d => dayPoints\(d, stayResolve\)\)/.test(app));
+  ok("and reaches day one only", /\$\{houseAreaSays && idx === 0 && idx \+ 1 < days\.length \?/.test(app));
+  ok("the call site hands over children, the published places and a DAY only",
+     /kids: !!guideBrief\.known\?\.party\?\.hasKids,/.test(app) && /arrival: datePrecision === "day" \? arrivalDate : null,/.test(app) && /places: freeEntrance,/.test(app));
+  ok("and both blocks sit inside the prompt the call sends", /\$\{hostelSays \? `/.test(app));
+}
+
+// ── HOW OLD THE CHECKED FIGURES ARE ─────────────────────────────────
+//
+// Oliver, 26 Sep 2026, on a weekly AI price refresh: "Go with Claude's view."
+// Every figure the app prices with carries a date and one of them was ever read.
+{
+  const { FIGURES, FIGURE_LIFE, figureAge, figureAges, figureAgeNote } = M;
+  const d = (s) => new Date(`${s}T12:00:00Z`);
+  ok("every figure has a kind with a lifetime", FIGURES.every(f => FIGURE_LIFE[f.kind] > 0));
+  ok("and a source and a date", FIGURES.every(f => /^https:\/\//.test(f.source) && /^\d{4}-\d\d-\d\d$/.test(f.checkedAt)));
+  ok("nothing is stale on the day they were read", figureAges(d("2026-09-26")).every(f => f.stale === false));
+  const nov = figureAges(d("2026-11-01"));
+  ok("five weeks on, the pump price is stale and nothing else is",
+     nov.filter(f => f.stale).map(f => f.id).join() === "fuel-price");
+  ok("and it is listed first", nov[0].id === "fuel-price");
+  ok("a year on, everything is", figureAges(d("2027-10-01")).every(f => f.stale));
+  is("an undated figure is never read as fresh", figureAge({ kind: "price", checkedAt: "" }, d("2026-09-26")).stale, null);
+  ok("the note counts the stale ones", /1 of \d+ checked figures is past its lifetime/.test(figureAgeNote(d("2026-11-01"))));
+  ok("and names the next to go when none are", /next to go old is pump prices/i.test(figureAgeNote(d("2026-09-26"))));
+  // ── AND NO FIGURE CAN BE ADDED WITHOUT BEING REGISTERED ──────────
+  // Every exported object in the modules that hold figures, and one level
+  // inside it, that carries a checkedAt and a source, must be on the list.
+  const holders = ["src/utils/budgetEstimate.js", "src/utils/mealsEstimate.js", "src/utils/fuel.js", "src/utils/summerhouse.js"];
+  const registered = new Set(FIGURES.map(f => `${f.source}|${f.checkedAt}`));
+  const found = [];
+  const visit = (v, where) => {
+    if (!v || typeof v !== "object" || Array.isArray(v)) return;
+    if (typeof v.checkedAt === "string" && v.checkedAt && typeof v.source === "string" && v.source) found.push({ key: `${v.source}|${v.checkedAt}`, where });
+  };
+  for (const [name, v] of Object.entries(M)) {
+    visit(v, name);
+    if (v && typeof v === "object" && !Array.isArray(v)) for (const [k, w] of Object.entries(v)) visit(w, `${name}.${k}`);
+  }
+  ok("the walk finds the figures it is meant to", found.length >= 12);
+  is("and every one of them is registered", found.filter(f => !registered.has(f.key)).map(f => f.where), []);
+  ok("the walk covers the modules that hold them", holders.every(h => existsSync(join(root, h))));
+  // AND THE STUDIO SHOWS IT.
+  const { renderSurface } = await import(pathToFileURL(join(root, "tests/render.mjs")).href);
+  const drawn = await renderSurface("src/components/FigureAgePanel.jsx", "FigureAgePanel", { today: d("2026-11-01") });
+  ok("the Studio panel says how many are old", drawn.text.includes("1 of ") && drawn.text.includes("Pump prices, petrol and diesel"));
+  ok("and links the page to re-read", /detkoster\.dk/.test(drawn.html));
+  const fresh = await renderSurface("src/components/FigureAgePanel.jsx", "FigureAgePanel", { today: d("2026-09-26") });
+  ok("and on a fresh day it lists nothing until asked", !fresh.text.includes("Pump prices, petrol and diesel"));
+  ok("the panel is in the Studio", /<FigureAgePanel \/>/.test(readFileSync(join(root, "src/App.jsx"), "utf8")));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

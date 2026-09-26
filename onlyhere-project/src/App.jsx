@@ -234,6 +234,7 @@ import { matchedPlaces, previewPools, wantedCategories, mentionsPlace } from "./
 import { estimateDay, estimateShort, estimateSays, estimateForBrief, isRecommended, recommendedWhy, summerhouseFit, summerhouseWhy, SUMMERHOUSE_MARK, BUDGET_CURRENCIES, ENABLE_LABEL, ENABLE_SAYS } from "./utils/budgetEstimate";
 import { TRIP_SCOPES, scopeSaid } from "./utils/tripScopeChoice";
 import { STAY_CHOICES, stayIsBooked, stayIsHouse, stayProblem, staySaid } from "./utils/stayChoice";
+import { hostelBlock, houseAreaBlock, dayPoints } from "./utils/stayAwareness";
 import { FOOD_TIERS } from "./utils/mealsEstimate";
 import { weighAdd, addCaution, tripLoadBlock } from "./utils/weighAdd";
 import { isBookableTicketUrl, pickTicketUrl, describeTicketSearch, ticketQueries, ticketUrlSaysElsewhere, ticketAgentOf, reviewPastedTicketUrl, isTourUrl, typeHasAdmission, editionYearOf, TICKET_FIELD, TOUR_FIELD } from "./utils/ticketLink";
@@ -323,6 +324,7 @@ import { CheapGemsPage } from "./components/CheapGemsPage";
 import { ShoppingPage } from "./components/ShoppingPage";
 import { CheapGemsPanel } from "./components/CheapGemsPanel";
 import { FounderNotesPanel } from "./components/FounderNotesPanel";
+import { FigureAgePanel } from "./components/FigureAgePanel";
 import { GEM_TYPE, gemsForChat, gemsChatBlock } from "./utils/cheapGems";
 import { NOTE_TYPE, notesFor, notesForGuide, notesBlock } from "./utils/founderNotes";
 import { reelLive, reelCount } from "./utils/reelGate";
@@ -14682,9 +14684,32 @@ ${researchRules("festival", ev)}`
   // turns the question from "where should they sleep" into "how do they get back
   // to it". A sommerhus is the same shape, and the only difference is that they
   // have not booked one yet, so day one still names the area.
-  const enrichGuideDays = async (days, travelMode, mixedModes, budgetSays = "", langBlock = "", bookedNights = [], bookedName = "", stayKind = "") => {
+  // ── AND NOW IT KNOWS WHERE THE BEDS ARE ─────────────────────────
+  //
+  // Oliver, 26 Sep 2026: "I think we should program it, so it has awareness of
+  // where the hostels are located and where summerhouses are located."
+  //
+  // `stayAware` carries what the call site knows and this function does not:
+  // whether children are coming, the arrival date when a DAY was said, the
+  // stop resolver, and the published places. Two blocks come out of it, both
+  // built in code from data/stayPlaces.js rather than asked of the model:
+  //
+  //   the hostel chip   the checked hostels near each day, and a plain "no
+  //                     dorm bed near here" where there is none
+  //   the sommerhus     day one picks from the checked coasts nearest the
+  //                     WHOLE trip, with the family places in reach of each
+  //
+  // Both go in as context the model may name from, exactly like the island
+  // directory: a name on the list may be returned, a name off it may not.
+  const enrichGuideDays = async (days, travelMode, mixedModes, budgetSays = "", langBlock = "", bookedNights = [], bookedName = "", stayKind = "", stayAware = null) => {
     setGlancePending(days.length);
     const glances = new Array(days.length).fill(null);
+    const stayResolve = typeof stayAware?.resolve === "function" ? stayAware.resolve : null;
+    const stayKids = !!stayAware?.kids;
+    const stayArrival = stayAware?.arrival instanceof Date && !Number.isNaN(stayAware.arrival.getTime()) ? stayAware.arrival : null;
+    const houseAreaSays = stayIsHouse(stayKind)
+      ? houseAreaBlock(days.slice(0, Math.max(1, days.length - 1)).flatMap(d => dayPoints(d, stayResolve)), { places: stayAware?.places || [], kids: stayKids })
+      : "";
     await Promise.all(days.map(async (day, idx) => {
       try {
         const names = (day.stops || []).map(s => s.name);
@@ -14707,12 +14732,23 @@ ${researchRules("festival", ev)}`
         // context this pipeline has ever had for a nine room island, where a
         // web search returns a booking aggregator with nothing on it.
         const islandSays = islandSaysForDay(day);
+        // THE HOSTEL CHIP ONLY, and never on a night that has no bed to find:
+        // the last day, a night already booked. A hotel chip or no chip at all
+        // is left to the search, because a hostel list offered to somebody who
+        // asked for a hotel is the app arguing with them.
+        const hostelSays = stayKind === "cheapest" && idx + 1 < days.length && !(bookedNights || []).includes(idx + 1)
+          ? hostelBlock(dayPoints(day, stayResolve), { wantsDorm: true, kids: stayKids, date: stayArrival ? dayPlus(dayKey(stayArrival), idx) : null })
+          : "";
         const enrichPrompt = `A traveler visits these stops in Denmark in this exact order: ${numbered}. Using ONLY the provided search context plus well-established Danish geography/transit knowledge, respond with ONLY strict JSON:
 {"legs": [${names.length > 1 ? `exactly ${names.length - 1} objects, where legs[0] is how to get from stop 1 to stop 2, legs[1] from stop 2 to stop 3, and so on` : "empty array"}, each: {"how": "e.g. '~10 min by bus' or '~25 min walk' or '~1h by train via Odense'"}], "accommodation": "One specific sentence — name an actual area/neighbourhood to stay in if the context supports it (e.g. 'Stay near Koge harbour for an easy morning ride out'), not a generic 'stay overnight in [town]' with no reason given. CRITICAL: the place you suggest MUST be realistically close to where this day's stops are — never suggest a town in a different region or a different island just because it has good general transport links; proximity to THIS day's actual activities always wins over generic transit convenience. Only default to day-trip-from-Copenhagen phrasing if that is the better call for this specific day. RELOCATION DAYS ARE A SPECIFIC CASE, GET THIS RIGHT: if this day's OWN stops end with leaving for a new town (a departure/travel leg to somewhere the traveler will be based from for the following day(s)), the accommodation for THIS day must reflect where they'll be sleeping that night — the destination they're traveling to, not the town they started the day in. Never write something like "stay near central Copenhagen" for a day whose last stop is "Departure to Aarhus" — that's recommending accommodation in a city they've already left by evening. Say where they'll really be. ACCOMMODATION TYPE, grounded in the real prices in the search context (never invent a specific price, only use ones present in context) and the traveler's stated daily budget: central Copenhagen is expensive — a tight budget there realistically means a hostel or budget guesthouse, not a hotel; the same budget in a smaller town elsewhere in Denmark often comfortably covers a real hotel, since prices outside the capital are typically lower. Weave the TYPE (hostel/hotel/guesthouse) into this sentence when the budget context makes one clearly more realistic than the other; if the budget is generous or unclear, don't force a type. ONE TRIP, ONE KIND OF TRAVELER — and if a day departs from that, the sentence has to say why IN THE SENTENCE. Oliver, 9 Aug 2026, on a real guide: \"It suggests hostels, but then gives a specific hotel??? Odd.\" Day 1 said book a hostel near Norreport, Day 3 said a comfortable hotel base in Odense, and on one budget BOTH were correct, because Copenhagen costs far more per night than Odense does. The reader could not know that, because neither sentence said it. Each day is written by its own separate call that cannot see the others, so YOU are the only place this can be caught: if the type you are about to write differs from what the same budget would buy in the capital, name the reason in the same breath (\"your nightly budget goes much further here than in Copenhagen, so a real hotel in the centre is comfortably in range\"). An unexplained jump between hostel and hotel does not read as good local knowledge, it reads as the guide contradicting itself. And the type in this sentence MUST match recommendedStay below: never write hostel here and return a hotel there.", "stayArea": "Just the specific area/neighbourhood/town name from the accommodation sentence above, 2-5 words, no extra description — e.g. 'Koge harbour' or 'central Odense' — used to build a real search link, so it must be an actual, findable place name, never invented.", "recommendedStay": "A REAL, SPECIFIC hotel or hostel name — ONLY if one is explicitly present in the search context, exactly as named there. This is the same never-guess rule as everything else here: if the search context does not name a specific real property, leave this an empty string and let the traveler search themselves — do NOT invent a plausible-sounding hotel name, do NOT reuse a generic chain name unless the context specifically confirms one exists in this area. An empty string is the correct, expected answer most of the time; only fill this when supported.", "nightFrom": "The LOWEST price for one room for one night in or near this stay area that the SEARCH CONTEXT ABOVE STATES, as a plain number of Danish kroner. 0 when the context states no room price in kroner. Never estimate, never convert from another currency, never use a price from memory: if it is not written in the context, it is 0.", "nightFromSays": "The exact words from the search context that state that price, copied character for character, at most 150 characters, including the number and the currency. Empty when nightFrom is 0."}
 Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommend somewhere that contradicts it, and never tell them to economise when they have said they are not counting. A real guide he read offered "a budget-friendly hostel-style option if watching costs" to a family who had just said they had plenty of money. If the honest answer happens to be a cheaper place anyway, give a reason that is about the place and not about their wallet. ` : `THEY HAVE SAID NOTHING ABOUT MONEY, SO YOU KNOW NOTHING ABOUT THEIR BUDGET. Do not describe it, do not guess at it, and do not write a sentence in the second person about what they can or cannot afford. "Your tight daily budget", "on a modest budget" and "out of reach for you" are all claims about a person who has not spoken. The paragraph above tells you what a tight budget buys in Copenhagen; that is background about the city, not a fact about them. Recommend an area for a reason about the PLACE, and if price is the point, say what the place costs rather than what they can afford. `}always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no real map data): use realistic speeds — walking ~5 km/h (roughly 12 min/km), cycling ~15 km/h, city driving ~30 km/h even accounting for a short trip. Never guess something like "1 min by car" for two stops that aren't at the same address — sharing a city name is NOT the same as being adjacent (a campsite on the edge of a city and a museum in its center are commonly several km apart even though both say "Aarhus"). If you're not confident of the real distance between two specific stops, say "Check the route" rather than guessing a number that could be wrong by an order of magnitude. ${mixedModes ? `The traveler explicitly wants a MIX of ${mixedModes.map(m => m.toUpperCase()).join(" AND ")} across this trip — do NOT default every leg to one of them. For EACH leg, pick whichever of those mentioned modes is the realistic, sensible choice given the real distance and geography (e.g. "~15 min walk" for two stops in the same town even on a mostly-bike trip, "~1h20 by train" for a long cross-country hop even on a mostly-transit trip, "~30 min by bike" for a short countryside stretch). vary the mode leg-by-leg based on what makes sense, not on which mode was mentioned first — mixing is the expected, correct output here, not an edge case.` : travelMode ? `The traveler's PRIMARY mode is ${travelMode.toUpperCase()} — use it for most legs (e.g. "~45 min by bike", "~30 min drive"${travelMode === "public transport" ? ', by train/bus' : ''}), and accommodation advice must fit it (bike = realistic daily distances, overnight stops matter more). BUT if a specific leg can't be done that way — most commonly a crossing to an island with no bridge (Bornholm, Ærø, Samsø, etc.), or two stops close enough to just walk — say so plainly and use the real mode for THAT leg instead (e.g. "~1h15 by ferry", "~10 min walk"), don't force the primary mode onto a leg where it doesn't work. Mixing modes across a trip is normal and expected, not an error.` : "If the transport mode is unknown, prefer public transport phrasing."} If two stops are in the same town or area, walking is usually right. If a leg is unclear, use "Check Rejseplanen for this leg" — never invent a confident time. Each value under 12 words.${islandSays ? `
 
 ${islandSays}
-THE LIST ABOVE COUNTS AS CONTEXT FOR recommendedStay, and it is the only list this trip has for that island: a name on it may be returned there, spelled exactly as the island spells it. A name that is NOT on it and NOT in the search context still may not be returned, and the accommodation sentence must carry the attribution the block asks for.` : ""}`;
+THE LIST ABOVE COUNTS AS CONTEXT FOR recommendedStay, and it is the only list this trip has for that island: a name on it may be returned there, spelled exactly as the island spells it. A name that is NOT on it and NOT in the search context still may not be returned, and the accommodation sentence must carry the attribution the block asks for.` : ""}${hostelSays ? `
+
+${hostelSays}` : ""}${houseAreaSays && idx === 0 && idx + 1 < days.length ? `
+
+${houseAreaSays}` : ""}`;
         // RETRIED (Oliver, again: "no accommodation recommendations (Booking)"):
         // this single call is the only source of the Where to stay card and the
         // per-leg how-texts, and it previously got exactly one attempt — one
@@ -18083,7 +18119,14 @@ If the conversation only covers a single day or a few stops with no explicit day
       const budgetSays = budgetSaid
         ? (budgetSaid.source === "intake" ? budgetSaid.value : `${travellerBudget(saidByTraveller(aiMessages)) || "not stated plainly"}`)
         : "";
-      const glances = await enrichGuideDays(parsed.days, travelMode, mixedModes, budgetSays, guideLangBlock, bookedNights, bookedName, intakeStay);
+      const glances = await enrichGuideDays(parsed.days, travelMode, mixedModes, budgetSays, guideLangBlock, bookedNights, bookedName, intakeStay, {
+        kids: !!guideBrief.known?.party?.hasKids,
+        // Only a DAY. A bare month is pinned to the 15th, and a hostel's
+        // season checked against an invented day is a closure invented with it.
+        arrival: datePrecision === "day" ? arrivalDate : null,
+        resolve: (name, town) => resolveStopCoords(name, null, town),
+        places: freeEntrance,
+      });
       parsed.days = parsed.days.map((d, i) => (glances[i] ? { ...d, glance: glances[i] } : d));
 
       buildStage("Verifying exact locations and routes", 95);
@@ -26566,6 +26609,13 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         </div>
                       )}
                     </div>
+
+                    {/* ── HOW OLD THE CHECKED FIGURES ARE ─────────────
+                        Oliver, 26 Sep 2026, choosing this over a weekly AI
+                        price pass: "Go with Claude's view." Every figure the
+                        app prices with carries a date; this is the first thing
+                        that reads them. See utils/figureAge.js. */}
+                    <FigureAgePanel />
 
                     {/* ── SWEEPS: A SMALL CHANGE, APPLIED TO MANY ROWS ────
                         The fourth maintenance panel, and the first one with a
