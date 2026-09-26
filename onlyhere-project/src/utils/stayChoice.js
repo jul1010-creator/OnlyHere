@@ -19,13 +19,27 @@
 //
 // So the row answers the question honestly or it does not answer it at all.
 //
-// ── AND IT IS A PREFERENCE, NOT A PRICE ─────────────────────────────
+// ── AND IT USED TO ASK ABOUT THE WRONG THING ────────────────────────
 //
-// Nothing here costs anything. "Cheapest" is a statement about WHERE, and what
-// that saves is a per-town question the guide's own bed search answers later:
-// the gap between the centre and one ring out is large in Copenhagen and close
-// to nothing in Ribe, so a single percentage would be wrong in both towns at
-// once. See bedsEstimate in utils/costLedger.js for the figure that is real.
+// Oliver, 26 Sep 2026: "what about hostels and hotels? That is a bigger
+// difference in price than hotel area".
+//
+// He is right by about four times. Measured off the app's own tables, a pair per
+// head per night: a dorm bunk is 145 to 248, a central hotel double is 600 to
+// 900. Against that, the centre against one ring out is a rounding error, and
+// nobody can source it anyway: this file's own note said so.
+//
+// So the row asked about the lever nothing can price and silently priced the one
+// it did not name, and the two halves contradicted each other out loud. The dorm
+// figure comes from Next House and Steel House, both CENTRAL Copenhagen, while
+// the chip carrying it told the planner they wanted to be "a little further out
+// from the centre". A traveller who wants a central hostel, which is the exact
+// thing the number is built on, had no chip to tick.
+//
+// THE ROW NAMES THE TYPE NOW. Location stops being the question and becomes a
+// line inside each answer, which is honest: the guide picks real places per town
+// later, and that is where location is really decided. See bedsEstimate in
+// utils/costLedger.js for the figure that is real.
 
 const clean = (s) => String(s ?? "").trim();
 
@@ -47,17 +61,53 @@ const clean = (s) => String(s ?? "").trim();
 export const STAY_CHOICES = [
   {
     key: "cheapest",
-    label: "Cheapest location",
+    label: "A hostel bed",
     booked: false,
     // His own words for it, and the limit matters: a bed an hour out of town is
     // not a saving, it is a different trip with a commute in it.
-    said: "They have not booked anywhere, and they want the cheaper end of the market: a little further out from the centre, still in the town and still close enough to the middle to get there quickly, never out in the country.",
+    // ── AND A HOSTEL IS NOT EVERYWHERE, WHICH THE FIGURE ASSUMES ──
+    //
+    // Oliver, 26 Sep 2026: "I just looked up Aalborg. Aalborg apparently has no
+    // cheap hostels, while Copenhagen does. So someone can't be sent to Aalborg,
+    // expecting a cheap stay."
+    //
+    // Checked and he is right, and it is worse than one town. Every dorm price in
+    // this app is Copenhagen's. Danhostel Aalborg publishes 35 rooms, all with a
+    // bath, none without, and reads as private rooms only; its own network quotes
+    // nearby houses from 405 to 455 a night. Aarhus meanwhile has dorms from
+    // about 85, CHEAPER than Copenhagen. So the figure is not a national one and
+    // the towns are not interchangeable.
+    //
+    // The panel cannot price 31 towns. What it can do is stop the planner
+    // repeating a number where the bed behind it does not exist, which is what
+    // the last sentence here is for.
+    said: "They have not booked anywhere, and they want a bed in a hostel rather than a room of their own, the cheap end of the market. Central is fine: the cheapest beds in Copenhagen are in the middle of town. IMPORTANT: not every Danish town has a hostel with dormitories. Copenhagen and Aarhus do; Aalborg's hostel is private rooms only, from about 405 a night. If the town you are proposing has no hostel dorm, say so plainly and price the cheapest real bed there instead of repeating the figure in their budget.",
   },
   {
     key: "best",
-    label: "Best location",
+    label: "A hotel",
     booked: false,
-    said: "They have not booked anywhere, and they would rather pay for being central than save on the room.",
+    said: "They have not booked anywhere, and they want a hotel room rather than a hostel bed, somewhere central and comfortable rather than the cheapest thing going.",
+  },
+  // ── AND THE ONE DANES THEMSELVES BOOK ───────────────────────────
+  //
+  // Oliver, 26 Sep 2026: "I want you to create one specifically for
+  // summerhouses, perhaps? ... if someone is a family of 4 on Jutland.."
+  //
+  // Measured against every other bed in this app, it is not a nice extra for a
+  // family. It is the cheapest way for four people to sleep in Denmark in every
+  // season, and in the busiest week of the year it undercuts a dorm bunk: 123 to
+  // 143 a head in July against 218 to 248 for a bed in a Copenhagen dormitory,
+  // and 53 to 59 in January. With a kitchen, which is what makes the cheapest
+  // food tier reachable rather than theoretical.
+  //
+  // THE CATCH IS THE WEEK. It is sold in sevens and nothing shorter, so the chip
+  // is only recommended to a trip long enough to use one. See utils/summerhouse.js.
+  {
+    key: "summerhouse",
+    label: "A summerhouse",
+    booked: false,
+    said: "They have not booked anywhere, and they want a sommerhus: a whole holiday house with a kitchen, booked by the week. Danish holiday houses are on the coasts and in the countryside rather than in town centres, so plan a base out there and day trips in rather than a town-centre itinerary, and say which town they are near. They are let Saturday to Saturday and cannot be taken for fewer than seven nights.",
   },
   {
     key: "booked",

@@ -231,7 +231,7 @@ import { readPromises, brokenPromises, promiseNote, rebuildKeptMore, promiseRetr
 import { swapIsAllowed } from "./utils/stopSwap";
 import { factCheckCopy } from "./utils/factCheckCopy";
 import { matchedPlaces, previewPools, wantedCategories, mentionsPlace } from "./utils/previewMatch";
-import { estimateDay, estimateShort, estimateSays, estimateForBrief, isRecommended, recommendedWhy, BUDGET_CURRENCIES, ENABLE_LABEL, ENABLE_SAYS } from "./utils/budgetEstimate";
+import { estimateDay, estimateShort, estimateSays, estimateForBrief, isRecommended, recommendedWhy, summerhouseFit, summerhouseWhy, SUMMERHOUSE_MARK, BUDGET_CURRENCIES, ENABLE_LABEL, ENABLE_SAYS } from "./utils/budgetEstimate";
 import { TRIP_SCOPES, scopeSaid } from "./utils/tripScopeChoice";
 import { STAY_CHOICES, stayIsBooked, stayProblem, staySaid } from "./utils/stayChoice";
 import { FOOD_TIERS } from "./utils/mealsEstimate";
@@ -19414,6 +19414,15 @@ If the conversation only covers a single day or a few stops with no explicit day
                     arrival: intakeArrival, departure: intakeDeparture })
     : { ready: false, need: [], problem: null };
   const intakeBudgetText = estimateForBrief(budgetEstimate);
+  // ── AND WHETHER A SOMMERHUS BEATS IT ─────────────────────────────
+  //
+  // Needs the trip length, which is the one hard gate: a holiday house is sold
+  // in sevens and nothing shorter, so a short trip cannot have one at any price.
+  // tripDays is the one reader of how long the trip is; see utils/tripEvents.js.
+  const houseNights = intakeArrival && intakeDeparture ? tripDays(intakeArrival, intakeDeparture) : 0;
+  const houseVerdict = budgetOn
+    ? summerhouseFit({ travellers: intakeTravelers, nights: houseNights, arrival: intakeArrival, departure: intakeDeparture })
+    : null;
 
   // ── AND IN THEIR OWN MONEY ───────────────────────────────────────
   //
@@ -30346,14 +30355,31 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: stayIsBooked(intakeStay) ? 8 : 14 }}>
                   {STAY_CHOICES.map(ch => {
                     const on = intakeStay === ch.key;
+                    /* ── AND THE SOMMERHUS CARRIES ITS OWN VERDICT ──
+                       Oliver, 26 Sep 2026: "imagine at the end summerhouses
+                       (strongly recommended / Recommended for your trip)..".
+                       Decided by the money rather than by a rule about
+                       families: it is marked when it beats the cheapest bed
+                       this panel otherwise offers, for this party, in this
+                       season. See summerhouseFit in utils/budgetEstimate.js. */
+                    const mark = ch.key === "summerhouse" ? SUMMERHOUSE_MARK[houseVerdict] : "";
                     return (
                       <button key={ch.key} onClick={() => { setIntakeStay(on ? "" : ch.key); if (on) setIntakeStayName(""); }}
                         style={{ background: on ? C.gold : "none", border: `1px solid ${on ? C.gold : C.border}`, color: on ? "#0A0F1E" : C.light, borderRadius: 100, padding: "8px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                        {ch.label}
+                        {ch.label}{mark ? <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, opacity: 0.85 }}>{houseVerdict === "strong" ? "★" : "✓"}</span> : null}
                       </button>
                     );
                   })}
                 </div>
+                {/* The reason, once, under the row, the same shape the transport
+                    row's recommendation uses. It names both figures rather than
+                    asserting a preference, because the numbers are the argument. */}
+                {houseVerdict && (
+                  <div style={{ fontSize: 11, color: C.light, lineHeight: 1.55, marginTop: -6, marginBottom: 12 }}>
+                    <span style={{ color: C.gold, fontWeight: 700 }}>{SUMMERHOUSE_MARK[houseVerdict]}: </span>
+                    {summerhouseWhy(houseVerdict, { heads: budgetEstimate.heads || 2, season: budgetEstimate.season })}
+                  </div>
+                )}
                 {stayIsBooked(intakeStay) && (
                   <div style={{ marginBottom: 14 }}>
                     <input value={intakeStayName} onChange={e => setIntakeStayName(e.target.value)}

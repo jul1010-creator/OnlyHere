@@ -282,9 +282,10 @@ writeFileSync(entry, `
   export { resolveStopCoords } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { festivalScale } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
   export { needsTier, proposedTier, BACKFILL_SORTS, BACKFILL_SORT_DEFAULT, sortForBackfill, tierSpread, backfillPrompt, readBackfill, missedByPass, proposeTiersWithReason, PASS_FAILED } from ${JSON.stringify(join(root, "src/utils/tierBackfill.js"))};
+  export { HOUSE_WEEK, HOUSE_SIZES, HOUSE_NIGHTS, HOUSE_FIT, HOUSE_SOURCE, HOUSE_CHECKED_AT, HOUSE_SEASON_CHECK, houseFor, houseWeek, housePerHeadNight, houseFit, houseSays } from ${JSON.stringify(join(root, "src/utils/summerhouse.js"))};
   export { STAY_CHOICES, STAY_KEYS, stayChoiceOf, stayIsBooked, stayProblem, staySaid } from ${JSON.stringify(join(root, "src/utils/stayChoice.js"))};
   export { TRIP_SCOPES, TRIP_SCOPE_KEYS, scopeOf as tripScopeOf, scopeSaid, scopeOffersOtherTowns, scopeAllowsTown } from ${JSON.stringify(join(root, "src/utils/tripScopeChoice.js"))};
-  export { BED_TIERS, EXCLUDED, estimateDay, estimateShort, estimateSays, estimateForBrief, ENABLE_LABEL, ENABLE_SAYS, HOPS_PER_DAY, STOREBAELT, TRAIN_HOP, HOP_KM, movingMode, hopCost, movingProblem, movingNote, LONG_HAUL_MODES, ROOM_KR, DORM_KR, SUMMER_BED, DORM_SUMMER_PCT, BED_SEASON, bedSeasonOf, dormBand, HOSTEL_ROOM_SIZES, ROOM_SLEEPS_MAX, HOTEL_SLEEPS, bedPerNight, RECOMMENDED, recommendedModes, recommendedWhy, isRecommended, showMoney, BUDGET_CURRENCIES, currencyOf } from ${JSON.stringify(join(root, "src/utils/budgetEstimate.js"))};
+  export { BED_TIERS, EXCLUDED, estimateDay, estimateShort, estimateSays, estimateForBrief, ENABLE_LABEL, ENABLE_SAYS, HOPS_PER_DAY, STOREBAELT, TRAIN_HOP, HOP_KM, movingMode, hopCost, movingProblem, movingNote, LONG_HAUL_MODES, ROOM_KR, DORM_KR, SUMMER_BED, DORM_SUMMER_PCT, BED_SEASON, bedSeasonOf, straddlesSeason, dormBand, HOSTEL_ROOM_SIZES, summerhouseFit, summerhouseWhy, SUMMERHOUSE_MARK, bunkPerHeadIn, ROOM_SLEEPS_MAX, HOTEL_SLEEPS, bedPerNight, RECOMMENDED, recommendedModes, recommendedWhy, isRecommended, showMoney, BUDGET_CURRENCIES, currencyOf } from ${JSON.stringify(join(root, "src/utils/budgetEstimate.js"))};
   export { matchedPlaces, previewPools, mentionsPlace, parentTownOf, isDeparturePlace, isRejectedPlace, onlyAskedAbout, isPassedThrough, regionsNamed, placeIsInRegion, REGION_TOWN_CAP, regionPickLimit } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
   export { wantedCategories, groupKeyOf, foodIsPlanned } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
   export { saysWord, briefThemes, fitsBrief, rankOffers, offerReason, profilePull, THEME_WORDS, MODE_WORDS, THEMES_WITHOUT_WORDS, OFFER_LIMIT, essentialsForTrip, essentialsBlock, reservedEssential, nightlifeWanted, nightlifeNotAsked, RESERVED_THEME, ESSENTIALS_IN_GUIDE } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
@@ -78065,6 +78066,187 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   }
 }
 
+// ── A HOUSE, NOT A BED ─────────────────────────────────────────────
+//
+// Oliver, 26 Sep 2026: "I want you to create one specifically for summerhouses,
+// perhaps? ... if someone is a family of 4 on Jutland.." and, when I asked about
+// Skagen, the line that turned out to understate it: "It's not cheap cheap.. but
+// for what you get, it's cheap."
+//
+// It is cheap cheap. In every season it is the cheapest way for four people to
+// sleep in Denmark, and in the busiest week of the year it undercuts a dorm bunk.
+{
+  const { HOUSE_WEEK, HOUSE_SIZES, HOUSE_NIGHTS, HOUSE_FIT, HOUSE_SOURCE, HOUSE_CHECKED_AT,
+          HOUSE_SEASON_CHECK, houseFor, houseWeek, housePerHeadNight, houseFit, houseSays,
+          summerhouseFit, summerhouseWhy, SUMMERHOUSE_MARK, bunkPerHeadIn, bedPerNight, estimateDay, estimateSays, estimateForBrief } = M;
+
+  // ── EVERY FIGURE WAS READ AT THE DATE IT APPLIES TO ─────────────
+  //
+  // Twice in two days I built a summer price by taking a published ratio and
+  // applying it to a base that was not the ratio's base. The second time it put
+  // a July week at 342 kr a head when the real answer is 123 to 143, out by
+  // nearly three times, in the direction that would have killed this feature
+  // before it existed. So these were read, one search per season.
+  {
+    ok("the houses carry their seller", /^https:\/\//.test(HOUSE_SOURCE));
+    ok("and the day they were read", /^\d{4}-\d{2}-\d{2}$/.test(HOUSE_CHECKED_AT));
+    is("two sizes were measured", HOUSE_SIZES.join(","), "4,6");
+    is("and a week is seven nights", HOUSE_NIGHTS, 7);
+    for (const size of HOUSE_SIZES) {
+      for (const season of ["winter", "low", "high"]) {
+        const band = HOUSE_WEEK[size][season];
+        ok(`${size} sleeps, ${season}: a real band`, band.low > 0 && band.high >= band.low);
+      }
+      // AND THE SEASONS ARE IN ORDER, which is the shape every reading showed:
+      // January cheapest, October in the middle, July dearest.
+      ok(`${size} sleeps: January is the cheapest month`, HOUSE_WEEK[size].winter.low < HOUSE_WEEK[size].low.low);
+      ok(`${size} sleeps: and July the dearest`, HOUSE_WEEK[size].high.low > HOUSE_WEEK[size].low.high);
+    }
+    // AND IT AGREES WITH THE NATIONAL FIGURE, which is what the cross-check is
+    // for: Danmarks Statistik puts high season 131 percent above the cheapest
+    // month, and these come out at about 2.3 times.
+    const ratio = HOUSE_WEEK[4].high.low / HOUSE_WEEK[4].winter.low;
+    ok("July is about two and a third times January", ratio > 2.1 && ratio < 2.5);
+    ok("and the national cross-check is named, not used as the source",
+       /131 percent/.test(HOUSE_SEASON_CHECK.says) && /read at each season rather than derived/.test(HOUSE_SEASON_CHECK.says));
+  }
+
+  // ── THE SMALLEST HOUSE THAT FITS, AND THE DIVISION BY THE PARTY ──
+  {
+    is("four take a four-sleeper", houseFor(4), 4);
+    is("five take a six", houseFor(5), 6);
+    is("two also take the smallest there is", houseFor(2), 4);
+    // Past the biggest measured size it uses that one's rate, which errs HIGH,
+    // the safe direction for a figure somebody budgets against.
+    is("eight take the biggest measured", houseFor(8), 6);
+    // DIVIDED BY THE PARTY, NOT BY WHAT THE HOUSE SLEEPS. Four people in a
+    // six-sleeper pay for the house, not four sixths of it.
+    const four = housePerHeadNight(4, "winter");
+    is("a family of four in January", `${four.low} to ${four.high}`, "53 to 59");
+    is("and in July", (() => { const h = housePerHeadNight(4, "high"); return `${h.low} to ${h.high}`; })(), "123 to 143");
+    const six = housePerHeadNight(6, "winter");
+    ok("six pay less a head than four", six.high < four.low);
+  }
+
+  // ── AND THE MARK IS DECIDED BY THE MONEY ────────────────────────
+  //
+  // The first draft was a headcount and a season written by hand: four or more,
+  // outside July. Both were wrong. A pair in January is 105 a head against 145
+  // for a bunk, so the headcount rule would have hidden it from people it suits,
+  // and July is where it wins by the most, so the season rule was backwards.
+  {
+    const week = (o) => summerhouseFit({ nights: 7, ...o });
+    is("his family of four, July", week({ travellers: "family of 4", arrival: "2027-07-10", departure: "2027-07-17" }), HOUSE_FIT.strong);
+    is("his family of four, January", week({ travellers: "family of 4", arrival: "2027-01-09", departure: "2027-01-16" }), HOUSE_FIT.strong);
+    is("and with no dates at all", week({ travellers: "family of 4" }), HOUSE_FIT.strong);
+    is("three friends, which a rule about families would have missed", week({ travellers: "3 friends" }), HOUSE_FIT.strong);
+    is("a pair in January, which a rule about pairs would have hidden",
+       week({ travellers: "2 people", arrival: "2027-01-09", departure: "2027-01-16" }), HOUSE_FIT.strong);
+    is("the same pair in July, where it only just wins",
+       week({ travellers: "2 people", arrival: "2027-07-10", departure: "2027-07-17" }), HOUSE_FIT.yes);
+    is("and one person, never", week({ travellers: "just me" }), null);
+    // ── THE ONE HARD GATE IS THE WEEK ─────────────────────────────
+    // A sommerhus is not sold by the night, so a short trip cannot have one at
+    // any price, whatever the figure says.
+    for (const nights of [1, 3, 5, 6]) {
+      is(`${nights} nights cannot book one`, summerhouseFit({ travellers: "family of 4", nights }), null);
+    }
+    is("seven can", summerhouseFit({ travellers: "family of 4", nights: 7 }), HOUSE_FIT.strong);
+    is("and a fortnight can", summerhouseFit({ travellers: "family of 4", nights: 14 }), HOUSE_FIT.strong);
+    // ── AND AN UNKNOWN SEASON IS EVERY SEASON, NOT A WIDE BAND ────
+    //
+    // The first version compared the undated house band against the undated bunk
+    // band, which is a January house against a July bunk, and recommended one to
+    // a SOLO traveller who is worse off in all three seasons.
+    is("a solo traveller is not flattered by the width of the band", summerhouseFit({ travellers: "just me", nights: 7 }), null);
+    for (const season of ["winter", "low", "high"]) {
+      const h = housePerHeadNight(1, season), b = bunkPerHeadIn(season, 1);
+      ok(`and really is worse off alone in ${season}`, h.low > b.high);
+    }
+    // THE WORDS EXIST FOR BOTH VERDICTS, because a mark with no sentence is a
+    // badge nobody can argue with.
+    ok("both verdicts have words", !!SUMMERHOUSE_MARK[HOUSE_FIT.strong] && !!SUMMERHOUSE_MARK[HOUSE_FIT.yes]);
+    // AND THE REASON NAMES WHAT IT BEAT, correctly. It used to say "a hostel
+    // bunk" whatever the cheapest tier had landed on, and for a family of four
+    // in July that tier is a Danhostel family ROOM at 200 a head.
+    ok("a July family is told it beat a room, not a bunk",
+       /hostel family room/.test(summerhouseWhy(HOUSE_FIT.strong, { heads: 4, season: "high" })));
+    ok("while a January pair is told it beat a bunk",
+       /hostel bunk/.test(summerhouseWhy(HOUSE_FIT.strong, { heads: 2, season: "winter" })));
+    ok("and the week is in the reason", /booked by the week and nothing shorter/.test(summerhouseWhy(HOUSE_FIT.strong, { heads: 4 })));
+  }
+
+  // ── AND WHAT A DANISH WINTER IN ONE IS LIKE ─────────────────────
+  //
+  // Oliver, 26 Sep 2026: "remember, it's september. And some people might use
+  // this app to plan something in winter." The cheapest season is the one that
+  // needs the warning: 53 kr a head sells itself, and what it does not say is
+  // that it is dark by four with the wind off the North Sea.
+  {
+    ok("January says what January is", /dark by four/.test(houseSays("winter")));
+    ok("and that it is what Danes do rather than a compromise", /what Danes do with the season/.test(houseSays("winter")));
+    ok("and no dates says the swing", /two and a half times/.test(houseSays(null)));
+    // ── AND THE SEASON LINE DOES NOT COMPARE ───────────────────
+    //
+    // It used to end "still cheaper a head than a hostel bunk", which is true
+    // for four people and FALSE for two: a pair in July is 245 to 287 a head
+    // against 218 to 248 for a bunk. This line knows the season and not the
+    // party, so it must not claim anything that depends on the party.
+    for (const season of ["winter", "low", "high", null]) {
+      ok(`the ${season || "undated"} line makes no comparison`,
+         !/cheaper a head|than a hostel|than a bunk|cheapest way to sleep/.test(houseSays(season)));
+    }
+    // AND THE CLAIM IT USED TO MAKE IS CHECKED WHERE THE PARTY IS KNOWN.
+    {
+      const pair = housePerHeadNight(2, "high"), bunk2 = bunkPerHeadIn("high", 2);
+      ok("a pair in July really is dearer in a house", pair.low > bunk2.low);
+      is("so the mark is the softer one", summerhouseFit({ travellers: "2 people", nights: 7, arrival: "2027-07-10", departure: "2027-07-17" }), HOUSE_FIT.yes);
+    }
+  }
+
+  // ── THE FIGURE AND THE SENTENCES ON THE PANEL ───────────────────
+  {
+    const trip = (o) => estimateDay({ food: "self", freeOnly: true, scope: "town", transport: ["\u{1F686} Public transport"], stay: "summerhouse", ...o });
+    const july = trip({ travellers: "family of 4", arrival: "2027-07-10", departure: "2027-07-17" });
+    const jan = trip({ travellers: "family of 4", arrival: "2027-01-09", departure: "2027-01-16" });
+    ok("January is far cheaper than July", jan.high < july.low);
+    ok("the panel calls it a house", /A whole house that sleeps 4/.test(estimateSays(july)));
+    ok("and says the week", /booked by the week/.test(estimateSays(july)));
+    ok("and the kitchen, which is what makes the cheapest food tier reachable", /with a kitchen/.test(estimateSays(july)));
+    // ── AND A HOUSE IS NOT TOLD THE HOSTEL'S CALENDAR ─────────────
+    //
+    // The hostel's winter line says "no Danish hostel publishes a December to
+    // February rate and plenty of them are shut". Novasol prices January and it
+    // was read, so saying that over a holiday house is a fact about a different
+    // kind of bed.
+    ok("no hostel calendar over a house", !/no Danish hostel publishes/.test(estimateSays(jan)));
+    ok("nor in the brief", !/Danish hostels do not publish/.test(estimateForBrief(jan)));
+    ok("the house's own January line is there instead", /dark by four/.test(estimateSays(jan)));
+    ok("and the season is said once, not twice",
+       (estimateSays(jan).match(/January/g) || []).length <= 1);
+    // AND THE PLANNER IS TOLD THE TWO THINGS THAT CHANGE ITS PLAN.
+    ok("the planner is told it is a whole house", /whole holiday house that sleeps 4/.test(estimateForBrief(july)));
+    ok("and that it is not in a town centre", /coasts and in the countryside/.test(estimateForBrief(july)));
+    ok("and to name the town it is near", /name the town it is near/.test(estimateForBrief(july)));
+    // AND THE HOSTEL TIER IS UNTOUCHED BY ANY OF THIS.
+    const bunk = trip({ stay: "cheapest", travellers: "2 people", arrival: "2027-01-09" });
+    ok("a hostel is still a hostel", /dorm bed each/.test(estimateSays(bunk)));
+    ok("and keeps its own calendar", /no Danish hostel publishes/.test(estimateSays(bunk)));
+  }
+
+  // ── AND THE PANEL HANDS IT THE TRIP LENGTH ──────────────────────
+  // An unread field is this codebase's signature defect, and the week gate is
+  // useless without one.
+  {
+    const appH = readFileSync(join(root, "src/App.jsx"), "utf8");
+    ok("the verdict is computed from both dates",
+       /summerhouseFit\(\{ travellers: intakeTravelers, nights: houseNights, arrival: intakeArrival, departure: intakeDeparture \}\)/.test(appH));
+    ok("and the nights come from tripDays", /const houseNights = intakeArrival && intakeDeparture \? tripDays\(intakeArrival, intakeDeparture\) : 0;/.test(appH));
+    ok("the chip carries the mark", /SUMMERHOUSE_MARK\[houseVerdict\]/.test(appH));
+    ok("and the reason is shown under the row", /summerhouseWhy\(houseVerdict/.test(appH));
+  }
+}
+
 // ── THE REST OF THE BUDGET PANEL ───────────────────────────────────
 //
 // Oliver, 25 Sep 2026: "Accomodation: Cheapest Location / Best Location ...
@@ -78073,8 +78255,36 @@ SOURCE: https://www.tripadvisor.com/whatever`;
 {
   const { STAY_CHOICES, STAY_KEYS, stayIsBooked, stayProblem, staySaid, FOOD_TIERS, readBrief } = M;
 
-  is("the three he asked for, plus the one that makes it safe", STAY_KEYS, ["cheapest", "best", "booked"]);
-  ok("only the booked one is a booking", stayIsBooked("booked") && !stayIsBooked("cheapest") && !stayIsBooked("best"));
+  // ── AND THE ROW ASKS ABOUT THE TYPE NOW ───────────────────────
+  //
+  // Oliver, 26 Sep 2026: "what about hostels and hotels? That is a bigger
+  // difference in price than hotel area". Right by about four times: a dorm
+  // bunk is 145 to 248 a head against 600 to 900 for a central hotel double,
+  // while the centre against one ring out is unsourceable and this file's own
+  // note said so. Worse, the two halves contradicted each other: the dorm price
+  // comes from two CENTRAL Copenhagen hostels and the chip carrying it told the
+  // planner the traveller wanted to be "a little further out from the centre".
+  is("the row names the type, and the sommerhus he asked for", STAY_KEYS, ["cheapest", "best", "summerhouse", "booked"]);
+  ok("and the labels say what they are",
+     STAY_CHOICES.map(c => c.label).join(" | ") === "A hostel bed | A hotel | A summerhouse | Already booked");
+  ok("only the booked one is a booking",
+     stayIsBooked("booked") && !stayIsBooked("cheapest") && !stayIsBooked("best") && !stayIsBooked("summerhouse"));
+  // ── AND A HOSTEL IS NOT IN EVERY TOWN ─────────────────────────
+  //
+  // Oliver, same day: "Aalborg apparently has no cheap hostels, while Copenhagen
+  // does. So someone can't be sent to Aalborg, expecting a cheap stay." Checked:
+  // Danhostel Aalborg publishes 35 rooms, all with a bath, none without. Every
+  // dorm price in this app is Copenhagen's, and the scope chip steers one-town
+  // trips at Aalborg by name, so the figure must not be repeated where the bed
+  // behind it does not exist.
+  ok("the hostel chip warns the planner the bed is not everywhere",
+     /not every Danish town has a hostel with dormitories/i.test(staySaid("cheapest", "")));
+  ok("and names the town it checked", /Aalborg/.test(staySaid("cheapest", "")));
+  ok("and says what to do instead", /price the cheapest real bed there/i.test(staySaid("cheapest", "")));
+  // AND THE SOMMERHUS SAYS THE TWO THINGS THAT DECIDE IT: the week, and that it
+  // is not in a town centre.
+  ok("the sommerhus says it is sold by the week", /seven nights/i.test(staySaid("summerhouse", "")));
+  ok("and that it is not in a town centre", /coasts and in the countryside/i.test(staySaid("summerhouse", "")));
   ok("and nothing ticked is not a booking", !stayIsBooked(""));
   // HIS LIMIT ON "CHEAPEST", in his own words: "not outside the city, but just
   // a little further out from center". A bed an hour out of town is a different
@@ -78084,9 +78294,11 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   // transcript, and travelModeKey reads a sentence for its slowest mode, so the
   // word walkable made a traveller who had ticked Car into a walker: a 15 km
   // ceiling on a 300 km trip. Same limit, no mode in the words.
-  ok("cheapest says how far out is too far",
-     /still in the town and still close enough to the middle to get there quickly, never out in the country/.test(staySaid("cheapest", "")));
+  // The location limit went with the relabel: the row asks the type now, and
+  // location is the guide's job once it knows the town. What survives is the
+  // rule that none of this prose may read as a travel mode.
   is("and it does not read as a travel mode", M.travelModeKey(staySaid("cheapest", "")), null);
+  is("nor does the sommerhus line", M.travelModeKey(staySaid("summerhouse", "")), null);
 
   // ── A BOOKING WITH NO NAME IS NOT A BOOKING ─────────────────────
   // `stay` is a BLOCKING brief slot. Ticked with the box empty, the app has

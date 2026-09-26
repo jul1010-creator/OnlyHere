@@ -56,6 +56,10 @@ import { partyOf } from "./costLedger";
 // guess for anything it cannot parse, which is what a season needs: a date
 // nobody can read must not quietly become July.
 import { dayStart } from "./calendarDay";
+// The one reader of what a sommerhus costs. Priced per house per week, which is
+// nothing else in this file's shape, so it keeps its own module with its own
+// sources rather than being flattened into a nightly rate here.
+import { houseWeek, HOUSE_NIGHTS, HOUSE_SOURCE, HOUSE_CHECKED_AT, HOUSE_SEASON_CHECK, houseSays, houseFor, houseFit, HOUSE_FIT, housePerHeadNight as housePerHead } from "./summerhouse";
 
 const clean = (s) => String(s ?? "").trim();
 
@@ -427,6 +431,30 @@ export const BED_TIERS = {
     checkedAt: "2026-09-25",
     says: "A Danish double at about 1,215 kr a room on traveller-reported spend, and a central Copenhagen mid-range room at 1,200 to 1,800. A room sleeps two, so a third person is a second room. No Danish body publishes a room rate to cite, so this is the softest figure here.",
   },
+  // ── A WHOLE HOUSE, BY THE WEEK ──────────────────────────────────
+  //
+  // The only tier not sold by the night and not sold by the room, so it answers
+  // with a party cost directly rather than going through the arrangement search:
+  // there is nothing to arrange, they take the house. See utils/summerhouse.js
+  // for the prices and for which season they were each read at.
+  summerhouse: {
+    roomSizes: [],
+    perRoom: () => ({ low: 0, high: 0 }),
+    perBed: null,
+    // Its two ends really are two months, read at each one rather than derived,
+    // so a date narrows it and narrows it a long way: roughly two and a half
+    // times from January to July.
+    seasonal: true,
+    perParty: (heads, season) => {
+      const w = houseWeek(heads, season);
+      return w ? { low: Math.round(w.low / HOUSE_NIGHTS), high: Math.round(w.high / HOUSE_NIGHTS) } : null;
+    },
+    sleeps: 0,
+    minNights: HOUSE_NIGHTS,
+    source: HOUSE_SOURCE,
+    checkedAt: HOUSE_CHECKED_AT,
+    says: `Novasol's own booking engine, read on ${HOUSE_CHECKED_AT} for Jutland at seven nights in each season: a four-sleeper runs 1,472 to 1,643 kr the week in January, 1,755 to 2,266 in October and 3,432 to 4,014 in July, and a six-sleeper less a head again. ${HOUSE_SEASON_CHECK.says}`,
+  },
   booked: {
     roomSizes: [1],
     perRoom: () => ({ low: 0, high: 0 }),
@@ -498,6 +526,23 @@ export const bedPerNight = (stay, heads = 2, season = null) => {
   const tier = BED_TIERS[clean(stay)];
   if (!tier) return null;
   const people = Math.max(1, Math.floor(Number(heads)) || 1);
+  // ── A TIER THAT IS NOT ROOMS AND NOT BEDS ───────────────────────
+  // A sommerhus is one price for the whole party, so there is no arrangement to
+  // search: they take the house. Answered here and returned whole, with the
+  // plans saying what it is so every sentence downstream can read them the same
+  // way it reads a room or a bunk.
+  if (typeof tier.perParty === "function") {
+    const band = tier.perParty(people, tier.seasonal ? season : null);
+    if (!band) return null;
+    const plan = { rooms: [], beds: 0, house: houseFor(people) };
+    return {
+      low: band.low, high: band.high, rooms: 0,
+      lowPlan: plan, highPlan: plan, lowIsBeds: false, highIsBeds: false,
+      sleeps: plan.house, house: plan.house, minNights: tier.minNights || 0,
+      season: (tier.seasonal && season) || null, seasonal: !!tier.seasonal,
+      per: "party", source: tier.source, says: tier.says,
+    };
+  }
   const sizes = Array.isArray(tier.roomSizes) && tier.roomSizes.length ? tier.roomSizes : [tier.sleeps];
   // The bed is NOT put through inSeason. dormBand already answers the season for
   // a bunk, and running it through the room's logic collapsed a size spread into
@@ -987,6 +1032,10 @@ export const estimateDay = ({ stay = "", food = "", freeOnly = false, scope = ""
     bedsHigh: !!bed?.highIsBeds,
     lowPlan: bed?.lowPlan ?? null,
     highPlan: bed?.highPlan ?? null,
+    // How many the house sleeps, and the shortest booking it comes in. Zero on
+    // every other tier, which is how the sentence tells them apart.
+    house: bed?.house ?? 0,
+    minNights: bed?.minNights ?? 0,
     // The biggest room the chosen tier sells, so the sentence can say why a
     // party needed two of them without crediting a hostel with a hotel's size.
     sleeps: bed?.sleeps ?? 0,
@@ -1114,6 +1163,7 @@ export const estimateSays = (est) => {
   // worst kind of wrong: nothing to check them against.
   const plan = (p) => {
     if (!p) return "";
+    if (p.house) return `a house that sleeps ${p.house}`;
     const rooms = p.rooms || [];
     const bunks = p.beds === 1 ? "one dorm bed" : `${p.beds} dorm beds`;
     if (!rooms.length) return p.beds === 1 ? "a dorm bed" : "a dorm bed each";
@@ -1132,7 +1182,13 @@ export const estimateSays = (est) => {
   // room. A party of six on the cheap tier is a five and a bunk, and the first
   // version told them they were all in one room.
   const allInOne = est.highPlan && est.highPlan.rooms.length === 1 && !est.highPlan.beds;
+  // A house answers this line on its own: it is neither a room count nor a bunk,
+  // and the thing worth saying about it is the week and the kitchen.
+  const houseLine = est.house
+    ? ` A whole house that sleeps ${est.house}, with a kitchen, booked by the week. ${houseSays(est.season)}`
+    : "";
   const beds = est.bedPaid || !est.lowPlan ? ""
+    : houseLine ? houseLine
     : sameEnds
       ? (est.bedsLow
           ? " A dorm bed each, which is the cheapest bed in the country."
@@ -1171,7 +1227,15 @@ export const estimateSays = (est) => {
     : anyRoom && !anyBunk
       ? `, which Danhostel charges ${BED_SEASON.step} kr a night more for`
       : "";
-  const when = est.bedPaid ? ""
+  // ── AND A HOUSE SAYS ITS OWN SEASON ──────────────────────────────
+  //
+  // houseSays already named the month in the line above, with the sommerhus's
+  // own prices behind it. Letting the hostel's clause run as well printed the
+  // season twice and, worse, told a traveller in a holiday house that "no Danish
+  // hostel publishes a December to February rate and plenty of them are shut",
+  // which is a fact about a different kind of bed. Novasol prices January and it
+  // was read: see summerhouse.js.
+  const when = est.bedPaid || houseLine ? ""
     : est.season === "high"
       ? ` Priced in high season, June to August${whoMoved}.`
       : est.season === "winter"
@@ -1241,6 +1305,7 @@ export const estimateForBrief = (est) => {
   // assumptions off the same number.
   const asPlan = (p) => {
     if (!p) return "";
+    if (p.house) return `a whole holiday house that sleeps ${p.house}, booked by the week`;
     const rooms = p.rooms || [];
     const bunks = p.beds === 1 ? "one dorm bunk" : `${p.beds} dorm bunks`;
     if (!rooms.length) return p.beds === 1 ? "a dorm bunk in a shared room" : "a dorm bunk each in a shared room";
@@ -1249,6 +1314,8 @@ export const estimateForBrief = (est) => {
     return `${rooms.length} private rooms${also}`;
   };
   const bedKind = est.bedPaid || !est.lowPlan ? ""
+    : est.house
+      ? ` That bed figure is a whole holiday house that sleeps ${est.house}, booked by the week and nothing shorter, with a kitchen. Danish holiday houses sit on the coasts and in the countryside, not in town centres, so build the days around a base out there with trips in, and name the town it is near.`
     : est.lowPlan.rooms.join(",") === est.highPlan.rooms.join(",") && est.lowPlan.beds === est.highPlan.beds
       ? ` That bed figure is ${asPlan(est.highPlan)}.${est.bedsLow ? ` Do not price a private room against it: a private double runs ${ROOM_KR[2].low} to ${ROOM_KR[2].high} a night.` : ""}`
       : ` The low end of that bed figure is ${asPlan(est.lowPlan)} and the high end is ${asPlan(est.highPlan)}, so say which you are assuming if you put a price on a night.`;
@@ -1266,7 +1333,10 @@ export const estimateForBrief = (est) => {
   // A bed that is already paid for has no season in it, and neither has food.
   // The first version told a traveller who had booked their room that their
   // groceries were priced in high season.
-  const when = est.bedPaid ? ""
+  // A house's season comes from summerhouse.js, which priced each one, not from
+  // the hostel's calendar. Same reason as estimateSays above.
+  const houseSeason = est.house ? ` ${houseSays(est.season)}` : "";
+  const when = est.bedPaid ? "" : est.house ? houseSeason
     : est.season === "high" ? " Priced in high season, June to August."
     : est.season === "winter" ? " Priced at low season, since Danish hostels do not publish a December to February rate."
     : est.season === "low" ? " Priced in low season, March to May and September to November."
@@ -1294,6 +1364,66 @@ export const estimateForBrief = (est) => {
 // The label says budget AND preferences because that is what is behind it.
 // "Enable budget estimate" over a panel that also decides how far the trip
 // goes would be a button that does more than it says.
+// ── AND WHETHER TO MARK THE SOMMERHUS ON THE ROW ────────────────────
+//
+// Oliver, 26 Sep 2026: "imagine at the end summerhouses (strongly recommended /
+// Recommended for your trip).. if someone is a family of 4 on Jutland.."
+//
+// The mark is decided by the money rather than by a rule about families, and the
+// comparison is against the CHEAPEST bed this panel otherwise offers, in the
+// same season, for the same party. houseFit does the comparing; this hands it
+// the hostel prices so summerhouse.js never has to know what a bunk costs.
+//
+// His family of four comes out strongly recommended in every season, which is
+// what he expected. So does a party of three, which a rule written as "four or
+// more" would have missed, and a pair in January, which one written as "not for
+// two" would have hidden: 105 a head against 145 for a bunk.
+export const bunkPerHeadIn = (season, heads) => {
+  const people = Math.max(1, Math.floor(Number(heads)) || 1);
+  const bed = bedPerNight("cheapest", people, season);
+  return bed ? { low: Math.round(bed.low / people), high: Math.round(bed.high / people) } : null;
+};
+
+export const summerhouseFit = ({ travellers = "", heads = null, nights = 0, arrival = "", departure = "" } = {}) => {
+  const said = partyOf(travellers);
+  const people = Math.max(1, Math.floor(Number(heads ?? said?.heads ?? 2)) || 1);
+  const season = bedSeasonOf(arrival, departure);
+  return houseFit({
+    heads: people,
+    nights,
+    season,
+    bunkPerHead: season ? bunkPerHeadIn(season, people) : null,
+    bunkBySeason: { winter: bunkPerHeadIn("winter", people), low: bunkPerHeadIn("low", people), high: bunkPerHeadIn("high", people) },
+  });
+};
+
+// The words on the chip, and the one under the row. Empty where it is not
+// marked, because a mark on everything is a mark on nothing.
+export const SUMMERHOUSE_MARK = {
+  [HOUSE_FIT.strong]: "strongly recommended",
+  [HOUSE_FIT.yes]: "recommended for your trip",
+};
+export const summerhouseWhy = (fit, { heads = 2, season = null } = {}) => {
+  if (!fit) return "";
+  const people = Math.max(1, Math.floor(Number(heads)) || 1);
+  const house = housePerHead(people, season);
+  const bunk = bunkPerHeadIn(season, people);
+  if (!house || !bunk) return "";
+  // ── AND THE THING IT IS BEING COMPARED TO IS NAMED CORRECTLY ────
+  //
+  // This said "a hostel bunk" whatever the cheapest tier had landed on, and for
+  // a family of four in July that tier is a Danhostel family ROOM at 200 a head,
+  // not a bunk at all. The plan already says which it is; read it rather than
+  // assuming, the same rule the bed sentence follows.
+  const plan = bedPerNight("cheapest", people, season)?.highPlan;
+  const against = !plan ? "the cheapest bed here"
+    : plan.rooms.length && !plan.beds ? (plan.rooms.length === 1 ? "a hostel family room" : "hostel rooms")
+    : plan.rooms.length ? "a hostel room and bunks"
+    : "a hostel bunk";
+  const band = (b) => (b.low === b.high ? `${b.low}` : `${b.low} to ${b.high}`);
+  return `A whole house works out at ${band(house)} kr a head a night against ${band(bunk)} for ${against}, with a kitchen and no strangers in the room. It is booked by the week and nothing shorter.`;
+};
+
 export const ENABLE_LABEL = "Enable my budget and preferences";
 export const ENABLE_SAYS = "Nothing in here changes your trip until you turn it on.";
 
