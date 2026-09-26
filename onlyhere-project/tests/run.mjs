@@ -285,7 +285,7 @@ writeFileSync(entry, `
   export { HOUSE_WEEK, HOUSE_SIZES, HOUSE_NIGHTS, HOUSE_FIT, HOUSE_SOURCE, HOUSE_CHECKED_AT, HOUSE_SEASON_CHECK, houseFor, houseWeek, housePerHeadNight, houseFit, houseSays } from ${JSON.stringify(join(root, "src/utils/summerhouse.js"))};
   export { STAY_CHOICES, STAY_KEYS, stayChoiceOf, stayIsBooked, stayProblem, staySaid } from ${JSON.stringify(join(root, "src/utils/stayChoice.js"))};
   export { HOSTELS, HOUSE_AREAS, STAY_TOWN_POINTS, STAY_PLACES_CHECKED_AT, HOSTEL_LIST_SOURCE, DORM } from ${JSON.stringify(join(root, "src/data/stayPlaces.js"))};
-  export { sellsDorm, dormForKids, hostelOpenOn, dormTowns, hostelTowns, roomsOnlyTowns, hostelChipSays, stayPointFor, dayPoints, hostelsNear, nearestDorm, hostelLine, hostelBlock, HOSTEL_NEAR_KM, HOSTEL_LINES, isFamilyPlace, familyPlacesNear, FAMILY_NEAR_KM, houseAreasFor, houseAreaLine, houseAreaBlock, HOUSE_AREA_PICKS, ONE_BASE_KM } from ${JSON.stringify(join(root, "src/utils/stayAwareness.js"))};
+  export { houseBase, houseNightSays, sellsDorm, dormForKids, hostelOpenOn, dormTowns, hostelTowns, roomsOnlyTowns, hostelChipSays, stayPointFor, dayPoints, hostelsNear, nearestDorm, hostelLine, hostelBlock, HOSTEL_NEAR_KM, HOSTEL_LINES, isFamilyPlace, familyPlacesNear, FAMILY_NEAR_KM, houseAreasFor, houseAreaLine, houseAreaBlock, HOUSE_AREA_PICKS, ONE_BASE_KM } from ${JSON.stringify(join(root, "src/utils/stayAwareness.js"))};
   export { FIGURES, FIGURE_LIFE, figureAge, figureAges, figureAgeNote } from ${JSON.stringify(join(root, "src/utils/figureAge.js"))};
   export { TRIP_SCOPES, TRIP_SCOPE_KEYS, scopeOf as tripScopeOf, scopeSaid, scopeOffersOtherTowns, scopeAllowsTown } from ${JSON.stringify(join(root, "src/utils/tripScopeChoice.js"))};
   export { BED_TIERS, EXCLUDED, estimateDay, estimateShort, estimateSays, estimateForBrief, ENABLE_LABEL, ENABLE_SAYS, HOPS_PER_DAY, STOREBAELT, TRAIN_HOP, HOP_KM, movingMode, hopCost, movingProblem, movingNote, LONG_HAUL_MODES, ROOM_KR, DORM_KR, SUMMER_BED, DORM_SUMMER_PCT, BED_SEASON, bedSeasonOf, straddlesSeason, dormBand, HOSTEL_ROOM_SIZES, summerhouseFit, summerhouseWhy, SUMMERHOUSE_MARK, bunkPerHeadIn, ROOM_SLEEPS_MAX, HOTEL_SLEEPS, bedPerNight, RECOMMENDED, recommendedModes, recommendedWhy, isRecommended, showMoney, BUDGET_CURRENCIES, currencyOf } from ${JSON.stringify(join(root, "src/utils/budgetEstimate.js"))};
@@ -78835,8 +78835,23 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   ok("a north Jutland trip gets north Jutland coasts", picks.every(p => p.region === "North Jutland"));
   const block = M.houseAreaBlock(north, { places: [farup], kids: true });
   ok("the park is worked out from the published place, with a distance", /Fårup Sommerland \(about \d+ km\)/.test(block));
-  ok("and the model may only name an area on the list", /An area that is not on this list may not be named/.test(block));
-  ok("and is told to weigh the park for children", /There are children on this trip/.test(block));
+  ok("the code picks the base and the model is told to return it", /Return '[^']+' as 'recommendedStay', spelled exactly so/.test(block));
+  ok("and is told every other night has the same house", /Every other night of this guide is told the house is at/.test(block));
+  ok("and says the park was part of why, for children", /There are children on this trip and the base was chosen partly for the family place/.test(block));
+  ok("and asks for no dashes", /Write no dashes/.test(block));
+  // ── THE FIRST LIVE BUILD, 26 SEP 2026 ─────────────────────────────
+  // A north Jutland family week: Skagen, Løkken, Aalborg Zoo, Fårup
+  // Sommerland twice, Blokhus, Aalborg. Ranked by the FURTHEST stop it got
+  // Skallerup, 29 km from the park, because Skagen pulled it north, while the
+  // chat on the same trip had said Blokhus. Ranked by the average drive, with
+  // the park's pull, it is Blokhus, 4 km from Fårup.
+  const week = [[57.72, 10.58], [57.37, 9.72], [57.04, 9.90], [57.271, 9.645], [57.271, 9.645], [57.25, 9.58], [57.05, 9.92]].map(([lat, lon]) => ({ lat, lon }));
+  const zoo = { name: "Aalborg Zoo", __lat: 57.039, __lon: 9.898 };
+  is("the live family week gets Blokhus, not Skallerup", M.houseBase(week, { places: [farup, zoo], kids: true })?.name, "Blokhus");
+  // AND EVERY NIGHT HEARS THE SAME NAME. The same build put the one house
+  // "near Skagen", "near Løkken", "near Aalborg" and "around Saltum".
+  ok("every later night is told the house by name", /THE HOUSE IS AT BLOKHUS/.test(M.houseNightSays(M.houseBase(week, { places: [farup, zoo], kids: true }))));
+  is("and no base, no sentence", M.houseNightSays(null), "");
   ok("a place with no family theme and no family name is not a family place",
      !M.isFamilyPlace({ name: "Aalborg Tower" }) && M.isFamilyPlace({ name: "Aalborg Tower", themes: ["family"] }) && M.isFamilyPlace({ name: "Aalborg Zoo" }));
   is("a family place with no coordinate is not measured", M.familyPlacesNear({ lat: 57.25, lon: 9.58 }, [{ name: "Legoland" }]), []);
@@ -78855,7 +78870,10 @@ SOURCE: https://www.tripadvisor.com/whatever`;
      /const enrichGuideDays = async \(days, travelMode, mixedModes, budgetSays = "", langBlock = "", bookedNights = \[\], bookedName = "", stayKind = "", stayAware = null\) =>/.test(app));
   ok("the hostel block is for the hostel chip only", /const hostelSays = stayKind === "cheapest" && idx \+ 1 < days\.length && !\(bookedNights \|\| \[\]\)\.includes\(idx \+ 1\)/.test(app));
   ok("the coast block is measured over the trip's nights, not one day",
-     /houseAreaBlock\(days\.slice\(0, Math\.max\(1, days\.length - 1\)\)\.flatMap\(d => dayPoints\(d, stayResolve\)\)/.test(app));
+     /const housePoints = stayIsHouse\(stayKind\) \? days\.slice\(0, Math\.max\(1, days\.length - 1\)\)\.flatMap\(d => dayPoints\(d, stayResolve\)\) : \[\];/.test(app)
+     && /houseAreaBlock\(housePoints, houseOpts\)/.test(app));
+  ok("and the same base reaches every later night", /houseNightSays\(houseBase\(housePoints, houseOpts\)\)/.test(app)
+     && /from this day's last stop\.\$\{houseLaterSays \? ` \$\{houseLaterSays\}` : ""\}/.test(app));
   ok("and reaches day one only", /\$\{houseAreaSays && idx === 0 && idx \+ 1 < days\.length \?/.test(app));
   ok("the call site hands over children, the published places and a DAY only",
      /kids: !!guideBrief\.known\?\.party\?\.hasKids,/.test(app) && /arrival: datePrecision === "day" \? arrivalDate : null,/.test(app) && /places: freeEntrance,/.test(app));

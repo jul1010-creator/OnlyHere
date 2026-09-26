@@ -242,26 +242,44 @@ export const familyPlacesNear = (point, places = [], { within = FAMILY_NEAR_KM }
 // ── WHICH COAST SUITS THE WHOLE TRIP ────────────────────────────────
 //
 // A sommerhus is one base for the week, so it is measured against EVERY stop
-// of the trip, not one day's: the area whose furthest stop is nearest wins,
-// which is the house they would drive back to least far on the worst day.
+// of the trip, not one day's. The first version ranked by the FURTHEST stop,
+// and the first real build showed why that is wrong: a north Jutland family
+// week with Fårup Sommerland on two of its days and Skagen on one got
+// Skallerup, 29 km from the park, because Skagen pulled the answer north. The
+// chat, reading the same trip, had already said Blokhus. The furthest stop is
+// one day; the AVERAGE drive is every day, so that is what ranks now.
 //
-// With children on the trip, an area with family places in reach moves up, but
-// only among areas that are nearly as close. A park is worth a few kilometres
-// of driving a day, not a coast on the wrong side of the country.
+// With children on the trip, the nearest family place pulls the area in, by
+// up to FAMILY_PULL_KM when the park is on the doorstep and nothing when it
+// is at the edge of reach. A park is worth a few kilometres of driving a day,
+// not a coast on the wrong side of the country.
 export const HOUSE_AREA_PICKS = 5;
 export const FAMILY_PULL_KM = 15;
 export const houseAreasFor = (points, { places = [], kids = false, limit = HOUSE_AREA_PICKS } = {}) => {
   const pts = (Array.isArray(points) ? points : []).filter(p => Number.isFinite(p?.lat) && Number.isFinite(p?.lon));
   if (!pts.length) return [];
   const scored = HOUSE_AREAS.map(a => {
-    const worst = Math.max(...pts.map(p => km(p, a) ?? Infinity));
-    const nearest = Math.min(...pts.map(p => km(p, a) ?? Infinity));
+    const each = pts.map(p => km(p, a)).filter(d => d != null);
+    if (!each.length) return null;
+    const meanKm = each.reduce((x, y) => x + y, 0) / each.length;
     const family = familyPlacesNear(a, places);
-    const pull = kids ? FAMILY_PULL_KM * Math.min(family.length, 2) / 2 : 0;
-    return { ...a, worstKm: worst, nearestKm: nearest, family, score: worst - pull };
-  }).filter(a => Number.isFinite(a.worstKm));
-  return scored.sort((a, b) => a.score - b.score || a.worstKm - b.worstKm).slice(0, limit);
+    const pull = kids && family.length ? FAMILY_PULL_KM * Math.max(0, 1 - family[0].km / FAMILY_NEAR_KM) : 0;
+    return { ...a, meanKm, worstKm: Math.max(...each), family, score: meanKm - pull };
+  }).filter(Boolean);
+  return scored.sort((a, b) => a.score - b.score || a.meanKm - b.meanKm).slice(0, limit);
 };
+
+// ── AND ONE HOUSE, NOT SEVEN GUESSES AT WHERE IT IS ─────────────────
+//
+// The same build: day one chose Skallerup, and the six nights after it put the
+// house "near Skagen", "near Løkken", "near Aalborg" and "around Saltum",
+// because each night is its own call and none of them could see day one's
+// answer. They run in parallel, so they cannot be told it either. So the CODE
+// picks the base, once, and every night is told the same name.
+export const houseBase = (points, opts = {}) => houseAreasFor(points, opts)[0] || null;
+export const houseNightSays = (base) => base
+  ? `THE HOUSE IS AT ${base.name.toUpperCase()}, on the ${base.coast} coast near ${base.nearTown}, the base day one recommended. Say they drive back to the house at ${base.name}, and never place it anywhere else.`
+  : "";
 
 // A trip whose stops are further apart than this cannot share one house. It is
 // the far end of a day trip out and back by car, and past it the honest answer
@@ -280,7 +298,7 @@ export const houseAreaLine = (a) => {
   const fam = a.family?.length
     ? ` Family places Gemlyx has published within ${FAMILY_NEAR_KM} km: ${a.family.slice(0, 3).map(f => `${f.name} (about ${round(f.km)} km)`).join(", ")}.`
     : "";
-  return `${a.name}${coast}${town}; its furthest stop on this trip is about ${round(a.worstKm)} km away.${who}${fam}`;
+  return `${a.name}${coast}${town}; the trip's stops average about ${round(a.meanKm)} km from it.${who}${fam}`;
 };
 
 export const houseAreaBlock = (points, { places = [], kids = false } = {}) => {
@@ -288,11 +306,14 @@ export const houseAreaBlock = (points, { places = [], kids = false } = {}) => {
   if (!pts.length) return "";
   const picks = houseAreasFor(pts, { places, kids });
   if (!picks.length) return "";
+  const [base, ...others] = picks;
   const spread = spreadOf(pts);
-  const lines = [`SOMMERHUS AREAS GEMLYX HAS CHECKED, nearest to the whole of this trip, each confirmed on a holiday-house agency's own page on ${STAY_PLACES_CHECKED_AT}:`];
-  picks.forEach(a => lines.push(`- ${houseAreaLine(a)}`));
-  lines.push("Return ONE of these areas as 'recommendedStay', spelled exactly as it is here, and say in 'accommodation' which town it is near and that it is booked by the week through a holiday-house agency. An area that is not on this list may not be named. Name a family place only if it is on this list.");
-  if (kids) lines.push("There are children on this trip: where two areas are about as near, prefer the one with family places in reach and say which.");
+  const lines = [`THE SOMMERHUS BASE GEMLYX HAS PICKED for this trip, from the areas a holiday-house agency's own page confirmed on ${STAY_PLACES_CHECKED_AT}:`];
+  lines.push(`- ${houseAreaLine(base)}`);
+  lines.push(`Return '${base.name}' as 'recommendedStay', spelled exactly so, and say in 'accommodation' which town it is near and that it is booked by the week through a holiday-house agency. Every other night of this guide is told the house is at ${base.name}, so do not suggest a different area.`);
+  if (others.length) lines.push(`Other checked areas near this trip, for context only: ${others.map(a => `${a.name} (near ${a.nearTown})`).join(", ")}.`);
+  lines.push("Name a family place only if it is on this list. Write no dashes: commas and full stops only.");
+  if (kids && base.family?.length) lines.push("There are children on this trip and the base was chosen partly for the family place in reach: say which, and how far.");
   if (spread > ONE_BASE_KM) lines.push(`THIS TRIP'S STOPS ARE ABOUT ${round(spread)} KM APART, too far for one house to be the base for all of them. Say so plainly in 'accommodation': the house suits the part of the trip near it, and the rest is a long day out or a night elsewhere.`);
   return lines.join("\n");
 };
