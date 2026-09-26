@@ -76170,9 +76170,25 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   // reads as complete. The panel asks for the two ticks instead.
   {
     is("no bed and no food is no figure", estimateDay({}).ready, false);
-    is("and it names both", estimateDay({}).need, ["where you sleep", "what you eat"]);
+    is("and it names both", estimateDay({}).need, ["pick where you sleep", "pick what you eat"]);
     is("a bed alone is not a day", estimateDay({ stay: "cheapest" }).ready, false);
-    is("and it names the half that is missing", estimateDay({ stay: "cheapest" }).need, ["what you eat"]);
+    is("and it names the half that is missing", estimateDay({ stay: "cheapest", travellers: "2 people" }).need, ["pick what you eat"]);
+    // ── AND NO BED PRICE UNTIL THE PARTY IS KNOWN ─────────────────
+    // Oliver, 26 Sep 2026: "how can we determine the budget of summerhouse
+    // and hostel per person, without knowing first the amount of people
+    // travelling". He chose to hold the bed back rather than assume two.
+    const waiting = estimateDay({ stay: "cheapest", food: "cheap" });
+    ok("a bed with no party is not priced", waiting.bedWaits && !waiting.parts.some(p => p.what === "a bed"));
+    is("and the panel asks for the party, not the bed", waiting.need, ["say who's traveling"]);
+    ok("so it is not a whole day", !waiting.ready);
+    ok("and the figure says what it leaves out, on the figure", /\(excluding accommodation\)$/.test(estimateShort(waiting)));
+    ok("while food is still counted", waiting.low > 0);
+    ok("a sommerhus waits the same way", estimateDay({ stay: "summerhouse", food: "cheap" }).bedWaits);
+    ok("a booked bed never waits, because nothing is being priced", !estimateDay({ stay: "booked", food: "cheap" }).bedWaits);
+    ok("and a counted party gets its bed", !estimateDay({ stay: "cheapest", food: "cheap", travellers: "3 friends" }).bedWaits);
+    ok("and no mention of accommodation once it is in", !/excluding/.test(estimateShort(estimateDay({ stay: "cheapest", food: "cheap", travellers: "3 friends" }))));
+    is("no party, no sommerhus mark", M.summerhouseFit({ travellers: "", nights: 7, arrival: "2027-01-09", departure: "2027-01-16" }), null);
+    ok("while a family of four in January gets one", !!M.summerhouseFit({ travellers: "family of 4", nights: 7, arrival: "2027-01-09", departure: "2027-01-16" }));
     is("food alone is not either", estimateDay({ food: "cheap" }).ready, false);
     is("a stay nobody offers is not a stay", estimateDay({ stay: "palace", food: "cheap" }).ready, false);
     ok("and the three real ones are the three on the buttons",
@@ -76185,7 +76201,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   // nobody measured, and a traveller who budgets to a midpoint and meets the
   // top of the band is the person this panel exists to protect.
   {
-    const est = estimateDay({ stay: "cheapest", food: "cheap" });
+    const est = estimateDay({ stay: "cheapest", food: "cheap", travellers: "2 people" });
     ok("a bed and food make a figure", est.ready);
     ok("and the low end is under the high one", est.low < est.high);
     ok("the bed is in it", est.parts.some(p => p.what === "a bed" && p.partyLow === bedPerNight("cheapest", 2).low));
@@ -76207,7 +76223,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     ok("and it is not called ready", !estimateDay({}).ready);
     ok("while it names what is still missing", estimateDay({}).need.length === 2);
     // ONE TICK MOVES IT, which is the thing being demonstrated.
-    ok("one tick already moves it", estimateDay({ stay: "cheapest" }).low > 0);
+    ok("one tick already moves it", estimateDay({ food: "cheap" }).low > 0);
   }
 
   // ── THE FOOD HALF IS NOT RE-PRICED HERE ─────────────────────────
@@ -76233,7 +76249,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   // ── A BED ALREADY PAID FOR IS NOT A COST ────────────────────────
   {
     const booked = estimateDay({ stay: "booked", food: "cheap" });
-    const paying = estimateDay({ stay: "cheapest", food: "cheap" });
+    const paying = estimateDay({ stay: "cheapest", food: "cheap", travellers: "2 people" });
     ok("booked costs less than unbooked", booked.low < paying.low);
     is("because the bed is nothing", bedPerNight("booked", 2).high, 0);
     ok("and the sentence says why", /bed already/i.test(estimateSays(booked)));
@@ -76241,7 +76257,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     // BEST LOCATION IS DEARER THAN CHEAPEST, which is the one ordering this
     // whole row promises and the only one a reader can check by eye.
     ok("and a central room beats a budget one",
-       estimateDay({ stay: "best", food: "cheap" }).low > paying.low);
+       estimateDay({ stay: "best", food: "cheap", travellers: "2 people" }).low > paying.low);
   }
 
   // ── AND WHAT IT LEAVES OUT IS NAMED ─────────────────────────────
@@ -76251,14 +76267,14 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   // built and the other on stops nobody has chosen. An estimate that says what
   // it leaves out is worth more than a bigger one that does not.
   {
-    const est = estimateDay({ stay: "cheapest", food: "cheap" });
+    const est = estimateDay({ stay: "cheapest", food: "cheap", travellers: "2 people" });
     ok("getting between towns is named as excluded", est.excludes.includes("getting between towns"));
     ok("so are flights", est.excludes.includes("flights"));
     ok("and entry, while it is unknown", est.excludes.includes("getting into places"));
     ok("the sentence lists them", /leaves out/.test(estimateSays(est)));
     // THE ONE TICK THAT MAKES IT MORE COMPLETE RATHER THAN CHEAPER. Free-only
     // does not remove a cost from the total, it settles one at zero.
-    const free = estimateDay({ stay: "cheapest", food: "cheap", freeOnly: true });
+    const free = estimateDay({ stay: "cheapest", food: "cheap", freeOnly: true, travellers: "2 people" });
     ok("free attractions only turns entry from unknown into nothing",
        !free.excludes.includes("getting into places") && free.entryFree);
     ok("and the sentence says so", /Entry is nothing/.test(estimateSays(free)));
@@ -76290,7 +76306,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   // reader: the panel and the brief cannot disagree because there is nothing
   // left to disagree with.
   {
-    const est = estimateDay({ stay: "cheapest", food: "cheap" });
+    const est = estimateDay({ stay: "cheapest", food: "cheap", travellers: "2 people" });
     const said = estimateForBrief(est);
     ok("the brief gets the same kroner the corner shows",
        said.includes(String(Math.round(est.low / 10) * 10)));
@@ -76597,7 +76613,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     const vague = estimateDay({ ...base, travellers: "2 weeks with friends" });
     is("so the estimate falls back", vague.heads, 2);
     is("and says it was not told", vague.headsCounted, false);
-    ok("out loud, in the sentence", /say how many you are/.test(estimateSays(vague)));
+    ok("so the bed waits for a real headcount", vague.bedWaits && vague.need.includes("say who's traveling"));
     ok("while a counted one says the number", /the 3 of you/.test(
        estimateSays(estimateDay({ ...base, travellers: "3 friends" }))));
   }
@@ -76718,7 +76734,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     // ── AND HIS OWN SCREEN, WHICH IS THE CHECK THAT MATTERS ──────
     const his = estimateDay({
       stay: "cheapest", food: "self", freeOnly: true,
-      scope: "town", transport: ["\u{1F686} Public transport"], travellers: "",
+      scope: "town", transport: ["\u{1F686} Public transport"], travellers: "2 people",
     });
     ok("the cheapest possible day starts where a hostel bed does", his.low < 200);
     ok("and no longer opens above 300", his.low < 300);
@@ -76863,8 +76879,8 @@ SOURCE: https://www.tripadvisor.com/whatever`;
       ok("an unshared figure says the headcount would not move it",
          /would not move it/.test(estimateSays(vague)));
       // WHILE A FIGURE WITH A ROOM IN IT STILL ASKS.
-      ok("and a shared one still asks",
-         /say how many you are/.test(estimateSays(estimateDay({ stay: "cheapest", food: "cheap", scope: "town", travellers: "2 weeks with friends" }))));
+      ok("and a shared one waits for the party instead of assuming it",
+         estimateDay({ stay: "cheapest", food: "cheap", scope: "town", travellers: "2 weeks with friends" }).bedWaits);
       // ── AND A COUNTED PARTY IS NOT TOLD OF A SPLIT EITHER ──────
       //
       // Found live on the deployed panel, 26 Sep 2026. The uncounted branch had
@@ -76959,8 +76975,8 @@ SOURCE: https://www.tripadvisor.com/whatever`;
         const unshared = estimateDay({ stay: "booked", food: "cheap", scope: "town", travellers: "" });
         ok("nothing shared, so the brief says so", /nothing in it is shared/.test(estimateForBrief(unshared)));
         ok("and the panel agrees", /nothing in it is shared/.test(estimateSays(unshared)));
-        ok("while a figure with a room in it still asks",
-           /assumed two sharing/.test(estimateForBrief(estimateDay({ stay: "cheapest", food: "cheap", scope: "town", travellers: "" }))));
+        is("while a figure with a room in it and no party tells the planner nothing",
+           estimateForBrief(estimateDay({ stay: "cheapest", food: "cheap", scope: "town", travellers: "" })), "");
       }
       for (const part of bunks.excludes) {
         ok(`and name ${part}`, estimateForBrief(bunks).includes(part));
@@ -76971,8 +76987,8 @@ SOURCE: https://www.tripadvisor.com/whatever`;
       // ── AND THE ASSUMED TWO, WHICH THE BRIEF USED TO HIDE ──────
       // The panel says "reckoned on two of you sharing, so say how many you are"
       // and the brief said nothing while the figure was still divided by two.
-      ok("an uncounted party is declared to the planner",
-         /assumed two sharing/.test(estimateForBrief(estimateDay({ stay: "cheapest", food: "self", scope: "town", travellers: "" }))));
+      is("an uncounted party sends the planner no bed figure at all",
+         estimateForBrief(estimateDay({ stay: "cheapest", food: "self", scope: "town", travellers: "" })), "");
       ok("and a counted one is given the number",
          / for 4\b/.test(estimateForBrief(estimateDay({ stay: "cheapest", food: "self", scope: "town", travellers: "family of 4" }))));
     }
@@ -77128,8 +77144,8 @@ SOURCE: https://www.tripadvisor.com/whatever`;
       // AND NO DEPARTURE STILL READS THE ARRIVAL, because half an answer beats
       // none and the sentence names the season it used.
       is("an arrival alone is still read", bedSeasonOf("2026-07-10", ""), "high");
-      const straddle = estimateDay({ stay: "cheapest", food: "self", scope: "town", arrival: "2026-05-31", departure: "2026-06-10" });
-      const inside = estimateDay({ stay: "cheapest", food: "self", scope: "town", arrival: "2026-06-05", departure: "2026-06-10" });
+      const straddle = estimateDay({ stay: "cheapest", food: "self", scope: "town", travellers: "2 people", arrival: "2026-05-31", departure: "2026-06-10" });
+      const inside = estimateDay({ stay: "cheapest", food: "self", scope: "town", travellers: "2 people", arrival: "2026-06-05", departure: "2026-06-10" });
       ok("a straddling trip keeps the whole band", straddle.high > inside.high || straddle.low < inside.low);
     }
 
@@ -77265,7 +77281,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
        /Go by the trip dates in this block/.test(estimateForBrief(unsaid)));
     // A STRADDLING TRIP IS TOLD IT STRADDLES, not that nobody said.
     {
-      const both = estimateDay({ stay: "cheapest", food: "self", scope: "town", arrival: "2026-05-30", departure: "2026-06-05" });
+      const both = estimateDay({ stay: "cheapest", food: "self", scope: "town", travellers: "2 people", arrival: "2026-05-30", departure: "2026-06-05" });
       ok("a trip across the boundary is told so", /spans both seasons/.test(estimateForBrief(both)));
       ok("and is not told a date is missing", !/no trip dates/.test(estimateForBrief(both)));
       ok("and the panel says it too", /spans both seasons/.test(estimateSays(both)));
@@ -77556,8 +77572,10 @@ SOURCE: https://www.tripadvisor.com/whatever`;
 
   // ── WHICH THE HEADLINE FIGURE USES ──────────────────────────────
   {
-    const est = estimateDay({ scope: "explore", transport: ["🚆 Public transport"], stay: "cheapest", food: "cheap" });
+    const est = estimateDay({ scope: "explore", transport: ["🚆 Public transport"], stay: "cheapest", food: "cheap", travellers: "2 people" });
     ok("the band converts whole", /^€\d+ to €\d+ a day$/.test(estimateShort(est, "EUR", RATE)));
+    ok("and a figure waiting on the party says so in euros too",
+       /^€\d+ to €\d+ a day \(excluding accommodation\)$/.test(estimateShort(estimateDay({ scope: "explore", transport: ["🚆 Public transport"], stay: "cheapest", food: "cheap" }), "EUR", RATE)));
     ok("and says the unit once either way", (estimateShort(est, "DKK", RATE).match(/kr/g) || []).length === 1);
     ok("a euro sign stays on both ends, since '€60 to 80' reads as something else",
        (estimateShort(est, "EUR", RATE).match(/€/g) || []).length === 2);
@@ -78923,6 +78941,29 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   const fresh = await renderSurface("src/components/FigureAgePanel.jsx", "FigureAgePanel", { today: d("2026-09-26") });
   ok("and on a fresh day it lists nothing until asked", !fresh.text.includes("Pump prices, petrol and diesel"));
   ok("the panel is in the Studio", /<FigureAgePanel \/>/.test(readFileSync(join(root, "src/App.jsx"), "utf8")));
+}
+
+// ── WHO IS COMING, AT THE TOP ───────────────────────────────────────
+// Oliver, 26 Sep 2026: "We need to have the amount of people travelling at
+// the top..." The party is what the estimate divides by, so it sits with the
+// dates in the card that is always open, above the folded panel.
+{
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const dates = app.indexOf('label="Departure"');
+  const who = app.indexOf("<input value={intakeTravelers}");
+  const kids = app.indexOf("checked={intakeFamilyMode}");
+  const start = app.indexOf("<input value={intakeStartPoint}");
+  const panel = app.indexOf("✦ Click here for quick adjustment of budget and preferences");
+  ok("who is travelling comes straight after the dates", dates > 0 && who > dates && who < start);
+  ok("with the kids box beside it", kids > who && kids < start);
+  ok("and both sit above the folded panel", who < panel && kids < panel);
+  is("and each is on the form once", [app.split("<input value={intakeTravelers}").length - 1, app.split("checked={intakeFamilyMode}").length - 1], [1, 1]);
+}
+
+{
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the panel builds its missing line from the need list, so 'say who's traveling' reads as a sentence",
+     /So far\. \{\(\(\) => \{ const t = budgetEstimate\.need\.join\(" and "\); return t\.charAt\(0\)\.toUpperCase\(\) \+ t\.slice\(1\); \}\)\(\)\} and this becomes a whole day\./.test(app));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

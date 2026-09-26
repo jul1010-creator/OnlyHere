@@ -59,3 +59,16 @@ Two real guides were built on gemlyxtravel.com, with every per-day accommodation
 Suite at 21,940 and the build is clean. Both fixes were broken on purpose to confirm their tests go red.
 
 **One gap found, not fixed.** The panel's chips only reach the chat and the planner as a sentence when "Build my trip" is pressed. If someone types straight into the chat, the per-day accommodation call still sees the chip, but the chat doesn't read the hostel sentence. In the hostel test the chat said "hostel dorms ... same as in Aalborg" before the guide corrected it.
+
+---
+
+## Who's traveling, and no bed price without it (batch 130)
+
+> "We need to have the amount of people travelling at the top..."
+> "Like how can we determine the budget of summerhouse and hostel per person, without knowing first the amount of people travelling"
+> "Remember to then count the budget saying '(excluding accomadation)'"
+
+1. **Who's traveling and the kids box sit under the dates now**, in the card that is always open, above the folded panel. They were the last fields in the panel.
+2. **No bed price until the party is known.** It used to assume two sharing and say so in small print. Now, with a sleep chip ticked and nobody counted, the bed is left out and the figure reads, for example, "120 to 250 kr a day (excluding accommodation)". The line under it says "Say who's traveling and this becomes a whole day". The summerhouse mark doesn't appear either, and the planner is sent no bed figure. "Already booked" is unaffected, because nothing is being priced.
+
+Suite 21,957, build clean, all three rules broken on purpose to confirm their tests go red.

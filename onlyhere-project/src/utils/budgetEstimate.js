@@ -907,7 +907,18 @@ export const estimateDay = ({ stay = "", food = "", freeOnly = false, scope = ""
   const straddles = straddlesSeason(arrival, departure);
   // Which way, because "crosses into summer" is false for a trip leaving it.
   const crossingIntoSummer = intoSummer(arrival, departure);
-  const bed = clean(stay) ? bedPerNight(stay, people, season) : null;
+  // ── AND NO BED PRICE UNTIL WE KNOW WHO IS SLEEPING IN IT ──────────
+  //
+  // Oliver, 26 Sep 2026: "how can we determine the budget of summerhouse and
+  // hostel per person, without knowing first the amount of people
+  // travelling". He is right, and he chose what to do about it: hold the bed
+  // back. It used to be priced for two sharing, with a line saying so, and
+  // every tier that is bought by the room or by the house is a different
+  // number for one, two or four: a sommerhus week is 53 a head for six and
+  // over 200 for two. A booked bed is the exception, because nothing is being
+  // priced.
+  const bedWaits = !!clean(stay) && !counted && !stayIsBooked(stay);
+  const bed = clean(stay) && !bedWaits ? bedPerNight(stay, people, season) : null;
   const tier = clean(food) ? foodTier(food) : null;
   // ── A CONTRADICTION IS NOT A FIGURE ─────────────────────────────
   // Asked before anything is added up. Exploring with no way to cross the
@@ -1013,7 +1024,8 @@ export const estimateDay = ({ stay = "", food = "", freeOnly = false, scope = ""
     // this says whether it is the whole of a day yet, so the panel can show
     // both at once instead of choosing between them.
     ready: !!bed && !!tier,
-    need: [!bed ? "where you sleep" : "", !tier ? "what you eat" : ""].filter(Boolean),
+    need: [bedWaits ? "say who's traveling" : !bed ? "pick where you sleep" : "", !tier ? "pick what you eat" : ""].filter(Boolean),
+    bedWaits,
     problem: null,
     low: parts.reduce((n, p) => n + p.low, 0),
     high: parts.reduce((n, p) => n + p.high, 0),
@@ -1072,9 +1084,15 @@ const toTen = (n) => Math.round(Number(n) / 10) * 10;
 // total and budgets a week against.
 export const estimateShort = (est, code = "DKK", rate = null) => {
   if (!est || est.low == null) return "";
+  // ── AND IT SAYS WHAT IS MISSING FROM IT ─────────────────────────
+  // Oliver, 26 Sep 2026, on holding the bed back until the party is known:
+  // "Remember to then count the budget saying '(excluding accomadation)'." A
+  // figure with the bed taken out, in the corner where the whole day usually
+  // sits, is read as the whole day unless it says otherwise, on the figure.
+  const out = est.bedWaits ? " (excluding accommodation)" : "";
   const lo = showMoney(est.low, code, rate);
   const hi = showMoney(est.high, code, rate);
-  if (lo === hi) return `${lo} a day`;
+  if (lo === hi) return `${lo} a day${out}`;
   // ── THE UNIT ONCE, NOT TWICE ────────────────────────────────────
   // "50 kr to 100 kr a day" says kroner twice for one band. The symbol stays
   // on whichever end carries it: kroner trail the number so the first one goes
@@ -1084,8 +1102,8 @@ export const estimateShort = (est, code = "DKK", rate = null) => {
   const live = code === "DKK" || Number.isFinite(typeof rate === "function" ? rate(code) : rate);
   const trailing = live ? c.after : true;
   return trailing
-    ? `${lo.replace(/\s*\S+$/, "")} to ${hi} a day`
-    : `${lo} to ${hi} a day`;
+    ? `${lo.replace(/\s*\S+$/, "")} to ${hi} a day${out}`
+    : `${lo} to ${hi} a day${out}`;
 };
 
 // ── AND THE SENTENCE UNDER IT ───────────────────────────────────────
@@ -1411,6 +1429,9 @@ export const houseReading = ({ travellers = "", heads = null, arrival = "", depa
 };
 
 export const summerhouseFit = ({ travellers = "", heads = null, nights = 0, arrival = "", departure = "" } = {}) => {
+  // The same rule as the bed: a house is split by the party, so with no party
+  // there is nothing to compare and no mark. See estimateDay.
+  if (heads == null && !partyOf(travellers)?.heads) return null;
   const { people, season } = houseReading({ travellers, heads, arrival, departure });
   return houseFit({
     heads: people,

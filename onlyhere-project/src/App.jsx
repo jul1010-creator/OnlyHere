@@ -30266,6 +30266,27 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     />
                   </div>
 
+                  {/* ── WHO IS COMING, AT THE TOP ─────────────────────
+                      Oliver, 26 Sep 2026: "We need to have the amount of
+                      people travelling at the top..." It was the last field
+                      in the folded panel, and it is the one the whole
+                      estimate divides by: a bed per head, a sommerhus week
+                      split four ways or two, whether the house is marked at
+                      all. So it sits with the dates, always open. */}
+                  <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Who's traveling</div>
+                  <div style={{ marginBottom: 8 }}>
+                    <input value={intakeTravelers} onChange={e => setIntakeTravelers(e.target.value)}
+                      placeholder="e.g. 4 friends, or 2 people + 1 joining a few days later"
+                      style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", fontSize: 13, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif", boxSizing: "border-box" }} />
+                  </div>
+                  <div style={{ marginBottom: 14 }}>
+                    <label style={{ display: "inline-flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                      <input type="checkbox" checked={intakeFamilyMode} onChange={e => setIntakeFamilyMode(e.target.checked)}
+                        style={{ width: 16, height: 16, accentColor: C.accent, cursor: "pointer" }} />
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: C.text }}><Ico name="family" size={14} color={C.light} /> Traveling with kids</span>
+                    </label>
+                  </div>
+
                   <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Starting point <span style={{ textTransform: "none", fontWeight: 400 }}>(blank = Copenhagen Airport)</span></div>
                   <div style={{ marginBottom: 14 }}>
                     <input value={intakeStartPoint} onChange={e => { setIntakeStartPoint(e.target.value); if (startHere) { setStartHere(false); setStartHereState(""); } }}
@@ -30545,7 +30566,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                             could only manage one of them. */}
                         {!budgetEstimate.ready && (
                           <div style={{ fontSize: 11, color: C.light, lineHeight: 1.55, marginBottom: 3 }}>
-                            So far. Pick {budgetEstimate.need.join(" and ")} and this becomes a whole day.
+                            So far. {(() => { const t = budgetEstimate.need.join(" and "); return t.charAt(0).toUpperCase() + t.slice(1); })()} and this becomes a whole day.
                           </div>
                         )}
                         {budgetEstimate.ready && (
@@ -30626,19 +30647,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   ))}
                 </div>
 
-                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Who's traveling</div>
-                <div style={{ marginBottom: 14 }}>
-                  <input value={intakeTravelers} onChange={e => setIntakeTravelers(e.target.value)}
-                    placeholder="e.g. 4 friends, or 2 people + 1 joining a few days later"
-                    style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", fontSize: 13, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif", boxSizing: "border-box" }} />
-                </div>
-
                 <div style={{ display: "flex", gap: 20, marginBottom: 16, flexWrap: "wrap" }}>
-                  <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-                    <input type="checkbox" checked={intakeFamilyMode} onChange={e => setIntakeFamilyMode(e.target.checked)}
-                      style={{ width: 16, height: 16, accentColor: C.accent, cursor: "pointer" }} />
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: C.text }}><Ico name="family" size={14} color={C.light} /> Traveling with kids</span>
-                  </label>
                   <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
                     <input type="checkbox" checked={intakeIncludeEvents} onChange={e => setIntakeIncludeEvents(e.target.checked)}
                       style={{ width: 16, height: 16, accentColor: C.accent, cursor: "pointer" }} />
