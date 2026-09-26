@@ -231,7 +231,7 @@ import { readPromises, brokenPromises, promiseNote, rebuildKeptMore, promiseRetr
 import { swapIsAllowed } from "./utils/stopSwap";
 import { factCheckCopy } from "./utils/factCheckCopy";
 import { matchedPlaces, previewPools, wantedCategories, mentionsPlace } from "./utils/previewMatch";
-import { estimateDay, estimateShort, estimateSays, estimateForBrief, isRecommended, recommendedWhy, showMoney, BUDGET_CURRENCIES, ENABLE_LABEL, ENABLE_SAYS } from "./utils/budgetEstimate";
+import { estimateDay, estimateShort, estimateSays, estimateForBrief, isRecommended, recommendedWhy, BUDGET_CURRENCIES, ENABLE_LABEL, ENABLE_SAYS } from "./utils/budgetEstimate";
 import { TRIP_SCOPES, scopeSaid } from "./utils/tripScopeChoice";
 import { STAY_CHOICES, stayIsBooked, stayProblem, staySaid } from "./utils/stayChoice";
 import { FOOD_TIERS } from "./utils/mealsEstimate";
@@ -19396,7 +19396,10 @@ If the conversation only covers a single day or a few stops with no explicit day
   const budgetEstimate = budgetOn
     ? estimateDay({ stay: intakeStay, food: intakeFood, freeOnly: intakeFreeOnly,
                     scope: intakeScope, transport: intakeTransport, travellers: intakeTravelers,
-                    arrival: intakeArrival })
+                    // BOTH DATES. Reading the arrival alone priced a trip that
+                    // landed on 31 May at March rates for thirteen June nights.
+                    // A trip that crosses the boundary gets the whole band back.
+                    arrival: intakeArrival, departure: intakeDeparture })
     : { ready: false, need: [], problem: null };
   const intakeBudgetText = estimateForBrief(budgetEstimate);
 
@@ -30404,15 +30407,13 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         {budgetEstimate.note && (
                           <div style={{ fontSize: 11, color: C.light, lineHeight: 1.55, marginTop: 6 }}>{budgetEstimate.note.say}</div>
                         )}
-                        {/* A crossing happens twice a trip whatever its length,
-                            so it is named on top rather than divided into a
-                            daily rate that would price a fortnight on Ærø as
-                            cheaper per day than a weekend on it. */}
-                        {budgetEstimate.ferry && (
-                          <div style={{ fontSize: 11, color: C.light, lineHeight: 1.55, marginTop: 6 }}>
-                            Plus about {budgetEstimate.ferry.kr} kr for the crossing there and back, {budgetEstimate.ferry.forParty ? "for the car" : `for the ${budgetEstimate.heads} of you`}, once for the whole trip. {budgetEstimate.ferry.says}
-                          </div>
-                        )}
+                        {/* A crossing used to be named here. It never could
+                            be: the middle scope exists to keep a boat OUT of
+                            the trip, so estimateDay has returned nothing for it
+                            since 25 Sep and this block could not render. Cut 26
+                            Sep after a review pass found it, along with the fare
+                            table behind it. utils/costLedger.js prices the real
+                            crossing once the guide knows which island. */}
                       </>
                     )}
                   </div>

@@ -40,7 +40,7 @@
 // total. An estimate that says what it leaves out is worth more than a bigger
 // one that does not.
 
-import { tierDayRate, foodTier, GROCERY_DAY, MEALS_A_DAY_DEFAULT } from "./mealsEstimate";
+import { tierDayBand, foodTier, cleanMeals, MEALS_A_DAY_DEFAULT } from "./mealsEstimate";
 import { stayIsBooked } from "./stayChoice";
 // The one reader of what a kilometre costs. fuel.js holds the pump price and
 // the consumption figure with their own sources, and a second copy of either
@@ -144,7 +144,7 @@ export const BED_SEASON = {
 // Null is the answer that keeps the whole band on screen, and it is the right
 // one: a traveller who has not said when they are coming should see June and
 // March at once rather than whichever the code picked for them.
-export const bedSeasonOf = (when) => {
+const seasonAt = (when) => {
   const day = dayStart(when);
   if (!day) return null;
   const m = day.getMonth() + 1;
@@ -153,52 +153,143 @@ export const bedSeasonOf = (when) => {
   return BED_SEASON.low.includes(m) ? "low" : null;
 };
 
+// ── AND A TRIP THAT CROSSES THE BOUNDARY IS NOT ONE SEASON ──────────
+//
+// The first version read the arrival day alone, so a trip landing on 31 May and
+// staying a fortnight was priced at March rates for thirteen June nights, and
+// one landing on 31 August was priced at June rates for a week of September.
+// Both dates are on the same panel and only one was being read, which is the
+// exact defect this change was fixing.
+//
+// A trip that straddles gets NO season, which puts the whole band back on screen
+// rather than picking the half the arrival happened to land in. That is the
+// honest answer: the traveller is paying both.
+export const bedSeasonOf = (arrival, departure = "") => {
+  const from = seasonAt(arrival);
+  if (!from) return null;
+  const to = seasonAt(departure);
+  if (!to) return from;
+  // Winter and low are the same price column, so crossing between them is not a
+  // straddle. June is.
+  const same = (a, b) => a === b || (a !== "high" && b !== "high");
+  return same(from, to) ? (from === "high" ? "high" : from) : null;
+};
+
 // What the season does to a band whose two ends are the two seasons. A known
 // season is one of them rather than a span across both; an unknown season is
 // the span, which is what the panel showed before it could read a date.
 //
 // Winter takes the low-season figure. The seller does not publish one, and the
 // alternative is refusing to price a January trip at all, which helps nobody.
-const inSeason = (band, season) =>
-  season === "high" ? { low: band.high, high: band.high }
-  : season ? { low: band.low, high: band.low }
-  : band;
+//
+// ── AND ONLY A BAND THAT IS TWO SEASONS MAY BE NARROWED ─────────────
+//
+// Found by a review pass the same night, and it was the worse half of the
+// change. ROOM_KR's two ends are June and March off one published list, so
+// picking one of them is reading the list. BED_TIERS.best's two ends are 1,200
+// and 1,800, which the file's own comment sources as the spread between a cheap
+// central double and a dear one: a price range, not a calendar. Narrowing that
+// one collapsed the softest figure in the file to a single number, moved it by
+// 600 kr, and told the traveller Danhostel had charged them for it.
+//
+// So the gate is the tier's own, not this function's guess. A tier says whether
+// its band is seasonal and this refuses to narrow one that has not said so.
+const inSeason = (band, season, seasonal) =>
+  !seasonal || !season ? band
+  : season === "high" ? { low: band.high, high: band.high }
+  : { low: band.low, high: band.low };
 
-// ── A DORM BED, PUBLISHED BY TWO SELLERS WHO AGREE ──────────────────
+// ── A DORM BED, PUBLISHED BY TWO SELLERS AND A PLATFORM ─────────────
 //
 // Next House Copenhagen publishes a bed in a six-person dorm from 145 kr and
 // one in a four-person dorm from 165, on its own front page. Steel House
 // Copenhagen publishes from 145 for a dorm bed on its own front page too. Two
 // sellers, independently, at the same number.
 //
-// THE TOP OF THE BAND IS BUILT FROM PUBLISHED FIGURES RATHER THAN GUESSED. The
-// 145 is the six-bed low-season price, so the dear end is the four-bed one at
-// 165 plus the 100 kr Danhostel's own price list puts between its low and high
-// season on its cheapest room. Danhostel also charges 75 for linen and two
-// towels, which is the part nobody expects and which sits on top of this.
-// THE BAND HAS TWO DIMENSIONS AND THEY ARE KEPT APART. 145 to 165 is the size
-// of the room, six beds against four. The 100 on top is the season, and it is
-// Danhostel's published step rather than a markup invented here. Holding them
-// separately is what lets a known arrival date narrow the figure instead of
-// widening it: see seasonOf and bedPerNight.
+// AND A THIRD READING AGREES, which is what makes this the hardest number in
+// the file rather than the softest. Hostelworld's Copenhagen page, read on 26
+// September 2026, listed six named hostels with dorms from 18.63 to 24.84 US
+// dollars, about 120 to 160 kr. The sellers' own from-prices sit inside a live
+// spread across six houses.
+//
+// ── AND NO SUMMER FIGURE, BECAUSE NOBODY PUBLISHES ONE ──────────────
+//
+// This had a seasonal step for about an hour and it was wrong twice over. It
+// took Danhostel's published 100 kr, which that seller charges PER ROOM, and
+// added it PER BED at two hostels that have nothing to do with Danhostel. Six
+// beds in a room would have made that 600 kr on one room.
+//
+// So the step is gone and the gap is named instead. No hostel in this file's
+// sources publishes a June dorm price, and the one price guide that does put
+// Copenhagen dorms at 300 to 450 in summer against 200 to 280 in low season.
+// Its low-season figure is the one that can be checked, and it runs about 60
+// percent above the six houses Hostelworld was quoting the day it was read. A
+// source that is measurably high on the season we can verify does not get to
+// set the ceiling on the season we cannot, so it is quoted as a warning rather
+// than folded into the figure. SUMMER_BED below carries it.
+//
+// The bed band is therefore the sellers' own, and it does not move with the
+// season, while ROOM_KR's does: one seller publishes a calendar and the others
+// do not, and pretending otherwise is how the last version got it wrong.
+// ── WHOSE SEASONAL FIGURES THE STEP COMES FROM ──────────────────────
+//
+// One Copenhagen price guide is the only source in reach that prices a dorm bed
+// by season. Its ABSOLUTE figures are not used and the reason is measurable: it
+// puts low season at 200 to 280 when Hostelworld was quoting six named
+// Copenhagen houses at about 120 to 160 the same day, so it is reporting what a
+// typical traveller paid rather than what a bed can be had for.
+//
+// Its RATIO is the part worth having, because it is the only published measure of
+// what a Danish summer does to a bunk. Declared above DORM_KR so the factor can
+// be divided out of these two numbers in code rather than asserted in a comment:
+// a step written as 1.5 with the arithmetic in prose is a number nobody can
+// check, which is the whole complaint this file spent the night answering.
+export const SUMMER_BED = {
+  low: 300, high: 450, lowSeasonLow: 200, lowSeasonHigh: 280,
+  source: "https://www.copenhagentourism.org/copenhagen-trip-cost/",
+  checkedAt: "2026-09-26",
+  says: "One Copenhagen price guide puts a dorm bed at 300 to 450 kr in June to August against 200 to 280 in low season. Its low-season figures run above what six named hostels were quoting the day this was read, so the summer step here is that guide's ratio applied to the sellers' own prices rather than its figures.",
+};
+
 export const DORM_KR = {
   low: 145,
   high: 165,
-  peak: BED_SEASON.step,
+  // ── AND WHAT SUMMER DOES TO IT, AS A RATIO ────────────────────────
+  //
+  // Divided out of SUMMER_BED's own pair: 300 against 200 at the cheap end and
+  // 450 against 280 at the dear one, which is half again and a little more. The
+  // cheaper of the two, because a factor borrowed from somebody else's price
+  // list should err downwards.
+  //
+  // This replaces a step that was wrong twice over: it took Danhostel's 100 kr,
+  // which that seller charges PER ROOM, and added it PER BED at two hostels with
+  // no connection to Danhostel. Six bunks in a room would have made it 600.
+  summerFactor: SUMMER_BED.low / SUMMER_BED.lowSeasonLow,
   source: "https://www.nexthousecopenhagen.com/hostel-copenhagen",
   checkedAt: "2026-09-26",
-  says: "Next House Copenhagen publishes a bed in a six-person dorm from 145 kr and a four-person dorm from 165, and Steel House Copenhagen publishes from 145 as well. Those are low-season prices, so high season adds the 100 kr Danhostel puts between its own two seasons, and some sellers charge 75 more for linen and two towels on top of that.",
+  says: "Next House Copenhagen publishes a bed in a six-person dorm from 145 kr and a four-person dorm from 165, and Steel House Copenhagen publishes from 145 as well. Hostelworld listed six named Copenhagen hostels from about 120 to 160 kr on the same day. Some sellers charge 75 more for linen and two towels on top.",
 };
 
-// The dorm band for a season. Low and winter are what the two sellers publish;
-// high season adds the step, to both ends, because a season moves a price list
-// rather than stretching it.
+// How much dearer a summer bunk is, as a whole number of percent, for the one
+// sentence that has to say it. Read from the factor rather than typed beside it.
+export const DORM_SUMMER_PCT = Math.round((DORM_KR.summerFactor - 1) * 100);
+
+// ── THE BED'S OWN SEASON, WHICH IS NOT THE ROOM'S ───────────────────
+//
+// A dorm band's two ends are the SIZE of the room, six bunks against four, so
+// the season cannot be one end of it the way it is for ROOM_KR. It moves the
+// whole band instead, which is what a factor does and what a seasonal price list
+// does. An unknown season spans both, which is the honest width.
+//
+// Held apart from inSeason on purpose. The first version pushed the bed through
+// the same function as the room and the room's own logic collapsed the band to
+// one figure, so a summer bunk was priced at the four-bed size and a March one at
+// the six-bed size, which is a room size masquerading as a calendar.
 export const dormBand = (season) => {
-  const up = season === "high" ? DORM_KR.peak : 0;
-  const band = { low: DORM_KR.low + up, high: DORM_KR.high + up };
-  // An unknown season is both seasons at once, which is the honest span and is
-  // what the panel shows until a date exists.
-  return season ? band : { low: DORM_KR.low, high: DORM_KR.high + DORM_KR.peak };
+  const up = (n) => Math.round(n * DORM_KR.summerFactor);
+  if (season === "high") return { low: up(DORM_KR.low), high: up(DORM_KR.high) };
+  if (season) return { low: DORM_KR.low, high: DORM_KR.high };
+  return { low: DORM_KR.low, high: up(DORM_KR.high) };
 };
 
 // ── AND A ROOM IS NEARLY STATIC ─────────────────────────────────────
@@ -226,9 +317,16 @@ export const dormBand = (season) => {
 // Danhostel's published figures, unbent. The single is 550 because that is what
 // a single costs; a solo traveller who wants a bed rather than a room gets one
 // from DORM_KR above, which is where that fact belongs.
+// ── AND 575 WAS A DIFFERENT SELLER'S NUMBER ─────────────────────────
+//
+// The double read 575 while the comment above it and the sentence on screen both
+// said 600. A review pass found the disagreement and Danhostel's own price page,
+// read again on 26 Sep 2026, settles it: 600 low season, 700 high. The 575 is
+// CABINN's room price, from the prose two blocks up, and it had migrated into
+// another seller's table. One list, one seller, no blending.
 export const ROOM_KR = {
   1: { low: 550, high: 650 },
-  2: { low: 575, high: 700 },
+  2: { low: 600, high: 700 },
   3: { low: 675, high: 775 },
   4: { low: 700, high: 800 },
   5: { low: 750, high: 850 },
@@ -242,26 +340,54 @@ export const ROOM_SLEEPS_MAX = 5;
 // hostel one: the hostel's curve rewards a big party and the hotel's does not.
 export const HOTEL_SLEEPS = 2;
 
+// ── EVERY ROOM SIZE THE SELLER PUBLISHES ────────────────────────────
+//
+// Held as a list rather than assumed to be one to five, because the two tiers
+// sell different things: a hostel publishes five sizes and a hotel publishes a
+// double. The arrangement search below walks whichever list the tier has, which
+// is what stops a hotel being offered a five-bed room it does not sell.
+export const HOSTEL_ROOM_SIZES = [1, 2, 3, 4, 5];
+
 export const BED_TIERS = {
   cheapest: {
-    perRoom: (heads) => ROOM_KR[Math.min(Math.max(1, heads), ROOM_SLEEPS_MAX)],
+    roomSizes: HOSTEL_ROOM_SIZES,
+    perRoom: (size) => ROOM_KR[Math.min(Math.max(1, size), ROOM_SLEEPS_MAX)],
     // The thing this tier was missing. A hostel sells beds as well as rooms,
     // and on the cheapest tier the bed is usually the answer.
-    perBed: (heads, season) => dormBand(season),
+    // Takes the season itself, because a bed's season is a factor on the whole
+    // band and a room's is one end of it. See dormBand.
+    perBed: (season) => dormBand(season),
+    // ROOM_KR's two ends are Danhostel's two published seasons, so a date may
+    // pick one of them. This says the ROOM half has a calendar; the bed half
+    // answers its own season through dormBand. See inSeason.
+    seasonal: true,
     sleeps: ROOM_SLEEPS_MAX,
     source: DORM_KR.source,
     checkedAt: "2026-09-26",
     says: `${DORM_KR.says} A room is the other way to buy it: Danhostel publishes 600 to 700 for a double, rising only 50 to 75 kr for each extra bed, so a big party is better off in one room than in separate beds. Whichever is cheaper is what this counts.`,
   },
   best: {
+    // A hotel sells a double. It does not publish a five-bed room, and the
+    // first version of the search offered it one.
+    roomSizes: [HOTEL_SLEEPS],
     perRoom: () => ({ low: 1200, high: 1800 }),
+    perBed: null,
+    // ── AND THIS BAND IS NOT A CALENDAR ─────────────────────────────
+    // 1,200 and 1,800 are a cheap central double and a dear one, which is a
+    // spread rather than June against March. A review pass the same night found
+    // the season being applied to it anyway, collapsing the softest figure in
+    // the file to one number and crediting Danhostel with a 600 kr move.
+    seasonal: false,
     sleeps: HOTEL_SLEEPS,
     source: "https://www.budgetyourtrip.com/denmark",
     checkedAt: "2026-09-25",
     says: "A Danish double at about 1,215 kr a room on traveller-reported spend, and a central Copenhagen mid-range room at 1,200 to 1,800. A room sleeps two, so a third person is a second room. No Danish body publishes a room rate to cite, so this is the softest figure here.",
   },
   booked: {
+    roomSizes: [1],
     perRoom: () => ({ low: 0, high: 0 }),
+    perBed: null,
+    seasonal: false,
     sleeps: 1,
     source: "",
     checkedAt: "",
@@ -269,49 +395,98 @@ export const BED_TIERS = {
   },
 };
 
+// ── THE CHEAPEST WAY TO SLEEP A PARTY, NOT THE TIDIEST ──────────────
+//
+// Found by a review pass on the night this shipped, and it was a real
+// overcharge rather than a wrinkle. The first version compared two arrangements
+// and took the cheaper: every one of them in a dorm bed, or all of them in
+// rooms filled largest first. Neither is the cheapest thing a party can buy,
+// and the gap is money:
+//
+//   Six people in high season: it charged 245 to 250 a head, when a five-bed
+//   room and one dorm bed is 183 to 186. The sixth person was billed 620 kr for
+//   a bed that costs 145.
+//   Eleven people: 214 a head against 177.
+//
+// The comment on the old version described the fault out loud and nobody read
+// it that way: "a party of six in hostel rooms is a five and a one, and the one
+// pays a single." The one should take a bunk.
+//
+// SO IT SEARCHES INSTEAD OF ASSUMING. Every mix of the sizes the seller
+// publishes and single beds, cheapest first, which for a party of twelve is a
+// few dozen sums. The plan it lands on is returned rather than described,
+// because the sentence under the figure has to be able to say what the
+// traveller is being quoted, and a sentence that guesses is how "one room for
+// the 6 of you" came to be printed over a two-room figure.
+const arrange = (people, roomAt, bedAt, sizes) => {
+  const cost = [0];
+  const via = [null];
+  for (let n = 1; n <= people; n++) {
+    let pick = null, step = null;
+    if (bedAt != null) { pick = bedAt + cost[n - 1]; step = { bed: true, from: n - 1 }; }
+    for (const k of sizes) {
+      const from = Math.max(0, n - k);
+      const c = roomAt(k) + cost[from];
+      // Strictly cheaper, so a tie keeps the bed, which is the arrangement a
+      // traveller on this tier asked for.
+      if (pick == null || c < pick) { pick = c; step = { room: k, from }; }
+    }
+    cost[n] = pick; via[n] = step;
+  }
+  const rooms = [];
+  let beds = 0;
+  for (let n = people; n > 0; n = via[n].from) {
+    if (via[n].bed) beds += 1; else rooms.push(via[n].room);
+  }
+  return { kr: cost[people], rooms: rooms.sort((x, y) => y - x), beds };
+};
+
 // What the whole party pays for its beds in a night, before anybody divides it.
 //
-// ── THE CHEAPER OF THE TWO WAYS TO BUY IT, AT EACH END ──────────────
+// ── THE TWO ENDS ARE SEARCHED SEPARATELY, ON PURPOSE ────────────────
 //
-// A tier that sells beds as well as rooms is priced at whichever costs less,
-// because that is what somebody asking for the cheapest bed in the country
-// buys. The two ends can land on different arrangements and that is the
-// interesting part rather than a wrinkle: beds do not get cheaper in a crowd
-// and a room nearly stops rising, so a big party crosses over from one to the
-// other somewhere inside the band. Both ends say which they are, so the
-// sentence under the figure can tell the traveller.
+// Beds do not get cheaper in a crowd and a Danhostel room nearly stops rising,
+// so a party crosses over from one to the other somewhere inside the band. A
+// single arrangement priced at both ends would have to pick a side of that
+// crossing and would be wrong on the other. Both plans come back, and the
+// sentence says what each end is.
 export const bedPerNight = (stay, heads = 2, season = null) => {
   const tier = BED_TIERS[clean(stay)];
   if (!tier) return null;
   const people = Math.max(1, Math.floor(Number(heads)) || 1);
-  const rooms = Math.ceil(people / tier.sleeps);
-  // Everybody in full rooms but the last, which takes whoever is left. A party
-  // of six in hostel rooms is a five and a one, and the one pays a single.
-  const inLast = people - (rooms - 1) * tier.sleeps;
-  // ── AND THE ROOM TABLE'S TWO ENDS ARE THE TWO SEASONS ─────────
-  // 550 and 650 are not a spread around a single room's price, they are March
-  // and July off the same published list. So a known season picks one of them
-  // and an unknown season keeps both, which is inSeason's whole job.
-  const full = inSeason(tier.perRoom(tier.sleeps), season);
-  const last = inSeason(tier.perRoom(inLast), season);
-  const byRoom = {
-    low: (rooms - 1) * full.low + last.low,
-    high: (rooms - 1) * full.high + last.high,
-  };
-  const bed = tier.perBed ? tier.perBed(people, season) : null;
-  const byBed = bed ? { low: bed.low * people, high: bed.high * people } : null;
+  const sizes = Array.isArray(tier.roomSizes) && tier.roomSizes.length ? tier.roomSizes : [tier.sleeps];
+  // The bed is NOT put through inSeason. dormBand already answers the season for
+  // a bunk, and running it through the room's logic collapsed a size spread into
+  // a calendar: a summer bed came out at the four-bed price and a March one at
+  // the six-bed price, which is not a season at all.
+  const bed = tier.perBed ? tier.perBed(season) : null;
+  const end = (which) => arrange(
+    people,
+    (k) => inSeason(tier.perRoom(k), season, tier.seasonal)[which],
+    bed ? bed[which] : null,
+    sizes,
+  );
+  const lowPlan = end("low");
+  const highPlan = end("high");
   return {
-    low: byBed ? Math.min(byRoom.low, byBed.low) : byRoom.low,
-    high: byBed ? Math.min(byRoom.high, byBed.high) : byRoom.high,
-    rooms,
-    // Which arrangement each end landed on, reported rather than inferred by
-    // whoever writes the sentence. A second reader working this out from the
-    // numbers is the failure this codebase keeps paying for.
-    lowIsBeds: !!byBed && byBed.low <= byRoom.low,
-    highIsBeds: !!byBed && byBed.high <= byRoom.high,
-    // Which season this was priced in, or null for both at once. Carried out
-    // rather than worked out again by whoever writes the sentence.
-    season: season || null,
+    low: lowPlan.kr,
+    high: highPlan.kr,
+    // The room count is the one the dear end buys, which is the end where rooms
+    // win and therefore the only end where a room count means anything.
+    rooms: highPlan.rooms.length,
+    // What each end actually is, reported rather than inferred. A second reader
+    // working this out from the numbers is the failure this codebase keeps
+    // paying for, and it printed two wrong sentences before this line existed.
+    lowPlan, highPlan,
+    lowIsBeds: lowPlan.rooms.length === 0,
+    highIsBeds: highPlan.rooms.length === 0,
+    // The biggest room this tier sells, so the sentence can say why a party
+    // needed two of them without crediting a hostel with a hotel's room size.
+    sleeps: tier.sleeps,
+    // Which season this was priced in, and null where the tier has no calendar
+    // to read. A tier that is not seasonal reports none however good the date.
+    season: (tier.seasonal && season) || null,
+    seasonal: !!tier.seasonal,
     per: "party",
     source: tier.source,
     says: tier.says,
@@ -387,25 +562,20 @@ export const TRAIN_HOP = {
 // real one later. Stated as the assumption it is.
 export const HOP_KM = 150;
 
-// ── AND A CROSSING, WHICH IS NOT A DAILY RATE ───────────────────────
+// ── AND A CROSSING, WHICH THIS DOES NOT PRICE ───────────────────────
 //
 // An island trip is one crossing out and one back, whatever its length, so
 // folding it into a figure per day would need a trip length the panel does not
 // always have and would price a fortnight on Aero as cheaper per day than a
-// weekend on it. It is named as an extra on top instead, with what a crossing
-// really costs.
+// weekend on it.
 //
-// PUBLISHED, BOTH OF THEM, on the operators' own 2026 price pages. Aero is 68
-// for a foot passenger, 25 for a bicycle and 142 for a car under six metres.
-// The Aarhus to Samso fast ferry is 112 on foot and 37 with a bike. Bornholm
-// and the long crossings run higher, which is why this is a band and why the
-// guide prices the real one once it knows which island.
-export const FERRY_FARE = {
-  footLow: 68, footHigh: 112, bikeLow: 25, bikeHigh: 37, carLow: 142,
-  source: "https://aeroe-ferry.dk/en/prices",
-  checkedAt: "2026-09-25",
-  says: "Aero charges 68 kr for a foot passenger, 25 for a bicycle and 142 for a car under six metres. The Aarhus to Samso fast ferry is 112 on foot. Bornholm and the long crossings run higher.",
-};
+// AND THE MIDDLE SCOPE IS NOT A BOAT. That option exists to keep a crossing OUT
+// of the trip: see the block inside estimateDay. So nothing here adds a ferry,
+// and the fare table that used to sit at this spot was deleted on 26 Sep 2026
+// after a review pass found that nothing read it and the panel's ferry block
+// could never render. A published figure with no reader is not evidence, it is
+// furniture. costLedger.js prices the real crossing once the guide knows which
+// island, which is where that number belongs.
 
 // travelModeKey, not a set of strings written here: the chips read "🚗 Car"
 // and free text reads "jeg korer i bil", and that function is already the one
@@ -552,7 +722,13 @@ export const RECOMMENDED = {
   },
   explore: {
     modes: ["public transport", "car"],
-    why: "Crossing the country needs one of these. A train is cheaper on your own and a car is cheaper once there are three of you, since the petrol and the bridge cost the same whoever is in it.",
+    // ── AND THE THRESHOLD IS THE ONE hopCost PRODUCES ─────────────
+    // This said three, and the module's own figures say two: a hop is 50 to 100
+    // a head by train and 40 to 99 for two sharing a car. Said in a sentence
+    // rather than read from the function, so the two drifted apart. It also
+    // needs the caveat, because the car figure is petrol and the bridge with no
+    // rental in it, which is why a train can still be the cheaper trip.
+    why: "Crossing the country needs one of these. A train is cheaper on your own and a car is cheaper from two of you up, since the petrol and the bridge cost the same whoever is in it. That car figure is fuel and the toll, not the hire.",
   },
 };
 
@@ -592,7 +768,7 @@ export const EXCLUDED = {
 // AND IT COUNTS UP FROM ZERO. `ready` says whether it is a whole day yet;
 // the figure is there from the first tick either way, so somebody can see what
 // their clicking is doing. See the block inside.
-export const estimateDay = ({ stay = "", food = "", freeOnly = false, scope = "", transport = [], travellers = "", heads = null, meals = MEALS_A_DAY_DEFAULT, arrival = "" } = {}) => {
+export const estimateDay = ({ stay = "", food = "", freeOnly = false, scope = "", transport = [], travellers = "", heads = null, meals = MEALS_A_DAY_DEFAULT, arrival = "", departure = "" } = {}) => {
   // ── HOW MANY OF THEM, READ ONCE ─────────────────────────────────
   //
   // partyOf, not a second parse of the same sentence: it already refuses a
@@ -617,7 +793,7 @@ export const estimateDay = ({ stay = "", food = "", freeOnly = false, scope = ""
   // tierDayRate's band is a counter price rather than a seasonal one, so
   // pushing a season through the food half would invent a movement nobody
   // published.
-  const season = bedSeasonOf(arrival);
+  const season = bedSeasonOf(arrival, departure);
   const bed = clean(stay) ? bedPerNight(stay, people, season) : null;
   const tier = clean(food) ? foodTier(food) : null;
   // ── A CONTRADICTION IS NOT A FIGURE ─────────────────────────────
@@ -641,9 +817,27 @@ export const estimateDay = ({ stay = "", food = "", freeOnly = false, scope = ""
   //
   // So it counts up from zero and SAYS what is still missing. Both facts are
   // on screen at once, which is what the first version could not manage.
-  const rate = tier ? tierDayRate(tier.key, meals) : null;
-  const foodLow = !tier ? 0 : (rate == null ? Math.round(GROCERY_DAY.kr / 3) : rate);
-  const foodHigh = !tier ? 0 : (rate == null ? GROCERY_DAY.kr : Math.round(rate * 1.6));
+  // ── AND THE FOOD HALF IS READ, NOT RE-PRICED ────────────────────
+  //
+  // This file's own header says the food half is not re-priced here, and for a
+  // day it was: a division by three for the low end and a multiplication by 1.6
+  // for the high one, neither published, while mealsEstimate held the real ends
+  // as STREET_MEAL.high and FLEXIBLE_MEAL.high all along. It quoted 160 for the
+  // cheap tier where that file says 180, so the panel and the guide's cost block
+  // disagreed about the same tier on the same trip. tierDayBand is the one reader
+  // of both ends now.
+  const band = tier ? tierDayBand(tier.key, meals) : null;
+  const foodLow = band ? band.low : 0;
+  const foodHigh = band ? band.high : 0;
+  // ── AND HOW MANY TIMES A DAY THEY EAT, WHICH IS AN ASSUMPTION ────
+  //
+  // The panel has no control for this and the guide's cost block does, so the
+  // figure rests on the default and the sentence has to say so: a third bought
+  // meal is another 50 to 90 kr, which moves the cheap tier by half. Only where
+  // the count changes the answer, which the self tier's own basis explains that
+  // it does not: one shop lasts LONGER if you skip breakfast.
+  const mealsCount = cleanMeals(meals);
+  const mealsMatter = !!band && tierDayBand(tier?.key, mealsCount === 2 ? 3 : 2)?.low !== band.low;
 
   const raw = [];
   if (bed) raw.push({ what: "a bed", low: bed.low, high: bed.high, per: "party", rooms: bed.rooms, source: bed.source, says: bed.says });
@@ -690,8 +884,7 @@ export const estimateDay = ({ stay = "", food = "", freeOnly = false, scope = ""
   //
   // A ferry a traveller chooses anyway is not free, and it is not this
   // panel's to guess at either: it depends on which island, and the guide
-  // prices the real crossing once it knows. FERRY_FARE stays, because that is
-  // what it is for.
+  // prices the real crossing once it knows. costLedger.js does that.
 
   const excludes = [
     freeOnly ? "" : EXCLUDED.entry,
@@ -718,20 +911,33 @@ export const estimateDay = ({ stay = "", food = "", freeOnly = false, scope = ""
     // an assumption has to say which one.
     headsCounted: counted,
     rooms: bed?.rooms ?? 0,
-    // Which way the beds were bought at each end of the band. Read off the
-    // pricing rather than worked out again from the numbers: see bedPerNight.
+    // Which way the beds were bought at each end of the band, and what the
+    // arrangement IS. Read off the pricing rather than worked out again from the
+    // numbers: a sentence that reconstructed this printed "one room for the 6 of
+    // you" over a two-room figure.
     bedsLow: !!bed?.lowIsBeds,
     bedsHigh: !!bed?.highIsBeds,
-    // Which season the bed was priced in, and null when no date said. Read off
-    // the pricing, so the panel and the sentence cannot disagree about it.
-    season,
+    lowPlan: bed?.lowPlan ?? null,
+    highPlan: bed?.highPlan ?? null,
+    // The biggest room the chosen tier sells, so the sentence can say why a
+    // party needed two of them without crediting a hostel with a hotel's size.
+    sleeps: bed?.sleeps ?? 0,
+    // Which season the bed was priced in, and null where the date said nothing
+    // OR the tier has no published calendar to read. bedPerNight decides, so the
+    // panel cannot name a season that moved nothing.
+    season: bed?.season ?? null,
+    seasonal: !!bed?.seasonal,
     // Stated separately from `excludes` because it is the opposite fact: the
     // tick did not remove a cost, it settled one.
     entryFree: !!freeOnly,
+    // How many bought meals a day the food half assumed, and whether saying so
+    // is worth the words. The panel has no control for it, so it is an
+    // assumption, and an assumption this figure rests on gets named.
+    meals: mealsCount,
+    mealsMatter,
     bedPaid: stayIsBooked(stay),
     moving: hops > 0 && hop ? { mode, hops } : null,
     note: movingNote(scope, transport),
-    ferry: null,
   };
 };
 
@@ -781,50 +987,115 @@ export const estimateSays = (est) => {
   // Travelling alone is not a division, and "split between the 1 of you" is
   // the sentence a template writes when nobody checked. It is also the case
   // where the figure is highest, so it is the one worth getting right.
+  // ── AND ONLY PROMISE A CHANGE THAT CAN HAPPEN ────────────────────
+  // A figure with nothing shared in it does not move when the headcount does, so
+  // asking for the headcount there is a form asking a question it will ignore.
+  // Somebody who has booked their bed and is staying in one town is paying for
+  // food, and food costs what it costs each.
+  const shared = est.parts.some(p => p.per === "party" && p.high > 0);
   const who = !est.headsCounted
-    ? "per person, reckoned on two of you sharing, so say how many you are and this changes"
+    ? (shared
+        ? "per person, reckoned on two of you sharing, so say how many you are and this changes"
+        : "per person, and nothing in it is shared, so the headcount would not move it")
     : est.heads === 1
-      ? "for one, with nobody to share a room or a car with"
+      ? (shared ? "for one, with nobody to share a room or a car with" : "for one")
       : `per person, split between the ${est.heads} of you`;
   // Only once there are enough of them for the answer to be interesting, and
   // the two answers are different facts: sharing one room is WHY it is cheap,
   // and needing a second one is why the middle tier stops getting cheaper.
   // ── AND WHAT KIND OF BED IT IS, WHICH IS THE WHOLE BAND ─────────
   //
-  // 26 Sep 2026. The cheapest tier buys beds or a room, whichever costs less,
-  // and the two ends of the band can be different things. Saying which is what
-  // turns the figure from a number into something a traveller can argue with:
-  // somebody who reads "a dorm bed each" knows exactly what they are being
+  // 26 Sep 2026. The cheapest tier buys beds or rooms or a mix, whichever costs
+  // least, and the two ends of the band can be different arrangements. Saying
+  // which is what turns the figure from a number into something a traveller can
+  // argue with: somebody who reads "a dorm bed each" knows what they are being
   // quoted and can pick the other tier if they want a door that locks.
   //
   // It also answers the question that found the fault. The old figure said 310
   // to 410 for the cheapest bed in the country and never said it had put a
   // couple in a private room to get there.
-  const beds = est.bedPaid ? ""
-    : est.bedsLow && est.bedsHigh
-      ? " A dorm bed each, which is the cheapest bed in the country."
-      : est.bedsLow
-        ? ` The bottom of that is a dorm bed each and the top is one room for the ${est.heads} of you, which overtakes separate beds once there are enough of you.`
-        : est.heads < 3 ? ""
-          : (est.rooms === 1 ? " You are all in one room." : ` That is ${est.rooms} rooms, since a hotel room sleeps two.`);
+  //
+  // ── AND IT READS THE PLAN RATHER THAN GUESSING AT IT ────────────
+  //
+  // The first version of this reconstructed the arrangement from two booleans
+  // and got it wrong twice: it told a party of six "the top is one room for the
+  // 6 of you" when the figure was two rooms, and it told a party of seven in a
+  // hostel "that is 2 rooms, since a hotel room sleeps two" when a hostel room
+  // sleeps five. Both sentences were printed over correct figures, which is the
+  // worst kind of wrong: nothing to check them against.
+  const plan = (p) => {
+    if (!p) return "";
+    const rooms = p.rooms || [];
+    const bunks = p.beds === 1 ? "one dorm bed" : `${p.beds} dorm beds`;
+    if (!rooms.length) return p.beds === 1 ? "a dorm bed" : "a dorm bed each";
+    const also = p.beds ? ` and ${bunks}` : "";
+    if (rooms.length === 1) {
+      return p.beds
+        ? `a room for ${rooms[0]}${also}`
+        : (rooms[0] >= est.heads ? "one room for all of you" : `one room for ${rooms[0]}`);
+    }
+    return `${rooms.length} rooms${also}`;
+  };
+  const sameEnds = est.lowPlan && est.highPlan
+    && est.lowPlan.rooms.join(",") === est.highPlan.rooms.join(",")
+    && est.lowPlan.beds === est.highPlan.beds;
+  // ONE ROOM AND NOBODY LEFT OVER is the only arrangement that may be called one
+  // room. A party of six on the cheap tier is a five and a bunk, and the first
+  // version told them they were all in one room.
+  const allInOne = est.highPlan && est.highPlan.rooms.length === 1 && !est.highPlan.beds;
+  const beds = est.bedPaid || !est.lowPlan ? ""
+    : sameEnds
+      ? (est.bedsLow
+          ? " A dorm bed each, which is the cheapest bed in the country."
+          : allInOne
+            ? " You are all in one room."
+            : ` That is ${plan(est.highPlan)}, since the biggest room this kind of place sells sleeps ${est.sleeps}.`)
+      : ` The bottom of that is ${plan(est.lowPlan)} and the top is ${plan(est.highPlan)}, which overtakes separate beds once there are enough of you.`;
   const free = est.entryFree ? " Entry is nothing, since you asked for free attractions only." : "";
-  // ── AND WHICH SEASON MOVED IT ────────────────────────────────────
+  const eating = est.mealsMatter ? ` Food is counted at ${est.meals} bought meals a day.` : "";
+  // ── AND WHICH SEASON MOVED IT, AND BY WHOSE FIGURE ───────────────
   //
   // Oliver, 26 Sep 2026: "Obviously the season also will affect the estimate.."
   //
   // Named either way, because both facts are worth having. With a date, the
   // figure is one season's prices and the traveller should know which. Without
-  // one, the width of the band IS the season, and a band nobody can account
-  // for is the thing that made the old figure unarguable.
+  // one, the width of the band IS the season, and a band nobody can account for
+  // is the thing that made the old figure unarguable.
+  //
+  // ── AND THE CREDIT GOES TO WHOEVER MOVED IT ─────────────────────
+  //
+  // A review pass found this sentence telling a traveller in a hotel double that
+  // Danhostel had charged them 100 kr more for June, and telling a traveller in a
+  // bunk the same thing when what moved their figure was a price guide's ratio.
+  // The two halves of this tier have different calendars and different sources,
+  // so the sentence reads which one the figure landed on. est.season is already
+  // null on a tier with no published calendar at all, so a hotel is told nothing.
+  // Read off the arrangement, not off the two all-or-nothing flags. A party of
+  // six in a five-bed room plus one bunk has BOTH a room's season and a bed's,
+  // and the first version of this credited Danhostel with the whole of it.
+  const bunksIn = (p) => !!p && p.beds > 0;
+  const roomsIn = (p) => !!p && p.rooms.length > 0;
+  const anyBunk = bunksIn(est.lowPlan) || bunksIn(est.highPlan);
+  const anyRoom = roomsIn(est.lowPlan) || roomsIn(est.highPlan);
+  const whoMoved = anyBunk && !anyRoom
+    ? `, which runs about ${DORM_SUMMER_PCT} percent dearer on a dorm bed`
+    : anyRoom && !anyBunk
+      ? `, which Danhostel charges ${BED_SEASON.step} kr a night more for`
+      : "";
   const when = est.bedPaid ? ""
     : est.season === "high"
-      ? " Priced in high season, which Danhostel puts at June to August and charges 100 kr a night more for."
+      ? ` Priced in high season, June to August${whoMoved}.`
       : est.season === "winter"
         ? " Priced at low season, since no Danish hostel publishes a December to February rate and plenty of them are shut."
         : est.season === "low"
           ? " Priced in low season, which is what Danhostel calls March to May and September to November."
-          : " The bottom of the band is low season and the top is June to August, so put your dates in and it narrows.";
-  return `${inIt}, ${who}.${beds}${when}${free} It leaves out ${est.excludes.join(", ")}. The guide prices those once it knows the route.`;
+          // A tier with no calendar says nothing here. The best tier's band is a
+          // cheap central room against a dear one, not June against March, and
+          // saying otherwise was the worst line this sentence ever printed.
+          : est.seasonal
+            ? " The bottom of the band is low season and the top is summer, so put your dates in and it narrows."
+            : "";
+  return `${inIt}, ${who}.${beds}${when}${eating}${free} It leaves out ${est.excludes.join(", ")}. The guide prices those once it knows the route.`;
 };
 
 // ── WHAT THE PLANNER IS TOLD ────────────────────────────────────────
@@ -845,10 +1116,15 @@ export const estimateForBrief = (est) => {
   // act on it. A guide told the figure is a high-season one will not go looking
   // for a March price to contradict it, and one told no season was read knows
   // the band is wide for a reason.
-  const when = est.season === "high" ? " Priced in high season, June to August."
+  // A bed that is already paid for has no season in it, and neither has food.
+  // The first version told a traveller who had booked their room that their
+  // groceries were priced in high season.
+  const when = est.bedPaid ? ""
+    : est.season === "high" ? " Priced in high season, June to August."
     : est.season === "winter" ? " Priced at low season, since Danish hostels do not publish a December to February rate."
     : est.season === "low" ? " Priced in low season, March to May and September to November."
-    : " No arrival date was given, so this spans low and high season rather than picking one.";
+    : est.seasonal ? " No arrival date was given, so this spans low season and summer rather than picking one."
+    : "";
   return `${money} ${covers}${who}.${when} Estimated from what they picked rather than a figure they gave, so treat it as the shape of the trip they want rather than a limit they stated.`;
 };
 
@@ -902,10 +1178,32 @@ export const currencyOf = (code) =>
 // counter prices; a euro figure rounds to five for the same reason, since ten
 // euros is seventy-five kroner and would be a coarser claim than the numbers
 // behind it support.
-const step = (code) => (clean(code) === "DKK" || clean(code) === "SEK" || clean(code) === "NOK" ? 10 : 5);
+// ── ROUNDED COARSELY, BUT NEVER COARSER THAN THE FIGURE ─────────────
+//
+// Kroner round to ten because the inputs are room rates and counter prices; a
+// euro figure rounds to five for the same reason, since ten euros is seventy-five
+// kroner and would be a coarser claim than the numbers behind it support.
+//
+// AND A SMALL FIGURE ROUNDS FINER, which a review pass found the hard way. The
+// cheapest food tier is 19 to 57 kr, which is 2.22 to 6.67 pounds, and a five
+// unit bucket turned both ends into 5: the panel offered a British traveller
+// "5 pounds a day" for a band nearly four times wide, and before that it offered
+// "0 to 5 pounds", which is the one figure a money column must never invent.
+//
+// So the bucket answers to the size of what it is rounding. Under twenty units
+// it is one, which is the granularity the underlying kroner support anyway.
+const SMALL = 20;
+const step = (code, n) => {
+  const big = clean(code) === "DKK" || clean(code) === "SEK" || clean(code) === "NOK" ? 10 : 5;
+  return Math.abs(Number(n)) < SMALL ? 1 : big;
+};
 const toStep = (n, code) => {
-  const k = step(code);
-  return Math.round(Number(n) / k) * k;
+  const v = Number(n);
+  const k = step(code, v);
+  const out = Math.round(v / k) * k;
+  // A real cost never rounds to nothing. Every other rounding error is a small
+  // lie and this one is a different claim.
+  return out === 0 && v > 0 ? k : out;
 };
 
 // `rate` is injected and answers one question: how many of this currency is

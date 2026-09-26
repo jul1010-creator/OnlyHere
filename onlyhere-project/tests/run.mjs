@@ -199,7 +199,7 @@ writeFileSync(entry, `
   export { bedsEstimate, tripEstimate, describeTrip } from ${JSON.stringify(join(root, "src/utils/costLedger.js"))};
   export { FUEL_PRICE, FUEL_USE, roadKm, fuelCost, describeFuel, fuelAge, FUEL_STALE_DAYS, drivingLegs, DRIVEN_MODES } from ${JSON.stringify(join(root, "src/utils/fuel.js"))};
   export { pagerStep, pagerAt, canStep, swipeDirection, pagerLabel, PAGER_MODES, SWIPE_MIN_PX } from ${JSON.stringify(join(root, "src/utils/dayPager.js"))};
-  export { FOOD_TIERS, FOOD_TIER_DEFAULT, foodTier, tierCost, tierDayRate, describeTier, GROCERY_DAY, SHOP_BASKET, STREET_MEAL, FLEXIBLE_MEAL, REGION_SPREAD_NOTE, BUDGET_WARNING, MEALS_A_DAY_OPTIONS, MEALS_A_DAY_DEFAULT, cleanMeals, BASKET_DAYS } from ${JSON.stringify(join(root, "src/utils/mealsEstimate.js"))};
+  export { FOOD_TIERS, FOOD_TIER_DEFAULT, foodTier, tierCost, tierDayRate, tierDayBand, describeTier, GROCERY_DAY, SHOP_BASKET, STREET_MEAL, FLEXIBLE_MEAL, REGION_SPREAD_NOTE, BUDGET_WARNING, MEALS_A_DAY_OPTIONS, MEALS_A_DAY_DEFAULT, cleanMeals, BASKET_DAYS } from ${JSON.stringify(join(root, "src/utils/mealsEstimate.js"))};
   export { isSplurge, SPLURGE_KR } from ${JSON.stringify(join(root, "src/utils/budgetFit.js"))};
   export { profileFromWords, FIT_STRONG as FIT_STRONG_WORD } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
   export { priceAverageKr } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
@@ -284,7 +284,7 @@ writeFileSync(entry, `
   export { needsTier, proposedTier, BACKFILL_SORTS, BACKFILL_SORT_DEFAULT, sortForBackfill, tierSpread, backfillPrompt, readBackfill, missedByPass, proposeTiersWithReason, PASS_FAILED } from ${JSON.stringify(join(root, "src/utils/tierBackfill.js"))};
   export { STAY_CHOICES, STAY_KEYS, stayChoiceOf, stayIsBooked, stayProblem, staySaid } from ${JSON.stringify(join(root, "src/utils/stayChoice.js"))};
   export { TRIP_SCOPES, TRIP_SCOPE_KEYS, scopeOf as tripScopeOf, scopeSaid, scopeOffersOtherTowns, scopeAllowsTown } from ${JSON.stringify(join(root, "src/utils/tripScopeChoice.js"))};
-  export { BED_TIERS, EXCLUDED, estimateDay, estimateShort, estimateSays, estimateForBrief, ENABLE_LABEL, ENABLE_SAYS, HOPS_PER_DAY, STOREBAELT, TRAIN_HOP, HOP_KM, FERRY_FARE, movingMode, hopCost, movingProblem, movingNote, LONG_HAUL_MODES, ROOM_KR, DORM_KR, BED_SEASON, bedSeasonOf, dormBand, ROOM_SLEEPS_MAX, HOTEL_SLEEPS, bedPerNight, RECOMMENDED, recommendedModes, recommendedWhy, isRecommended, showMoney, BUDGET_CURRENCIES, currencyOf } from ${JSON.stringify(join(root, "src/utils/budgetEstimate.js"))};
+  export { BED_TIERS, EXCLUDED, estimateDay, estimateShort, estimateSays, estimateForBrief, ENABLE_LABEL, ENABLE_SAYS, HOPS_PER_DAY, STOREBAELT, TRAIN_HOP, HOP_KM, movingMode, hopCost, movingProblem, movingNote, LONG_HAUL_MODES, ROOM_KR, DORM_KR, SUMMER_BED, DORM_SUMMER_PCT, BED_SEASON, bedSeasonOf, dormBand, HOSTEL_ROOM_SIZES, ROOM_SLEEPS_MAX, HOTEL_SLEEPS, bedPerNight, RECOMMENDED, recommendedModes, recommendedWhy, isRecommended, showMoney, BUDGET_CURRENCIES, currencyOf } from ${JSON.stringify(join(root, "src/utils/budgetEstimate.js"))};
   export { matchedPlaces, previewPools, mentionsPlace, parentTownOf, isDeparturePlace, isRejectedPlace, onlyAskedAbout, isPassedThrough, regionsNamed, placeIsInRegion, REGION_TOWN_CAP, regionPickLimit } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
   export { wantedCategories, groupKeyOf, foodIsPlanned } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
   export { saysWord, briefThemes, fitsBrief, rankOffers, offerReason, profilePull, THEME_WORDS, MODE_WORDS, THEMES_WITHOUT_WORDS, OFFER_LIMIT, essentialsForTrip, essentialsBlock, reservedEssential, nightlifeWanted, nightlifeNotAsked, RESERVED_THEME, ESSENTIALS_IN_GUIDE } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
@@ -76147,7 +76147,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
 // can change the budget", and neither changed it.
 {
   const { estimateDay, estimateSays, HOPS_PER_DAY, STOREBAELT, TRAIN_HOP, HOP_KM,
-          FERRY_FARE, movingMode, hopCost, movingProblem, movingNote, LONG_HAUL_MODES,
+          movingMode, hopCost, movingProblem, movingNote, LONG_HAUL_MODES,
           EXCLUDED, fuelCost, MODE_DAY_KM } = M;
 
   const base = { stay: "cheapest", food: "cheap" };
@@ -76246,17 +76246,23 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   // have caught it, because the code read the word on the chip and the word
   // was wrong.
   {
-    for (const t of [["🚗 Car"], ["🚆 Public transport"], ["🚲 Bike"]]) {
-      is(`staying in one part adds no crossing, by ${t[0]}`,
-         estimateDay({ ...base, scope: "island", transport: t }).ferry, null);
+    // ── AND THE FIELD ITSELF IS GONE NOW ─────────────────────────
+    //
+    // 26 Sep 2026. It returned null for every scope for a day, so the panel's
+    // ferry block could never render and the fare table behind it had no reader
+    // at all. A review pass found both. A published figure nothing reads is not
+    // evidence, it is furniture, and costLedger.js prices the real crossing once
+    // the guide knows which island.
+    for (const sc of ["island", "explore", "town"]) {
+      for (const t of [["🚗 Car"], ["🚆 Public transport"], ["🚲 Bike"]]) {
+        const e = estimateDay({ ...base, scope: sc, transport: t });
+        ok(`${sc} by ${t[0]} carries no crossing at all`, !("ferry" in e));
+        // AND NO PART OF THE FIGURE IS ONE EITHER, which is the check that
+        // would catch a crossing creeping back in under another name.
+        ok(`and nothing in ${sc} by ${t[0]} is priced as a boat`,
+           !e.parts.some(p => /ferry|crossing/i.test(p.what)));
+      }
     }
-    // AND NO OTHER SCOPE EVER DID. Stated so the removal cannot be read as a
-    // regression somewhere else.
-    is("nor does exploring", estimateDay({ ...base, scope: "explore", transport: ["🚗 Car"] }).ferry, null);
-    is("nor one town", estimateDay({ ...base, scope: "town", transport: ["🚗 Car"] }).ferry, null);
-    // The published fares stay, because the guide prices a real crossing once
-    // it knows which island. They are just not this panel's to guess at.
-    ok("the fares are still on file, with the operator", /aeroe-ferry/.test(FERRY_FARE.source));
   }
 
   // ── EXPLORING WITH NO WAY OF MOVING IS NOT A TRIP ───────────────
@@ -76328,7 +76334,10 @@ SOURCE: https://www.tripadvisor.com/whatever`;
        /scope: intakeScope, transport: intakeTransport/.test(app));
     ok("the refusal is shown", /\{budgetEstimate\.problem\.say\}/.test(app));
     ok("so is the cycle-tour line", /\{budgetEstimate\.note\.say\}/.test(app));
-    ok("and the crossing, named on top", /budgetEstimate\.ferry\.kr/.test(app));
+    // THE DEAD CROSSING BLOCK IS GONE, checked as an absence. It read a field
+    // estimateDay stopped returning on 25 Sep, so it could never render, and a
+    // block that cannot render is a promise the panel is not keeping.
+    ok("and no block reads a crossing the estimate never returns", !/budgetEstimate\.ferry/.test(app));
   }
 }
 
@@ -76344,7 +76353,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
 // four was told their beds cost nearly twice what they do.
 {
   const { estimateDay, estimateSays, estimateForBrief, bedPerNight, ROOM_KR, DORM_KR,
-          BED_SEASON, bedSeasonOf, dormBand,
+          BED_SEASON, bedSeasonOf, dormBand, SUMMER_BED, DORM_SUMMER_PCT, HOSTEL_ROOM_SIZES,
           ROOM_SLEEPS_MAX, HOTEL_SLEEPS, hopCost, partyOf } = M;
   const base = { stay: "cheapest", food: "cheap", scope: "explore", transport: ["🚗 Car"] };
 
@@ -76386,11 +76395,47 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     const four = bedPerNight("cheapest", 4);
     ok("one room holds a party of four", four.rooms === 1);
     ok("and four pay far less each than two do", four.high / 4 < two.high / 2);
-    // PAST THE LARGEST PUBLISHED ROOM, ANOTHER ROOM. Pretending a party of
-    // eight fits in one would price them at almost nothing.
-    const six = bedPerNight("cheapest", ROOM_SLEEPS_MAX + 1);
-    is("six take two rooms", six.rooms, 2);
-    ok("and pay more in total than five do", six.low > bedPerNight("cheapest", ROOM_SLEEPS_MAX).low);
+    // ── PAST THE LARGEST PUBLISHED ROOM, WHATEVER IS CHEAPEST ─────
+    //
+    // 26 Sep 2026, and this assertion was the overcharge written down. It said
+    // six people take two rooms, and the comment beside the old code said out
+    // loud what that cost: "a party of six in hostel rooms is a five and a one,
+    // and the one pays a single." The one should take a bunk. In high season it
+    // was billing the sixth traveller 620 kr for a 218 kr bed.
+    const six = bedPerNight("cheapest", ROOM_SLEEPS_MAX + 1, "high");
+    is("six in summer take one full room", six.highPlan.rooms.join(","), "5");
+    is("and the sixth takes a bunk", six.highPlan.beds, 1);
+    ok("and pay more in total than five do", six.low > bedPerNight("cheapest", ROOM_SLEEPS_MAX, "high").low);
+    // AND NOBODY IS EVER PRICED ABOVE THE CHEAPEST THING THEY COULD BUY. The
+    // check that would have caught it: an independent search over the same two
+    // published tables, for every party and every season.
+    {
+      const optimum = (n, season) => {
+        const bed = dormBand(season);
+        const room = (k) => {
+          const r = ROOM_KR[Math.min(Math.max(1, k), ROOM_SLEEPS_MAX)];
+          return season === "high" ? { low: r.high, high: r.high } : season ? { low: r.low, high: r.low } : r;
+        };
+        const at = (end) => {
+          const c = [0];
+          for (let i = 1; i <= n; i++) {
+            let pick = bed[end] + c[i - 1];
+            for (const k of HOSTEL_ROOM_SIZES) pick = Math.min(pick, room(k)[end] + c[Math.max(0, i - k)]);
+            c[i] = pick;
+          }
+          return c[n];
+        };
+        return { low: at("low"), high: at("high") };
+      };
+      let off = 0;
+      for (const season of [null, "low", "high", "winter"]) {
+        for (let n = 1; n <= 12; n++) {
+          const got = bedPerNight("cheapest", n, season), want = optimum(n, season);
+          if (got.low !== want.low || got.high !== want.high) off += 1;
+        }
+      }
+      is("no party at any season is charged more than the cheapest arrangement", off, 0);
+    }
     // ── AND THE ROOM TABLE IS DANHOSTEL'S, UNBENT ─────────────────
     //
     // 26 Sep 2026. The single used to read 200 rather than the 550 Danhostel
@@ -76460,10 +76505,43 @@ SOURCE: https://www.tripadvisor.com/whatever`;
       stay: "cheapest", food: "self", freeOnly: true,
       scope: "town", transport: ["\u{1F686} Public transport"], travellers: "family of 4",
     });
-    ok("a family is told the top of their band is one room",
-       /one room for the 4 of you/.test(estimateSays(four)));
-    ok("and nobody is told they are all in one room when they are in bunks",
-       !/You are all in one room/.test(estimateSays(four)));
+    ok("a family in summer is told they are in one room",
+       /You are all in one room/.test(estimateSays({ ...four, ...estimateDay({
+         stay: "cheapest", food: "self", freeOnly: true, scope: "town",
+         transport: ["\u{1F686} Public transport"], travellers: "family of 4",
+         arrival: "2026-07-10T12:00" }) })));
+    ok("and out of season, that they are in bunks",
+       /dorm bed each/.test(estimateSays(four)));
+    // ── AND A SENTENCE NEVER DESCRIBES AN ARRANGEMENT NOBODY BOUGHT ─
+    //
+    // Both of these were printed over correct figures, which is the worst kind
+    // of wrong: a number with nothing to check it against. A party of six was
+    // told "one room for the 6 of you" when the figure was a five-bed room and a
+    // bunk, and a party of seven in a HOSTEL was told "that is 2 rooms, since a
+    // hotel room sleeps two". The sentence reads the arrangement now.
+    for (const n of [6, 7, 8, 9, 11, 12]) {
+      for (const arrival of ["", "2026-07-10T12:00", "2027-03-10T12:00"]) {
+        const e = estimateDay({
+          stay: "cheapest", food: "self", scope: "town",
+          transport: ["\u{1F686} Public transport"], travellers: `${n} people`, arrival,
+        });
+        const line = estimateSays(e);
+        const plan = e.highPlan;
+        // "All in one room" may only be said where one room holds everybody.
+        if (/You are all in one room/.test(line)) {
+          ok(`${n} at ${arrival || "no date"} really are in one room`,
+             plan.rooms.length === 1 && !plan.beds && plan.rooms[0] >= e.heads);
+        }
+        // A hostel is never credited with a hotel's room size.
+        ok(`${n} at ${arrival || "no date"} is not told a hostel room sleeps two`,
+           !/a hotel room sleeps two/.test(line));
+        // And where the arrangement mixes, the sentence says both halves.
+        if (plan.rooms.length && plan.beds) {
+          ok(`${n} at ${arrival || "no date"} is told about the bunk as well`,
+             /dorm bed/.test(line));
+        }
+      }
+    }
   }
 
   // ── AND WHICH SEASON THEY ARE COMING IN ─────────────────────────
@@ -76498,10 +76576,188 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     is("no date is no season", bedSeasonOf(""), null);
     is("and neither is something nobody can parse", bedSeasonOf("sometime soon"), null);
 
-    // THE STEP MOVES THE PRICE LIST RATHER THAN STRETCHING IT. A season is a
-    // different column on the same sheet, so both ends rise together.
-    is("high season adds the step to the bottom too", dormBand("high").low, dormBand("low").low + BED_SEASON.step);
-    is("and to the top", dormBand("high").high, dormBand("low").high + BED_SEASON.step);
+    // ── AND A BED'S STEP IS NOT A ROOM'S ─────────────────────────
+    //
+    // 26 Sep 2026. This asserted the step was Danhostel's published 100 kr, and
+    // a review pass caught what that meant: Danhostel charges the 100 PER ROOM,
+    // and it was being added PER BED at two hostels with no connection to
+    // Danhostel. Six bunks in a room would have made it 600.
+    //
+    // It is a RATIO now, divided out of the one source that prices a dorm by
+    // season, and the derivation is in code so it can be checked.
+    is("the summer step is that guide's own ratio", DORM_KR.summerFactor, SUMMER_BED.low / SUMMER_BED.lowSeasonLow);
+    is("said as a percentage where a sentence needs one", DORM_SUMMER_PCT, 50);
+    // BOTH ENDS MOVE TOGETHER, because a factor is a factor.
+    is("high season lifts the bottom", dormBand("high").low, Math.round(DORM_KR.low * DORM_KR.summerFactor));
+    is("and the top", dormBand("high").high, Math.round(DORM_KR.high * DORM_KR.summerFactor));
+    // AND ITS ABSOLUTE FIGURES ARE NOT USED, on purpose, because its low-season
+    // number runs well above what six named hostels were quoting the same day.
+    ok("the guide's own figures stay out of the band",
+       dormBand("high").low < SUMMER_BED.low && dormBand("low").low < SUMMER_BED.lowSeasonLow);
+    ok("and it says why on screen", /run above what six named hostels/.test(SUMMER_BED.says));
+
+    // ── AND ONLY A BAND THAT IS A CALENDAR MAY BE NARROWED ───────
+    //
+    // The worst line this file ever printed, found by a review pass hours after
+    // it shipped. BED_TIERS.best's 1,200 and 1,800 are a cheap central double
+    // and a dear one, which the file's own comment sources as a spread. The
+    // season was applied to it anyway: a July double came out at 900 a head flat,
+    // a 600 kr move, with the sentence crediting Danhostel for it.
+    {
+      const july = { food: "cheap", scope: "town", travellers: "2 people", arrival: "2026-07-10T12:00" };
+      const hotel = estimateDay({ ...july, stay: "best" });
+      const march = estimateDay({ ...july, stay: "best", arrival: "2027-03-10T12:00" });
+      const undated = estimateDay({ ...july, stay: "best", arrival: "" });
+      is("a hotel double has no season to read", hotel.season, null);
+      is("and says so by carrying no calendar", hotel.seasonal, false);
+      ok("so a date does not move it", hotel.low === march.low && hotel.high === march.high);
+      ok("and it is still the band the source published", hotel.high === undated.high);
+      ok("and Danhostel is not credited for a hotel room",
+         !/Danhostel/.test(estimateSays(hotel)));
+      ok("nor is a hotel band called a season",
+         !/low season/.test(estimateSays(hotel)) && !/June to August/.test(estimateSays(hotel)));
+      // WHILE THE HOSTEL, WHOSE ROOMS ARE A PUBLISHED CALENDAR, DOES MOVE.
+      const hostel = estimateDay({ ...july, stay: "cheapest" });
+      is("a hostel reads the calendar it has", hostel.season, "high");
+      ok("and moves with it", hostel.low > estimateDay({ ...july, stay: "cheapest", arrival: "2027-03-10T12:00" }).low);
+    }
+
+    // ── AND A BED ALREADY PAID FOR HAS NO SEASON ANYWHERE ────────
+    // estimateSays checked this and estimateForBrief did not, so the planner was
+    // told a traveller's groceries were priced in high season.
+    {
+      const paid = estimateDay({ stay: "booked", food: "cheap", scope: "town", travellers: "1", arrival: "2026-07-10T12:00" });
+      ok("the sentence says no season", !/season/.test(estimateSays(paid)));
+      ok("and neither does the brief", !/season/.test(estimateForBrief(paid)));
+      // AND IT DOES NOT NAME A ROOM OR A CAR THAT IS NOT IN THE FIGURE.
+      ok("nor a room nobody is paying for", !/share a room/.test(estimateSays(paid)));
+      // ── AND IT DOES NOT ASK FOR A HEADCOUNT IT WOULD IGNORE ────
+      // Food costs the same each. A form that asks a question it will not act on
+      // has stopped asking and started decorating.
+      const vague = estimateDay({ stay: "booked", food: "cheap", scope: "town", travellers: "2 weeks with friends" });
+      ok("an unshared figure says the headcount would not move it",
+         /would not move it/.test(estimateSays(vague)));
+      // WHILE A FIGURE WITH A ROOM IN IT STILL ASKS.
+      ok("and a shared one still asks",
+         /say how many you are/.test(estimateSays(estimateDay({ stay: "cheapest", food: "cheap", scope: "town", travellers: "2 weeks with friends" }))));
+    }
+
+    // ── AND A TRIP THAT CROSSES THE BOUNDARY IS NOT ONE SEASON ───
+    //
+    // The first version read the arrival day alone, so a trip landing 31 May and
+    // staying a fortnight was priced at March rates for thirteen June nights.
+    // Both dates sit on the same panel and one was unread, which is the exact
+    // defect the change was fixing.
+    {
+      is("31 May to 10 June is neither season", bedSeasonOf("2026-05-31", "2026-06-10"), null);
+      is("31 August to 5 September is neither", bedSeasonOf("2026-08-31", "2026-09-05"), null);
+      is("both inside summer is summer", bedSeasonOf("2026-06-10", "2026-06-20"), "high");
+      is("both outside it is not", bedSeasonOf("2027-03-10", "2027-03-20"), "low");
+      // WINTER AND LOW ARE THE SAME PRICE COLUMN, so crossing between them is
+      // not a straddle and must not throw the band away.
+      is("February into March is one price column", bedSeasonOf("2027-02-25", "2027-03-05"), "winter");
+      // AND NO DEPARTURE STILL READS THE ARRIVAL, because half an answer beats
+      // none and the sentence names the season it used.
+      is("an arrival alone is still read", bedSeasonOf("2026-07-10", ""), "high");
+      const straddle = estimateDay({ stay: "cheapest", food: "self", scope: "town", arrival: "2026-05-31", departure: "2026-06-10" });
+      const inside = estimateDay({ stay: "cheapest", food: "self", scope: "town", arrival: "2026-06-05", departure: "2026-06-10" });
+      ok("a straddling trip keeps the whole band", straddle.high > inside.high || straddle.low < inside.low);
+    }
+
+    // ── AND THE FOOD HALF IS READ, NOT RE-PRICED ─────────────────
+    //
+    // This file's own header says the food half is not re-priced here, and for a
+    // day it was: a division by three for the low end and a multiplication by
+    // 1.6 for the high one, neither published, while mealsEstimate held the real
+    // ends all along. The panel quoted 160 a day for the cheap tier where that
+    // file says 180, so the budget panel and the guide's cost block disagreed
+    // about the same tier on the same trip.
+    {
+      const { tierDayBand, tierDayRate, STREET_MEAL, FLEXIBLE_MEAL, SHOP_BASKET, GROCERY_DAY, BASKET_DAYS } = M;
+      is("the cheap tier's day is two published meals", tierDayBand("cheap", 2).high, STREET_MEAL.high * 2);
+      is("and its low end is the same meals at the low end", tierDayBand("cheap", 2).low, STREET_MEAL.low * 2);
+      is("three meals is three of them", tierDayBand("cheap", 3).high, STREET_MEAL.high * 3);
+      is("the flexible tier is one sit-down and the rest cheap", tierDayBand("flex", 2).high, FLEXIBLE_MEAL.high + STREET_MEAL.high);
+      is("and the cheapest tier is a basket stretched or a kitchen used",
+         tierDayBand("self", 2).low, Math.round(SHOP_BASKET.kr / BASKET_DAYS));
+      is("up to a full self-catering day", tierDayBand("self", 2).high, GROCERY_DAY.kr);
+      // THE BUTTON AND THE BAND AGREE ABOUT THE SAME TIER, which is the whole
+      // point of one reader.
+      for (const k of ["cheap", "flex"]) {
+        is(`${k}'s button rate is the bottom of its band`, tierDayRate(k, 2), tierDayBand(k, 2).low);
+      }
+      // AND THE PANEL SHOWS EXACTLY THAT BAND, with nothing multiplied on top.
+      for (const k of ["self", "cheap", "flex"]) {
+        const food = estimateDay({ stay: "booked", food: k, scope: "town", travellers: "1" })
+          .parts.find(p => p.what === "food");
+        const want = tierDayBand(k, 2);
+        is(`the panel's ${k} low end is the published one`, food.low, want.low);
+        is(`and its high end too`, food.high, want.high);
+      }
+    }
+
+    // ── AND THE ROOM TABLE IS ONE SELLER'S, UNBLENDED ────────────
+    // The double read 575 while the comment above it and the sentence on screen
+    // both said 600. Danhostel's own page, read again 26 Sep 2026, says 600 low
+    // and 700 high. The 575 was CABINN's, from the prose two blocks up, and it
+    // had migrated into another seller's table.
+    {
+      is("the double is what Danhostel charges", ROOM_KR[2].low, 600);
+      is("and in high season", ROOM_KR[2].high, 700);
+      ok("and the sentence on screen agrees with the table",
+         new RegExp(`${ROOM_KR[2].low} to ${ROOM_KR[2].high} for a double`).test(M.BED_TIERS.cheapest.says));
+    }
+
+    // ── AND A MONEY COLUMN NEVER INVENTS A ZERO ──────────────────
+    //
+    // The cheapest food tier's low end is 9 kr, which is about a pound, and a
+    // five unit bucket rounded it to 0: the panel offered a British traveller
+    // their food at "0 to 5 pounds a day". Every other rounding error is a small
+    // lie and that one is a different claim.
+    {
+      const { showMoney, estimateShort, BUDGET_CURRENCIES } = M;
+      const cheap = estimateDay({ stay: "booked", food: "self", scope: "town", travellers: "1" });
+      const rates = { EUR: 0.134, USD: 0.155, GBP: 0.117, SEK: 1.48, NOK: 1.55, CHF: 0.123, PLN: 0.57, CAD: 0.21, AUD: 0.23, DKK: 1 };
+      for (const c of BUDGET_CURRENCIES) {
+        const rate = () => rates[c.code];
+        for (const kr of [1, 5, 9, 19, 57, 145, 1800]) {
+          const out = showMoney(kr, c.code, rate);
+          ok(`${c.code} never prints nothing for ${kr} kr`, !/\b0\b/.test(out));
+        }
+        // AND A REAL BAND DOES NOT COLLAPSE INTO ONE FIGURE. 9 to 57 kr is a
+        // band nearly seven times wide and a coarse bucket printed it as "5".
+        const line = estimateShort(cheap, c.code, rate);
+        ok(`${c.code} keeps the band a band`, / to /.test(line));
+      }
+      // AND THE UNIT APPEARS ONCE, whichever side of the number it sits on.
+      const kr = estimateShort(cheap, "DKK", () => 1);
+      is("kroner trail the band once", (kr.match(/kr/g) || []).length, 1);
+      const eur = estimateShort(cheap, "EUR", () => 0.134);
+      is("and a euro sign leads each end", (eur.match(/€/g) || []).length, 2);
+    }
+
+    // ── AND HOW OFTEN THEY EAT, WHICH THE PANEL ASSUMES ──────────
+    //
+    // The panel has no control for the meal count and the guide's cost block
+    // does, so the figure rests on the default and the sentence names it. A
+    // third bought meal is another 50 to 90 kr, which moves the cheap tier by
+    // half, and an assumption that size goes on screen.
+    {
+      const at = (food) => estimateDay({ stay: "cheapest", food, scope: "town", travellers: "2 people" });
+      for (const f of ["cheap", "flex"]) {
+        ok(`${f} says how many meals it counted`, /bought meals a day/.test(estimateSays(at(f))));
+      }
+      // AND THE ONE TIER WHERE IT CHANGES NOTHING SAYS NOTHING. A basket bought
+      // once lasts LONGER if you skip breakfast, which its own basis explains.
+      ok("the grocery tier does not claim a meal count",
+         !/bought meals a day/.test(estimateSays(at("self"))));
+      is("because its band does not move with the count", at("self").mealsMatter, false);
+      // AND THE COUNT IT NAMES IS THE COUNT IT USED.
+      const three = estimateDay({ stay: "booked", food: "cheap", scope: "town", travellers: "1", meals: 3 });
+      is("three meals is carried out", three.meals, 3);
+      ok("and said", /3 bought meals a day/.test(estimateSays(three)));
+      ok("and costs more than two", three.low > estimateDay({ stay: "booked", food: "cheap", scope: "town", travellers: "1", meals: 2 }).low);
+    }
     // WINTER TAKES THE LOW FIGURE, because the seller publishes none and
     // refusing to price a January trip helps nobody.
     is("winter is priced at low season", dormBand("winter").low, dormBand("low").low);
@@ -76606,8 +76862,8 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   // above: this used to charge a traveller for the one thing they had just
   // asked not to do.
   {
-    is("a family staying in one part pays for no crossing",
-       estimateDay({ ...base, scope: "island", transport: ["🚗 Car"], travellers: "family of 4" }).ferry, null);
+    ok("a family staying in one part pays for no crossing",
+       !("ferry" in estimateDay({ ...base, scope: "island", transport: ["🚗 Car"], travellers: "family of 4" })));
   }
 
   // ── AND THE BRIEF CARRIES THE COUNT ─────────────────────────────
@@ -76624,7 +76880,9 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   {
     const app = readFileSync(join(root, "src/App.jsx"), "utf8");
     ok("the who's-travelling box reaches the estimate", /travellers: intakeTravelers/.test(app));
-    ok("and the crossing says who it is for", /budgetEstimate\.ferry\.forParty/.test(app));
+    // AND BOTH DATES, which is the other half of the season. Reading the
+    // arrival alone priced thirteen June nights at March rates.
+    ok("and both dates reach it", /arrival: intakeArrival, departure: intakeDeparture/.test(app));
   }
 }
 
@@ -76675,7 +76933,22 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     ok("which is the same pair the check asks for",
        modes.every(m => !movingProblem("explore", [m])));
     // AND IT SAYS WHICH IS CHEAPER FOR WHOM, off the model rather than a mood.
-    ok("with the headcount as the deciding fact", /three of you/.test(RECOMMENDED.explore.why));
+    // AND IT AGREES WITH hopCost, which it did not: the sentence said three and
+    // the module's own figures cross over at two. A threshold written in prose
+    // beside the function that answers it is two readers of one value.
+    ok("with the headcount as the deciding fact", /two of you/.test(RECOMMENDED.explore.why));
+    {
+      const perHead = (n, mode) => {
+        const p = M.estimateDay({ stay: "booked", food: "self", scope: "explore", transport: [mode], heads: n })
+          .parts.find(x => x.what === "getting between towns");
+        return p ? p.low : null;
+      };
+      ok("a train is cheaper on your own", perHead(1, "🚆 Public transport") < perHead(1, "🚗 Car"));
+      ok("and the car is cheaper from two up", perHead(2, "🚗 Car") < perHead(2, "🚆 Public transport"));
+      // AND THE CAVEAT IS THERE, because that figure is fuel and the toll with
+      // no hire in it, which is why a train can still be the cheaper trip.
+      ok("and it says the hire is not in that", /not the hire/.test(RECOMMENDED.explore.why));
+    }
   }
 
   // ── THE CHIP'S OWN LABEL IS WHAT THE PANEL HAS ──────────────────

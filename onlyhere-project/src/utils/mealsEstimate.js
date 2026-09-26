@@ -248,6 +248,18 @@ export const FOOD_TIERS = [
     label: "Cheapest",
     what: "Grocery store. Rugbrød and pålæg, and one loaf lasts one person most of a short trip.",
     perTrip: SHOP_BASKET.kr,
+    // ── AND WHAT ONE DAY OF IT COSTS, AT BOTH ENDS ────────────────
+    //
+    // Added 26 Sep 2026. budgetEstimate.js was inventing this: it divided
+    // GROCERY_DAY by three for a low end and multiplied a day rate by 1.6 for a
+    // high one, neither of which anybody published, while the real high ends sat
+    // in this file as STREET_MEAL.high and FLEXIBLE_MEAL.high. Its own header
+    // says the food half is not re-priced there, and it was.
+    //
+    // A DAY OF THIS TIER IS A BASKET STRETCHED OR A KITCHEN USED. The cheap end
+    // is the one shop spread over the week it lasts; the dear end is a full
+    // self-catering day with dinner cooked, which is the household figure.
+    dayBand: () => ({ low: Math.round(SHOP_BASKET.kr / BASKET_DAYS), high: GROCERY_DAY.kr }),
     source: SHOP_BASKET.source,
     checkedAt: SHOP_BASKET.checkedAt,
     // The basket does not answer to meals a day, and that is not an oversight:
@@ -260,6 +272,10 @@ export const FOOD_TIERS = [
     label: "Cheap",
     what: "Kebab and hot dog stands, McDonald's, a pizza slice.",
     dayRate: (meals) => STREET_MEAL.low * cleanMeals(meals),
+    // The same meals counted at the other end of the published durum band, which
+    // is what "the high end is nearly double" in the basis text means. A panel
+    // that multiplied the low end by 1.6 was quoting 160 where this says 180.
+    dayBand: (meals) => ({ low: STREET_MEAL.low * cleanMeals(meals), high: STREET_MEAL.high * cleanMeals(meals) }),
     source: STREET_MEAL.source,
     checkedAt: STREET_MEAL.checkedAt,
     basis: `A kebab, a hot dog from a pølsevogn or a burger chain meal runs ${STREET_MEAL.low} to ${STREET_MEAL.high} DKK: published durum prices sit at 53 to 87, and ${STREET_MEAL.cheapestOf} is ${STREET_MEAL.cheapest}, though that is a price McDonald's recommends and each franchise sets its own. Counted at the low end of the band, so the high end is nearly double.`,
@@ -273,6 +289,13 @@ export const FOOD_TIERS = [
     // restaurant, and treating it as a second restaurant would make this tier
     // the "two restaurants a day" trip it explicitly is not.
     dayRate: (meals) => FLEXIBLE_MEAL.low + STREET_MEAL.low * (cleanMeals(meals) - 1),
+    // One sit-down and the rest cheap, priced at both ends of both bands. Still
+    // one sit-down at the top: two restaurant meals a day is the other trip and
+    // the basis text prices it separately.
+    dayBand: (meals) => ({
+      low: FLEXIBLE_MEAL.low + STREET_MEAL.low * (cleanMeals(meals) - 1),
+      high: FLEXIBLE_MEAL.high + STREET_MEAL.high * (cleanMeals(meals) - 1),
+    }),
     basis: `One sit-down meal at ${FLEXIBLE_MEAL.low} DKK and the rest of the day's eating cheap, which is what eating flexibly looks like rather than a restaurant every time. Two sit-down meals a day is a different trip and would run to about ${FLEXIBLE_MEAL.high * 2} DKK a head. Where you eat decides this far more than which town you are in: the dear places are the tourist strips, and Nørrebro is as cheap as anywhere outside the capital.`,
   },
 ];
@@ -284,6 +307,19 @@ export const foodTier = (key) => FOOD_TIERS.find(t => t.key === key) || FOOD_TIE
 export const tierDayRate = (key, meals = MEALS_A_DAY_DEFAULT) => {
   const t = foodTier(key);
   return typeof t?.dayRate === "function" ? t.dayRate(meals) : null;
+};
+
+// ── AND BOTH ENDS OF A DAY, FOR ANYBODY SHOWING A BAND ──────────────
+//
+// The one reader of what a day of a tier costs from cheap end to dear end. It
+// exists because budgetEstimate.js was working it out for itself off a division
+// and a multiplier nobody published, so the budget panel and the guide's cost
+// block quoted different figures for the same tier on the same trip.
+export const tierDayBand = (key, meals = MEALS_A_DAY_DEFAULT) => {
+  const t = foodTier(key);
+  if (typeof t?.dayBand !== "function") return null;
+  const b = t.dayBand(meals);
+  return b && Number.isFinite(b.low) && Number.isFinite(b.high) ? b : null;
 };
 
 // What a tier costs over a trip. Rounded to the nearest ten: the inputs are a
