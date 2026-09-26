@@ -21694,6 +21694,9 @@ ${languageBlock()}`;
       // settings ran on this one number, so the only thing separating them was
       // the model's judgement, formed by the forty lines of prompt above it.
       // The cap is not the rule and is not meant to be reached.
+      // The most this app will spend on one chat turn, thinking and answer
+      // together. Named once so the first call and the escalation cannot drift.
+      const CHAT_TOKEN_CEILING = 16000;
       const CHAT_TOKENS = answerTokens(answerLength, 8192);
       const streamClaudeChat = async (messages, onText, maxTokens = CHAT_TOKENS) => {
         const res = await fetch("/api/anthropic", {
@@ -21875,10 +21878,20 @@ ${languageBlock()}`;
         // It is to ask with more room. Same escalation aiClient.js already does
         // for a truncated reply, capped so a pathological turn cannot spend
         // without limit.
-        if (out.ranOutThinking && maxTokens < 16000) {
-          console.warn("Gemlyx chat: the budget went on thinking, retrying with more room.", { was: maxTokens });
+        // ── AND THE RETRY GOES TO THE CEILING, NOT TO DOUBLE ──────
+        //
+        // Measured live 26 Sep 2026: doubling 1200 to 2400 failed the same way,
+        // because the thing that ran out was the thinking and 2400 is not enough
+        // thinking either. The traveller then read "Send it again and I will give
+        // myself more room" from a retry that had already given itself all the
+        // room it was ever going to.
+        //
+        // One retry, at the most this app will ever spend on a turn. There is no
+        // third attempt, so the second one has no reason to hold anything back.
+        if (out.ranOutThinking && maxTokens < CHAT_TOKEN_CEILING) {
+          console.warn("Gemlyx chat: the budget went on thinking, retrying at the ceiling.", { was: maxTokens, now: CHAT_TOKEN_CEILING });
           clearStreamedBubble();
-          const roomier = await streamClaudeChat(msgs, handleDelta, Math.min(16000, maxTokens * 2));
+          const roomier = await streamClaudeChat(msgs, handleDelta, CHAT_TOKEN_CEILING);
           // Taken only if it is actually better. A second empty turn must not
           // replace the first, or the diagnosis the traveller sees describes the
           // retry rather than the thing that went wrong.

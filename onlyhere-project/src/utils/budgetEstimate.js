@@ -1080,7 +1080,15 @@ export const estimateSays = (est) => {
         : "per person, and nothing in it is shared, so the headcount would not move it")
     : est.heads === 1
       ? (shared ? "for one, with nobody to share a room or a car with" : "for one")
-      : `per person, split between the ${est.heads} of you`;
+      // ── AND A SPLIT IS ONLY CLAIMED WHERE ONE HAPPENED ───────────
+      // Found live on the panel, 26 Sep 2026: a booked bed, cheap food and a
+      // party of three read "split between the 3 of you" over a figure in which
+      // every part is per person. The uncounted branch above already tested
+      // this and the counted one did not, so the sentence was true for a
+      // traveller who had not said how many they were and false for one who had.
+      : shared
+        ? `per person, split between the ${est.heads} of you`
+        : `per person, the same for each of the ${est.heads} of you, since nothing in it is shared`;
   // Only once there are enough of them for the answer to be interesting, and
   // the two answers are different facts: sharing one room is WHY it is cheap,
   // and needing a second one is why the middle tier stops getting cheaper.

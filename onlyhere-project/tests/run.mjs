@@ -59591,6 +59591,31 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
         is("short has a ceiling of its own", answerTokens(ANSWER_SHORT, 8192), SHORT_REPLY_TOKENS);
         is("and full keeps the full budget", answerTokens(ANSWER_LONG, 8192), 8192);
         ok("the ceiling is well clear of three sentences", SHORT_REPLY_TOKENS > 600);
+        // ── AND CLEAR OF THE THINKING IN FRONT OF THEM ──────────
+        //
+        // Measured live on the deployed site, 26 Sep 2026: at 1200 three turns in
+        // a row on a complete brief came back with no text at all, and the same
+        // questions on Full answered first time. max_tokens is not an answer
+        // length on a model that thinks before it writes: it is the budget for
+        // both, and the thinking goes first. The rule lives in SHORT_DEPTH, which
+        // the model obeys; this number is a backstop that must not be reachable
+        // by reasoning alone.
+        ok("and clear of the reasoning that comes before them", SHORT_REPLY_TOKENS >= 4000);
+        // STILL A CHOICE, though: short costs less than full or the setting is
+        // decoration.
+        ok("while still costing less than the full setting", SHORT_REPLY_TOKENS < 8192);
+        // AND THE RETRY GOES TO THE CEILING, because doubling from a budget that
+        // was spent on thinking lands on another budget that gets spent on
+        // thinking. There is no third attempt.
+        {
+          const appC = readFileSync(join(root, "src/App.jsx"), "utf8");
+          ok("the ceiling is named once", /const CHAT_TOKEN_CEILING = 16000;/.test(appC));
+          ok("and the escalation goes straight to it",
+             /streamClaudeChat\(msgs, handleDelta, CHAT_TOKEN_CEILING\)/.test(appC));
+          ok("rather than doubling", !/handleDelta, Math\.min\(16000, maxTokens \* 2\)\)/.test(appC));
+          ok("and the guard reads the same ceiling",
+             /out\.ranOutThinking && maxTokens < CHAT_TOKEN_CEILING/.test(appC));
+        }
         const app2 = readFileSync(join(root, "src/App.jsx"), "utf8");
         ok("the depth paragraph is the setting rather than a fixed line",
            /\$\{depthBlock\(answerLength\)\}/.test(app2)
@@ -76780,6 +76805,23 @@ SOURCE: https://www.tripadvisor.com/whatever`;
       // WHILE A FIGURE WITH A ROOM IN IT STILL ASKS.
       ok("and a shared one still asks",
          /say how many you are/.test(estimateSays(estimateDay({ stay: "cheapest", food: "cheap", scope: "town", travellers: "2 weeks with friends" }))));
+      // ── AND A COUNTED PARTY IS NOT TOLD OF A SPLIT EITHER ──────
+      //
+      // Found live on the deployed panel, 26 Sep 2026. The uncounted branch had
+      // this check and the counted one did not, so a traveller who typed "3
+      // friends" with a booked bed and a one-town trip read "split between the 3
+      // of you" over a figure in which every part is per person. True for the
+      // person who said nothing, false for the person who answered.
+      {
+        const counted = estimateDay({ stay: "booked", food: "cheap", scope: "town", travellers: "3 friends" });
+        is("the party was read", counted.heads, 3);
+        ok("nothing in that figure is shared", !counted.parts.some(p => p.per === "party" && p.high > 0));
+        ok("so it does not claim a split", !/split between/.test(estimateSays(counted)));
+        ok("and says why", /nothing in it is shared/.test(estimateSays(counted)));
+        // WHILE A FIGURE WITH A ROOM IN IT STILL SPLITS, and says so.
+        const room = estimateDay({ stay: "cheapest", food: "cheap", scope: "town", travellers: "3 friends" });
+        ok("a room is split between them", /split between the 3 of you/.test(estimateSays(room)));
+      }
     }
 
     // ── AND THE PLANNER IS TOLD WHAT KIND OF BED IT BOUGHT ───────

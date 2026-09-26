@@ -93,11 +93,32 @@ export const depthBlock = (mode) => (cleanLength(mode) === SHORT ? SHORT_DEPTH :
 // cap is not the rule and is not meant to be hit, it is the thing that makes the
 // rule cost something when it is ignored.
 //
-// Generous enough that a route across several days, which the short block
-// explicitly allows two paragraphs for, still finishes its sentence. A reply cut
-// off mid word is worse than a long one, and this project has shipped that bug
-// once already.
-export const SHORT_REPLY_TOKENS = 1200;
+// ── AND AT 1200 IT WAS HIT EVERY TIME, BY THE THINKING ──────────────
+//
+// Measured live on the deployed site, 26 Sep 2026, on a complete brief with the
+// panel filled in. Three turns in a row on the Short setting came back with no
+// text at all and the traveller got a diagnosis instead of an answer:
+//
+//   Gemlyx chat: no text in this turn
+//   Gemlyx chat: the budget went on thinking, retrying with more room
+//   Gemlyx chat: no text in this turn
+//
+// The same questions on Full answered first time. So the cap was not trimming a
+// long reply, it was eating the reply whole.
+//
+// THE REASON IS THAT max_tokens IS NOT AN ANSWER LENGTH. On a model that thinks
+// before it writes, that number is the budget for the thinking AND the answer,
+// and the thinking goes first. A short answer is a few hundred tokens; the
+// reasoning in front of it on a seven-slot brief is thousands. Capping the pair
+// at 1200 does not make a verbose model terse, it makes a thoughtful one silent.
+//
+// SO THE RULE STAYS WHERE IT WORKS, which is the block above: SHORT_DEPTH tells
+// the model what a short answer is, and it obeys it. This number goes back to
+// being what its own comment says it is, a backstop that is not meant to be hit,
+// at a height that leaves room to think. Still below the full setting, so the
+// choice still costs something, and a turn that somehow needs more is escalated
+// to the ceiling rather than to double. See runTurn in App.jsx.
+export const SHORT_REPLY_TOKENS = 6000;
 export const answerTokens = (mode, full) => (cleanLength(mode) === SHORT ? SHORT_REPLY_TOKENS : full);
 
 // What the two buttons say. "Short" and "Full" rather than "Short" and "Long",
