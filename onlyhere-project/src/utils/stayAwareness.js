@@ -286,7 +286,7 @@ export const houseBase = (points, opts = {}) => houseAreasFor(points, opts)[0] |
 // first day happened to end. The base is picked from the planner's skeleton
 // now, before the writer runs, and this is what the writer reads.
 export const houseBaseBlock = (base) => base
-  ? `\n\nTHE SOMMERHUS FOR THE WHOLE WEEK IS AT ${base.name.toUpperCase()}, on the ${base.coast} coast near ${base.nearTown}. It is one house, booked by the week through a holiday-house agency. Every day starts from the house at ${base.name} and ends back there: write the first day's arrival as getting the keys at ${base.name}, never put the house in any other town, and never say they settle in anywhere else.`
+  ? `\n\nTHE SOMMERHUS FOR THE WHOLE TRIP IS AT ${base.name.toUpperCase()}, on the ${base.coast} coast near ${base.nearTown}. It is one house, rented through a holiday-house agency. Every day starts from the house at ${base.name} and ends back there: write the first day's arrival as getting the keys at ${base.name}, never put the house in any other town, and never say they settle in anywhere else.`
   : "";
 
 // ── AND HOW FAR THE HOUSE IS FROM THIS DAY ─────────────────────────
@@ -342,7 +342,7 @@ export const houseAreaBlock = (points, { places = [], kids = false, base: chosen
   const spread = spreadOf(pts);
   const lines = [`THE SOMMERHUS BASE GEMLYX HAS PICKED for this trip, from the areas a holiday-house agency's own page confirmed on ${STAY_PLACES_CHECKED_AT}:`];
   lines.push(`- ${houseAreaLine(base)}`);
-  lines.push(`Return '${base.name}' as 'recommendedStay', spelled exactly so, and say in 'accommodation' which town it is near and that it is booked by the week through a holiday-house agency. Every other night of this guide is told the house is at ${base.name}, so do not suggest a different area.`);
+  lines.push(`Return '${base.name}' as 'recommendedStay', spelled exactly so, and say in 'accommodation' which town it is near and that it is rented through a holiday-house agency. Every other night of this guide is told the house is at ${base.name}, so do not suggest a different area.`);
   if (others.length) lines.push(`Other checked areas near this trip, for context only: ${others.map(a => `${a.name} (near ${a.nearTown})`).join(", ")}.`);
   lines.push("Name a family place only if it is on this list. Write no dashes: commas and full stops only.");
   if (kids && base.family?.length) lines.push("There are children on this trip and the base was chosen partly for the family place in reach: say which, and how far.");

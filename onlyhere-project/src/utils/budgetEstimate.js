@@ -59,7 +59,7 @@ import { dayStart } from "./calendarDay";
 // The one reader of what a sommerhus costs. Priced per house per week, which is
 // nothing else in this file's shape, so it keeps its own module with its own
 // sources rather than being flattened into a nightly rate here.
-import { houseWeek, HOUSE_NIGHTS, HOUSE_SOURCE, HOUSE_CHECKED_AT, HOUSE_SEASON_CHECK, houseSays, houseFor, houseFit, HOUSE_FIT, housePerHeadNight as housePerHead } from "./summerhouse";
+import { houseWeek, HOUSE_NIGHTS, HOUSE_SOURCE, HOUSE_CHECKED_AT, HOUSE_SEASON_CHECK, houseSays, houseFor, houseFit, HOUSE_FIT, housePerHeadNight as housePerHead, houseNightsPaid, houseSuits, houseStaySays, houseWhereSays } from "./summerhouse";
 
 const clean = (s) => String(s ?? "").trim();
 
@@ -445,11 +445,15 @@ export const BED_TIERS = {
     // so a date narrows it and narrows it a long way: roughly two and a half
     // times from January to July.
     seasonal: true,
-    perParty: (heads, season) => {
+    // A short trip pays the week, spread over its own few nights. See
+    // HOUSE_SHORT in utils/summerhouse.js.
+    perParty: (heads, season, nights = null) => {
       const w = houseWeek(heads, season);
-      return w ? { low: Math.round(w.low / HOUSE_NIGHTS), high: Math.round(w.high / HOUSE_NIGHTS) } : null;
+      const over = houseNightsPaid(nights);
+      return w ? { low: Math.round(w.low / over), high: Math.round(w.high / over) } : null;
     },
     sleeps: 0,
+    // The length the price is quoted for, not a minimum any more.
     minNights: HOUSE_NIGHTS,
     source: HOUSE_SOURCE,
     checkedAt: HOUSE_CHECKED_AT,
@@ -522,7 +526,7 @@ const arrange = (people, roomAt, bedAt, sizes) => {
 // single arrangement priced at both ends would have to pick a side of that
 // crossing and would be wrong on the other. Both plans come back, and the
 // sentence says what each end is.
-export const bedPerNight = (stay, heads = 2, season = null) => {
+export const bedPerNight = (stay, heads = 2, season = null, nights = null) => {
   const tier = BED_TIERS[clean(stay)];
   if (!tier) return null;
   const people = Math.max(1, Math.floor(Number(heads)) || 1);
@@ -532,13 +536,15 @@ export const bedPerNight = (stay, heads = 2, season = null) => {
   // plans saying what it is so every sentence downstream can read them the same
   // way it reads a room or a bunk.
   if (typeof tier.perParty === "function") {
-    const band = tier.perParty(people, tier.seasonal ? season : null);
+    const band = tier.perParty(people, tier.seasonal ? season : null, nights);
     if (!band) return null;
     const plan = { rooms: [], beds: 0, house: houseFor(people) };
     return {
       low: band.low, high: band.high, rooms: 0,
       lowPlan: plan, highPlan: plan, lowIsBeds: false, highIsBeds: false,
       sleeps: plan.house, house: plan.house, minNights: tier.minNights || 0,
+      // Fewer nights than the week it is priced in, so the week is spread thin.
+      short: houseNightsPaid(nights) < HOUSE_NIGHTS,
       season: (tier.seasonal && season) || null, seasonal: !!tier.seasonal,
       per: "party", source: tier.source, says: tier.says,
     };
@@ -876,7 +882,7 @@ export const EXCLUDED = {
 // AND IT COUNTS UP FROM ZERO. `ready` says whether it is a whole day yet;
 // the figure is there from the first tick either way, so somebody can see what
 // their clicking is doing. See the block inside.
-export const estimateDay = ({ stay = "", food = "", freeOnly = false, scope = "", transport = [], travellers = "", heads = null, meals = MEALS_A_DAY_DEFAULT, arrival = "", departure = "" } = {}) => {
+export const estimateDay = ({ stay = "", food = "", freeOnly = false, scope = "", transport = [], travellers = "", heads = null, meals = MEALS_A_DAY_DEFAULT, arrival = "", departure = "", nights = null } = {}) => {
   // ── HOW MANY OF THEM, READ ONCE ─────────────────────────────────
   //
   // partyOf, not a second parse of the same sentence: it already refuses a
@@ -918,7 +924,7 @@ export const estimateDay = ({ stay = "", food = "", freeOnly = false, scope = ""
   // over 200 for two. A booked bed is the exception, because nothing is being
   // priced.
   const bedWaits = !!clean(stay) && !counted && !stayIsBooked(stay);
-  const bed = clean(stay) && !bedWaits ? bedPerNight(stay, people, season) : null;
+  const bed = clean(stay) && !bedWaits ? bedPerNight(stay, people, season, nights) : null;
   const tier = clean(food) ? foodTier(food) : null;
   // ── A CONTRADICTION IS NOT A FIGURE ─────────────────────────────
   // Asked before anything is added up. Exploring with no way to cross the
@@ -1048,6 +1054,7 @@ export const estimateDay = ({ stay = "", food = "", freeOnly = false, scope = ""
     // every other tier, which is how the sentence tells them apart.
     house: bed?.house ?? 0,
     minNights: bed?.minNights ?? 0,
+    houseShort: !!bed?.short,
     // The biggest room the chosen tier sells, so the sentence can say why a
     // party needed two of them without crediting a hostel with a hotel's size.
     sleeps: bed?.sleeps ?? 0,
@@ -1203,7 +1210,7 @@ export const estimateSays = (est) => {
   // A house answers this line on its own: it is neither a room count nor a bunk,
   // and the thing worth saying about it is the week and the kitchen.
   const houseLine = est.house
-    ? ` A whole house that sleeps ${est.house}, with a kitchen, booked by the week. ${houseSays(est.season)}`
+    ? ` A whole house that sleeps ${est.house}, with a kitchen. ${houseStaySays(est.houseShort)} ${houseSays(est.season)}${houseWhereSays(est.season, est.house) ? ` ${houseWhereSays(est.season, est.house)}` : ""}`
     : "";
   const beds = est.bedPaid || !est.lowPlan ? ""
     : houseLine ? houseLine
@@ -1323,7 +1330,7 @@ export const estimateForBrief = (est) => {
   // assumptions off the same number.
   const asPlan = (p) => {
     if (!p) return "";
-    if (p.house) return `a whole holiday house that sleeps ${p.house}, booked by the week`;
+    if (p.house) return `a whole holiday house that sleeps ${p.house}`;
     const rooms = p.rooms || [];
     const bunks = p.beds === 1 ? "one dorm bunk" : `${p.beds} dorm bunks`;
     if (!rooms.length) return p.beds === 1 ? "a dorm bunk in a shared room" : "a dorm bunk each in a shared room";
@@ -1333,7 +1340,7 @@ export const estimateForBrief = (est) => {
   };
   const bedKind = est.bedPaid || !est.lowPlan ? ""
     : est.house
-      ? ` That bed figure is a whole holiday house that sleeps ${est.house}, booked by the week and nothing shorter, with a kitchen. Danish holiday houses sit on the coasts and in the countryside, not in town centres, so build the days around a base out there with trips in, and name the town it is near.`
+      ? ` That bed figure is a whole holiday house that sleeps ${est.house}, with a kitchen. ${houseStaySays(est.houseShort)} Danish holiday houses sit on the coasts and in the countryside, not in town centres, so build the days around a base out there with trips in, and name the town it is near.`
     : est.lowPlan.rooms.join(",") === est.highPlan.rooms.join(",") && est.lowPlan.beds === est.highPlan.beds
       ? ` That bed figure is ${asPlan(est.highPlan)}.${est.bedsLow ? ` Do not price a private room against it: a private double runs ${ROOM_KR[2].low} to ${ROOM_KR[2].high} a night.` : ""}`
       : ` The low end of that bed figure is ${asPlan(est.lowPlan)} and the high end is ${asPlan(est.highPlan)}, so say which you are assuming if you put a price on a night.`;
@@ -1428,10 +1435,12 @@ export const houseReading = ({ travellers = "", heads = null, arrival = "", depa
   };
 };
 
-export const summerhouseFit = ({ travellers = "", heads = null, nights = 0, arrival = "", departure = "" } = {}) => {
+export const summerhouseFit = ({ travellers = "", heads = null, nights = 0, arrival = "", departure = "", kids = false, interests = [], said = "" } = {}) => {
   // The same rule as the bed: a house is split by the party, so with no party
   // there is nothing to compare and no mark. See estimateDay.
   if (heads == null && !partyOf(travellers)?.heads) return null;
+  // And only for nature or children. See houseSuits in utils/summerhouse.js.
+  if (!houseSuits({ kids, interests, said })) return null;
   const { people, season } = houseReading({ travellers, heads, arrival, departure });
   return houseFit({
     heads: people,
@@ -1448,10 +1457,10 @@ export const SUMMERHOUSE_MARK = {
   [HOUSE_FIT.strong]: "strongly recommended",
   [HOUSE_FIT.yes]: "recommended for your trip",
 };
-export const summerhouseWhy = (fit, { travellers = "", heads = null, arrival = "", departure = "" } = {}) => {
+export const summerhouseWhy = (fit, { travellers = "", heads = null, arrival = "", departure = "", nights = null } = {}) => {
   if (!fit) return "";
   const { people, season } = houseReading({ travellers, heads, arrival, departure });
-  const house = housePerHead(people, season);
+  const house = housePerHead(people, season, nights);
   const bunk = bunkPerHeadIn(season, people);
   if (!house || !bunk) return "";
   // ── AND THE THING IT IS BEING COMPARED TO IS NAMED CORRECTLY ────
@@ -1466,7 +1475,7 @@ export const summerhouseWhy = (fit, { travellers = "", heads = null, arrival = "
     : plan.rooms.length ? "a hostel room and bunks"
     : "a hostel bunk";
   const band = (b) => (b.low === b.high ? `${b.low}` : `${b.low} to ${b.high}`);
-  return `A whole house works out at ${band(house)} kr a head a night against ${band(bunk)} for ${against}, with a kitchen and no strangers in the room. It is booked by the week and nothing shorter.`;
+  return `A whole house works out at ${band(house)} kr a head a night against ${band(bunk)} for ${against}, with a kitchen and no strangers in the room. ${houseStaySays(houseNightsPaid(nights) < HOUSE_NIGHTS)}`;
 };
 
 export const ENABLE_LABEL = "Enable my budget and preferences";

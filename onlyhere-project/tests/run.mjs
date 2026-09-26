@@ -284,7 +284,7 @@ writeFileSync(entry, `
   export { measuredLeg, mapsRouteUrl, foundAPlace, looseStop } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { festivalScale } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
   export { needsTier, proposedTier, BACKFILL_SORTS, BACKFILL_SORT_DEFAULT, sortForBackfill, tierSpread, backfillPrompt, readBackfill, missedByPass, proposeTiersWithReason, PASS_FAILED } from ${JSON.stringify(join(root, "src/utils/tierBackfill.js"))};
-  export { HOUSE_WEEK, HOUSE_SIZES, HOUSE_NIGHTS, HOUSE_FIT, HOUSE_SOURCE, HOUSE_CHECKED_AT, HOUSE_SEASON_CHECK, houseFor, houseWeek, housePerHeadNight, houseFit, houseSays } from ${JSON.stringify(join(root, "src/utils/summerhouse.js"))};
+  export { HOUSE_WEEK, HOUSE_SIZES, HOUSE_NIGHTS, HOUSE_FIT, HOUSE_SOURCE, HOUSE_CHECKED_AT, HOUSE_SEASON_CHECK, houseFor, houseWeek, housePerHeadNight, houseFit, houseSays, houseSuits } from ${JSON.stringify(join(root, "src/utils/summerhouse.js"))};
   export { STAY_CHOICES, STAY_KEYS, stayChoiceOf, stayIsBooked, stayProblem, staySaid } from ${JSON.stringify(join(root, "src/utils/stayChoice.js"))};
   export { HOSTELS, HOUSE_AREAS, STAY_TOWN_POINTS, STAY_PLACES_CHECKED_AT, HOSTEL_LIST_SOURCE, DORM } from ${JSON.stringify(join(root, "src/data/stayPlaces.js"))};
   export { houseBase, houseBaseBlock, houseNightSays, houseDistanceSays, sellsDorm, dormForKids, hostelOpenOn, dormTowns, hostelTowns, roomsOnlyTowns, hostelChipSays, stayPointFor, dayPoints, hostelsNear, nearestDorm, hostelLine, hostelBlock, HOSTEL_NEAR_KM, HOSTEL_LINES, isFamilyPlace, familyPlacesNear, FAMILY_NEAR_KM, houseAreasFor, houseAreaLine, houseAreaBlock, HOUSE_AREA_PICKS, ONE_BASE_KM } from ${JSON.stringify(join(root, "src/utils/stayAwareness.js"))};
@@ -40825,8 +40825,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // decision a house makes and the traveller cannot book one without it.
   ok("day one of a sommerhus trip answers with an area, not a hotel",
      /THEY ARE TAKING A SOMMERHUS[\s\S]{0,700}return 'recommendedStay' as the AREA/.test(stayApp));
-  ok("and it says the house is let by the week through an agency",
-     /THEY ARE TAKING A SOMMERHUS[\s\S]{0,700}booked by the week through a holiday-house agency/.test(stayApp));
+  ok("and it says the house is rented through an agency",
+     /THEY ARE TAKING A SOMMERHUS[\s\S]{0,700}rented through a holiday-house agency/.test(stayApp));
   ok("and forbids the two things the day's search will hand it",
      /THEY ARE TAKING A SOMMERHUS[\s\S]{0,800}Never name a hotel or a hostel/.test(stayApp));
   // Every day after it recommends NOTHING, which is the half that matters:
@@ -76194,7 +76194,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     ok("and a counted party gets its bed", !estimateDay({ stay: "cheapest", food: "cheap", travellers: "3 friends" }).bedWaits);
     ok("and no mention of accommodation once it is in", !/excluding/.test(estimateShort(estimateDay({ stay: "cheapest", food: "cheap", travellers: "3 friends" }))));
     is("no party, no sommerhus mark", M.summerhouseFit({ travellers: "", nights: 7, arrival: "2027-01-09", departure: "2027-01-16" }), null);
-    ok("while a family of four in January gets one", !!M.summerhouseFit({ travellers: "family of 4", nights: 7, arrival: "2027-01-09", departure: "2027-01-16" }));
+    ok("while a family of four in January gets one", !!M.summerhouseFit({ travellers: "family of 4", kids: true, nights: 7, arrival: "2027-01-09", departure: "2027-01-16" }));
     is("food alone is not either", estimateDay({ food: "cheap" }).ready, false);
     is("a stay nobody offers is not a stay", estimateDay({ stay: "palace", food: "cheap" }).ready, false);
     ok("and the three real ones are the three on the buttons",
@@ -78218,7 +78218,9 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   // for a bunk, so the headcount rule would have hidden it from people it suits,
   // and July is where it wins by the most, so the season rule was backwards.
   {
-    const week = (o) => summerhouseFit({ nights: 7, ...o });
+    // With the kids box ticked, so the money is what is being tested here. The
+    // gate on who a house suits has its own block below.
+    const week = (o) => summerhouseFit({ nights: 7, kids: true, ...o });
     is("his family of four, July", week({ travellers: "family of 4", arrival: "2027-07-10", departure: "2027-07-17" }), HOUSE_FIT.strong);
     is("his family of four, January", week({ travellers: "family of 4", arrival: "2027-01-09", departure: "2027-01-16" }), HOUSE_FIT.strong);
     is("and with no dates at all", week({ travellers: "family of 4" }), HOUSE_FIT.strong);
@@ -78246,20 +78248,26 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     is("but October says it plainly",
        week({ travellers: "2 people", arrival: "2026-10-10", departure: "2026-10-17" }), HOUSE_FIT.yes);
     is("and one person, never", week({ travellers: "just me" }), null);
-    // ── THE ONE HARD GATE IS THE WEEK ─────────────────────────────
-    // A sommerhus is not sold by the night, so a short trip cannot have one at
-    // any price, whatever the figure says.
-    for (const nights of [1, 3, 5, 6]) {
-      is(`${nights} nights cannot book one`, summerhouseFit({ travellers: "family of 4", nights }), null);
-    }
-    is("seven can", summerhouseFit({ travellers: "family of 4", nights: 7 }), HOUSE_FIT.strong);
-    is("and a fortnight can", summerhouseFit({ travellers: "family of 4", nights: 14 }), HOUSE_FIT.strong);
+    // ── A SHORT TRIP PAYS THE WEEK, AND THE MONEY DECIDES ─────────
+    // Oliver, 26 Sep 2026: "according to novasol, you can stay there for just a
+    // weekend". The hard gate at seven nights is gone. A short trip pays the
+    // whole week over its own few nights, so a family of four for three October
+    // nights is 146 to 189 a head against a 145 to 165 bunk and is not marked,
+    // while six for the same three nights still win.
+    const oct3 = { arrival: "2026-10-10", departure: "2026-10-13", nights: 3, kids: true };
+    is("four for three nights in October are not marked", summerhouseFit({ travellers: "family of 4", ...oct3 }), null);
+    is("six for the same three nights are", summerhouseFit({ travellers: "family of 6", ...oct3 }), HOUSE_FIT.strong);
+    ok("because three nights pay the whole week", housePerHeadNight(4, "low", 3).low === Math.round(1755 / 4 / 3));
+    is("and a week or more is spread over its own nights", housePerHeadNight(4, "low", 14).low, housePerHeadNight(4, "low", 7).low);
+    is("no length known, no verdict", summerhouseFit({ travellers: "family of 4", kids: true }), null);
+    is("seven can", summerhouseFit({ travellers: "family of 4", kids: true, nights: 7 }), HOUSE_FIT.strong);
+    is("and a fortnight can", summerhouseFit({ travellers: "family of 4", kids: true, nights: 14 }), HOUSE_FIT.strong);
     // ── AND AN UNKNOWN SEASON IS EVERY SEASON, NOT A WIDE BAND ────
     //
     // The first version compared the undated house band against the undated bunk
     // band, which is a January house against a July bunk, and recommended one to
     // a SOLO traveller who is worse off in all three seasons.
-    is("a solo traveller is not flattered by the width of the band", summerhouseFit({ travellers: "just me", nights: 7 }), null);
+    is("a solo traveller is not flattered by the width of the band", summerhouseFit({ travellers: "just me", nights: 7, kids: true }), null);
     for (const season of ["winter", "low", "high"]) {
       const h = housePerHeadNight(1, season), b = bunkPerHeadIn(season, 1);
       ok(`and really is worse off alone in ${season}`, h.low > b.high);
@@ -78274,7 +78282,8 @@ SOURCE: https://www.tripadvisor.com/whatever`;
        /hostel family room/.test(summerhouseWhy(HOUSE_FIT.strong, { heads: 4, season: "high" })));
     ok("while a January pair is told it beat a bunk",
        /hostel bunk/.test(summerhouseWhy(HOUSE_FIT.strong, { heads: 2, season: "winter" })));
-    ok("and the week is in the reason", /booked by the week and nothing shorter/.test(summerhouseWhy(HOUSE_FIT.strong, { heads: 4 })));
+    ok("and the week is in the reason", /let by the week, and outside the summer holidays for a weekend too/.test(summerhouseWhy(HOUSE_FIT.strong, { heads: 4, nights: 7 })));
+    ok("and a short trip is told it pays the week", /shorter than a week[\s\S]*counts the week/.test(summerhouseWhy(HOUSE_FIT.strong, { heads: 6, nights: 3 })));
   }
 
   // ── AND WHAT A DANISH WINTER IN ONE IS LIKE ─────────────────────
@@ -78301,7 +78310,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     {
       const pair = housePerHeadNight(2, "high"), bunk2 = bunkPerHeadIn("high", 2);
       ok("a pair in July really is dearer in a house", pair.low > bunk2.low);
-      is("so there is no mark on it", summerhouseFit({ travellers: "2 people", nights: 7, arrival: "2027-07-10", departure: "2027-07-17" }), null);
+      is("so there is no mark on it", summerhouseFit({ travellers: "2 people", kids: true, nights: 7, arrival: "2027-07-10", departure: "2027-07-17" }), null);
     }
   }
 
@@ -78312,7 +78321,17 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     const jan = trip({ travellers: "family of 4", arrival: "2027-01-09", departure: "2027-01-16" });
     ok("January is far cheaper than July", jan.high < july.low);
     ok("the panel calls it a house", /A whole house that sleeps 4/.test(estimateSays(july)));
-    ok("and says the week", /booked by the week/.test(estimateSays(july)));
+    ok("and says the week", /let by the week/.test(estimateSays(july)));
+    // A July house is told it is the cheapest July week in Jutland and that a
+    // popular coast costs more, with the two coasts read on 26 Sep 2026.
+    ok("and that a popular coast costs more in July", /cheapest July week Novasol had in all of Jutland[\s\S]*near Blokhus was 5,640 kr and the cheapest near Skagen 10,700/.test(estimateSays(july)));
+    ok("which is not said over January, where no coast was read", !/near Blokhus/.test(estimateSays(jan)));
+    {
+      const short = trip({ travellers: "family of 4", arrival: "2027-07-10", departure: "2027-07-13", nights: 3 });
+      ok("three July nights cost more a day than the July week", short.low > july.low && short.houseShort);
+      ok("and the panel says why", /shorter than a week/.test(estimateSays(short)));
+      ok("and so does the planner", /shorter than a week/.test(estimateForBrief(short)));
+    }
     ok("and the kitchen, which is what makes the cheapest food tier reachable", /with a kitchen/.test(estimateSays(july)));
     // ── AND A HOUSE IS NOT TOLD THE HOSTEL'S CALENDAR ─────────────
     //
@@ -78341,8 +78360,9 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   {
     const appH = readFileSync(join(root, "src/App.jsx"), "utf8");
     ok("the verdict is computed from both dates",
-       /const houseAsked = \{ travellers: intakeTravelers, arrival: intakeArrival, departure: intakeDeparture \};/.test(appH) &&
-       /summerhouseFit\(\{ \.\.\.houseAsked, nights: houseNights \}\)/.test(appH));
+       /const houseAsked = \{ travellers: intakeTravelers, arrival: intakeArrival, departure: intakeDeparture, nights: houseNights \|\| null \};/.test(appH) &&
+       /summerhouseFit\(\{ \.\.\.houseAsked, \.\.\.houseWho \}\)/.test(appH));
+    ok("and the bed is priced over the same nights", /arrival: intakeArrival, departure: intakeDeparture, nights: houseNights \|\| null \}\)/.test(appH));
     ok("and the nights come from tripDays", /const houseNights = intakeArrival && intakeDeparture \? tripDays\(intakeArrival, intakeDeparture\) : 0;/.test(appH));
     ok("the chip carries the mark", /SUMMERHOUSE_MARK\[houseVerdict\]/.test(appH));
     // ── AND THE REASON READS THE SAME FACTS THE VERDICT DID ───────
@@ -78361,11 +78381,11 @@ SOURCE: https://www.tripadvisor.com/whatever`;
       // sentence prints a band spanning every season is the bug, whatever the
       // call site looks like.
       const asked = { travellers: "family of 4", arrival: "2026-10-10", departure: "2026-10-17" };
-      const verdict = summerhouseFit({ ...asked, nights: 7 });
-      const why = summerhouseWhy(verdict, asked);
+      const verdict = summerhouseFit({ ...asked, nights: 7, kids: true });
+      const why = summerhouseWhy(verdict, { ...asked, nights: 7 });
       ok("the October sentence prices October", /63 to 81 kr a head/.test(why));
       ok("and not every season at once", !/53 to 143/.test(why) && !/105 to 287/.test(why));
-      const undated = summerhouseWhy(summerhouseFit({ travellers: "family of 4", nights: 7 }), { travellers: "family of 4" });
+      const undated = summerhouseWhy(summerhouseFit({ travellers: "family of 4", nights: 7, kids: true }), { travellers: "family of 4", nights: 7 });
       ok("and an undated trip still gets the whole band", /53 to 143 kr a head/.test(undated));
       // AND THE PARTY COMES FROM ONE PLACE TOO: the verdict counted heads off
       // the brief while the sentence took the panel's default of two, so a
@@ -78374,8 +78394,8 @@ SOURCE: https://www.tripadvisor.com/whatever`;
       // brief while the sentence took the panel's default of two, so a family
       // of four could be marked on four and have it explained on two.
       const pairWhy = summerhouseWhy(
-        summerhouseFit({ travellers: "2 people", arrival: "2026-10-10", departure: "2026-10-17", nights: 7 }),
-        { travellers: "2 people", arrival: "2026-10-10", departure: "2026-10-17" });
+        summerhouseFit({ travellers: "2 people", arrival: "2026-10-10", departure: "2026-10-17", nights: 7, kids: true }),
+        { travellers: "2 people", arrival: "2026-10-10", departure: "2026-10-17", nights: 7 });
       ok("a pair in the same week gets a pair's figure", /125 to 162 kr a head/.test(pairWhy));
       ok("and the family is not explained with it", why !== pairWhy && !/125 to 162/.test(why));
     }
@@ -78418,7 +78438,8 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   ok("and says what to do instead", /price the cheapest real bed there/i.test(staySaid("cheapest", "")));
   // AND THE SOMMERHUS SAYS THE TWO THINGS THAT DECIDE IT: the week, and that it
   // is not in a town centre.
-  ok("the sommerhus says it is sold by the week", /seven nights/i.test(staySaid("summerhouse", "")));
+  ok("the sommerhus says it is let by the week, and for a weekend outside summer", /let by the week, and outside the summer holidays for a weekend too/i.test(staySaid("summerhouse", "")));
+  ok("and no longer claims a seven night minimum", !/fewer than seven nights|Saturday to Saturday/.test(staySaid("summerhouse", "")));
   ok("and that it is not in a town centre", /coasts and in the countryside/i.test(staySaid("summerhouse", "")));
   ok("and nothing ticked is not a booking", !stayIsBooked(""));
   // HIS LIMIT ON "CHEAPEST", in his own words: "not outside the city, but just
@@ -79057,7 +79078,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
 {
   const b = M.HOUSE_AREAS.find(a => a.name === "Blokhus");
   const said = M.houseBaseBlock(b);
-  ok("the writer is told the one house", /THE SOMMERHUS FOR THE WHOLE WEEK IS AT BLOKHUS/.test(said));
+  ok("the writer is told the one house", /THE SOMMERHUS FOR THE WHOLE TRIP IS AT BLOKHUS/.test(said));
   ok("and that every day starts and ends there", /Every day starts from the house at Blokhus and ends back there/.test(said));
   ok("with no dash in it", !/[\u2013\u2014]/.test(said));
   is("no base, no block", M.houseBaseBlock(null), "");
@@ -79110,6 +79131,25 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   const { wantedCategories } = M;
   ok("a zoo asks for attractions", wantedCategories("the kids love the zoo")?.has("free"));
   ok("and so do the beach and a sommerland", wantedCategories("a day at the beach")?.has("free") && wantedCategories("Fårup Sommerland for the kids")?.has("free"));
+}
+
+// ── A SOMMERHUS IS RECOMMENDED FOR NATURE OR CHILDREN ───────────────
+// Oliver, 26 Sep 2026: "summerhouse should probably only be recommended for
+// nature people", and asked about families he kept them in. The chip stays
+// for anyone; only the mark is gated.
+{
+  const { houseSuits } = M;
+  const oct = { travellers: "family of 4", arrival: "2026-10-10", departure: "2026-10-17", nights: 7 };
+  is("four in October with nothing said are not marked", M.summerhouseFit(oct), null);
+  is("the kids box marks it", M.summerhouseFit({ ...oct, kids: true }), "strong");
+  is("so does the Nature tick", M.summerhouseFit({ ...oct, interests: ["Nature"] }), "strong");
+  is("and nature said in the chat", M.summerhouseFit({ ...oct, said: "we want long walks on the beach" }), "strong");
+  ok("a city trip is not", !houseSuits({ said: "museums, bars and a good night out in Copenhagen" }));
+  ok("whole words only, so 'Seattle' is not the sea", !houseSuits({ said: "we fly in from Seattle" }));
+  ok("and Danish counts", houseSuits({ said: "vi vil gerne have ro og fred og en strand" }));
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the panel hands it the kids box, the ticks and the chat with refusals taken out",
+     /const houseWho = \{\s*kids: intakeFamilyMode,\s*interests: intakeInterest,\s*said: withoutRefused\(aiMessages\.filter\(m => m\.role === "user" && !m\.isError\)\.map\(m => m\.text \|\| ""\)\.join\(" "\)\),\s*\};/.test(app));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

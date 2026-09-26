@@ -13,10 +13,11 @@
 // ── PRICED PER HOUSE, PER WEEK, WHICH NOTHING ELSE HERE IS ──────────
 //
 // Every other bed in this app is a price per night. A sommerhus is a price for
-// SEVEN NIGHTS, for the whole house, and there is no shorter booking. Both facts
+// SEVEN NIGHTS, for the whole house, and a shorter booking costs about the same
+// (see HOUSE_SHORT). Both facts
 // change what the panel can say: the per-head figure falls hard with the party,
-// harder than the Danhostel curve, and a trip of three nights cannot use one at
-// all. Held in the unit it is sold in and divided once, at the end, the same
+// harder than the Danhostel curve, and a trip of three nights pays for seven.
+// Held in the unit it is sold in and divided once, at the end, the same
 // discipline ROOM_KR follows.
 //
 // ── READ FROM THE SELLER'S OWN BOOKING ENGINE ───────────────────────
@@ -49,12 +50,73 @@
 // So every figure below was READ, at the date it applies to, and the national
 // statistic is kept as the cross-check it should have been all along rather than
 // as the source of a number.
+import { fold } from "./danishNames";
+
 export const HOUSE_SOURCE = "https://www.novasol.dk/danmark/jylland";
 export const HOUSE_CHECKED_AT = "2026-09-26";
 
-// The only length a sommerhus is sold in, and the reason a short trip cannot
-// have one whatever the price says.
+// The length a sommerhus is priced in. It used to say "the only length", and
+// it is not: see HOUSE_SHORT below.
 export const HOUSE_NIGHTS = 7;
+
+// ── A WEEKEND IS SOLD, AND IT COSTS ABOUT A WEEK ─────────────────────
+//
+// Oliver, 26 Sep 2026: "according to novasol, you can stay there for just a
+// weekend if you want". He was right, and this file said the opposite in its
+// header. Read on Novasol's own booking pages the same evening:
+//
+//   Blokhus, arriving Fri 6 Nov 2026, the same houses at 2 nights and 7:
+//     1,567 against 1,785    2,682 against 3,352    6,432 against 7,751
+//   Rudkøbing, arriving 14 Oct 2026 (his own find), one house:
+//     3 nights 3,120 against 7 nights 2,978, because the week carried a 40
+//     percent discount and the short stay about 21
+//   Blokhus, arriving Fri 16 Jul 2027 for 2 nights: no house at all, while 54
+//     were free for the Saturday week. In the summer holidays it is the week.
+//
+// So a short stay is never cheaper than the week in any reading, and sometimes
+// dearer. His rule, 26 Sep 2026: price a short stay as the whole week, and
+// tell them a week often costs the same or less. No ratio is invented for it.
+export const HOUSE_SHORT = {
+  says: "Novasol sells weekends and short stays outside the summer holidays, and read on 26 Sep 2026 a weekend cost about 80 to 90 percent of the same house for a week, while close to the date a discounted week could cost less than three nights. In mid July no Blokhus house took a two night booking at all.",
+  source: "https://www.novasol.dk/ferie/miniferie",
+  checkedAt: "2026-09-26",
+};
+
+// What the panel and the planner are told about the length. A short trip is
+// told plainly that it is paying for the week, and why that is still the
+// honest figure.
+export const houseStaySays = (short) => short
+  ? "Your trip is shorter than a week, and a house for a few nights costs about what the whole week does, sometimes more, so this counts the week. In the summer holidays it is the week or nothing."
+  : "It is let by the week, and outside the summer holidays for a weekend too.";
+
+// ── AND WHERE THE HOUSE IS CHANGES THE PRICE ───────────────────────
+//
+// Oliver, 26 Sep 2026: "the place you might want to be located, can be
+// pricier than other places." HOUSE_WEEK is the cheapest Novasol had in all of
+// Jutland, and the coasts a guide picks are not the cheapest ones. Read the
+// same evening for the week of 17 Jul 2027, four adults: the cheapest of all
+// 20 houses near Skagen that sleeps six was 10,700 kr, and among 24 of the 54
+// near Blokhus one sleeping six was 5,640. Only July was read by coast, so only
+// a July figure says it. A per coast table needs every coast read, which has
+// not been done.
+export const HOUSE_WHERE = {
+  says: "For the week of 17 Jul 2027 a house sleeping six near Blokhus was 5,640 kr and the cheapest near Skagen 10,700. The cheapest in all of Jutland for the week before, 10 Jul, was 3,696 to 4,184.",
+  source: "https://www.novasol.dk/danmark/nordjylland/skagen",
+  checkedAt: "2026-09-26",
+};
+export const houseWhereSays = (season, sleeps) => {
+  if (!sleeps || (season && season !== "high")) return "";
+  const lead = season === "high" ? "That is the cheapest July week Novasol had in all of Jutland." : "The top of that is the cheapest July week Novasol had in all of Jutland.";
+  return `${lead} A popular coast costs more: for a July week a house for six near Blokhus was 5,640 kr and the cheapest near Skagen 10,700.`;
+};
+
+// How many nights the week's price is spread over: the trip's own nights for
+// a week or longer, and seven for anything shorter, because a short stay pays
+// the week. Nights unknown is a week, which is what the prices were read as.
+export const houseNightsPaid = (nights) => {
+  const n = Math.floor(Number(nights));
+  return Number.isFinite(n) && n >= 1 && n < HOUSE_NIGHTS ? n : HOUSE_NIGHTS;
+};
 
 // By how many the house sleeps. Two sizes, because two sizes were measured; see
 // houseWeek for what happens to a party bigger than the biggest of them.
@@ -103,13 +165,15 @@ export const houseWeek = (heads, season = null) => {
 // And per person per night, which is the unit the panel shows. The division is
 // by the PARTY, not by what the house sleeps: four people in a six-sleeper pay
 // for the house, not for four sixths of it.
-export const housePerHeadNight = (heads, season = null) => {
+// A short trip divides the whole week by its own few nights. See HOUSE_SHORT.
+export const housePerHeadNight = (heads, season = null, nights = null) => {
   const week = houseWeek(heads, season);
   if (!week) return null;
   const people = Math.max(1, Math.floor(Number(heads)) || 1);
+  const over = houseNightsPaid(nights);
   return {
-    low: Math.round(week.low / people / HOUSE_NIGHTS),
-    high: Math.round(week.high / people / HOUSE_NIGHTS),
+    low: Math.round(week.low / people / over),
+    high: Math.round(week.high / people / over),
     sleeps: week.sleeps,
     week,
   };
@@ -128,8 +192,43 @@ export const housePerHeadNight = (heads, season = null) => {
 // cheapest. The number makes the argument, which means the rule cannot drift
 // away from the prices the way a sentence about "a family of four" would.
 //
-// THE ONE HARD GATE IS THE WEEK. A sommerhus is not sold by the night, so a trip
-// shorter than seven nights cannot have one at any price.
+// THERE IS NO HARD GATE ON LENGTH ANY MORE. A short trip pays the week, so its
+// nights are dearer and the comparison below says so by itself; a three night
+// pair is not recommended, which is the true answer, and a three night
+// family of six still can be. It needs the length known, because an unknown
+// length would price a weekend as a week.
+//
+// ── AND ONLY FOR THE PEOPLE A HOUSE OUT THERE SUITS ────────────────
+//
+// Oliver, 26 Sep 2026: "summerhouse should probably only be recommended for
+// nature people". Asked whether families still count, he chose nature OR kids.
+// A house sits on a coast or in the countryside, usually away from a bus or a
+// bike shop, so for a city trip the cheap bed is a long way from the trip.
+// The chip stays for anyone to pick; only the recommendation is gated.
+const NATURE_WORDS = ["nature", "natural", "outdoors", "outdoor", "beach", "beaches", "coast", "coastal",
+  "sea", "seaside", "hiking", "hike", "hikes", "walks", "walking", "forest", "forests", "woods", "dunes",
+  "quiet", "peace", "peaceful", "countryside", "wildlife", "birds", "birdwatching", "fishing", "kayak",
+  "kayaking", "national park", "natur", "strand", "skov", "klit", "klitter", "vandring", "stilhed", "ro og fred"];
+// Whole words on the folded text, the same boundary rule interestFit's saysWord
+// keeps. Not imported from there, because that file reads tripBrief and this
+// one is read by the budget: a small copy here is cheaper than a cycle. The
+// caller scrubs refusals first ("no beaches, please"), see App.jsx.
+const hasWord = (hay, word) => {
+  const w = fold(word);
+  let from = 0;
+  for (;;) {
+    const i = hay.indexOf(w, from);
+    if (i < 0) return false;
+    if (!/[a-z0-9]/.test(hay[i - 1] || " ") && !/[a-z0-9]/.test(hay[i + w.length] || " ")) return true;
+    from = i + 1;
+  }
+};
+export const houseSuits = ({ kids = false, interests = [], said = "" } = {}) => {
+  if (kids) return true;
+  if ((Array.isArray(interests) ? interests : []).some(i => String(i).trim().toLowerCase() === "nature")) return true;
+  const hay = fold(String(said || ""));
+  return !!hay && NATURE_WORDS.some(w => hasWord(hay, w));
+};
 export const HOUSE_FIT = { strong: "strong", yes: "yes" };
 
 // One season, compared end for end. Both bands must be the SAME season or the
@@ -149,8 +248,8 @@ export const HOUSE_FIT = { strong: "strong", yes: "yes" };
 // traveller is likely to get against the bunk they are likely to get. The
 // strong verdict is unchanged and is the strict one it always was, cheaper at
 // its dearest than a bunk at its cheapest.
-const fitInSeason = (heads, season, bunkPerHead) => {
-  const house = housePerHeadNight(heads, season);
+const fitInSeason = (heads, season, bunkPerHead, nights = null) => {
+  const house = housePerHeadNight(heads, season, nights);
   if (!house || !bunkPerHead) return null;
   const lo = Number(bunkPerHead.low), hi = Number(bunkPerHead.high);
   if (!Number.isFinite(lo) || !Number.isFinite(hi)) return null;
@@ -172,13 +271,13 @@ const SEASONS = ["winter", "low", "high"];
 const WEAKEST = [null, HOUSE_FIT.yes, HOUSE_FIT.strong];
 export const houseFit = ({ heads, nights, season = null, bunkPerHead = null, bunkBySeason = null } = {}) => {
   const n = Math.floor(Number(nights));
-  if (!Number.isFinite(n) || n < HOUSE_NIGHTS) return null;
+  if (!Number.isFinite(n) || n < 1) return null;
   const key = seasonKey(season);
-  if (key) return fitInSeason(heads, key, bunkPerHead);
+  if (key) return fitInSeason(heads, key, bunkPerHead, n);
   // Every season, each against its own bunk price. bunkBySeason is injected so
   // this file never learns what a hostel costs: see budgetEstimate.js.
   if (!bunkBySeason) return null;
-  const verdicts = SEASONS.map(s => fitInSeason(heads, s, bunkBySeason[s]));
+  const verdicts = SEASONS.map(s => fitInSeason(heads, s, bunkBySeason[s], n));
   return verdicts.reduce((worst, v) =>
     (WEAKEST.indexOf(v) < WEAKEST.indexOf(worst) ? v : worst), HOUSE_FIT.strong);
 };

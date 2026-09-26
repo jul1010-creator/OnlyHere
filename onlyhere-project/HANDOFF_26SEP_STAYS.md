@@ -148,3 +148,33 @@ Lille Vildmose labelled Øster Hurup was the Maps web page misreading the name, 
 `wantedCategories` now hears zoo, aquarium, waterpark, sommerland, Legoland, playground, animals, wildlife, nature, beach and hiking as asking for attractions. One old test used "beaches and something fun for the kids" as a brief that names nothing; it now uses "something fun for the kids".
 
 Suite 22,011, build clean.
+
+---
+
+## Sommerhus: weekends, price by coast, and who it suits (batch 135)
+
+> "according to novasol, you can stay there for just a weekend if you want"
+> "the place you might want to be located, can be pricier than other places. And good chance you might need car"
+> "I find that summerhouse should probably only be recommended for nature people.." (asked about families: nature or kids)
+
+### What was read on Novasol, 26 Sep 2026
+
+| What | Found |
+|---|---|
+| Blokhus, Fri 6 Nov 2026, same houses | 2 nights 1,567 / 2,682 / 6,432 kr against 7 nights 1,785 / 3,352 / 7,751 |
+| Rudkøbing, 14 Oct 2026 (your link) | 3 nights 3,120 against 7 nights 2,978, because the week had 40% off and the short stay about 21% |
+| Blokhus, Fri 16 Jul 2027, 2 nights | No house at all. 54 were free for the Saturday week |
+| July week (17 Jul 2027), house for six | Blokhus from 5,640 (24 of 54 read), Skagen cheapest 10,700 (all 20 read). The app's figure, the cheapest in all Jutland for 10 Jul, is 3,696 to 4,184 |
+
+### What changed
+
+1. **No more seven night minimum.** A short trip pays the whole week, spread over its own nights. So four people for three October nights are no longer recommended a house (146 to 189 kr a head against a 145 to 165 bunk), while six for the same three nights still are. The panel and the planner say it plainly: "Your trip is shorter than a week, and a house for a few nights costs about what the whole week does, sometimes more, so this counts the week. In the summer holidays it is the week or nothing."
+2. **The chip no longer says** "let Saturday to Saturday and cannot be taken for fewer than seven nights". It says let by the week, and outside the summer holidays for a weekend too. The writer is told "for the whole trip", not "for the whole week".
+3. **In July the panel says a popular coast costs more**, with the Blokhus and Skagen figures. Only July was read by coast, so only July says it.
+4. **The ★/✓ mark only appears for nature or kids:** the kids box, the Nature tick, or nature words in the chat (beach, hiking, forest, quiet, strand, skov and so on), with refusals taken out. The chip itself stays for anyone to pick.
+5. Both new readings are in the Studio's "How old the checked figures are" panel.
+
+### Not done
+
+- **A price for every coast.** Two coasts were read. The other 29 Novasol coasts need the same July read, and ideally a spring or autumn week too. I stopped because it runs in your Chrome and would take over the browser for a while.
+- **Bus and bike reach per coast**, for trips without a car.

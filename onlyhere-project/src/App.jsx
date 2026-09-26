@@ -185,7 +185,7 @@ import { readerBody, noticeAsk, sentencesIn, TRANSLATE_NOTICE, translatedNotice,
 import { frozenFrom, factsLost, frozenBlock, lostNote } from "./utils/frozenFacts";
 import { crossingBlock, ferryLine, isOperatorSite } from "./utils/ferryDoor";
 import { shortBy, better, dayRetryBlock, stillShortNote } from "./utils/dayCount";
-import { homeStartBlock, readBrief, briefBlock, nextAsks, asksThisTurn, sharperAsk, buildBlockedNote, enoughToRecommend, unsureWhatTheyWant, namedStayIn, bookedDayNumbers } from "./utils/tripBrief";
+import { homeStartBlock, readBrief, briefBlock, nextAsks, asksThisTurn, sharperAsk, buildBlockedNote, enoughToRecommend, unsureWhatTheyWant, namedStayIn, bookedDayNumbers, withoutRefused } from "./utils/tripBrief";
 import { askedBeforeTurns, lastAskedOnScreen } from "./utils/directAnswer";
 import { briefConflicts } from "./utils/briefConflicts";
 // The arithmetic behind the "can I also go to Jutland" conflict. Measured in
@@ -14775,7 +14775,7 @@ ${houseDistanceSays(houseBaseArea, dayPoints(day, stayResolve))}` : ""}`;
           // the guide writer's. It produces the "Where to stay" sentence and
           // every leg description, which are two of the most-read lines on the
           // page, so leaving it out means a Danish guide with English legs.
-          `${enrichPrompt}${idx + 1 >= days.length ? `\n\nTHIS DAY HAS NO NIGHT AFTER IT. It is the last day of the trip and they go home at the end of it, so there is no bed to recommend: return 'accommodation' as one sentence about the end of the day and the journey out, and return 'stayArea' and 'recommendedStay' as EMPTY STRINGS. A three day trip that offered a hotel on day 3 is the guide booking a room for a night the traveller is not in the country.` : ''}${stayIsHouse(stayKind) && idx + 1 < days.length ? (idx === 0 ? `\n\nTHEY ARE TAKING A SOMMERHUS, A DANISH HOLIDAY HOUSE, FOR THE WHOLE WEEK. It is one booking, not a bed per night, and holiday houses sit on the coasts and in the countryside rather than in town centres. For THIS day only, return 'recommendedStay' as the AREA to take a house in rather than a hotel in this town: name the stretch of coast or the village, say which town it is near and how far, and say that it is booked by the week through a holiday-house agency. Never name a hotel or a hostel.` : `\n\nTHEY HAVE A SOMMERHUS FOR THE WHOLE WEEK AND IT IS THE SAME HOUSE TONIGHT. Do not recommend anywhere to sleep: return 'recommendedStay' as an empty string and write 'accommodation' as one sentence about getting back to the house from this day's last stop.${houseLaterSays ? ` ${houseLaterSays} ${houseDistanceSays(houseBaseArea, dayPoints(day, stayResolve))}` : ""}`) : ""}${(bookedNights || []).includes(idx + 1) ? `\n\nTHIS NIGHT IS ALREADY BOOKED. They are sleeping at ${bookedName || 'a place they have already booked'} on day ${idx + 1} and it is not in question. Return 'accommodation' as one sentence about getting back to it from this day's last stop, and return 'stayArea' and 'recommendedStay' as EMPTY STRINGS. Do not name anywhere else, do not compare it to anywhere else, and do not suggest they move.` : ''}\nEVERY PRICE YOU WRITE IS IN DKK. Never dollars, euros or pounds, and never a conversion in brackets: a traveller in Denmark is charged kroner and a converted figure matches nothing they will see. A price you can only give by converting is a price you do not have, so describe the place without one.${langBlock}\n\nRespond with ONLY the raw JSON object, no markdown code fences.\n\n${context || "No live search context available — use only safe general knowledge and 'Check Rejseplanen' fallbacks."}`,
+          `${enrichPrompt}${idx + 1 >= days.length ? `\n\nTHIS DAY HAS NO NIGHT AFTER IT. It is the last day of the trip and they go home at the end of it, so there is no bed to recommend: return 'accommodation' as one sentence about the end of the day and the journey out, and return 'stayArea' and 'recommendedStay' as EMPTY STRINGS. A three day trip that offered a hotel on day 3 is the guide booking a room for a night the traveller is not in the country.` : ''}${stayIsHouse(stayKind) && idx + 1 < days.length ? (idx === 0 ? `\n\nTHEY ARE TAKING A SOMMERHUS, A DANISH HOLIDAY HOUSE, FOR THE WHOLE TRIP. It is one booking, not a bed per night, and holiday houses sit on the coasts and in the countryside rather than in town centres. For THIS day only, return 'recommendedStay' as the AREA to take a house in rather than a hotel in this town: name the stretch of coast or the village, say which town it is near and how far, and say that it is rented through a holiday-house agency. Never name a hotel or a hostel.` : `\n\nTHEY HAVE A SOMMERHUS FOR THE WHOLE TRIP AND IT IS THE SAME HOUSE TONIGHT. Do not recommend anywhere to sleep: return 'recommendedStay' as an empty string and write 'accommodation' as one sentence about getting back to the house from this day's last stop.${houseLaterSays ? ` ${houseLaterSays} ${houseDistanceSays(houseBaseArea, dayPoints(day, stayResolve))}` : ""}`) : ""}${(bookedNights || []).includes(idx + 1) ? `\n\nTHIS NIGHT IS ALREADY BOOKED. They are sleeping at ${bookedName || 'a place they have already booked'} on day ${idx + 1} and it is not in question. Return 'accommodation' as one sentence about getting back to it from this day's last stop, and return 'stayArea' and 'recommendedStay' as EMPTY STRINGS. Do not name anywhere else, do not compare it to anywhere else, and do not suggest they move.` : ''}\nEVERY PRICE YOU WRITE IS IN DKK. Never dollars, euros or pounds, and never a conversion in brackets: a traveller in Denmark is charged kroner and a converted figure matches nothing they will see. A price you can only give by converting is a price you do not have, so describe the place without one.${langBlock}\n\nRespond with ONLY the raw JSON object, no markdown code fences.\n\n${context || "No live search context available — use only safe general knowledge and 'Check Rejseplanen' fallbacks."}`,
           // TOKEN BUMP 350 → 900 (Oliver: "why does the accommodation/booking
           // affiliation keep getting removed"): 350 max_tokens was genuinely too
           // tight for this response — a 5-stop day needs 4 leg objects PLUS the
@@ -19496,21 +19496,23 @@ If the conversation only covers a single day or a few stops with no explicit day
   // so a date turns that band into one season's number. An unread field that
   // the answer depends on is this codebase's signature defect and this was
   // another one of them.
+  // How many nights, read once for the bed and for the house verdict below. A
+  // sommerhus for three nights pays the week, so the bed has to know.
+  const houseNights = intakeArrival && intakeDeparture ? tripDays(intakeArrival, intakeDeparture) : 0;
   const budgetEstimate = budgetOn
     ? estimateDay({ stay: intakeStay, food: intakeFood, freeOnly: intakeFreeOnly,
                     scope: intakeScope, transport: intakeTransport, travellers: intakeTravelers,
                     // BOTH DATES. Reading the arrival alone priced a trip that
                     // landed on 31 May at March rates for thirteen June nights.
                     // A trip that crosses the boundary gets the whole band back.
-                    arrival: intakeArrival, departure: intakeDeparture })
+                    arrival: intakeArrival, departure: intakeDeparture, nights: houseNights || null })
     : { ready: false, need: [], problem: null };
   const intakeBudgetText = estimateForBrief(budgetEstimate);
   // ── AND WHETHER A SOMMERHUS BEATS IT ─────────────────────────────
   //
-  // Needs the trip length, which is the one hard gate: a holiday house is sold
-  // in sevens and nothing shorter, so a short trip cannot have one at any price.
-  // tripDays is the one reader of how long the trip is; see utils/tripEvents.js.
-  const houseNights = intakeArrival && intakeDeparture ? tripDays(intakeArrival, intakeDeparture) : 0;
+  // Needs the trip length: a short trip pays the week, which the comparison
+  // then weighs by itself. tripDays is the one reader of how long the trip is;
+  // see utils/tripEvents.js. houseNights is read above, before the bed.
   // ── ONE SET OF FACTS, TWO SENTENCES ──────────────────────────────
   //
   // Built once and handed to BOTH the verdict and the sentence that explains
@@ -19519,8 +19521,16 @@ If the conversation only covers a single day or a few stops with no explicit day
   // explanation priced the house across every season, because the sentence was
   // reading the season the BED was priced in and no bed had been picked yet.
   // A mark and its reason that can answer differently is worse than no mark.
-  const houseAsked = { travellers: intakeTravelers, arrival: intakeArrival, departure: intakeDeparture };
-  const houseVerdict = budgetOn ? summerhouseFit({ ...houseAsked, nights: houseNights }) : null;
+  const houseAsked = { travellers: intakeTravelers, arrival: intakeArrival, departure: intakeDeparture, nights: houseNights || null };
+  // Oliver, 26 Sep 2026: "summerhouse should probably only be recommended for
+  // nature people", and he kept families in. The kids box, the Nature tick, or
+  // nature said in the chat, with anything they refused taken out first.
+  const houseWho = {
+    kids: intakeFamilyMode,
+    interests: intakeInterest,
+    said: withoutRefused(aiMessages.filter(m => m.role === "user" && !m.isError).map(m => m.text || "").join(" ")),
+  };
+  const houseVerdict = budgetOn ? summerhouseFit({ ...houseAsked, ...houseWho }) : null;
 
   // ── AND IN THEIR OWN MONEY ───────────────────────────────────────
   //

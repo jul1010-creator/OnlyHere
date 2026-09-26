@@ -120,7 +120,7 @@ export const STAY_CHOICES = [
     label: "A summerhouse",
     booked: false,
     house: true,
-    said: "They have not booked anywhere, and they want a sommerhus: a whole holiday house with a kitchen, booked by the week. Danish holiday houses are on the coasts and in the countryside rather than in town centres, so plan a base out there and day trips in rather than a town-centre itinerary, and say which town they are near. They are let Saturday to Saturday and cannot be taken for fewer than seven nights.",
+    said: "They have not booked anywhere, and they want a sommerhus: a whole holiday house with a kitchen. Danish holiday houses are on the coasts and in the countryside rather than in town centres, so plan a base out there and day trips in rather than a town-centre itinerary, and say which town they are near. They are let by the week, and outside the summer holidays for a weekend too, though a few nights cost about what the whole week does.",
   },
   {
     key: "booked",

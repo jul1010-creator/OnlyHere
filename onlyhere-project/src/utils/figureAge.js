@@ -32,7 +32,7 @@
 import { BED_SEASON, SUMMER_BED, DORM_KR, BED_TIERS, STOREBAELT, TRAIN_HOP } from "./budgetEstimate";
 import { SHOP_BASKET, GROCERY_DAY, STREET_MEAL } from "./mealsEstimate";
 import { FUEL_PRICE, FUEL_USE, FUEL_STALE_DAYS } from "./fuel";
-import { HOUSE_CHECKED_AT, HOUSE_SOURCE, HOUSE_SEASON_CHECK } from "./summerhouse";
+import { HOUSE_CHECKED_AT, HOUSE_SOURCE, HOUSE_SEASON_CHECK, HOUSE_SHORT, HOUSE_WHERE } from "./summerhouse";
 import { STAY_PLACES_CHECKED_AT, HOSTEL_LIST_SOURCE } from "../data/stayPlaces";
 
 export const FIGURE_LIFE = { pump: FUEL_STALE_DAYS, price: 90, statistic: 365, directory: 180 };
@@ -46,6 +46,8 @@ export const FIGURES = [
   { id: "tier-hostel", label: "The hostel chip's figure", kind: "price", checkedAt: BED_TIERS.cheapest.checkedAt, source: BED_TIERS.cheapest.source, where: "utils/budgetEstimate.js BED_TIERS.cheapest" },
   { id: "tier-hotel", label: "The hotel chip's figure", kind: "price", checkedAt: BED_TIERS.best.checkedAt, source: BED_TIERS.best.source, where: "utils/budgetEstimate.js BED_TIERS.best" },
   { id: "house-week", label: "A sommerhus week, by season", kind: "price", checkedAt: HOUSE_CHECKED_AT, source: HOUSE_SOURCE, where: "utils/summerhouse.js HOUSE_WEEK" },
+  { id: "house-short", label: "A sommerhus weekend against its week", kind: "price", checkedAt: HOUSE_SHORT.checkedAt, source: HOUSE_SHORT.source, where: "utils/summerhouse.js HOUSE_SHORT" },
+  { id: "house-where", label: "A July sommerhus week by coast", kind: "price", checkedAt: HOUSE_WHERE.checkedAt, source: HOUSE_WHERE.source, where: "utils/summerhouse.js HOUSE_WHERE" },
   { id: "house-season", label: "Holiday-home season ratio", kind: "statistic", checkedAt: HOUSE_SEASON_CHECK.checkedAt, source: HOUSE_SEASON_CHECK.source, where: "utils/summerhouse.js HOUSE_SEASON_CHECK" },
   { id: "storebaelt", label: "Storebælt bridge toll", kind: "price", checkedAt: STOREBAELT.checkedAt, source: STOREBAELT.source, where: "utils/budgetEstimate.js STOREBAELT" },
   { id: "train-hop", label: "A long DSB train hop", kind: "price", checkedAt: TRAIN_HOP.checkedAt, source: TRAIN_HOP.source, where: "utils/budgetEstimate.js TRAIN_HOP" },
