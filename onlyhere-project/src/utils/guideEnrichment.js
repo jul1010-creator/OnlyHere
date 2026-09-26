@@ -23,7 +23,7 @@ import { nightlifeSpots } from "../data/nightlife";
 import { nightlifeStreets } from "../data/nightlifeStreets";
 import { foodSpots } from "../data/food";
 import { detectLegMode, haversineKm, isFerryText } from "./helpers";
-import { containsName, variantsOf, distinctiveWords } from "./danishNames";
+import { containsName, variantsOf, distinctiveWords, fold } from "./danishNames";
 
 // Looks up a stop name against everything real Gemlyx already knows, so a
 // guide can show real price/hours/type instead of just repeating the AI's
@@ -1008,4 +1008,115 @@ export const estimateDurationText = (km, mode) => {
   if (hours === 0) return `~${mins} min`;
   if (mins === 0) return `~${hours} hour${hours > 1 ? "s" : ""}`;
   return `~${hours} hour${hours > 1 ? "s" : ""} ${mins} min`;
+};
+
+// ── THE MAPS LINK OPENS THE JOURNEY THAT WAS MEASURED ───────────────
+//
+// Oliver, 26 Sep 2026, on a live guide: the chip read "~10 min walk" from
+// Aalborg waterfront to "Aalborg shopping streets", and the Maps link beside
+// it opened a 7 km walk to Aalborg Storcenter. "This is NOT allowed to
+// happen."
+//
+// The build had measured that leg at 15 minutes and 1 km through
+// /api/directions. The link then sent the same two NAMES to the Maps web
+// page, and Google's web geocoder read "Aalborg shopping streets" as a mall
+// on the edge of town. Two geocoders, one name, two places. Sending
+// coordinates instead is what an earlier fix did and then undid, because a
+// Maps page opening on "55.26,12.12" reads as broken.
+//
+// place_id settles it without either cost: the link keeps the readable name
+// and Google opens the exact place the measurement used. Read off whichever
+// measurement exists for this pair, in any mode, because the places do not
+// change with the mode.
+export const measuredLeg = (exactDurations, originName, destName) => {
+  const prefix = `${originName}|${destName}|`;
+  const hit = Object.entries(exactDurations || {}).find(([k, v]) => k.startsWith(prefix) && v?.placeIds);
+  return hit ? hit[1] : null;
+};
+
+// Google fell back to an area rather than a place when all it could return
+// was the town, the region or the country. A measurement to one of those is
+// not about the stop, which is the Højer sluice rule in GuidePage.
+const AREA_TYPES = ["locality", "sublocality", "political", "administrative_area_level_1", "administrative_area_level_2", "country", "postal_code", "postal_town", "colloquial_area"];
+export const foundAPlace = (types) => Array.isArray(types) && types.length > 0 && !types.every(t => AREA_TYPES.includes(t));
+
+export const mapsRouteUrl = ({ originText, destText, mode, originPlaceId = "", destPlaceId = "" }) => {
+  const q = [
+    `origin=${encodeURIComponent(originText)}`,
+    originPlaceId ? `origin_place_id=${encodeURIComponent(originPlaceId)}` : "",
+    `destination=${encodeURIComponent(destText)}`,
+    destPlaceId ? `destination_place_id=${encodeURIComponent(destPlaceId)}` : "",
+    `travelmode=${mode}`,
+  ].filter(Boolean).join("&");
+  return `https://www.google.com/maps/dir/?api=1&${q}`;
+};
+
+// ── A STOP THAT IS NOT A PLACE GETS NO ROUTE ────────────────────────
+//
+// Oliver, 26 Sep 2026, after the Maps check: "Aalborg shopping streets" was
+// measured by one Google geocoder at 1 km and opened by the other at a mall
+// 7 km out. place_id makes the two agree, but agreeing on an arbitrary point
+// is still a route to somewhere nobody meant. Asked whether such a stop should
+// be forced onto a real address or left as free time: "Naah it doesen't need
+// to give a link I guess."
+//
+// So a stop whose name is only a town plus words that describe WHAT you do
+// there (shopping, lunch, a supermarket, free time) rather than WHICH place,
+// is loose. It keeps its card and its note, is tagged free time, and gets no
+// leg chip, no Maps link, no measurement and no pin.
+//
+// THE TEST IS WHAT IS LEFT, NOT WHAT IS THERE. Towns are taken out, then the
+// filler ("in", "the", "streets", "centre") and the vague words. If any other
+// word survives, it is a name and the stop is a place: "Café Luna, Aalborg"
+// keeps "luna", "Lille Vildmose, Øster Hurup" keeps "lille vildmose", "Asaa
+// beach" keeps "beach". A town on its own is a visit to that town and is never
+// loose, because no vague word was said. A published row is always a place.
+//
+// A chain with no branch named is vague for the same reason: "Netto, Blokhus"
+// is whichever Netto Google picks. "Netto Vesterbrogade" keeps its street.
+const LOOSE_WORDS = new Set([
+  "shopping", "shops", "shop", "boutique", "boutiques", "errands", "supermarket", "supermarkets",
+  "grocery", "groceries", "grocer", "bakery", "bakeries", "cafe", "cafes", "coffee", "restaurant",
+  "restaurants", "eatery", "bistro", "pizzeria", "pizza", "kebab", "kebabs", "burger", "burgers",
+  "hotdog", "polsevogn", "sandwich", "sandwiches", "ice", "cream", "icecream", "lunch", "dinner",
+  "supper", "breakfast", "brunch", "picnic", "snack", "snacks", "meal", "drinks", "bar", "bars",
+  "pub", "pubs", "free", "leisure", "rest", "relax", "relaxing", "downtime",
+  "indkob", "butikker", "supermarked", "bager", "bageri", "frokost", "aftensmad", "morgenmad", "fritid",
+]);
+const LOOSE_FILLER = new Set([
+  "the", "a", "an", "of", "in", "at", "on", "to", "and", "or", "for", "with", "by", "around", "near",
+  "some", "local", "nearby", "time", "street", "streets", "area", "district", "quarter", "town", "city",
+  "centre", "center", "downtown", "main", "high", "pedestrian", "your", "our", "back", "evening",
+  "afternoon", "morning", "house", "holiday", "sommerhus", "summerhouse", "cottage", "cabin",
+  "accommodation", "i", "pa", "og", "en", "et", "ved", "det", "den", "byen", "midtbyen", "centrum",
+]);
+const LOOSE_CHAINS = /(?:^| )(?:netto|fotex|rema 1000|rema|lidl|aldi|bilka|meny|irma|coop 365|coop|superbrugsen|dagli brugsen|kvickly|spar|lovbjerg|7 eleven|mcdonald s|mcdonalds|burger king|sunset boulevard|max burgers|circle k)(?= |$)/g;
+const wordsOnly = (s) => String(s || "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ");
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const withoutTown = (text, town) => {
+  let out = text;
+  for (const v of [town, bareKey(town), ...variantsOf(bareKey(town))]) {
+    const w = wordsOnly(v).trim();
+    if (w) out = out.replace(new RegExp(`(?<![\\p{L}\\p{N}])${escapeRe(w)}s?(?![\\p{L}\\p{N}])`, "gu"), " ");
+  }
+  return out;
+};
+export const looseStop = (stop, row = lookupRealPlace(stop?.name)) => {
+  const name = String(stop?.name || "").trim();
+  if (!name) return false;
+  if (row && !TOWN_ROW(row)) return false;
+  let text = ` ${wordsOnly(name)} `;
+  if (stop?.town) text = withoutTown(text, String(stop.town));
+  for (let i = 0; i < 4; i++) {
+    const key = townKeyFor(text);
+    if (!key) break;
+    text = withoutTown(text, key);
+  }
+  let folded = ` ${fold(text)} `;
+  const chain = LOOSE_CHAINS.test(folded.trim());
+  LOOSE_CHAINS.lastIndex = 0;
+  folded = folded.trim().replace(LOOSE_CHAINS, " ");
+  const words = folded.split(" ").filter(Boolean);
+  const vague = chain || words.some(w => LOOSE_WORDS.has(w));
+  return vague && words.every(w => LOOSE_WORDS.has(w) || LOOSE_FILLER.has(w));
 };

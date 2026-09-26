@@ -277,6 +277,34 @@ export const houseAreasFor = (points, { places = [], kids = false, limit = HOUSE
 // answer. They run in parallel, so they cannot be told it either. So the CODE
 // picks the base, once, and every night is told the same name.
 export const houseBase = (points, opts = {}) => houseAreasFor(points, opts)[0] || null;
+// ── AND THE WRITER IS TOLD BEFORE IT WRITES ─────────────────────────
+//
+// The second live build, 26 Sep 2026: every night said Blokhus, and the guide
+// writer's own day one said "settle into the sommerhus, then walk down to the
+// harbour" at Asaa, on the other coast. The writer runs before the per-day
+// calls and had never been told where the house is, so it put one where the
+// first day happened to end. The base is picked from the planner's skeleton
+// now, before the writer runs, and this is what the writer reads.
+export const houseBaseBlock = (base) => base
+  ? `\n\nTHE SOMMERHUS FOR THE WHOLE WEEK IS AT ${base.name.toUpperCase()}, on the ${base.coast} coast near ${base.nearTown}. It is one house, booked by the week through a holiday-house agency. Every day starts from the house at ${base.name} and ends back there: write the first day's arrival as getting the keys at ${base.name}, never put the house in any other town, and never say they settle in anywhere else.`
+  : "";
+
+// ── AND HOW FAR THE HOUSE IS FROM THIS DAY ─────────────────────────
+//
+// The same live build had day one tell a family the drive back from Asaa to
+// Blokhus was "roughly 100 km ... about a 1h15 drive". It is about 50 km in a
+// straight line. The model was never told the distance, so it made one up.
+// Now each night is told it, from the same coordinates the base was picked
+// with, and told that a road is longer than a straight line rather than
+// shorter.
+export const houseDistanceSays = (base, points = []) => {
+  const pts = (Array.isArray(points) ? points : []).filter(p => Number.isFinite(p?.lat) && Number.isFinite(p?.lon));
+  if (!base || !pts.length) return "";
+  const last = pts[pts.length - 1];
+  const d = km(last, base);
+  if (d == null) return "";
+  return `This day's last stop is about ${round(d)} km from ${base.name} in a straight line, so the drive back is somewhat longer than that and never shorter. Quote no other distance or drive time for it.`;
+};
 export const houseNightSays = (base) => base
   ? `THE HOUSE IS AT ${base.name.toUpperCase()}, on the ${base.coast} coast near ${base.nearTown}, the base day one recommended. Say they drive back to the house at ${base.name}, and never place it anywhere else.`
   : "";
@@ -301,12 +329,16 @@ export const houseAreaLine = (a) => {
   return `${a.name}${coast}${town}; the trip's stops average about ${round(a.meanKm)} km from it.${who}${fam}`;
 };
 
-export const houseAreaBlock = (points, { places = [], kids = false } = {}) => {
+export const houseAreaBlock = (points, { places = [], kids = false, base: chosen = null } = {}) => {
   const pts = (Array.isArray(points) ? points : []).filter(p => Number.isFinite(p?.lat) && Number.isFinite(p?.lon));
   if (!pts.length) return "";
   const picks = houseAreasFor(pts, { places, kids });
-  if (!picks.length) return "";
-  const [base, ...others] = picks;
+  if (!picks.length && !chosen) return "";
+  // A base already picked upstream (from the planner's skeleton, and already
+  // handed to the writer) wins, so the day card cannot name a different coast
+  // from the one the days were written around.
+  const base = chosen || picks[0];
+  const others = picks.filter(a => a.name !== base.name).slice(0, HOUSE_AREA_PICKS - 1);
   const spread = spreadOf(pts);
   const lines = [`THE SOMMERHUS BASE GEMLYX HAS PICKED for this trip, from the areas a holiday-house agency's own page confirmed on ${STAY_PLACES_CHECKED_AT}:`];
   lines.push(`- ${houseAreaLine(base)}`);

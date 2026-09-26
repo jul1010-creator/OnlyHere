@@ -72,3 +72,79 @@ Suite at 21,940 and the build is clean. Both fixes were broken on purpose to con
 2. **No bed price until the party is known.** It used to assume two sharing and say so in small print. Now, with a sleep chip ticked and nobody counted, the bed is left out and the figure reads, for example, "120 to 250 kr a day (excluding accommodation)". The line under it says "Say who's traveling and this becomes a whole day". The summerhouse mark doesn't appear either, and the planner is sent no bed figure. "Already booked" is unaffected, because nothing is being priced.
 
 Suite 21,957, build clean, all three rules broken on purpose to confirm their tests go red.
+
+---
+
+## Live tests, later that evening (batch 132)
+
+Guides were built on the live site and every Maps link was opened in Google Maps, as you asked.
+
+### Maps: the link must open the journey the chip talks about
+
+> "Aalborg shopping streets" showed "~10 min walk · Check Maps", and the link opened a 7 km, 1 hour 37 minute walk to Aalborg Storcenter. "This is NOT allowed to happen."
+
+**What happened.** The build had measured that leg: 15 minutes, 1 km. The page then threw the measurement away, because neither stop was pinned to a real place, and printed the model's own "~10 min walk" instead. The link sent Google Maps the two names, and Maps' web search read "Aalborg shopping streets" as a mall on the edge of town. Google's routing service and the Maps website read the same name as two different places.
+
+**The same fault on a second leg.** "Lille Vildmose, Øster Hurup" opened Restaurant Vildmose, 2 minutes away. The chip said 14 minutes by car to the bog.
+
+**Fixed:**
+- `api/directions.js` now returns the **place_id** of the two places Google measured between, and what kind of place each one is.
+- Every leg link carries `origin_place_id` and `destination_place_id`. The name stays readable, and Google Maps opens exactly the places the chip was measured to.
+- When Google found a real place at both ends, the chip shows the measured time rather than the model's guess, because the link now opens those same two places.
+
+This only works for guides built after the push. An older saved guide has no place ids and links by name as before.
+
+### A crash for families
+
+With the kids box ticked and no kind of place named ("beaches and something fun for the kids"), pressing build showed **"Something broke on our end"**. It also came back on every reload of that tab. `wantedCategories` returns nothing when no category word is found, and the preview screen called `.has` on that. Fixed, and a test now checks every reader of it. It dates from 19 Sep; moving the kids box to the top made it more likely.
+
+### Summerhouse: every night was told it was already booked
+
+The summerhouse chip's own sentence ("booked by the week", "Saturday to Saturday") was read as the whole trip being booked. Every night was then told "THIS NIGHT IS ALREADY BOOKED" at "a place they have already booked", so day one never recommended the coast. Fixed at the reader: with no booking, there are no booked nights.
+
+### Summerhouse: the writer put the house on the wrong coast
+
+Every night said Blokhus, while the guide writer's own day one said "settle into the sommerhus" at Asaa, on the other coast. The base is now picked from the planner's skeleton **before** the writer runs, the writer is told it, and the same base goes to every night. Each night is also given its real straight-line distance to the house. Day one had invented "roughly 100 km" for a 50 km trip.
+
+### Currency: one line, their own currency
+
+> "just tell the user what the rate is in their own currency.. if it's a Dane, just leave it out."
+
+The line now reads "100 DKK is about 13.38 EUR." Only the reader's own currency is shown. It comes from their account's country, then a home country they typed as the starting point, then their browser's region. A Danish reader gets no line, and a reader nothing tells us about gets no guess.
+
+### Still open
+
+- **Vague stop names.** "Aalborg shopping streets", "Aalborg waterfront" and "Aalborg" as a stop are not places. The place ids make the link match the chip, but the planner shouldn't write stops like these at all.
+- **Wrong town labels.** Lille Vildmose was labelled Øster Hurup, and the town label is what gets sent to Google alongside the name.
+- **Missing category word.** "Zoo" is not a category word in `wantedCategories`.
+
+Suite 21,995, build clean, every new rule broken on purpose to confirm its test goes red.
+
+---
+
+## Free time, and the zoo (batch 134)
+
+> "Naah it doesen't need to give a link I guess."
+
+### A stop that is not a place is free time
+
+A stop whose name is only a town plus what you do there, like "Aalborg shopping streets", "Lunch in Skagen", "Netto, Blokhus" or "Free time in Aalborg", now:
+
+- keeps its card and its note, tagged **Free time** (Fri tid, Freizeit)
+- gets **no leg chip and no Maps link**, in or out
+- is **not measured** by the build and **not geocoded**, so it costs no Google call
+- is **not a pin** on the map, and isn't counted as unplaced
+
+**How it decides** (`looseStop` in `utils/guideEnrichment.js`): the town is taken out of the name, then filler words ("in", "the", "streets", "centre") and vague words (shopping, lunch, supermarket, kebab, café, bar, free, and a few Danish ones). If any other word is left, it's a name and the stop is a place. So "Café Luna, Aalborg", "Lille Vildmose, Øster Hurup", "Asaa beach" and "Aalborg waterfront" all stay places. A town on its own ("Aalborg") is a visit and keeps its legs. A published row is always a place. A supermarket chain with no branch named is free time; "Netto Vesterbrogade" is that branch.
+
+**What it costs:** a leg from a real stop, through free time, to the next real stop shows no chip for either half. That's the trade you picked.
+
+### Wrong town labels: mostly solved by the place ids
+
+Lille Vildmose labelled Øster Hurup was the Maps web page misreading the name, not the label. The bog is a few km from Øster Hurup, so the label wasn't far off, and since batch 133 the link opens the exact place Google measured. I left town labels alone rather than guess corrections.
+
+### The zoo
+
+`wantedCategories` now hears zoo, aquarium, waterpark, sommerland, Legoland, playground, animals, wildlife, nature, beach and hiking as asking for attractions. One old test used "beaches and something fun for the kids" as a brief that names nothing; it now uses "something fun for the kids".
+
+Suite 22,011, build clean.

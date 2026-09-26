@@ -280,12 +280,14 @@ writeFileSync(entry, `
   export { sentencesIn, readerBody, noticeAsk, noticeText, TRANSLATE_NOTICE, translatedNotice, DEAD_ENDS } from ${JSON.stringify(join(root, "src/utils/noticeVoice.js"))};
   export { guideClaims, guideClaimNote } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { resolveStopCoords } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
+  export { readerCurrency, fxRateFor } from ${JSON.stringify(join(root, "src/utils/profile.js"))};
+  export { measuredLeg, mapsRouteUrl, foundAPlace, looseStop } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { festivalScale } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
   export { needsTier, proposedTier, BACKFILL_SORTS, BACKFILL_SORT_DEFAULT, sortForBackfill, tierSpread, backfillPrompt, readBackfill, missedByPass, proposeTiersWithReason, PASS_FAILED } from ${JSON.stringify(join(root, "src/utils/tierBackfill.js"))};
   export { HOUSE_WEEK, HOUSE_SIZES, HOUSE_NIGHTS, HOUSE_FIT, HOUSE_SOURCE, HOUSE_CHECKED_AT, HOUSE_SEASON_CHECK, houseFor, houseWeek, housePerHeadNight, houseFit, houseSays } from ${JSON.stringify(join(root, "src/utils/summerhouse.js"))};
   export { STAY_CHOICES, STAY_KEYS, stayChoiceOf, stayIsBooked, stayProblem, staySaid } from ${JSON.stringify(join(root, "src/utils/stayChoice.js"))};
   export { HOSTELS, HOUSE_AREAS, STAY_TOWN_POINTS, STAY_PLACES_CHECKED_AT, HOSTEL_LIST_SOURCE, DORM } from ${JSON.stringify(join(root, "src/data/stayPlaces.js"))};
-  export { houseBase, houseNightSays, sellsDorm, dormForKids, hostelOpenOn, dormTowns, hostelTowns, roomsOnlyTowns, hostelChipSays, stayPointFor, dayPoints, hostelsNear, nearestDorm, hostelLine, hostelBlock, HOSTEL_NEAR_KM, HOSTEL_LINES, isFamilyPlace, familyPlacesNear, FAMILY_NEAR_KM, houseAreasFor, houseAreaLine, houseAreaBlock, HOUSE_AREA_PICKS, ONE_BASE_KM } from ${JSON.stringify(join(root, "src/utils/stayAwareness.js"))};
+  export { houseBase, houseBaseBlock, houseNightSays, houseDistanceSays, sellsDorm, dormForKids, hostelOpenOn, dormTowns, hostelTowns, roomsOnlyTowns, hostelChipSays, stayPointFor, dayPoints, hostelsNear, nearestDorm, hostelLine, hostelBlock, HOSTEL_NEAR_KM, HOSTEL_LINES, isFamilyPlace, familyPlacesNear, FAMILY_NEAR_KM, houseAreasFor, houseAreaLine, houseAreaBlock, HOUSE_AREA_PICKS, ONE_BASE_KM } from ${JSON.stringify(join(root, "src/utils/stayAwareness.js"))};
   export { FIGURES, FIGURE_LIFE, figureAge, figureAges, figureAgeNote } from ${JSON.stringify(join(root, "src/utils/figureAge.js"))};
   export { TRIP_SCOPES, TRIP_SCOPE_KEYS, scopeOf as tripScopeOf, scopeSaid, scopeOffersOtherTowns, scopeAllowsTown } from ${JSON.stringify(join(root, "src/utils/tripScopeChoice.js"))};
   export { BED_TIERS, EXCLUDED, estimateDay, estimateShort, estimateSays, estimateForBrief, ENABLE_LABEL, ENABLE_SAYS, HOPS_PER_DAY, STOREBAELT, TRAIN_HOP, HOP_KM, movingMode, hopCost, movingProblem, movingNote, LONG_HAUL_MODES, ROOM_KR, DORM_KR, SUMMER_BED, DORM_SUMMER_PCT, BED_SEASON, bedSeasonOf, straddlesSeason, dormBand, HOSTEL_ROOM_SIZES, summerhouseFit, summerhouseWhy, SUMMERHOUSE_MARK, bunkPerHeadIn, ROOM_SLEEPS_MAX, HOTEL_SLEEPS, bedPerNight, RECOMMENDED, recommendedModes, recommendedWhy, isRecommended, showMoney, BUDGET_CURRENCIES, currencyOf } from ${JSON.stringify(join(root, "src/utils/budgetEstimate.js"))};
@@ -12201,7 +12203,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
         ok("the chat prompt carries it", /const homeSays = homeStartBlock\(brief\);/.test(appH)
            && /\$\{homeSays \? `\\n\$\{homeSays\}\\n` : ""\}/.test(appH));
         ok("and so does the guide writer, where Getting Around starts at Kastrup by default",
-           /const homeStartsHere = homeStartBlock\(guideBrief\)/.test(appH) && /\$\{bookedStayBlock\}\$\{homeStartsHere\}/.test(appH));
+           /const homeStartsHere = homeStartBlock\(guideBrief\)/.test(appH) && /\$\{bookedStayBlock\}\$\{houseBaseSays\}\$\{homeStartsHere\}/.test(appH));
       }
     }
 
@@ -37472,14 +37474,16 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   {
     const fxSrc = readFileSync(join(root, "api/fx.js"), "utf8");
     const appFx = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
-    ok("dollars and euros are asked for on every guide",
-       /\["USD", "EUR", \.\.\.\(wantFx \? \[wantFx\] : \[\]\)\]/.test(appFx));
+    // Oliver, 26 Sep 2026, replacing that: "just tell the user what the rate
+    // is in their own currency.. if it's a Dane, just leave it out."
+    ok("only the reader's own currency is asked for, and nothing for a Dane",
+       /const fxWanted = wantFx && wantFx !== "DKK" \? \[wantFx\] : \[\];/.test(appFx));
     // ONE CALL FOR ALL OF THEM. Asking twice would let a build straddle 16:00
     // CET and stamp two different ECB dates on one line.
     ok("in one request, so every rate shares a publication date",
        /symbols=\$\{asked\.join\(","\)\}/.test(fxSrc));
-    ok("the account's own currency joins them rather than replacing them",
-       /new Set\(\["USD", "EUR"/.test(appFx));
+    ok("the account's country, then a typed home country, then the browser decide it",
+       /const wantFx = readerCurrency\(\{\s*profileCountry: userProfile\?\.country,\s*typedCountry: homeCountryIn\(intakeStartPoint\)\?\.code \|\| "",\s*locale:/.test(appFx));
     // The list goes into somebody else's URL.
     ok("the currencies are still checked against the allow-list", /const bad = asked\.find\(c => !ALLOWED\.has\(c\)\)/.test(fxSrc));
     ok("and the list is bounded", /asked\.length > 4/.test(fxSrc));
@@ -37491,10 +37495,17 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // own stored copy.
     ok("the old single-currency shape is still returned", /\n      to: first\.to,\n      amount: first\.amount,/.test(fxSrc));
     const gpFx = stripComments(readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8"));
-    ok("and the page still reads it for a guide saved before this",
-       /Number\(fx\?\.amount\) > 0 \? \[\{ to: fx\.to, amount: fx\.amount \}\] : \[\]/.test(gpFx));
-    ok("the page lists every rate it was given", /rates\.map\(r => `\$\{r\.amount\} \$\{r\.to\}`\)/.test(gpFx));
-    ok("and says nothing at all when there is no rate", /if \(!rates\.length\) return null;/.test(gpFx));
+    is("a guide saved with the old single pair still reads", M.fxRateFor({ to: "EUR", amount: 13.38, baseAmount: 100 }, "EUR")?.amount, 13.38);
+    is("a guide saved with dollars and euros shows only the reader's own", M.fxRateFor({ baseAmount: 100, rates: [{ to: "USD", amount: 15.25 }, { to: "EUR", amount: 13.38 }] }, "EUR")?.to, "EUR");
+    is("a Dane sees nothing, even from a guide that somehow carries kroner", M.fxRateFor({ baseAmount: 100, rates: [{ to: "DKK", amount: 100 }] }, "DKK"), null);
+    is("nor does a reader nothing tells us about", M.fxRateFor({ baseAmount: 100, rates: [{ to: "EUR", amount: 13.38 }] }, null), null);
+    is("and no rate is no line", M.fxRateFor(null, "EUR"), null);
+    ok("and the page says nothing when there is nothing to say", /if \(!fxOwn \|\| isDane\) return null;/.test(gpFx));
+    is("the account's country wins", M.readerCurrency({ profileCountry: "GB", typedCountry: "DE", locale: "da-DK" }), "GBP");
+    is("then a home country they typed", M.readerCurrency({ typedCountry: "DE", locale: "en-US" }), "EUR");
+    is("then the browser's region", M.readerCurrency({ locale: "en-US" }), "USD");
+    is("a Danish browser is a Dane, with or without a region", [M.readerCurrency({ locale: "da" }), M.readerCurrency({ locale: "da-DK" })], ["DKK", "DKK"]);
+    is("and a browser with no region tells us nothing", M.readerCurrency({ locale: "en" }), null);
   }
 
   // ── "MAKE 3 OPTIONS YOU CAN CLICK ON" ───────────────────────────
@@ -47168,16 +47179,14 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // This used to run ONLY for a signed-in reader who had set a country, which
   // is almost nobody, so almost no guide carried the line. Oliver, 24 Sep 2026:
   // "convert it to US dollars and Euro when guide shows."
-  ok("dollars and euros go on every guide, not only a filled-in profile",
-     /const fxWanted = \[\.\.\.new Set\(\["USD", "EUR"/.test(appF));
-  ok("and where they are from is added to those rather than replacing them",
-     /const wantFx = homeCurrency\(userProfile\?\.country\);/.test(appF) && /\.\.\.\(wantFx \? \[wantFx\] : \[\]\)/.test(appF));
+  ok("one currency, the reader's own, and none for a Dane",
+     /const fxWanted = wantFx && wantFx !== "DKK" \? \[wantFx\] : \[\];/.test(appF) && /if \(fxWanted\.length\) \{/.test(appF));
   ok("and it is stamped onto the guide", /_fx: fxLine,/.test(appF));
 
   // FAILURE IS SILENCE, NEVER A GUESS. api/ask.js's rule, applied here: a thing
   // that cannot be read must not become a thing that does not apply.
   ok("a failed fetch leaves no line", /catch \{ \/\* no rate, no line, no harm \*\//.test(appF));
-  ok("and nothing renders without a real number", /if \(!rates\.length\) return null;/.test(guideF));
+  ok("and nothing renders without a real number", /if \(!fxOwn \|\| isDane\) return null;/.test(guideF));
   ok("there is no hardcoded fallback rate",
      !/FALLBACK_RATE|DEFAULT_RATE/.test(fx) && /There is no fallback table and there must never be one/.test(fx));
 
@@ -47185,20 +47194,16 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // must say which day its number came from, and "today" would make it lie the
   // moment it was saved.
   ok("the published date is what gets stamped", /on: String\(data\?\.date \|\| ""\)\.slice\(0, 10\)/.test(fx));
-  ok("and the line says so to the reader",
-     /fx\.on \? ` \$\{uiT\("guide\.onDate", uiLang\)\} \$\{fx\.on\}`/.test(guideF));
-  ok("and warns the rate will have moved",
-     /uiT\("guide\.ratesMoved", uiLang\)/.test(guideF)
-     && /rates will have moved a little by the time you travel/.test(M.UI_STRINGS["guide.ratesMoved"].en)
-     && /kurserne har flyttet sig/.test(M.UI_STRINGS["guide.ratesMoved"].da));
+  // Oliver, 26 Sep 2026: "Don't make it so complicated." The date and the
+  // warning that rates move are gone from the reader's line; the date stays
+  // stamped on the guide for anybody who needs it.
+  ok("the line is one short sentence",
+     /const line = `\$\{fxOwn\.base\} DKK \$\{uiT\("guide\.isAbout", uiLang\)\} \$\{fxOwn\.amount\} \$\{fxOwn\.to\}\.`;/.test(guideF));
+  ok("with no date and no warning in it", !M.UI_STRINGS["guide.ratesMoved"] && !M.UI_STRINGS["guide.onDate"] && !M.UI_STRINGS["guide.pricedInDkk"]);
 
   // AND IT STILL SAYS PRICES ARE IN KRONER, which is the load-bearing half.
-  ok("the line leads with DKK",
-     /uiT\("guide\.pricedInDkk", uiLang\)/.test(guideF)
-     && /Everything here is priced in DKK, which is what you will be charged/.test(M.UI_STRINGS["guide.pricedInDkk"].en)
-     // The load-bearing half, in every language: the number a reader is quoted
-     // is kroner, whatever their screen is in.
-     && ["en", "da", "de"].every(c => /DKK|danske kroner|dänischen Kronen/.test(M.UI_STRINGS["guide.pricedInDkk"][c])));
+  ok("the line still starts from kroner", /\$\{fxOwn\.base\} DKK/.test(guideF)
+     && ["en", "da", "de"].every(c => !!M.UI_STRINGS["guide.isAbout"][c]));
 
   // A currency going into a URL is checked against a list, not passed through.
   // Several of them now, since a guide carries dollars and euros as well as
@@ -75116,7 +75121,8 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     const chip = gp.slice(gp.indexOf("const legChip = (originName, destName, how) => {"), gp.indexOf("const journey = exact ? journeyFromStored(exact) : null;"));
     ok("legChip is findable", chip.length > 2000);
     ok("the chip asks the flagged resolver whether either end is a stand-in",
-       /const standInEnd = \(nm\) => \{\s*const d = resolveStopCoordsDetailed\(nm, geo, stopTownOf\(nm\)\);\s*return !d \|\| !d\.precise;\s*\};\s*const standIn = standInEnd\(originName\) \|\| standInEnd\(destName\);/.test(chip));
+       /const standInEnd = \(nm\) => \{\s*const d = resolveStopCoordsDetailed\(nm, geo, stopTownOf\(nm\)\);\s*return !d \|\| !d\.precise;\s*\};/.test(chip)
+       && /const standIn = !googlePlaced && \(standInEnd\(originName\) \|\| standInEnd\(destName\)\);/.test(chip));
     ok("a stored walking answer over a stand-in is refused, whichever mode was asked for",
        /const walkOnStandIn = standIn && \(rawExact\?\.modeUsed \|\| mode\) === "walking";/.test(chip)
        && /const exact = rawExact && !walkOnStandIn && \(/.test(chip));
@@ -78889,9 +78895,16 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   ok("the hostel block is for the hostel chip only", /const hostelSays = stayKind === "cheapest" && idx \+ 1 < days\.length && !\(bookedNights \|\| \[\]\)\.includes\(idx \+ 1\)/.test(app));
   ok("the coast block is measured over the trip's nights, not one day",
      /const housePoints = stayIsHouse\(stayKind\) \? days\.slice\(0, Math\.max\(1, days\.length - 1\)\)\.flatMap\(d => dayPoints\(d, stayResolve\)\) : \[\];/.test(app)
-     && /houseAreaBlock\(housePoints, houseOpts\)/.test(app));
-  ok("and the same base reaches every later night", /houseNightSays\(houseBase\(housePoints, houseOpts\)\)/.test(app)
-     && /from this day's last stop\.\$\{houseLaterSays \? ` \$\{houseLaterSays\}` : ""\}/.test(app));
+     && /houseAreaBlock\(housePoints, \{ \.\.\.houseOpts, base: houseBaseArea \}\)/.test(app));
+  ok("and the same base reaches every later night", /const houseBaseArea = stayIsHouse\(stayKind\) \? \(stayAware\?\.base \|\| houseBase\(housePoints, houseOpts\)\) : null;/.test(app)
+     && /const houseLaterSays = houseNightSays\(houseBaseArea\);/.test(app)
+     && /from this day's last stop\.\$\{houseLaterSays \? ` \$\{houseLaterSays\} \$\{houseDistanceSays\(houseBaseArea, dayPoints\(day, stayResolve\)\)\}` : ""\}/.test(app));
+  ok("and day one is told its own distance too", /\$\{houseAreaSays\}\n\$\{houseDistanceSays\(houseBaseArea, dayPoints\(day, stayResolve\)\)\}/.test(app));
+  // THE LIVE BUILD'S DAY ONE: Asaa to Blokhus, written as "roughly 100 km".
+  const asaa = M.houseDistanceSays(M.HOUSE_AREAS.find(a => a.name === "Blokhus"), [{ lat: 57.148, lon: 10.405 }]);
+  ok("a night is told its straight-line distance to the house", /about (4|5)\d km from Blokhus in a straight line/.test(asaa));
+  ok("and that the road is longer, never shorter", /somewhat longer than that and never shorter/.test(asaa));
+  is("no base, no distance", M.houseDistanceSays(null, [{ lat: 57, lon: 10 }]), "");
   ok("and reaches day one only", /\$\{houseAreaSays && idx === 0 && idx \+ 1 < days\.length \?/.test(app));
   ok("the call site hands over children, the published places and a DAY only",
      /kids: !!guideBrief\.known\?\.party\?\.hasKids,/.test(app) && /arrival: datePrecision === "day" \? arrivalDate : null,/.test(app) && /places: freeEntrance,/.test(app));
@@ -78964,6 +78977,139 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   const app = readFileSync(join(root, "src/App.jsx"), "utf8");
   ok("the panel builds its missing line from the need list, so 'say who's traveling' reads as a sentence",
      /So far\. \{\(\(\) => \{ const t = budgetEstimate\.need\.join\(" and "\); return t\.charAt\(0\)\.toUpperCase\(\) \+ t\.slice\(1\); \}\)\(\)\} and this becomes a whole day\./.test(app));
+}
+
+// ── `wanted` CAN BE NULL, SO NOTHING MAY CALL .has ON IT BARE ─────────
+// Found live, 26 Sep 2026: a family with the kids box ticked and no kind of
+// place named crashed the preview screen ("Something broke on our end"),
+// because one reader of wantedCategories called wanted.has without checking.
+{
+  is("nothing named is a null set, which is why the guard matters", M.wantedCategories("something fun for the kids", []), null);
+  const bare = [];
+  for (const rel of ["src/components/GuidePreviewScreen.jsx", "src/utils/previewMatch.js", "src/utils/previewCoverage.js", "src/App.jsx"]) {
+    const code = stripComments(readFileSync(join(root, rel), "utf8"));
+    for (const line of code.split("\n")) {
+      if (/\bwanted\.has\(/.test(line) && !/(wanted && wanted\.has|!wanted \|\||!!wanted && wanted\.has|wanted\?\.has)/.test(line)) bare.push(`${rel}: ${line.trim().slice(0, 120)}`);
+    }
+  }
+  // previewCoverage returns early on a null set the line before, so its call
+  // is guarded by the function rather than by the expression.
+  is("every wanted.has is guarded against null", bare, ["src/utils/previewCoverage.js: const hit = TYPE_FOR_CATEGORY.find(([cat]) => wanted.has(cat));"]);
+  ok("and that one is guarded the line before", /if \(!wanted \|\| !wanted\.size\) return null;\s*\n\s*const hit = TYPE_FOR_CATEGORY\.find/.test(readFileSync(join(root, "src/utils/previewCoverage.js"), "utf8")));
+}
+
+// ── NO BOOKING, NO BOOKED NIGHTS ────────────────────────────────────
+// Found live, 26 Sep 2026: the sommerhus chip's own sentence ("booked by the
+// week", "Saturday to Saturday") was read as "the whole trip" booked, and
+// every night of a family guide was told it was already booked somewhere, so
+// day one never recommended the coast.
+{
+  const said = M.staySaid("summerhouse", "");
+  const text = `Arriving: 10 October 2026 at 12:00 | Departing: 17 October 2026 at 12:00 | ${said}`;
+  const b = M.readBrief({ travellerText: text, travellerTurns: [text] });
+  is("the sommerhus chip is not a booking", b.known.stay?.value, "not booked");
+  ok("so it has no booked nights", !b.known.stayWhen);
+  const hotel = "We have booked Hotel Jutlandia in Frederikshavn for the whole trip.";
+  const h = M.readBrief({ travellerText: hotel, travellerTurns: [hotel] });
+  is("while a real booking for the whole trip keeps them", h.known.stay?.value, "booked");
+  ok("and its nights", !!h.known.stayWhen?.all);
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("and the guide build only counts booked nights for a booking",
+     /const bookedNights = \(stayKnown\.stay\?\.value === "booked" \|\| bookedName\) \? bookedDayNumbers\(stayKnown\.stayWhen, requestedDays \|\| 0\) : \[\];/.test(app));
+}
+
+// ── THE MAPS LINK OPENS THE JOURNEY THAT WAS MEASURED ───────────────
+// Oliver, 26 Sep 2026: a chip reading "~10 min walk" to "Aalborg shopping
+// streets" beside a Maps link that opened a 7 km walk to Aalborg Storcenter.
+// "This is NOT allowed to happen." The build had measured 15 minutes and 1 km;
+// the Maps web page read the same name as a different place.
+{
+  const { measuredLeg, mapsRouteUrl, foundAPlace } = M;
+  const ex = {
+    "Aalborg waterfront|Aalborg shopping streets|walking": { durationMinutes: 15, durationText: "15 mins",
+      placeIds: { origin: "ChIJwaterfront", destination: "ChIJshops" },
+      placeTypes: { origin: ["tourist_attraction", "point_of_interest"], destination: ["route"] } },
+  };
+  const hit = measuredLeg(ex, "Aalborg waterfront", "Aalborg shopping streets");
+  is("the measurement for a pair is found whatever mode it was taken in", hit?.placeIds?.destination, "ChIJshops");
+  is("and nothing is found for a pair nobody measured", measuredLeg(ex, "Aalborg", "Skagen"), null);
+  const url = mapsRouteUrl({ originText: "Aalborg waterfront, Aalborg, Denmark", destText: "Aalborg shopping streets, Aalborg, Denmark", mode: "walking",
+    originPlaceId: hit.placeIds.origin, destPlaceId: hit.placeIds.destination });
+  ok("the link carries the place Google measured to", /destination_place_id=ChIJshops/.test(url) && /origin_place_id=ChIJwaterfront/.test(url));
+  ok("and keeps the readable names", /destination=Aalborg%20shopping%20streets/.test(url));
+  ok("a pair with no measurement links by name only, as before",
+     !/place_id/.test(mapsRouteUrl({ originText: "A", destText: "B", mode: "walking" })));
+  ok("a street or a venue is a place Google found", foundAPlace(["route"]) && foundAPlace(["establishment", "point_of_interest"]));
+  ok("the town itself is not", !foundAPlace(["locality", "political"]) && !foundAPlace([]));
+  const api = readFileSync(join(root, "api/directions.js"), "utf8");
+  ok("the endpoint returns the place ids Google geocoded", /const waypoints = Array\.isArray\(data\.geocoded_waypoints\) \? data\.geocoded_waypoints : \[\];/.test(api) && /placeIds: \{\s*origin: String\(waypoints\[0\]\?\.place_id/.test(api));
+  ok("and their types", /placeTypes: \{/.test(api));
+  const page = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+  ok("every leg link is built from the measured places", /const measured = measuredLeg\(exactDurations, originName, destName\);\s*return mapsRouteUrl\(\{ originText, destText, mode,/.test(page));
+  ok("and a measurement Google placed at both ends is shown rather than the model's guess",
+     /const standIn = !googlePlaced && \(standInEnd\(originName\) \|\| standInEnd\(destName\)\);/.test(page));
+  is("there is one Maps directions builder in the guide", (page.match(/google\.com\/maps\/dir/g) || []).length, 0);
+}
+
+// ── THE WRITER IS TOLD WHERE THE HOUSE IS ───────────────────────────
+// The second live build: every night said Blokhus, while the writer's own day
+// one said "settle into the sommerhus" at Asaa on the other coast.
+{
+  const b = M.HOUSE_AREAS.find(a => a.name === "Blokhus");
+  const said = M.houseBaseBlock(b);
+  ok("the writer is told the one house", /THE SOMMERHUS FOR THE WHOLE WEEK IS AT BLOKHUS/.test(said));
+  ok("and that every day starts and ends there", /Every day starts from the house at Blokhus and ends back there/.test(said));
+  ok("with no dash in it", !/[\u2013\u2014]/.test(said));
+  is("no base, no block", M.houseBaseBlock(null), "");
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the base is picked from the skeleton before the writer runs",
+     /plannerSkeleton = JSON\.stringify\(\{ days: planDays \}\);\s*if \(stayIsHouse\(intakeStay\)\) \{\s*houseBaseForTrip = houseBase\(/.test(app)
+     && /houseBaseSays = houseBaseBlock\(houseBaseForTrip\);/.test(app));
+  ok("and the same base is handed to the per-day calls", /places: freeEntrance,\s*base: houseBaseForTrip,/.test(app));
+  // A base handed in wins over the block's own ranking, so day one cannot name
+  // a different coast from the one the writer was given.
+  const week = [[57.72, 10.58], [57.37, 9.72]].map(([lat, lon]) => ({ lat, lon }));
+  const hals = M.HOUSE_AREAS.find(a => a.name === "Hals");
+  ok("a base handed in is the one the day card returns", /Return 'Hals' as 'recommendedStay'/.test(M.houseAreaBlock(week, { base: { ...hals, meanKm: 60, family: [] } })));
+}
+
+// ── A STOP THAT IS NOT A PLACE GETS NO ROUTE ────────────────────────
+// Oliver, 26 Sep 2026, on "Aalborg shopping streets" opening a mall 7 km out:
+// "Naah it doesen't need to give a link I guess." A stop naming only a town
+// and what you do there is free time: its card stays, and nothing routes to it.
+{
+  const { looseStop } = M;
+  ok("shopping streets in a town is free time", looseStop({ name: "Aalborg shopping streets", town: "Aalborg" }, null));
+  ok("and the town is found in the name when the plan left it out", looseStop({ name: "Lunch in Skagen" }, null) && looseStop({ name: "Grocery shopping in København" }, null));
+  ok("a chain with no branch is free time", looseStop({ name: "Netto, Blokhus", town: "Blokhus" }, null) && looseStop({ name: "Rema 1000, Løkken", town: "Løkken" }, null));
+  ok("a chain with its street is that branch", !looseStop({ name: "Netto Vesterbrogade", town: "Copenhagen" }, null));
+  ok("a town on its own is a visit, not free time", !looseStop({ name: "Aalborg" }, null) && !looseStop({ name: "Aalborg city centre", town: "Aalborg" }, null));
+  ok("a name that survives is a place", !looseStop({ name: "Café Luna, Aalborg" }, null)
+     && !looseStop({ name: "Lille Vildmose, Øster Hurup", town: "Øster Hurup" }, null)
+     && !looseStop({ name: "Asaa beach", town: "Asaa" }, null)
+     && !looseStop({ name: "Dinner at Mortens Kro", town: "Aalborg" }, null));
+  ok("a published row is always a place", !looseStop({ name: "Aalborg shopping streets" }, { name: "Aalborg shopping streets", _src: "free" }));
+  const page = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+  ok("the guide draws no leg chip, and so no Maps link, into or out of free time",
+     /const legChip = \(originName, destName, how\) => \{\s*if \(looseByName\(originName\) \|\| looseByName\(destName\)\) return null;/.test(page));
+  ok("and no connector line around it", /\{!lightMode && nextStop && !looseLeg && /.test(page));
+  ok("the card is tagged free time", /const kind = loose \? uiT\("guide\.freeTime", guideLang\) :/.test(page));
+  ok("and it is no pin on the map", /\.filter\(st => !looseStop\(st\)\);/.test(page));
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the build measures no leg to free time", /if \(looseStop\(day\.stops\[i\]\) \|\| looseStop\(day\.stops\[i \+ 1\]\)\) continue;/.test(app)
+     && /!samePlace\(prevLast\.name, firstHere\.name\) && !looseStop\(prevLast\) && !looseStop\(firstHere\)\)/.test(app));
+  ok("and geocodes none", /d\.stops\.filter\(s => !looseStop\(s\)\)\.map\(s => s\.name\)/.test(app));
+  const ui = readFileSync(join(root, "src/utils/uiLanguage.js"), "utf8");
+  ok("free time is said in all three languages", /"guide\.freeTime":\s*\{ en: "Free time", da: "Fri tid", de: "Freizeit" \}/.test(ui));
+}
+
+// ── THE KIDS LOVE THE ZOO ───────────────────────────────────────────
+// A family brief names the place and not the category, and nothing in the
+// category list heard it, so the zoo was held back as not asked for.
+{
+  const { wantedCategories } = M;
+  ok("a zoo asks for attractions", wantedCategories("the kids love the zoo")?.has("free"));
+  ok("and so do the beach and a sommerland", wantedCategories("a day at the beach")?.has("free") && wantedCategories("Fårup Sommerland for the kids")?.has("free"));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

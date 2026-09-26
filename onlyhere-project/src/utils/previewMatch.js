@@ -230,7 +230,11 @@ const CATEGORY_WORDS = {
     "castle", "castles", "palace", "palaces", "attraction", "attractions", "sightseeing", "sights",
     "viking", "vikings", "architecture", "church", "churches", "cathedral", "old town", "landmark",
     "landmarks", "monument", "monuments", "exhibition", "exhibitions", "craft", "crafts", "ceramics",
-    "pottery", "design", "workshop", "workshops", "garden", "gardens", "park", "parks", "culture"],
+    "pottery", "design", "workshop", "workshops", "garden", "gardens", "park", "parks", "culture",
+    // A family brief names the place, not the category: "the kids love the
+    // zoo" said nothing this list heard, so the zoo was held back as not asked.
+    "zoo", "zoos", "aquarium", "aquariums", "waterpark", "waterparks", "sommerland", "legoland",
+    "playground", "playgrounds", "animals", "wildlife", "nature", "beach", "beaches", "hiking"],
 };
 
 // Whole words, folded, so "art" does not fire on "Aarhus" and "bar" does not

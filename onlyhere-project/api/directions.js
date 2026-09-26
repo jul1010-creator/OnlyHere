@@ -133,6 +133,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ error: data.status || "No route found" });
     }
     const leg = data.routes[0].legs[0];
+    const waypoints = Array.isArray(data.geocoded_waypoints) ? data.geocoded_waypoints : [];
 
     // ── WHAT THE JOURNEY IS ACTUALLY MADE OF ────────────────────────
     // Oliver, 6 Aug 2026: "Surely the AI can look into these transports that
@@ -239,6 +240,29 @@ export default async function handler(req, res) {
       // own polyline next to Google's own duration makes that whole class of
       // disagreement impossible by construction.
       polyline: decodePolyline(data.routes[0].overview_polyline?.points),
+      // ── AND WHICH TWO PLACES GOOGLE MEASURED BETWEEN ────────────────
+      // Oliver, 26 Sep 2026, with a screenshot of a guide leg reading "~10 min
+      // walk" from Aalborg waterfront to "Aalborg shopping streets" and the Maps
+      // link beside it opening a 7 km, 1 hour 37 minute walk to Aalborg
+      // Storcenter: "this is NOT allowed to happen."
+      //
+      // This endpoint had measured that same leg at 15 minutes and 1 km. Google
+      // runs two geocoders, and the Directions API and the Maps web page read
+      // the same vague name as two different places. The only way to make the
+      // link open the journey that was measured is to hand the link the exact
+      // places, and Google's own answer is place_id: the Maps URL takes
+      // origin_place_id and destination_place_id and then opens those, not a
+      // second guess. The types say whether Google found a venue at all or fell
+      // back to the town itself.
+      placeIds: {
+        origin: String(waypoints[0]?.place_id || ""),
+        destination: String(waypoints[waypoints.length - 1]?.place_id || ""),
+      },
+      placeTypes: {
+        origin: Array.isArray(waypoints[0]?.types) ? waypoints[0].types : [],
+        destination: Array.isArray(waypoints[waypoints.length - 1]?.types) ? waypoints[waypoints.length - 1].types : [],
+      },
+      endAddresses: { origin: String(leg.start_address || ""), destination: String(leg.end_address || "") },
     });
   } catch (err) {
     return res.status(500).json({ error: String(err) });

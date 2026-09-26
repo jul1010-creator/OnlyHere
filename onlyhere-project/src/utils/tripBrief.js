@@ -1474,6 +1474,21 @@ export const readBrief = ({ travellerText = "", travellerTurns = null, intake = 
       if (v) known.stayWhen = v;
     });
   }
+  // ── AND NO BOOKING, NO BOOKED NIGHTS ─────────────────────────────
+  //
+  // Found live, 26 Sep 2026, on a family sommerhus week. The summerhouse
+  // chip writes "They have not booked anywhere ... booked by the week ... let
+  // Saturday to Saturday" into the intake turn, and readStayNights heard "the
+  // whole trip" in it. The brief then held stay "not booked" AND stayWhen "the
+  // whole trip", the guide build turned that into every night being already
+  // booked, and every night's accommodation call was told "THIS NIGHT IS
+  // ALREADY BOOKED" at "a place they have already booked". Day one never got
+  // to recommend the sommerhus coast at all.
+  //
+  // The slot table already says it: stayWhen `needs` a booked stay. This makes
+  // the value obey the same rule the question does, after every reader and the
+  // direct-answer pass have had their turn.
+  if (known.stayWhen && known.stay?.value !== "booked") delete known.stayWhen;
   // ── AND A TURN THAT TRIED AND LANDED NOWHERE ──────────────────────
   //
   // Oliver, 13 Sep 2026: "I'd rather have the model asks 'do you mean public

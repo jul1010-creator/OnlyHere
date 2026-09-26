@@ -609,7 +609,15 @@ export const GuidePreviewScreen = ({
     // bar, and taking it off the screen would be deciding for them. `wanted`
     // is read from their own turns, so asking for it at any point opens it
     // again.
-    .map(cat => (cat.src === "nightlife" && kidsAlong && !wanted.has("nightlife")
+    //
+    // ── AND `wanted` IS NULL WHEN THEY NAMED NO KIND OF PLACE ──────
+    // Found live, 26 Sep 2026: a family who ticked the kids box and wrote
+    // "beaches and something fun for the kids" pressed build and got "Something
+    // broke on our end". wantedCategories returns null when nothing it reads
+    // is a category, every other reader of it checks for that, and this one
+    // called .has on it. The kids box moved to the top of the form the same
+    // day, so this is the path more families now take.
+    .map(cat => (cat.src === "nightlife" && kidsAlong && !(wanted && wanted.has("nightlife"))
       ? { ...cat, offered: [], picks: [] }
       : cat))
     .filter(cat => cat.items.length > 0 || cat.offered.length > 0 || cat.consider.length > 0);

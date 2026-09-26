@@ -37,7 +37,7 @@ import { shops } from "./data/shops";
 import { shopPlaces } from "./data/shopPlaces";
 import { repairBody, headingsOf, bodyProblems, priceProblems, auditPublished, describeAudit } from "./utils/publishedRepair";
 import { blockingCoordProblems, coordProblems, coordAudit, describeCoordAudit } from "./utils/coordCheck";
-import { fetchProfile, saveProfile, takeHeldProfile, claimSignupCarry, profileForPrompt, isBlank as profileIsBlank, homeCurrency } from "./utils/profile";
+import { fetchProfile, saveProfile, takeHeldProfile, claimSignupCarry, profileForPrompt, isBlank as profileIsBlank, homeCurrency, readerCurrency } from "./utils/profile";
 // The half of the account that learns rather than being typed. See
 // utils/profileLearning.js for the four rules it has to obey.
 import { seenFromTrip, observeTrip, observedForPrompt } from "./utils/profileLearning";
@@ -53,7 +53,7 @@ import { reconcileHours, hoursForPrompt } from "./utils/openingHours";
 import { matchEvent, reconcileTickets, ticketsForPrompt, appearances, otherDatesHere, alsoPlayingLine, describeAppearances, ticketBadge, priceText, normaliseTicketStatus, stampTicketSource, ticketProvenance, statedAsFact, ticketPromptNote, writtenStatusRule, lookupFailureNote, TICKET_HUNT_PROMPT, ticketHuntUrls } from "./utils/tickets";
 import { readFactCheck, describeFactCheck, withRoots, datesConfirmedBy, readInventedCheck, researchForCheck, INVENTED_CHECK_FORMAT, correctionLanded, describeCorrection, correctionBanner, correctionPublisherNote } from "./utils/factCheckRead";
 import { tracePrices, describePriceTrace, untracedPriceClaim, readerText, glanceProblems, repairGlance, curatedFindProblems, selfContradictions, launderedAbsence, priceSource, priceMisses, findTicketPrice, whoSaid, ticketPriceOn, pricesAdmission, evidenceStanding, describeEvidence, statesAPrice, unpricedLine, describeUnpriced, PRICE_UNCHECKED, sourceFit, describeSourceFit, LIVING_TYPES, VENUE_KINDS, UNCONFIRMED_IDENTITY, UNVERIFIED_PROSE } from "./utils/entryAudit";
-import { townPointFor, isSameTownWalk, legDistanceKm, resolveLegMode, lookupRealPlace, placeCoords, directionsEndpoint, collapsedRoute, WALK_MAX_MINUTES, WALK_MAX_KM, townKeyFor, coordFitsTown, rowTownFits, MAX_TOWN_KM, upgradeWorthIt, onFootMinutes } from "./utils/guideEnrichment";
+import { townPointFor, isSameTownWalk, legDistanceKm, resolveLegMode, lookupRealPlace, placeCoords, directionsEndpoint, collapsedRoute, WALK_MAX_MINUTES, WALK_MAX_KM, townKeyFor, coordFitsTown, rowTownFits, MAX_TOWN_KM, upgradeWorthIt, onFootMinutes, looseStop } from "./utils/guideEnrichment";
 import { checkPlan, planProblemsForPrompt, titlePromises, MAX_BARS_A_NIGHT, MAX_CLUBS_A_NIGHT } from "./utils/planGate";
 import { isPremium } from "./utils/premium";
 import { stayProblems, withoutMismatchedStays, travellerBudget, saidByTraveller, budgetTierMismatch, budgetCapitalBlock, BUDGET_CAPITAL_GUIDE, budgetFoodBlock, budgetFoodGuide, nightPriceFrom } from "./utils/accommodation";
@@ -234,7 +234,7 @@ import { matchedPlaces, previewPools, wantedCategories, mentionsPlace } from "./
 import { estimateDay, estimateShort, estimateSays, estimateForBrief, isRecommended, recommendedWhy, summerhouseFit, summerhouseWhy, SUMMERHOUSE_MARK, BUDGET_CURRENCIES, ENABLE_LABEL, ENABLE_SAYS } from "./utils/budgetEstimate";
 import { TRIP_SCOPES, scopeSaid } from "./utils/tripScopeChoice";
 import { STAY_CHOICES, stayIsBooked, stayIsHouse, stayProblem, staySaid } from "./utils/stayChoice";
-import { hostelBlock, houseAreaBlock, houseBase, houseNightSays, dayPoints } from "./utils/stayAwareness";
+import { hostelBlock, houseAreaBlock, houseBase, houseBaseBlock, houseNightSays, houseDistanceSays, dayPoints } from "./utils/stayAwareness";
 import { FOOD_TIERS } from "./utils/mealsEstimate";
 import { weighAdd, addCaution, tripLoadBlock } from "./utils/weighAdd";
 import { isBookableTicketUrl, pickTicketUrl, describeTicketSearch, ticketQueries, ticketUrlSaysElsewhere, ticketAgentOf, reviewPastedTicketUrl, isTourUrl, typeHasAdmission, editionYearOf, TICKET_FIELD, TOUR_FIELD } from "./utils/ticketLink";
@@ -14712,8 +14712,11 @@ ${researchRules("festival", ev)}`
     // The first live build without this put one house in four places.
     const housePoints = stayIsHouse(stayKind) ? days.slice(0, Math.max(1, days.length - 1)).flatMap(d => dayPoints(d, stayResolve)) : [];
     const houseOpts = { places: stayAware?.places || [], kids: stayKids };
-    const houseAreaSays = stayIsHouse(stayKind) ? houseAreaBlock(housePoints, houseOpts) : "";
-    const houseLaterSays = stayIsHouse(stayKind) ? houseNightSays(houseBase(housePoints, houseOpts)) : "";
+    // The skeleton's base when the build has one, so the writer, day one and
+    // every night name the same house. Worked out here only as a fallback.
+    const houseBaseArea = stayIsHouse(stayKind) ? (stayAware?.base || houseBase(housePoints, houseOpts)) : null;
+    const houseAreaSays = stayIsHouse(stayKind) ? houseAreaBlock(housePoints, { ...houseOpts, base: houseBaseArea }) : "";
+    const houseLaterSays = houseNightSays(houseBaseArea);
     await Promise.all(days.map(async (day, idx) => {
       try {
         const names = (day.stops || []).map(s => s.name);
@@ -14752,7 +14755,8 @@ THE LIST ABOVE COUNTS AS CONTEXT FOR recommendedStay, and it is the only list th
 
 ${hostelSays}` : ""}${houseAreaSays && idx === 0 && idx + 1 < days.length ? `
 
-${houseAreaSays}` : ""}`;
+${houseAreaSays}
+${houseDistanceSays(houseBaseArea, dayPoints(day, stayResolve))}` : ""}`;
         // RETRIED (Oliver, again: "no accommodation recommendations (Booking)"):
         // this single call is the only source of the Where to stay card and the
         // per-leg how-texts, and it previously got exactly one attempt — one
@@ -14771,7 +14775,7 @@ ${houseAreaSays}` : ""}`;
           // the guide writer's. It produces the "Where to stay" sentence and
           // every leg description, which are two of the most-read lines on the
           // page, so leaving it out means a Danish guide with English legs.
-          `${enrichPrompt}${idx + 1 >= days.length ? `\n\nTHIS DAY HAS NO NIGHT AFTER IT. It is the last day of the trip and they go home at the end of it, so there is no bed to recommend: return 'accommodation' as one sentence about the end of the day and the journey out, and return 'stayArea' and 'recommendedStay' as EMPTY STRINGS. A three day trip that offered a hotel on day 3 is the guide booking a room for a night the traveller is not in the country.` : ''}${stayIsHouse(stayKind) && idx + 1 < days.length ? (idx === 0 ? `\n\nTHEY ARE TAKING A SOMMERHUS, A DANISH HOLIDAY HOUSE, FOR THE WHOLE WEEK. It is one booking, not a bed per night, and holiday houses sit on the coasts and in the countryside rather than in town centres. For THIS day only, return 'recommendedStay' as the AREA to take a house in rather than a hotel in this town: name the stretch of coast or the village, say which town it is near and how far, and say that it is booked by the week through a holiday-house agency. Never name a hotel or a hostel.` : `\n\nTHEY HAVE A SOMMERHUS FOR THE WHOLE WEEK AND IT IS THE SAME HOUSE TONIGHT. Do not recommend anywhere to sleep: return 'recommendedStay' as an empty string and write 'accommodation' as one sentence about getting back to the house from this day's last stop.${houseLaterSays ? ` ${houseLaterSays}` : ""}`) : ""}${(bookedNights || []).includes(idx + 1) ? `\n\nTHIS NIGHT IS ALREADY BOOKED. They are sleeping at ${bookedName || 'a place they have already booked'} on day ${idx + 1} and it is not in question. Return 'accommodation' as one sentence about getting back to it from this day's last stop, and return 'stayArea' and 'recommendedStay' as EMPTY STRINGS. Do not name anywhere else, do not compare it to anywhere else, and do not suggest they move.` : ''}\nEVERY PRICE YOU WRITE IS IN DKK. Never dollars, euros or pounds, and never a conversion in brackets: a traveller in Denmark is charged kroner and a converted figure matches nothing they will see. A price you can only give by converting is a price you do not have, so describe the place without one.${langBlock}\n\nRespond with ONLY the raw JSON object, no markdown code fences.\n\n${context || "No live search context available — use only safe general knowledge and 'Check Rejseplanen' fallbacks."}`,
+          `${enrichPrompt}${idx + 1 >= days.length ? `\n\nTHIS DAY HAS NO NIGHT AFTER IT. It is the last day of the trip and they go home at the end of it, so there is no bed to recommend: return 'accommodation' as one sentence about the end of the day and the journey out, and return 'stayArea' and 'recommendedStay' as EMPTY STRINGS. A three day trip that offered a hotel on day 3 is the guide booking a room for a night the traveller is not in the country.` : ''}${stayIsHouse(stayKind) && idx + 1 < days.length ? (idx === 0 ? `\n\nTHEY ARE TAKING A SOMMERHUS, A DANISH HOLIDAY HOUSE, FOR THE WHOLE WEEK. It is one booking, not a bed per night, and holiday houses sit on the coasts and in the countryside rather than in town centres. For THIS day only, return 'recommendedStay' as the AREA to take a house in rather than a hotel in this town: name the stretch of coast or the village, say which town it is near and how far, and say that it is booked by the week through a holiday-house agency. Never name a hotel or a hostel.` : `\n\nTHEY HAVE A SOMMERHUS FOR THE WHOLE WEEK AND IT IS THE SAME HOUSE TONIGHT. Do not recommend anywhere to sleep: return 'recommendedStay' as an empty string and write 'accommodation' as one sentence about getting back to the house from this day's last stop.${houseLaterSays ? ` ${houseLaterSays} ${houseDistanceSays(houseBaseArea, dayPoints(day, stayResolve))}` : ""}`) : ""}${(bookedNights || []).includes(idx + 1) ? `\n\nTHIS NIGHT IS ALREADY BOOKED. They are sleeping at ${bookedName || 'a place they have already booked'} on day ${idx + 1} and it is not in question. Return 'accommodation' as one sentence about getting back to it from this day's last stop, and return 'stayArea' and 'recommendedStay' as EMPTY STRINGS. Do not name anywhere else, do not compare it to anywhere else, and do not suggest they move.` : ''}\nEVERY PRICE YOU WRITE IS IN DKK. Never dollars, euros or pounds, and never a conversion in brackets: a traveller in Denmark is charged kroner and a converted figure matches nothing they will see. A price you can only give by converting is a price you do not have, so describe the place without one.${langBlock}\n\nRespond with ONLY the raw JSON object, no markdown code fences.\n\n${context || "No live search context available — use only safe general knowledge and 'Check Rejseplanen' fallbacks."}`,
           // TOKEN BUMP 350 → 900 (Oliver: "why does the accommodation/booking
           // affiliation keep getting removed"): 350 max_tokens was genuinely too
           // tight for this response — a 5-stop day needs 4 leg objects PLUS the
@@ -15951,7 +15955,7 @@ ${houseAreaSays}` : ""}`;
         const prevDay = days[di - 1];
         const prevLast = (prevDay.stops || [])[prevDay.stops.length - 1];
         const firstHere = (day.stops || [])[0];
-        if (prevLast?.name && firstHere?.name && !samePlace(prevLast.name, firstHere.name)) {
+        if (prevLast?.name && firstHere?.name && !samePlace(prevLast.name, firstHere.name) && !looseStop(prevLast) && !looseStop(firstHere)) {
           // ── NO how-TEXT, BECAUSE THERE ISN'T ONE FOR THIS LEG ─────
           //
           // This passed `day.glance.legs[0].how`, which is the description of the
@@ -15979,6 +15983,9 @@ ${houseAreaSays}` : ""}`;
       }
       for (let i = 0; i < day.stops.length - 1; i++) {
         if (samePlace(day.stops[i].name, day.stops[i + 1].name)) continue;
+        // Free time is no end of a route. See looseStop: nothing is measured
+        // to a stop the page will not draw a leg to.
+        if (looseStop(day.stops[i]) || looseStop(day.stops[i + 1])) continue;
         // Day number carried so each leg is routed on ITS OWN date: a five-day
         // trip crosses a weekend, and day four's Sunday bus is a different
         // question from day one's Wednesday train.
@@ -16314,7 +16321,9 @@ ${houseAreaSays}` : ""}`;
       const c = coordForTown(real, town) || placeCoords(real);
       return !!c && coordFitsTown(c, town).ok;
     };
-    const names = [...new Set(days.flatMap(d => d.stops.map(s => s.name)))].filter(n => !hasPreciseCoords(n, townByName[n]));
+    // Free time is never geocoded: the page draws no pin for it, and a
+    // Nominatim hit on "Aalborg shopping streets" is a guess at one shop.
+    const names = [...new Set(days.flatMap(d => d.stops.filter(s => !looseStop(s)).map(s => s.name)))].filter(n => !hasPreciseCoords(n, townByName[n]));
     const found = {};
     for (const name of names) {
       try {
@@ -17129,7 +17138,9 @@ ${houseAreaSays}` : ""}`;
       const homeStartsHere = homeStartBlock(guideBrief) ? `\n\n${homeStartBlock(guideBrief)}` : "";
       const stayKnown = guideBrief.known;
       const bookedName = namedStayIn(saidByTravellerForGuide);
-      const bookedNights = bookedDayNumbers(stayKnown.stayWhen, requestedDays || 0);
+      // Only a booking has booked nights. See the note at the end of the slot
+      // pass in utils/tripBrief.js for the sommerhus week this caught.
+      const bookedNights = (stayKnown.stay?.value === "booked" || bookedName) ? bookedDayNumbers(stayKnown.stayWhen, requestedDays || 0) : [];
       const bookedStayBlock = (stayKnown.stay?.value !== "booked" && !bookedName) ? "" : (() => {
         const what = bookedName ? `${bookedName}, which they have already booked` : "somewhere to sleep, already booked";
         // WHICH NIGHTS, OR PLAINLY THAT NOBODY KNOWS. The second branch is the
@@ -17160,6 +17171,10 @@ ${houseAreaSays}` : ""}`;
       // directly from the conversation, exactly like this pipeline didn't exist.
       buildStage("Planning your itinerary structure", 25);
       let plannerSkeleton = "";
+      // The sommerhus base, picked once from the skeleton and handed to both
+      // the writer and the per-day calls. See houseBaseBlock.
+      let houseBaseForTrip = null;
+      let houseBaseSays = "";
       // The community block, when the plan stands somewhere with something on.
       // Declared beside the skeleton it is built from. See utils/communityEvents.js.
       let communityFound = "";
@@ -17323,6 +17338,12 @@ ${houseAreaSays}` : ""}`;
               problems: verdict.problems.length,
             });
             plannerSkeleton = JSON.stringify({ days: planDays });
+            if (stayIsHouse(intakeStay)) {
+              houseBaseForTrip = houseBase(
+                planDays.slice(0, Math.max(1, planDays.length - 1)).flatMap(d => dayPoints(d, (name, town) => resolveStopCoords(name, null, town))),
+                { places: freeEntrance, kids: !!guideBrief.known?.party?.hasKids });
+              houseBaseSays = houseBaseBlock(houseBaseForTrip);
+            }
             plannerStopNames = planDays.flatMap(d => (d.stops || []).map(s => s?.name)).filter(Boolean);
             plannerTowns = [...new Set(planDays.flatMap(d => (d.stops || []).map(s => s?.town)).filter(Boolean))];
             // ── AND WHAT IS ON IN THE PLACES THEMSELVES ───────────
@@ -17638,7 +17659,7 @@ CRITICAL — GEOGRAPHIC GROUPING AND SEQUENCING: within a single day, group stop
 CRITICAL — SEQUENCE THE DAYS THEMSELVES ALONG ONE ROUTE, NOT JUST EACH DAY INTERNALLY: this applies across the whole trip, not just within one day — Copenhagen/Zealand and Jutland are different regions connected only by a long bridge/ferry crossing or a flight, never a short hop. Don't send the trip deeper into one region for several days and then jump straight to the other with no bridging day (e.g. Day 1-2 further into Jutland, Day 3 suddenly Copenhagen). If a planning skeleton is provided below, its day-to-day order already accounts for this — follow it. If you're structuring the trip yourself (no skeleton, or it's missing this), order the days to move in one general direction across the country and minimize total region-crossings over the whole trip.
 CRITICAL — REALISTIC ARRIVAL-DAY TIMING: on the actual arrival day, never schedule the first real activity at or right after the exact landing time — leave a real buffer for immigration/baggage claim, then getting from the airport to accommodation and checking in, roughly 60-90 minutes depending on distance, before anything else starts. Someone landing at 12:00 realistically reaches their hotel/hostel around 13:00-13:30, not before — the first stop's arrivalTime should reflect that reality, not the literal landing timestamp.
 CRITICAL — REALISTIC DEPARTURE-DAY TIMING: on the actual departure day, never schedule an activity (a museum visit, a meal, anything) that runs right up against the flight's departure time — leave a real buffer BEFORE it for getting to the airport, checking in, and security, same logic as the arrival buffer but in reverse. People commonly arrive at the airport 2-3 hours before a flight, so if departure is at 14:00, the last real activity should wrap up by roughly 11:00-11:30 at the latest, not 13:30. If the departure time is early enough that there's no realistic room for any activity that day at all, say so plainly rather than forcing one in anyway — a half-day or single relaxed stop near the accommodation is the honest call, not a full itinerary crammed against the clock. If "Traveling with kids" is mentioned, adjust the plan for it — shorter, less-packed days (2-3 stops, not 4-5), avoid late-night-only venues and anything inappropriate for children, favor stops with real breaks (parks, casual food) between bigger activities, and mention if something specific is a poor fit for kids rather than including it anyway.
-If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day.${requestedDays ? ` CRITICAL — the traveler explicitly said they have ${requestedDays} day${requestedDays > 1 ? "s" : ""} for this trip: the "days" array MUST contain exactly ${requestedDays} entries, one per day, even if the conversation text itself didn't spell out "Day 1:", "Day 2:" etc. for each one — split ALL the places discussed across those ${requestedDays} days yourself, in a sensible geographic/logical order (don't cram everything into day 1 and leave later days empty). If too few distinct places were discussed to fill every day with something real, it's fine for a day to have fewer stops or repeat a base town for a slower day — but never invent a place that wasn't mentioned just to fill a day.` : ""} Use only real place names mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.${CURRENCY_RULE}${budgetCapitalGuide}${chosenEventsBlock}${chosenExtrasBlock}${ruledOutBlock}${kindsOutBlock}${localSaysGuide}${bookedStayBlock}${homeStartsHere}${beenBlock}${essentialsFacts}${communityFound ? `\n${communityFound}` : ""}${activitySaysForGuide ? `\n${activitySaysForGuide}` : ""}${crossingsForGuide ? `\n${crossingsForGuide}` : ""}${plannerSkeleton ? `\nA planning pass already worked out a day-by-day structure (which places, which day, what order) — follow this exact breakdown unless it's missing something the conversation clearly mentioned; your job is to write the full essentials and every stop's note yourself, this only gives you the skeleton: ${plannerSkeleton}` : ""}${tavilyGrounding ? `\nWEB RESEARCH (Tavily, real current results — weigh alongside the conversation for prices, hours, and current details): ${tavilyGrounding}` : ""}${guideGrounding ? `\nGOOGLE AI CROSS-CHECK (weigh this alongside the conversation — if it reveals a mentioned place doesn't seem to exist, prefer the nearest real equivalent rather than inventing): ${guideGrounding}` : ""}${guideLangBlock}`;
+If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day.${requestedDays ? ` CRITICAL — the traveler explicitly said they have ${requestedDays} day${requestedDays > 1 ? "s" : ""} for this trip: the "days" array MUST contain exactly ${requestedDays} entries, one per day, even if the conversation text itself didn't spell out "Day 1:", "Day 2:" etc. for each one — split ALL the places discussed across those ${requestedDays} days yourself, in a sensible geographic/logical order (don't cram everything into day 1 and leave later days empty). If too few distinct places were discussed to fill every day with something real, it's fine for a day to have fewer stops or repeat a base town for a slower day — but never invent a place that wasn't mentioned just to fill a day.` : ""} Use only real place names mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.${CURRENCY_RULE}${budgetCapitalGuide}${chosenEventsBlock}${chosenExtrasBlock}${ruledOutBlock}${kindsOutBlock}${localSaysGuide}${bookedStayBlock}${houseBaseSays}${homeStartsHere}${beenBlock}${essentialsFacts}${communityFound ? `\n${communityFound}` : ""}${activitySaysForGuide ? `\n${activitySaysForGuide}` : ""}${crossingsForGuide ? `\n${crossingsForGuide}` : ""}${plannerSkeleton ? `\nA planning pass already worked out a day-by-day structure (which places, which day, what order) — follow this exact breakdown unless it's missing something the conversation clearly mentioned; your job is to write the full essentials and every stop's note yourself, this only gives you the skeleton: ${plannerSkeleton}` : ""}${tavilyGrounding ? `\nWEB RESEARCH (Tavily, real current results — weigh alongside the conversation for prices, hours, and current details): ${tavilyGrounding}` : ""}${guideGrounding ? `\nGOOGLE AI CROSS-CHECK (weigh this alongside the conversation — if it reveals a mentioned place doesn't seem to exist, prefer the nearest real equivalent rather than inventing): ${guideGrounding}` : ""}${guideLangBlock}`;
       // Guide-building is genuine multi-step reasoning (timing, geography, avoiding
       // duplicates, family-mode adjustments) — this is the one call in Detour worth
       // Opus's extra reasoning depth, and it already has a loading screen the person
@@ -18093,9 +18114,16 @@ If the conversation only covers a single day or a few stops with no explicit day
       //
       // ONE CALL FOR ALL OF THEM, so every rate on a guide shares one ECB
       // publication date. See api/fx.js.
-      const wantFx = homeCurrency(userProfile?.country);
-      const fxWanted = [...new Set(["USD", "EUR", ...(wantFx ? [wantFx] : [])])];
-      {
+      // ── ONE RATE, IN THEIR OWN MONEY, AND NONE FOR A DANE ────────
+      // Oliver, 26 Sep 2026: "just tell the user what the rate is in their
+      // own currency.. if it's a Dane, just leave it out." See readerCurrency.
+      const wantFx = readerCurrency({
+        profileCountry: userProfile?.country,
+        typedCountry: homeCountryIn(intakeStartPoint)?.code || "",
+        locale: typeof navigator !== "undefined" ? navigator.language : "",
+      });
+      const fxWanted = wantFx && wantFx !== "DKK" ? [wantFx] : [];
+      if (fxWanted.length) {
         try {
           const fxRes = await fetch(`/api/fx?to=${encodeURIComponent(fxWanted.join(","))}`);
           if (fxRes.ok) {
@@ -18130,6 +18158,7 @@ If the conversation only covers a single day or a few stops with no explicit day
         arrival: datePrecision === "day" ? arrivalDate : null,
         resolve: (name, town) => resolveStopCoords(name, null, town),
         places: freeEntrance,
+        base: houseBaseForTrip,
       });
       parsed.days = parsed.days.map((d, i) => (glances[i] ? { ...d, glance: glances[i] } : d));
 

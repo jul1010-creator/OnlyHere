@@ -414,12 +414,10 @@ export const UI_STRINGS = {
   // is called, and the German column says Kronen because that is what a German
   // reader calls it.
   "guide.kroner":       { en: "Kroner",  da: "Kroner",  de: "Kronen" },
-  "guide.pricedInDkk":  { en: "Everything here is priced in DKK, which is what you will be charged.", da: "Alt her er i danske kroner, og det er også det, du bliver trukket.", de: "Alles hier ist in dänischen Kronen ausgezeichnet, und genau das wird auch abgebucht." },
-  "guide.wasAbout":     { en: "was about", da: "svarede til cirka", de: "waren etwa" },
-  "guide.onDate":       { en: "on",       da: "den",     de: "am" },
-  // Joins the last two rates when a guide carries more than one.
-  "guide.orAbout":      { en: "or about", da: "eller cirka", de: "oder etwa" },
-  "guide.ratesMoved":   { en: "so rates will have moved a little by the time you travel.", da: "så kurserne har flyttet sig en smule, når du rejser.", de: "die Kurse werden sich bis zu deiner Reise also ein wenig bewegt haben." },
+  // Oliver, 26 Sep 2026: "just tell the user what the rate is in their own
+  // currency." The whole line is now "100 DKK is about 13.38 EUR."
+  "guide.isAbout":      { en: "is about", da: "er cirka", de: "sind etwa" },
+  "guide.freeTime":     { en: "Free time", da: "Fri tid", de: "Freizeit" },
 
   // ── THE SENTENCE UNDER EVERY PAID LINK ────────────────────────────
   //

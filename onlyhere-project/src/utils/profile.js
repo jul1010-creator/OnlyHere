@@ -275,6 +275,43 @@ export const homeCurrency = (code) => {
   return !c || c.currency === "DKK" ? null : c.currency;
 };
 
+// ── AND WHICH CURRENCY THIS READER THINKS IN ────────────────────────
+//
+// Oliver, 26 Sep 2026, of the guide's currency line ("Everything here is
+// priced in DKK ... 100 DKK was about 15.25 USD or about 13.38 EUR on
+// 2026-09-25, so rates will have moved a little by the time you travel"):
+// "Don't make it so complicated.. just tell the user what the rate is in
+// their own currency.. if it's a Dane, just leave it out."
+//
+// So one currency, theirs, from the best evidence there is, in this order:
+// the country on their account, a home country they typed as the starting
+// point, then the region of their browser's language. A Dane at any step is
+// null, and so is a reader nothing tells us about: no line beats a guess.
+export const readerCurrency = ({ profileCountry = "", typedCountry = "", locale = "" } = {}) => {
+  for (const code of [profileCountry, typedCountry]) {
+    const c = countryNamed(code);
+    if (c) return c.currency;
+  }
+  const loc = String(locale || "");
+  // Danish is Danish whatever region the browser adds, or leaves off.
+  if (/^da\b/i.test(loc)) return "DKK";
+  const region = (loc.match(/[-_]([A-Za-z]{2})\b/) || [])[1];
+  const c = region ? countryNamed(region) : null;
+  return c ? c.currency : null;
+};
+
+// The one line the guide shows. DKK for a Dane is nothing to convert, a reader
+// nothing tells us about gets no guess, and a guide built before this carried
+// dollars and euros both, so the reader's own is picked out of those.
+export const fxRateFor = (fx, currency) => {
+  if (!currency || currency === "DKK") return null;
+  const rates = Array.isArray(fx?.rates) && fx.rates.length
+    ? fx.rates
+    : (Number(fx?.amount) > 0 ? [{ to: fx.to, amount: fx.amount }] : []);
+  const hit = rates.find(r => r?.to === currency);
+  return hit ? { base: Number(fx?.baseAmount) || 100, to: hit.to, amount: hit.amount } : null;
+};
+
 export const DESCRIPTION_MAX = 600;
 
 // ── WHICH TERMS THEY AGREED TO ──────────────────────────────────────

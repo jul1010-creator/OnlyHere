@@ -9,6 +9,7 @@ import { languageBlock } from "../utils/readerLanguage";
 // blocks and English leg lines." This page is ROUTED rather than rendered by
 // App.jsx, so it reads the stored choice itself instead of being handed it.
 import { currentUiLanguage, isUiLanguage, t as uiT } from "../utils/uiLanguage";
+import { readerCurrency, fxRateFor } from "../utils/profile";
 // ── AND THE GUIDE'S OWN WORDS FOLLOW THE GUIDE'S OWN LANGUAGE ───────
 // Not the picker. The picker says what language the SITE is in; a guide was
 // written in whatever language the traveller wrote their brief in, and it now
@@ -48,7 +49,7 @@ import { nightlifeSpots } from "../data/nightlife";
 import { shops } from "../data/shops";
 import { craftItemsFallback } from "../data/craft";
 import { events, majorEvents } from "../data/events";
-import { lookupRealPlace, placeCoords, resolveStopCoords, resolveStopCoordsDetailed, townKeyFor, townFallbackFor, townPointFor, resolveLegMode, kmBetween, estimateDurationText, isSameTownWalk, legDistanceKm, isSameSpot, WALK_MAX_MINUTES, walkEstimateTooFar, stopTown } from "../utils/guideEnrichment";
+import { lookupRealPlace, placeCoords, resolveStopCoords, resolveStopCoordsDetailed, townKeyFor, townFallbackFor, townPointFor, resolveLegMode, kmBetween, estimateDurationText, isSameTownWalk, legDistanceKm, isSameSpot, WALK_MAX_MINUTES, walkEstimateTooFar, stopTown, measuredLeg, mapsRouteUrl, foundAPlace, looseStop } from "../utils/guideEnrichment";
 import { operatorsForLeg, operatorNote, OPERATORS } from "../utils/operators";
 import { partOfCountry } from "../utils/geography";
 import { journeyFromStored, legSteps, worthShowingLegs, journeyAgencies, JOURNEY_SOURCE } from "../utils/journey";
@@ -969,7 +970,10 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
   // ── "IT SHOULD BE TRACKING EVERYDAY FOR THEM" ──────────────────
 
   const tripGeo = guide._geo || {};
-  const allStops = days.flatMap((d, di) => (d.stops || []).map(st => ({ ...st, _day: d.day || di + 1 })));
+  // Free time is not a pin: a map dot for "Aalborg shopping streets" is a
+  // claim about one spot that nobody made. See looseStop.
+  const allStops = days.flatMap((d, di) => (d.stops || []).map(st => ({ ...st, _day: d.day || di + 1 })))
+    .filter(st => !looseStop(st));
   // ── A PIN THAT IS A TOWN CENTRE MUST NOT LOOK LIKE A VENUE ──────
   // Oliver, 10 Aug 2026: "coordination is off", and "if we screw
   // coordinations, it might hurt our guide too". He is right, and this is the
@@ -1561,20 +1565,24 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                   they share a date by construction. A guide saved before this
                   carries only the flat to/amount pair, which is why that is
                   still read as a fallback rather than replaced. */}
+              {/* ── ONE RATE, THEIRS, AND NOTHING FOR A DANE ──────
+                  Oliver, 26 Sep 2026: "Don't make it so complicated.. just
+                  tell the user what the rate is in their own currency.. if
+                  it's a Dane, just leave it out." See readerCurrency and
+                  fxRateFor in utils/profile.js. */}
               {(() => {
-                const fx = guide._fx;
-                const rates = Array.isArray(fx?.rates) && fx.rates.length
-                  ? fx.rates
-                  : (Number(fx?.amount) > 0 ? [{ to: fx.to, amount: fx.amount }] : []);
-                if (!rates.length) return null;
-                const said = rates.map(r => `${r.amount} ${r.to}`);
-                const list = said.length === 1 ? said[0] : `${said.slice(0, -1).join(", ")} ${uiT("guide.orAbout", uiLang)} ${said[said.length - 1]}`;
+                // The guide was fetched in the builder's currency; the reader
+                // may be somebody the link was shared with, so their own is
+                // read again here and a Dane sees no line.
+                const fxOwn = fxRateFor(guide._fx, readerCurrency({ locale: typeof navigator !== "undefined" ? navigator.language : "" }))
+                  || fxRateFor(guide._fx, guide._fx?.rates?.length === 1 ? guide._fx.rates[0].to : null);
+                const isDane = readerCurrency({ locale: typeof navigator !== "undefined" ? navigator.language : "" }) === "DKK";
+                if (!fxOwn || isDane) return null;
+                const line = `${fxOwn.base} DKK ${uiT("guide.isAbout", uiLang)} ${fxOwn.amount} ${fxOwn.to}.`;
                 return (
                   <div style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
                     <span style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, letterSpacing: 0.8, textTransform: "uppercase", flexShrink: 0, width: 92 }}>{uiT("guide.kroner", uiLang)}</span>
-                    <span style={{ fontSize: 13, color: C.light, lineHeight: 1.6 }}>
-                      {uiT("guide.pricedInDkk", uiLang)} {fx.baseAmount} DKK {uiT("guide.wasAbout", uiLang)} {list}{fx.on ? ` ${uiT("guide.onDate", uiLang)} ${fx.on}` : ""}, {uiT("guide.ratesMoved", uiLang)}
-                    </span>
+                    <span style={{ fontSize: 13, color: C.light, lineHeight: 1.6 }}>{line}</span>
                   </div>
                 );
               })()}
@@ -1875,9 +1883,21 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
             const oc = preciseCoord(originName), dc = preciseCoord(destName);
             const originText = originTown ? `${originName}, ${originTown}, Denmark` : oc ? `${oc.lat},${oc.lon}` : `${originName}, Denmark`;
             const destText = destTown ? `${destName}, ${destTown}, Denmark` : dc ? `${dc.lat},${dc.lon}` : `${destName}, Denmark`;
-            return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(originText)}&destination=${encodeURIComponent(destText)}&travelmode=${mode}`;
+            // THE MEASURED PLACES, when there are any. See measuredLeg: the
+            // name stays readable and Google opens the exact place the chip's
+            // number was measured to, rather than guessing a second time.
+            const measured = measuredLeg(exactDurations, originName, destName);
+            return mapsRouteUrl({ originText, destText, mode,
+              originPlaceId: measured?.placeIds?.origin || "", destPlaceId: measured?.placeIds?.destination || "" });
           };
+          // A stop that names no place (see looseStop) is free time: the
+          // card stays, and no leg in or out of it is drawn, measured or
+          // linked. Looked up on today and on yesterday, because the first
+          // chip of a day starts at yesterday's last stop.
+          const looseByName = (nm) => looseStop((day.stops || []).find(s => s.name === nm)
+            || (dayIdx > 0 ? (days[dayIdx - 1]?.stops || []).find(s => s.name === nm) : null) || { name: nm });
           const legChip = (originName, destName, how) => {
+            if (looseByName(originName) || looseByName(destName)) return null;
             // ── TIVOLI TO TIVOLI NEEDS NO TRANSPORT ──────────────
             // Oliver, 17 Aug 2026, with a screenshot: "Tivoli Gardens" and
             // "Tivoli Christmas market" as two stops on one day, and between
@@ -1961,7 +1981,17 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
               const d = resolveStopCoordsDetailed(nm, geo, stopTownOf(nm));
               return !d || !d.precise;
             };
-            const standIn = standInEnd(originName) || standInEnd(destName);
+            // ── UNLESS GOOGLE FOUND BOTH PLACES, AND THE LINK NOW OPENS THEM ──
+            // The stand-in rule exists because a walk measured to "somewhere in
+            // Højer" is not a walk to the sluice. When Google's answer names a
+            // real place at both ends, the measurement IS about those places,
+            // and since the link carries their place_ids the reader opens the
+            // same two points. Showing the model's own guess instead, as it did
+            // for "Aalborg shopping streets", is what put a 10 minute chip next
+            // to a 97 minute link.
+            const googlePlaced = !!(rawExact?.placeIds?.origin && rawExact?.placeIds?.destination
+              && foundAPlace(rawExact?.placeTypes?.origin) && foundAPlace(rawExact?.placeTypes?.destination));
+            const standIn = !googlePlaced && (standInEnd(originName) || standInEnd(destName));
             const walkOnStandIn = standIn && (rawExact?.modeUsed || mode) === "walking";
             // Walking cap tightened 180 → WALK_MAX_MINUTES (Oliver: "there has
             // to be rules. No walking more than 15-20 minutes"). 180 minutes
@@ -2392,7 +2422,9 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                 // whether one is a museum, a church or a hole in the ground.
                 // Danish compound names already carry the answer, so this costs
                 // one small tag and no research at all.
-                const kind = entryWord(stopKind(stop.name, real), guideLang);
+                const loose = looseStop(stop, matched);
+                const looseLeg = loose || (!!nextStop && looseStop(nextStop));
+                const kind = loose ? uiT("guide.freeTime", guideLang) : entryWord(stopKind(stop.name, real), guideLang);
                 // ── AND WHEN IT RUNS, IF IT IS AN EVENT ──────────────
                 // Null for everything that is not one, so a restaurant is
                 // untouched. See stopEventWhen in utils/guideReading.js: this
@@ -2461,7 +2493,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                   </button>
                 ) : null;
                 return (
-                <div key={stopIdx} style={{ marginBottom: nextStop && lightMode ? 14 : 0 }}>
+                <div key={stopIdx} style={{ marginBottom: nextStop && (lightMode || looseLeg) ? 14 : 0 }}>
                   {real?.photo ? (
                   <div onClick={() => openStopDetail(real)}
                     style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden", cursor: "pointer" }}>
@@ -2570,7 +2602,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                       foot". The Directions API had honestly answered zero for a
                       route from a point to itself. A stop repeated as a base is
                       not a leg and gets no chip. */}
-                  {!lightMode && nextStop && nextStop.name.trim().toLowerCase() !== stop.name.trim().toLowerCase() && (
+                  {!lightMode && nextStop && !looseLeg && nextStop.name.trim().toLowerCase() !== stop.name.trim().toLowerCase() && (
                     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "4px 0" }}>
                       <div style={{ width: 1, height: 16, background: `${C.gold}55` }} />
                       {legChip(stop.name, nextStop.name, day.glance?.legs?.[stopIdx]?.how)}
