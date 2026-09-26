@@ -19382,9 +19382,21 @@ If the conversation only covers a single day or a few stops with no explicit day
   // country they have not been to. The ticks ask what they want, which is a
   // question they can answer, and the pricing is ours. See
   // utils/budgetEstimate.js.
+  //
+  // ── AND THE ARRIVAL DATE, WHICH WAS ALREADY ON THIS PANEL ────────
+  //
+  // Oliver, 26 Sep 2026: "Obviously the season also will affect the estimate.."
+  //
+  // Right, and it was the cheapest fix in the file: the date picker sits two
+  // rows above this and the estimate was not reading it. Every bed figure is a
+  // band because Danhostel publishes June and March prices for the same room,
+  // so a date turns that band into one season's number. An unread field that
+  // the answer depends on is this codebase's signature defect and this was
+  // another one of them.
   const budgetEstimate = budgetOn
     ? estimateDay({ stay: intakeStay, food: intakeFood, freeOnly: intakeFreeOnly,
-                    scope: intakeScope, transport: intakeTransport, travellers: intakeTravelers })
+                    scope: intakeScope, transport: intakeTransport, travellers: intakeTravelers,
+                    arrival: intakeArrival })
     : { ready: false, need: [], problem: null };
   const intakeBudgetText = estimateForBrief(budgetEstimate);
 

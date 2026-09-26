@@ -62,7 +62,7 @@ import { PLACE_KINDS } from "./placeKind";
 import { PLACE_THEMES, cleanThemes, MAX_THEMES, TIER_VALUES } from "./placeThemes";
 import { soldOutClaim, soldOutContradiction, restampAfterRewrite } from "./tickets";
 import { citationUrls } from "./aiClient";
-import { needsTier, proposeTiers, missedByPass } from "./tierBackfill";
+import { needsTier, proposeTiersWithReason, missedByPass } from "./tierBackfill";
 
 const clean = (v) => String(v == null ? "" : v).trim();
 const lower = (v) => clean(v).toLowerCase();
@@ -195,7 +195,7 @@ Give: ticketInfo as the price list as a reader would want it, ticketStatus as on
     noEntry: true,
     noResearch: true,
     // The whole set, once, ranked against itself. See tierBackfill.js.
-    wholeSet: proposeTiers,
+    wholeSet: proposeTiersWithReason,
     // A relative judgement is the one thing worth being able to re-sort: A to
     // Z to work down the list, by tier to see whether the top of the scale has
     // been handed out too freely.
@@ -720,12 +720,22 @@ export const proposeSweep = async ({ sweep, rows, knownPlaces, revise = false, d
   // pass leaves every row unresolved and the table says so, which is the same
   // thing that happens when a per-row resolver comes back with nothing.
   let wholeSet = null;
+  let wholeSetFailed = "";
   const missedWholeSet = new Set();
   if (typeof sweep.wholeSet === "function" && rows.length) {
     onProgress?.({ done: 0, total: rows.length, name: `all ${rows.length} at once` });
     const entries = rows.map(r => r.payload || {});
-    wholeSet = await sweep.wholeSet({ entries, deps });
-    if (!(wholeSet instanceof Map)) wholeSet = null;
+    // ── AND A FAILED PASS SAYS SO ───────────────────────────────
+    //
+    // Oliver, 26 Sep 2026, on the first live run: forty-six rows all reading
+    // "the pass ranked the others and left this one out", every count zero.
+    // That sentence is true of a row the pass skipped and a LIE about a run
+    // that produced no answer at all, and nothing could tell them apart
+    // because the hook returned the same empty Map for both. A refusal carries
+    // its reason: this file's own rule, broken by its own newest caller.
+    const said = await sweep.wholeSet({ entries, deps });
+    wholeSet = said?.picks instanceof Map ? said.picks : (said instanceof Map ? said : null);
+    wholeSetFailed = clean(said?.why);
     // NAMED, not counted. One pass answers for the whole batch or it does not,
     // so a row it left out is not a row that was researched and came back
     // empty: it is a row the pass never reached an opinion about, and saying
@@ -751,7 +761,12 @@ export const proposeSweep = async ({ sweep, rows, knownPlaces, revise = false, d
     // A row the pass never answered for falls through with an empty patch and
     // is reported unresolved, never pre-ticked.
     const said = wholeSet?.get?.(clean(p.name).toLowerCase());
-    if (missedWholeSet.has(clean(p.name).toLowerCase())) {
+    if (wholeSetFailed) {
+      // The run failed, so no row was "left out" and none of them is evidence
+      // about itself. One sentence, the same on every row, saying what really
+      // happened.
+      notes.push(wholeSetFailed);
+    } else if (missedWholeSet.has(clean(p.name).toLowerCase())) {
       notes.push("The pass ranked the others and left this one out, so it is still yours to set.");
     }
     if (said) {

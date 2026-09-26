@@ -123,9 +123,30 @@ export const tierSpread = (props) => {
 export const backfillPrompt = (entries) => {
   const list = (Array.isArray(entries) ? entries : []).filter(e => clean(e?.name));
   if (!list.length) return "";
+  // ── NOTHING AFTER THE NAME, WHICH COST A WHOLE RUN ──────────────
+  //
+  // Oliver, 26 Sep 2026, on the first live pass: forty-six rows, every one of
+  // them "The pass ranked the others and left this one out", and every count
+  // zero.
+  //
+  // This line listed each entry as "Amalienborg Slot (Copenhagen)" and the
+  // schema asked for "exactly the name as given below". So the model did as it
+  // was told and returned the name WITH the bracket, readBackfill looked up
+  // "amalienborg slot (copenhagen)" against a set keyed on "amalienborg slot",
+  // and all forty-six picks were dropped as rows nobody asked about.
+  //
+  // The same bracket trap townKeyFor was bitten by earlier the same day, in a
+  // different file, for the same reason: a parenthetical is part of the string
+  // and nothing about the string says so.
+  //
+  // Fixed on BOTH sides, deliberately. Here the town moves onto its own line
+  // so the name stands alone and the instruction is literally true. In
+  // readBackfill the bracket is stripped anyway, because a model that adds one
+  // back must not be able to cost another run.
   const body = list.map((e, i) => {
     const parts = [clean(e.desc), clean(e.whoFor), clean(e.realityCheck)].filter(Boolean);
-    return `${i + 1}. ${clean(e.name)}${clean(e.city) ? ` (${clean(e.city)})` : ""}\n${parts.join(" ")}`;
+    const where = clean(e.city) ? `\nWhere: ${clean(e.city)}` : "";
+    return `${i + 1}. ${clean(e.name)}${where}\n${parts.join(" ")}`;
   }).join("\n\n");
   return `${TIER_RULE}
 
@@ -137,7 +158,7 @@ Judge each one on the words below and nothing else. If what is written about a p
 
 These are all free to enter, so cost is not part of the judgement. The question is only how far out of their way somebody should go.
 
-Respond with ONLY strict JSON: {"picks": [{"name": "exactly the name as given below", "tier": "EXACTLY one of: ${TIER_VALUES.join(" / ")}", "why": "one short sentence, under 20 words, saying what decided it. Never restate the tier, never praise the place, say the thing that settled it"}]}
+Respond with ONLY strict JSON: {"picks": [{"name": "the attraction name exactly as it appears after the number below, and nothing else: no town, no brackets, no numbering", "tier": "EXACTLY one of: ${TIER_VALUES.join(" / ")}", "why": "one short sentence, under 20 words, saying what decided it. Never restate the tier, never praise the place, say the thing that settled it"}]}
 
 ${body}`;
 };
@@ -152,17 +173,32 @@ ${body}`;
 //
 // First answer wins. A model that lists the same place twice has contradicted
 // itself, and the later line is not more considered than the earlier one.
+// A trailing parenthetical is not part of a name. "Amalienborg Slot
+// (Copenhagen)" and "Amalienborg Slot" are one place, and the difference
+// between them cost a whole run of forty-six rows on 26 Sep 2026.
+const bare = (s) => fold(s).replace(/\s*\([^()]*\)\s*$/, "").trim();
+
 export const readBackfill = (answer, entries) => {
-  const known = new Map((Array.isArray(entries) ? entries : [])
-    .filter(e => clean(e?.name)).map(e => [fold(e.name), e]));
+  const known = new Map();
+  for (const e of Array.isArray(entries) ? entries : []) {
+    if (!clean(e?.name)) continue;
+    // Keyed both ways, so a model that answers with the bracket and one that
+    // answers without it both land on the same row. The VALUE is the entry's
+    // own key, so what comes out is always Gemlyx's spelling.
+    known.set(fold(e.name), e);
+    known.set(bare(e.name), e);
+  }
   const picks = Array.isArray(answer?.picks) ? answer.picks : [];
   const out = new Map();
   for (const p of picks) {
-    const key = fold(p?.name);
-    if (!key || !known.has(key) || out.has(key)) continue;
+    const said = fold(p?.name);
+    const key = known.has(said) ? said : (known.has(bare(said)) ? bare(said) : "");
+    if (!key || out.has(fold(known.get(key)?.name))) continue;
     const tier = clean(p?.tier);
     if (!TIER_VALUES.includes(tier)) continue;
-    out.set(key, { tier, why: clean(p?.why) });
+    // Filed under the entry's OWN name, never the one the model typed, so the
+    // per-row lookup in sweeps.js finds it however the answer was spelled.
+    out.set(fold(known.get(key).name), { tier, why: clean(p?.why) });
   }
   return out;
 };
@@ -185,18 +221,52 @@ export const missedByPass = (entries, proposals) =>
 // that cannot run leaves forty-six rows unresolved, which the proposal table
 // already knows how to say out loud; a throw would lose the run and the reason
 // for it together.
-export const proposeTiers = async ({ entries, deps = {} }) => {
+// ── THE ONE CALL ────────────────────────────────────────────────────
+//
+// There was a proposeTiers here that returned just the Map, and once the sweep
+// started reading the reason as well it had no caller left. A wrapper nobody
+// calls is the dead export this repository's own suite refuses, so it went
+// rather than being kept for symmetry.
+
+// ── AND WHY NOTHING CAME BACK, WHEN NOTHING DID ─────────────────────
+//
+// Oliver, 26 Sep 2026, on the first live run: forty-six rows, every one
+// reading "The pass ranked the others and left this one out", every count
+// zero. That sentence is TRUE of a row the pass skipped and a lie about a run
+// that never produced an answer at all, and the screen could not tell them
+// apart because this file returned the same empty Map for both.
+//
+// A refusal carries its reason: this codebase's own rule, stated in sweeps.js
+// and broken here. So the pass reports what happened, and the panel can say
+// "the ranking failed" instead of accusing the model of declining forty-six
+// times.
+export const PASS_FAILED = {
+  none: "",
+  noReply: "The ranking pass got no answer back. Nothing was written and nothing is lost: run it again.",
+  badJson: "The ranking pass answered, and the answer was not readable JSON. Nothing was written. Run it again.",
+  noMatches: "The ranking pass answered, and not one of its names matched a published attraction, so none of it could be used. That is a fault in the pass rather than in the rows.",
+};
+
+// The same call, and what went wrong with it. Kept beside proposeTiers rather
+// than folded into it because the sweep's whole-set hook wants a Map and this
+// wants a sentence, and one function returning both is how a caller ends up
+// checking the wrong half.
+export const proposeTiersWithReason = async ({ entries, deps = {} }) => {
   const { askClaude, parseJSON } = deps;
   const list = (Array.isArray(entries) ? entries : []).filter(e => clean(e?.name));
-  if (!list.length || !askClaude) return new Map();
+  if (!list.length || !askClaude) return { picks: new Map(), why: PASS_FAILED.none };
   const prompt = backfillPrompt(list);
-  if (!prompt) return new Map();
-  // Room for forty-six three-field objects, and asked of the same model the
-  // other sweeps use. A ranking is a reading task, not a research one.
-  const res = await askClaude(prompt, Math.max(1500, list.length * 60), "claude-sonnet-5", true);
-  if (res?.error || !res?.text) return new Map();
+  if (!prompt) return { picks: new Map(), why: PASS_FAILED.none };
+  const room = Math.max(2000, list.length * 90);
+  const res = await askClaude(prompt, room, "claude-sonnet-5", true);
+  if (res?.error || !res?.text) return { picks: new Map(), why: PASS_FAILED.noReply };
   let parsed = null;
   try { parsed = parseJSON ? await parseJSON(res.text) : JSON.parse(res.text); } catch { parsed = null; }
-  if (!parsed) return new Map();
-  return readBackfill(parsed, list);
+  if (!parsed) return { picks: new Map(), why: PASS_FAILED.badJson };
+  const picks = readBackfill(parsed, list);
+  // ANSWERED AND MATCHED NOTHING is the case that cost the run, and it is its
+  // own fault with its own sentence: the rows were fine and the names were
+  // not.
+  if (!picks.size) return { picks, why: PASS_FAILED.noMatches };
+  return { picks, why: PASS_FAILED.none };
 };

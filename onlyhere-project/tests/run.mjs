@@ -281,10 +281,10 @@ writeFileSync(entry, `
   export { guideClaims, guideClaimNote } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { resolveStopCoords } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { festivalScale } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
-  export { needsTier, proposedTier, BACKFILL_SORTS, BACKFILL_SORT_DEFAULT, sortForBackfill, tierSpread, backfillPrompt, readBackfill, missedByPass, proposeTiers } from ${JSON.stringify(join(root, "src/utils/tierBackfill.js"))};
+  export { needsTier, proposedTier, BACKFILL_SORTS, BACKFILL_SORT_DEFAULT, sortForBackfill, tierSpread, backfillPrompt, readBackfill, missedByPass, proposeTiersWithReason, PASS_FAILED } from ${JSON.stringify(join(root, "src/utils/tierBackfill.js"))};
   export { STAY_CHOICES, STAY_KEYS, stayChoiceOf, stayIsBooked, stayProblem, staySaid } from ${JSON.stringify(join(root, "src/utils/stayChoice.js"))};
   export { TRIP_SCOPES, TRIP_SCOPE_KEYS, scopeOf as tripScopeOf, scopeSaid, scopeOffersOtherTowns, scopeAllowsTown } from ${JSON.stringify(join(root, "src/utils/tripScopeChoice.js"))};
-  export { BED_TIERS, EXCLUDED, estimateDay, estimateShort, estimateSays, estimateForBrief, ENABLE_LABEL, ENABLE_SAYS, HOPS_PER_DAY, STOREBAELT, TRAIN_HOP, HOP_KM, FERRY_FARE, movingMode, hopCost, movingProblem, movingNote, LONG_HAUL_MODES, ROOM_KR, ROOM_SLEEPS_MAX, HOTEL_SLEEPS, bedPerNight, RECOMMENDED, recommendedModes, recommendedWhy, isRecommended, showMoney, BUDGET_CURRENCIES, currencyOf } from ${JSON.stringify(join(root, "src/utils/budgetEstimate.js"))};
+  export { BED_TIERS, EXCLUDED, estimateDay, estimateShort, estimateSays, estimateForBrief, ENABLE_LABEL, ENABLE_SAYS, HOPS_PER_DAY, STOREBAELT, TRAIN_HOP, HOP_KM, FERRY_FARE, movingMode, hopCost, movingProblem, movingNote, LONG_HAUL_MODES, ROOM_KR, DORM_KR, BED_SEASON, bedSeasonOf, dormBand, ROOM_SLEEPS_MAX, HOTEL_SLEEPS, bedPerNight, RECOMMENDED, recommendedModes, recommendedWhy, isRecommended, showMoney, BUDGET_CURRENCIES, currencyOf } from ${JSON.stringify(join(root, "src/utils/budgetEstimate.js"))};
   export { matchedPlaces, previewPools, mentionsPlace, parentTownOf, isDeparturePlace, isRejectedPlace, onlyAskedAbout, isPassedThrough, regionsNamed, placeIsInRegion, REGION_TOWN_CAP, regionPickLimit } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
   export { wantedCategories, groupKeyOf, foodIsPlanned } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
   export { saysWord, briefThemes, fitsBrief, rankOffers, offerReason, profilePull, THEME_WORDS, MODE_WORDS, THEMES_WITHOUT_WORDS, OFFER_LIMIT, essentialsForTrip, essentialsBlock, reservedEssential, nightlifeWanted, nightlifeNotAsked, RESERVED_THEME, ESSENTIALS_IN_GUIDE } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
@@ -76343,7 +76343,8 @@ SOURCE: https://www.tripadvisor.com/whatever`;
 // a party of three was told a car cost them more than it does, and a family of
 // four was told their beds cost nearly twice what they do.
 {
-  const { estimateDay, estimateSays, estimateForBrief, bedPerNight, ROOM_KR,
+  const { estimateDay, estimateSays, estimateForBrief, bedPerNight, ROOM_KR, DORM_KR,
+          BED_SEASON, bedSeasonOf, dormBand,
           ROOM_SLEEPS_MAX, HOTEL_SLEEPS, hopCost, partyOf } = M;
   const base = { stay: "cheapest", food: "cheap", scope: "explore", transport: ["🚗 Car"] };
 
@@ -76385,15 +76386,156 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     const four = bedPerNight("cheapest", 4);
     ok("one room holds a party of four", four.rooms === 1);
     ok("and four pay far less each than two do", four.high / 4 < two.high / 2);
-    ok("while two pay far less each than one does", two.high / 2 < alone.high);
     // PAST THE LARGEST PUBLISHED ROOM, ANOTHER ROOM. Pretending a party of
     // eight fits in one would price them at almost nothing.
     const six = bedPerNight("cheapest", ROOM_SLEEPS_MAX + 1);
     is("six take two rooms", six.rooms, 2);
     ok("and pay more in total than five do", six.low > bedPerNight("cheapest", ROOM_SLEEPS_MAX).low);
-    // A SOLO TRAVELLER TAKES A DORM, NOT A SINGLE. Pricing this branch at the
-    // single alone would say the cheapest bed in Denmark costs 550 kr.
-    ok("and one person's band reaches down to a dorm bed", ROOM_KR[1].low < ROOM_KR[2].low);
+    // ── AND THE ROOM TABLE IS DANHOSTEL'S, UNBENT ─────────────────
+    //
+    // 26 Sep 2026. The single used to read 200 rather than the 550 Danhostel
+    // charges, with a comment saying a solo traveller on this tier takes a
+    // dorm. True, and the wrong place for it: it fixed one row and left four
+    // rows pricing a party at a private room they had not asked for. The dorm
+    // is its own price now and every row can reach it, so this table can go
+    // back to being a copy of somebody's published price list.
+    is("the single is what Danhostel charges for a single", ROOM_KR[1].low, 550);
+    ok("and a dorm bed is cheaper than any room in it",
+       DORM_KR.low < ROOM_KR[1].low && DORM_KR.high < ROOM_KR[1].high);
+  }
+
+  // ── THE CHEAPEST BED IN DENMARK IS A BUNK, NOT A ROOM ───────────
+  //
+  // Oliver, 26 Sep 2026, on the panel reading 310 to 410 kr a day for one
+  // town, public transport, cheapest bed, cheapest food and free attractions
+  // only: "you can get hostels for 110 dkk.. and we put food at 60 dkk. And I
+  // clicked only free attractions.. how is that 310-410 dkk? I get you can say
+  // 200-300.. but 310-410? Who is calculating this???"
+  //
+  // The arithmetic was right and the input was wrong, which is the worse of
+  // the two faults: 575 for a CABINN room halved into 288 a head, so a pair of
+  // backpackers were quoted a door that locks. Two of them take two dorm beds.
+  {
+    // PUBLISHED, BY TWO SELLERS WHO AGREE. Next House Copenhagen and Steel
+    // House Copenhagen both publish a dorm bed from 145 kr on their own front
+    // pages, which is the standard this file holds every other number to.
+    ok("a dorm bed carries its seller", /^https:\/\//.test(DORM_KR.source));
+    ok("and the day it was read", /^\d{4}-\d{2}-\d{2}$/.test(DORM_KR.checkedAt));
+    ok("and says both sellers in words", /145/.test(DORM_KR.says) && /Next House/.test(DORM_KR.says));
+    ok("it is a band", DORM_KR.low < DORM_KR.high);
+
+    // ── THE CHEAPER OF THE TWO WAYS TO BUY IT, AT EACH END ───────
+    const two = bedPerNight("cheapest", 2);
+    is("a pair pay two dorm beds, not half a private room", two.low, DORM_KR.low * 2);
+    ok("which is well under half the room they used to be quoted", two.low / 2 < ROOM_KR[2].low / 2);
+    ok("and the pricing says which it landed on", two.lowIsBeds && two.highIsBeds);
+
+    // AND THE ROOM STILL WINS WHERE IT WINS. Beds do not get cheaper in a
+    // crowd and a Danhostel room nearly stops rising, so a big party crosses
+    // over from one to the other somewhere inside the band. That crossing is
+    // the interesting part rather than a wrinkle.
+    const five = bedPerNight("cheapest", 5);
+    is("five pay for one room at the top of the band", five.high, 850);
+    ok("so the pricing says the top is not beds", five.lowIsBeds && !five.highIsBeds);
+    ok("while a hostel keeps getting cheaper a head as the party grows",
+       bedPerNight("cheapest", 3).high / 3 > bedPerNight("cheapest", 4).high / 4);
+    // AND A DORM BED COSTS WHAT IT COSTS HOWEVER MANY OF YOU THERE ARE, which
+    // is the honest shape of the bottom of this band and was hidden while
+    // every party was priced at a room.
+    is("a bed at the bottom of the band is the same price for any party",
+       bedPerNight("cheapest", 1).low, bedPerNight("cheapest", 4).low / 4);
+
+    // ── AND HIS OWN SCREEN, WHICH IS THE CHECK THAT MATTERS ──────
+    const his = estimateDay({
+      stay: "cheapest", food: "self", freeOnly: true,
+      scope: "town", transport: ["\u{1F686} Public transport"], travellers: "",
+    });
+    ok("the cheapest possible day starts where a hostel bed does", his.low < 200);
+    ok("and no longer opens above 300", his.low < 300);
+    // The sentence has to say what kind of bed that is, or the figure is a
+    // number nobody can argue with. That is how this fault survived.
+    ok("and the sentence names the bed", /dorm bed each/.test(estimateSays(his)));
+    // A FAMILY READS THE OTHER SENTENCE, because their band crosses over.
+    const four = estimateDay({
+      stay: "cheapest", food: "self", freeOnly: true,
+      scope: "town", transport: ["\u{1F686} Public transport"], travellers: "family of 4",
+    });
+    ok("a family is told the top of their band is one room",
+       /one room for the 4 of you/.test(estimateSays(four)));
+    ok("and nobody is told they are all in one room when they are in bunks",
+       !/You are all in one room/.test(estimateSays(four)));
+  }
+
+  // ── AND WHICH SEASON THEY ARE COMING IN ─────────────────────────
+  //
+  // Oliver, 26 Sep 2026: "Obviously the season also will affect the estimate.."
+  //
+  // It already did, which is the fault. Every bed figure here is a band because
+  // Danhostel publishes two prices for the same room, and the two ends of that
+  // band are June and March. The panel was showing a season without saying so,
+  // and the arrival date it needed was sitting two rows up the same panel
+  // unread. An unread field the answer depends on is this codebase's signature
+  // defect, and this was another one.
+  {
+    // THE MONTHS ARE THE SELLER'S, off the same price page as the room curve.
+    ok("the seasons carry their seller", /^https:\/\//.test(BED_SEASON.source));
+    ok("and the day they were read", /^\d{4}-\d{2}-\d{2}$/.test(BED_SEASON.checkedAt));
+    ok("and say the months in words", /1 June to 31 August/.test(BED_SEASON.says));
+    is("high season is June to August", BED_SEASON.high.join(","), "6,7,8");
+    is("and the step between them is Danhostel's own", BED_SEASON.step, 100);
+    // EVERY MONTH IS IN EXACTLY ONE OF THE THREE. A month in none of them would
+    // read as no season and quietly widen the band back out again.
+    const all = [...BED_SEASON.high, ...BED_SEASON.low, ...BED_SEASON.winter];
+    is("twelve months, each in one season", new Set(all).size, 12);
+    is("and none in two", all.length, 12);
+
+    is("July is high season", bedSeasonOf("2026-07-10"), "high");
+    is("March is low", bedSeasonOf("2027-03-10"), "low");
+    is("January is winter", bedSeasonOf("2027-01-10"), "winter");
+    // NO DATE IS NOT A SEASON, and that is what keeps the whole band on screen.
+    // Picking one for somebody who has not said when they are coming is how a
+    // January planner budgets a July trip at a March price.
+    is("no date is no season", bedSeasonOf(""), null);
+    is("and neither is something nobody can parse", bedSeasonOf("sometime soon"), null);
+
+    // THE STEP MOVES THE PRICE LIST RATHER THAN STRETCHING IT. A season is a
+    // different column on the same sheet, so both ends rise together.
+    is("high season adds the step to the bottom too", dormBand("high").low, dormBand("low").low + BED_SEASON.step);
+    is("and to the top", dormBand("high").high, dormBand("low").high + BED_SEASON.step);
+    // WINTER TAKES THE LOW FIGURE, because the seller publishes none and
+    // refusing to price a January trip helps nobody.
+    is("winter is priced at low season", dormBand("winter").low, dormBand("low").low);
+    // AND NO SEASON IS BOTH AT ONCE, which is the honest span.
+    is("an unknown season spans both", dormBand(null).low, dormBand("low").low);
+    is("all the way to the top of high season", dormBand(null).high, dormBand("high").high);
+
+    // ── WHICH MOVES THE FIGURE, WHICH IS THE POINT ───────────────
+    const trip = (arrival) => estimateDay({
+      stay: "cheapest", food: "self", freeOnly: true,
+      scope: "town", transport: ["\u{1F686} Public transport"], travellers: "2 people", arrival,
+    });
+    const july = trip("2026-07-10"), march = trip("2027-03-10"), unsaid = trip("");
+    ok("July costs more than March", july.low > march.low);
+    ok("and a date narrows the band rather than moving it wholesale",
+       july.high - july.low < unsaid.high - unsaid.low);
+    ok("with both seasons inside the undated one",
+       unsaid.low <= march.low && unsaid.high >= july.high);
+    // SAID OUT LOUD, EITHER WAY. A band nobody can account for is what made
+    // the old figure unarguable, and that is how this fault survived.
+    ok("the sentence names high season", /high season/.test(estimateSays(july)));
+    ok("and low season", /low season/.test(estimateSays(march)));
+    ok("and says why the undated band is wide", /put your dates in/.test(estimateSays(unsaid)));
+    ok("the planner is told the season too", /high season/.test(estimateForBrief(july)));
+    ok("and told when it was not read", /No arrival date/.test(estimateForBrief(unsaid)));
+    // THE FOOD HALF DOES NOT MOVE. A durum costs the same in February, and
+    // tierDayRate's band is a counter price rather than a seasonal one, so
+    // pushing a season through it would invent a movement nobody published.
+    const foodOf = (e) => e.parts.find(p => p.what === "food");
+    is("food does not have a season", foodOf(july).low, foodOf(march).low);
+    is("nor at the top", foodOf(july).high, foodOf(march).high);
+    // AND A PAID BED HAS NO SEASON EITHER, because it is not in the figure.
+    ok("somebody who has booked already is told no season",
+       !/season/.test(estimateSays(estimateDay({ stay: "booked", food: "self", arrival: "2026-07-10" }))));
   }
 
   // ── AND A HOTEL ROOM DOES NOT STRETCH ───────────────────────────
@@ -76407,8 +76549,11 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     ok("so the third person is the expensive one", three.low / 3 > four.low / 4);
     // THE HOSTEL TIER DOES NOT DO THAT, and the difference is real rather than
     // an artefact: it is why one row is called cheapest and the other best.
+    // Read at the top of the band, which is where the hostel's room curve is
+    // what the traveller is buying. At the bottom they are buying dorm beds and
+    // a bunk costs the same however many of them there are.
     ok("while a hostel keeps getting cheaper a head",
-       bedPerNight("cheapest", 3).low / 3 > bedPerNight("cheapest", 4).low / 4);
+       bedPerNight("cheapest", 3).high / 3 > bedPerNight("cheapest", 4).high / 4);
   }
 
   // ── WHICH MOVES THE FIGURE, WHICH IS THE POINT ──────────────────
@@ -76416,19 +76561,28 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     const alone = estimateDay({ ...base, travellers: "just me" });
     const pair = estimateDay({ ...base, travellers: "2 people" });
     const four = estimateDay({ ...base, travellers: "family of 4" });
-    // ── EXCEPT AT THE BOTTOM OF THE BAND, AND THAT IS REAL ────────
+    // ── AND A DORM BED IS A DORM BED, WHICH IS THE HONEST SHAPE ───
     //
-    // My own expectation here was wrong and the code was right. A solo
-    // traveller on the cheap tier takes a DORM BED, and a dorm is cheaper per
-    // head than half of a private double. So travelling alone is dearest at
-    // the top of the band, where both are private rooms, and cheapest at the
-    // bottom, where one of them is a bunk in a shared room.
+    // Twice now my expectation here has been wrong and the code right. The
+    // first version of this asserted that travelling alone is always dearest a
+    // head, which a solo dorm bed disproved. This version asserted the cure:
+    // that a dorm undercuts half a double, on a tier that quietly priced every
+    // pair at a private room anyway.
     //
-    // Asserting the other way round would have hidden a true and useful fact
-    // behind a tidy-looking rule.
-    ok("travelling alone is dearest a head, once both are private rooms", alone.high > pair.high);
-    ok("but a dorm bed undercuts half a double", alone.low < pair.low);
-    ok("and a family cheapest", four.low < pair.low);
+    // With the dorm properly its own price, one person and two people pay the
+    // same at the bottom of the band, because a bunk costs what it costs. The
+    // party curve bites at the TOP, where a room overtakes separate beds, and
+    // that is where the interesting fact now lives.
+    // Read off the bed line rather than the total, because this base has a car
+    // in it and a car is the other static cost: one person pays the whole of it
+    // and two split it, which is Oliver's own correction working.
+    const bedOf = (e) => e.parts.find(p => p.what === "a bed");
+    is("one person and two pay the same for a bunk each", bedOf(alone).low, bedOf(pair).low);
+    ok("while a family is cheaper a head at the top of the band", bedOf(four).high < bedOf(pair).high);
+    is("and no cheaper at the bottom, because a bed is a bed", bedOf(four).low, bedOf(pair).low);
+    // AND THE CAR IS WHY THE TOTALS STILL DIFFER, which is worth asserting
+    // separately rather than letting one number carry two facts.
+    ok("so the difference between one and two is the car", alone.low > pair.low);
     // THE CAR IS THE STATIC ONE, and the sentence says so where he can read it.
     ok("the car says it does not move with the headcount",
        /same whoever is in it/.test(hopCost("car").says));
@@ -76883,6 +77037,121 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   ok("the nightlife page volunteers nothing about Nightpay", !/ask if the bars take/.test(app));
 }
 
+
+// ── PASS 120: FORTY-SIX ROWS AND NOT ONE TIER ──────────────────────
+//
+// Oliver, 26 Sep 2026, running the tier sweep for the first time: every one of
+// the forty-six attractions came back "The pass ranked the others and left
+// this one out", and every count in the spread read zero.
+//
+// The pass had answered. Every answer was thrown away.
+//
+// backfillPrompt listed each entry as "Amalienborg Slot (Copenhagen)" and the
+// schema asked for "exactly the name as given below", so the model did as it
+// was told and returned the name WITH the bracket. readBackfill looked that up
+// against a set keyed on the bare name, matched nothing, and dropped all
+// forty-six as rows nobody had asked about.
+//
+// The same bracket trap townKeyFor was bitten by earlier the same day, in
+// another file, for the same reason: a parenthetical is part of the string and
+// nothing about the string says so.
+{
+  const { backfillPrompt, readBackfill, missedByPass, proposeTiersWithReason, PASS_FAILED } = M;
+  const entries = [
+    { name: "Amalienborg Slot", city: "Copenhagen", desc: "The royal residence, and the guard changes at noon." },
+    { name: "ARoS Aarhus Art Museum", city: "Aarhus", desc: "A rainbow walkway right over the city." },
+  ];
+
+  // ── FIXED ON THE PROMPT SIDE ────────────────────────────────────
+  // The town moves to its own line, so the name stands alone and the
+  // instruction is literally true rather than nearly true.
+  {
+    const p = backfillPrompt(entries);
+    ok("the name is on its own, with nothing after it", /1\. Amalienborg Slot\nWhere: Copenhagen/.test(p));
+    ok("so no entry is listed with a bracket after its name", !/Amalienborg Slot \(/.test(p));
+    ok("and the schema spells out what it wants", /no town, no brackets, no numbering/.test(p));
+  }
+
+  // ── AND ON THE READING SIDE, WHICH IS THE ONE THAT MATTERS ──────
+  // A model that adds the bracket back must not be able to cost another run.
+  {
+    const withBracket = readBackfill({ picks: [
+      { name: "Amalienborg Slot (Copenhagen)", tier: "Highly Recommended", why: "the guard change" },
+      { name: "ARoS Aarhus Art Museum", tier: "Can't Miss Out", why: "the walkway" },
+    ] }, entries);
+    is("a name answered with its town still lands", withBracket.get("amalienborg slot")?.tier, "Highly Recommended");
+    is("and one answered plainly lands too", withBracket.get("aros aarhus art museum")?.tier, "Can't Miss Out");
+    // FILED UNDER GEMLYX'S OWN SPELLING, never the model's, so the per-row
+    // lookup in the sweep finds it however the answer was written.
+    is("nothing is missed", missedByPass(entries, withBracket), []);
+    // AND A PLACE NOBODY ASKED ABOUT IS STILL REFUSED. Loosening the match
+    // must not loosen that: the bracket rule strips a trailing parenthetical,
+    // it does not make every name match every row.
+    const invented = readBackfill({ picks: [{ name: "Somewhere Else (Odense)", tier: "Can't Miss Out", why: "x" }] }, entries);
+    is("a row nobody asked about still gets nothing", invented.size, 0);
+    // A tier off the closed list is still dropped.
+    is("and an invented tier is still dropped",
+       readBackfill({ picks: [{ name: "Amalienborg Slot", tier: "Quite Good", why: "x" }] }, entries).size, 0);
+  }
+
+  // ── AND A FAILED RUN NO LONGER READS AS FORTY-SIX REFUSALS ──────
+  //
+  // "The pass ranked the others and left this one out" is true of a row the
+  // pass skipped and a lie about a run that produced no usable answer at all.
+  // The screen could not tell them apart because this file returned the same
+  // empty Map for both. A refusal carries its reason, which is this
+  // codebase's own rule, broken by its newest caller.
+  {
+    const deps = (askClaude) => ({ askClaude, parseJSON: (t) => JSON.parse(t) });
+    const noReply = await proposeTiersWithReason({ entries, deps: deps(async () => ({ error: "429" })) });
+    is("a pass that got no answer says so", noReply.why, PASS_FAILED.noReply);
+    is("and proposes nothing", noReply.picks.size, 0);
+
+    const badJson = await proposeTiersWithReason({ entries, deps: deps(async () => ({ text: "sorry!" })) });
+    is("a pass that answered unreadably says that instead", badJson.why, PASS_FAILED.badJson);
+
+    // THE ONE THAT ACTUALLY HAPPENED: it answered, and not one name matched.
+    const noMatches = await proposeTiersWithReason({ entries, deps: deps(async () =>
+      ({ text: JSON.stringify({ picks: [{ name: "Somewhere Else", tier: "Can't Miss Out", why: "x" }] }) })) });
+    is("and a pass whose names matched nothing says that", noMatches.why, PASS_FAILED.noMatches);
+    ok("naming it as a fault in the pass rather than in the rows",
+       /fault in the pass rather than in the rows/.test(PASS_FAILED.noMatches));
+
+    // A RUN THAT WORKED SAYS NOTHING, because there is nothing to say.
+    const fine = await proposeTiersWithReason({ entries, deps: deps(async () =>
+      ({ text: JSON.stringify({ picks: entries.map(e => ({ name: e.name, tier: "Worth Considering", why: "ok" })) }) })) });
+    is("a run that worked reports no fault", fine.why, PASS_FAILED.none);
+    is("and proposes for every row", fine.picks.size, 2);
+  }
+
+  // ── ONE IMPLEMENTATION, NOT TWO ─────────────────────────────────
+  // The sweep's hook wants a Map and the panel wants a sentence. Two functions
+  // making the same call is how the two halves come to disagree about what
+  // happened.
+  {
+    const src = readFileSync(join(root, "src/utils/tierBackfill.js"), "utf8");
+    is("there is only one place that asks", (stripNonCode(src).match(/await askClaude\(/g) || []).length, 1);
+    // AND NO WRAPPER LEFT BEHIND. Once the sweep started reading the reason
+    // too, the Map-only version had no caller, and a wrapper nobody calls is
+    // the dead export this suite refuses.
+    ok("and no Map-only wrapper survives it", !/export const proposeTiers = /.test(src));
+    // ROOM TO ANSWER IN ONE GO. The first version budgeted sixty tokens a pick
+    // and leaned on askClaude's doubling retry, which is a retry paid for on
+    // every single run.
+    ok("with room sized for the answer rather than the retry", /list\.length \* 90/.test(src));
+  }
+
+  // ── AND THE SWEEP SAYS IT ON THE ROWS ───────────────────────────
+  {
+    const sw = readFileSync(join(root, "src/utils/sweeps.js"), "utf8");
+    ok("the sweep reads the reason off the pass", /wholeSetFailed = clean\(said\?\.why\);/.test(sw));
+    ok("and a failed run replaces the left-this-one-out line",
+       /if \(wholeSetFailed\) \{[\s\S]{0,300}notes\.push\(wholeSetFailed\);/.test(sw));
+    ok("rather than accusing the model of declining every row",
+       /else if \(missedWholeSet\.has/.test(sw));
+  }
+}
+
 // ── HOW FAR THEY WANT TO GO, ASKED RATHER THAN GUESSED ─────────────
 //
 // Oliver, 25 Sep 2026: "'Stay at one town' 'Stay at one Island' 'Explore
@@ -77152,7 +77421,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
 // immediately before it is written.
 {
   const { needsTier, proposedTier, BACKFILL_SORTS, BACKFILL_SORT_DEFAULT, sortForBackfill,
-          tierSpread, backfillPrompt, readBackfill, missedByPass, proposeTiers,
+          tierSpread, backfillPrompt, readBackfill, missedByPass, proposeTiersWithReason,
           TIER_VALUES, SWEEPS, sweepById, selectRows, cleanPatch, proposeSweep, MARKS,
           shapeForLive } = M;
 
@@ -77326,7 +77595,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
       { name: "Jelling", tier: "Can't Miss Out", why: "The stones are the founding document." },
       { name: "Bunker", tier: "Best If You're Already Nearby", why: "One room, and the walk is longer than the visit." },
     ] }) }; };
-    const got = await proposeTiers({ entries: ENTRIES, deps: { askClaude } });
+    const got = (await proposeTiersWithReason({ entries: ENTRIES, deps: { askClaude } })).picks;
     is("two entries cost one call, not two", calls, 1);
     ok("and both were in it", /Jelling/.test(asked) && /Bunker/.test(asked));
     is("both come back ranked", [...got.keys()].sort(), ["bunker", "jelling"]);
@@ -77337,10 +77606,10 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     // table already knows how to say a row was not answered, and a throw would
     // lose the run and the reason for it together.
     is("a model error is an empty answer, not a crash",
-       (await proposeTiers({ entries: ENTRIES, deps: { askClaude: async () => ({ error: "429" }) } })).size, 0);
+       (await proposeTiersWithReason({ entries: ENTRIES, deps: { askClaude: async () => ({ error: "429" }) } })).picks.size, 0);
     is("so is something that is not JSON",
-       (await proposeTiers({ entries: ENTRIES, deps: { askClaude: async () => ({ text: "sorry!" }) } })).size, 0);
-    is("and nothing to rank asks nothing", (await proposeTiers({ entries: [], deps: { askClaude } })).size, 0);
+       (await proposeTiersWithReason({ entries: ENTRIES, deps: { askClaude: async () => ({ text: "sorry!" }) } })).picks.size, 0);
+    is("and nothing to rank asks nothing", (await proposeTiersWithReason({ entries: [], deps: { askClaude } })).picks.size, 0);
     is("...which really was no extra call", calls, 1);
   }
 
