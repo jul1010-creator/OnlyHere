@@ -231,7 +231,7 @@ import { readPromises, brokenPromises, promiseNote, rebuildKeptMore, promiseRetr
 import { swapIsAllowed } from "./utils/stopSwap";
 import { factCheckCopy } from "./utils/factCheckCopy";
 import { matchedPlaces, previewPools, wantedCategories, mentionsPlace } from "./utils/previewMatch";
-import { estimateDay, estimateShort, estimateSays, estimateForBrief, isRecommended, recommendedWhy, summerhouseFit, summerhouseWhy, SUMMERHOUSE_MARK, BUDGET_CURRENCIES, ENABLE_LABEL, ENABLE_SAYS } from "./utils/budgetEstimate";
+import { estimateDay, bedSeasonOf, estimateShort, estimateLead, estimateDetail, estimateForBrief, isRecommended, recommendedWhy, summerhouseFit, summerhouseWhy, SUMMERHOUSE_MARK, BUDGET_CURRENCIES, ENABLE_LABEL, ENABLE_SAYS } from "./utils/budgetEstimate";
 import { TRIP_SCOPES, scopeSaid } from "./utils/tripScopeChoice";
 import { STAY_CHOICES, stayIsBooked, stayIsHouse, stayProblem, staySaid } from "./utils/stayChoice";
 import { hostelBlock, houseAreaBlock, houseBase, houseBaseBlock, houseNightSays, houseDistanceSays, dayPoints } from "./utils/stayAwareness";
@@ -14711,7 +14711,7 @@ ${researchRules("festival", ev)}`
     // because the nights are parallel calls and cannot read day one's answer.
     // The first live build without this put one house in four places.
     const housePoints = stayIsHouse(stayKind) ? days.slice(0, Math.max(1, days.length - 1)).flatMap(d => dayPoints(d, stayResolve)) : [];
-    const houseOpts = { places: stayAware?.places || [], kids: stayKids };
+    const houseOpts = { places: stayAware?.places || [], kids: stayKids, season: stayAware?.season || null, heads: stayAware?.heads || null };
     // The skeleton's base when the build has one, so the writer, day one and
     // every night name the same house. Worked out here only as a fallback.
     const houseBaseArea = stayIsHouse(stayKind) ? (stayAware?.base || houseBase(housePoints, houseOpts)) : null;
@@ -17342,7 +17342,9 @@ ${houseDistanceSays(houseBaseArea, dayPoints(day, stayResolve))}` : ""}`;
               houseBaseForTrip = houseBase(
                 planDays.slice(0, Math.max(1, planDays.length - 1)).flatMap(d => dayPoints(d, (name, town) => resolveStopCoords(name, null, town))),
                 { places: freeEntrance, kids: !!guideBrief.known?.party?.hasKids });
-              houseBaseSays = houseBaseBlock(houseBaseForTrip);
+              // The season from the dates and the party from the brief, so the
+              // writer can quote what a week near that coast cost when read.
+              houseBaseSays = houseBaseBlock(houseBaseForTrip, { season: bedSeasonOf(intakeArrival, intakeDeparture), heads: guideBrief.known?.party?.total || null });
             }
             plannerStopNames = planDays.flatMap(d => (d.stops || []).map(s => s?.name)).filter(Boolean);
             plannerTowns = [...new Set(planDays.flatMap(d => (d.stops || []).map(s => s?.town)).filter(Boolean))];
@@ -18159,6 +18161,8 @@ If the conversation only covers a single day or a few stops with no explicit day
         resolve: (name, town) => resolveStopCoords(name, null, town),
         places: freeEntrance,
         base: houseBaseForTrip,
+        season: bedSeasonOf(intakeArrival, intakeDeparture),
+        heads: guideBrief.known?.party?.total || null,
       });
       parsed.days = parsed.days.map((d, i) => (glances[i] ? { ...d, glance: glances[i] } : d));
 
@@ -19571,6 +19575,8 @@ If the conversation only covers a single day or a few stops with no explicit day
   // Redesign pass: the intake form was one long wall of fields. Dates + starting
   // point stay visible; everything else lives behind this "fine-tune" toggle.
   const [intakeMoreOpen, setIntakeMoreOpen] = useState(false);
+  // The budget box's working, folded by default. See estimateLead.
+  const [budgetWhyOpen, setBudgetWhyOpen] = useState(false);
 
   // ── THE INTERFACE LANGUAGE ────────────────────────────────────────
   //
@@ -30513,7 +30519,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 {houseVerdict && (
                   <div style={{ fontSize: 11, color: C.light, lineHeight: 1.55, marginTop: -6, marginBottom: 12 }}>
                     <span style={{ color: C.gold, fontWeight: 700 }}>{SUMMERHOUSE_MARK[houseVerdict]}: </span>
-                    {summerhouseWhy(houseVerdict, houseAsked)}
+                    {summerhouseWhy(houseVerdict, houseAsked, { picked: stayIsHouse(intakeStay), noCar: !!budgetEstimate.noCar })}
                   </div>
                 )}
                 {stayIsBooked(intakeStay) && (
@@ -30608,8 +30614,22 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                             So far. {(() => { const t = budgetEstimate.need.join(" and "); return t.charAt(0).toUpperCase() + t.slice(1); })()} and this becomes a whole day.
                           </div>
                         )}
+                        {/* ── ONE LINE, AND THE WORKING ONE TAP AWAY ─────
+                            Seen live on 27 Sep 2026: five sentences sat under
+                            the number. The first says what it covers and who
+                            it is split between; the rest is behind the link.
+                            See estimateLead in utils/budgetEstimate.js. */}
                         {budgetEstimate.ready && (
-                          <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.55 }}>{estimateSays(budgetEstimate)}</div>
+                          <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.55 }}>
+                            {estimateLead(budgetEstimate)}{" "}
+                            {estimateDetail(budgetEstimate) && (
+                              <button onClick={() => setBudgetWhyOpen(o => !o)}
+                                style={{ background: "none", border: "none", padding: 0, color: C.gold, fontWeight: 700, fontSize: 11, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                {budgetWhyOpen ? "Hide" : "Why this number"}
+                              </button>
+                            )}
+                            {budgetWhyOpen && <div style={{ marginTop: 4 }}>{estimateDetail(budgetEstimate)}</div>}
+                          </div>
                         )}
                         {/* ── A CYCLE TOUR IS A PLAN, NOT A MISTAKE ──
                             Denmark has eleven signed national cycle routes and

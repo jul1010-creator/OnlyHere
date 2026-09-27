@@ -59,7 +59,7 @@ import { dayStart } from "./calendarDay";
 // The one reader of what a sommerhus costs. Priced per house per week, which is
 // nothing else in this file's shape, so it keeps its own module with its own
 // sources rather than being flattened into a nightly rate here.
-import { houseWeek, HOUSE_NIGHTS, HOUSE_SOURCE, HOUSE_CHECKED_AT, HOUSE_SEASON_CHECK, houseSays, houseFor, houseFit, HOUSE_FIT, housePerHeadNight as housePerHead, houseNightsPaid, houseSuits, houseStaySays, houseWhereSays } from "./summerhouse";
+import { houseWeek, HOUSE_NIGHTS, HOUSE_SOURCE, HOUSE_CHECKED_AT, HOUSE_SEASON_CHECK, houseSays, houseFor, houseFit, HOUSE_FIT, housePerHeadNight as housePerHead, houseNightsPaid, houseSuits, houseStaySays, houseWhereSays, houseNoCarSays } from "./summerhouse";
 
 const clean = (s) => String(s ?? "").trim();
 
@@ -1055,6 +1055,9 @@ export const estimateDay = ({ stay = "", food = "", freeOnly = false, scope = ""
     house: bed?.house ?? 0,
     minNights: bed?.minNights ?? 0,
     houseShort: !!bed?.short,
+    // Transport was picked and none of it is a car. Unpicked is not "no car":
+    // nothing is said until they say how they move. See houseNoCarSays.
+    noCar: (() => { const list = (Array.isArray(transport) ? transport : [transport]).map(t => travelModeKey(t)).filter(Boolean); return list.length > 0 && !list.includes("car") && !list.includes("camper"); })(),
     // The biggest room the chosen tier sells, so the sentence can say why a
     // party needed two of them without crediting a hostel with a hotel's size.
     sleeps: bed?.sleeps ?? 0,
@@ -1210,7 +1213,7 @@ export const estimateSays = (est) => {
   // A house answers this line on its own: it is neither a room count nor a bunk,
   // and the thing worth saying about it is the week and the kitchen.
   const houseLine = est.house
-    ? ` A whole house that sleeps ${est.house}, with a kitchen. ${houseStaySays(est.houseShort)} ${houseSays(est.season)}${houseWhereSays(est.season, est.house) ? ` ${houseWhereSays(est.season, est.house)}` : ""}`
+    ? ` A whole house that sleeps ${est.house}, with a kitchen. ${houseStaySays(est.houseShort, est.season)} ${houseSays(est.season)}${houseWhereSays(est.season, est.house) ? ` ${houseWhereSays(est.season, est.house)}` : ""}${est.noCar ? ` ${houseNoCarSays}` : ""}`
     : "";
   const beds = est.bedPaid || !est.lowPlan ? ""
     : houseLine ? houseLine
@@ -1284,6 +1287,25 @@ export const estimateSays = (est) => {
   return `${inIt}, ${who}.${beds}${when}${eating}${free} It leaves out ${est.excludes.join(", ")}. The guide prices those once it knows the route.`;
 };
 
+// ── THE ONE LINE, AND THE REST BEHIND A TAP ─────────────────────────
+//
+// Seen live on 27 Sep 2026: five sentences under the number before it reached
+// what was left out. The first sentence is what the number is and who it is
+// divided by; everything after it is the working. The panel shows the first
+// and keeps the working one tap away, so nothing is hidden and nothing is in
+// the way. Split off the full sentence, so the two halves can never say
+// different things from the whole.
+export const estimateLead = (est) => {
+  const all = estimateSays(est);
+  const cut = all.indexOf(". ");
+  return cut < 0 ? all : all.slice(0, cut + 1);
+};
+export const estimateDetail = (est) => {
+  const all = estimateSays(est);
+  const cut = all.indexOf(". ");
+  return cut < 0 ? "" : all.slice(cut + 2);
+};
+
 // ── WHAT THE PLANNER IS TOLD ────────────────────────────────────────
 //
 // The same figure, written the way a person would say it, because it goes into
@@ -1340,7 +1362,7 @@ export const estimateForBrief = (est) => {
   };
   const bedKind = est.bedPaid || !est.lowPlan ? ""
     : est.house
-      ? ` That bed figure is a whole holiday house that sleeps ${est.house}, with a kitchen. ${houseStaySays(est.houseShort)} Danish holiday houses sit on the coasts and in the countryside, not in town centres, so build the days around a base out there with trips in, and name the town it is near.`
+      ? ` That bed figure is a whole holiday house that sleeps ${est.house}, with a kitchen. ${houseStaySays(est.houseShort, est.season)} Danish holiday houses sit on the coasts and in the countryside, not in town centres, so build the days around a base out there with trips in, and name the town it is near.${est.noCar ? " They have no car, so put the base in or right next to a town with a bus or train, and plan the day trips by public transport." : ""}`
     : est.lowPlan.rooms.join(",") === est.highPlan.rooms.join(",") && est.lowPlan.beds === est.highPlan.beds
       ? ` That bed figure is ${asPlan(est.highPlan)}.${est.bedsLow ? ` Do not price a private room against it: a private double runs ${ROOM_KR[2].low} to ${ROOM_KR[2].high} a night.` : ""}`
       : ` The low end of that bed figure is ${asPlan(est.lowPlan)} and the high end is ${asPlan(est.highPlan)}, so say which you are assuming if you put a price on a night.`;
@@ -1457,7 +1479,10 @@ export const SUMMERHOUSE_MARK = {
   [HOUSE_FIT.strong]: "strongly recommended",
   [HOUSE_FIT.yes]: "recommended for your trip",
 };
-export const summerhouseWhy = (fit, { travellers = "", heads = null, arrival = "", departure = "", nights = null } = {}) => {
+// `shown` carries what the panel already says elsewhere: when the sommerhus is
+// the stay they picked, the budget box under it explains the week, so this line
+// keeps to the two prices rather than printing the same sentence twice.
+export const summerhouseWhy = (fit, { travellers = "", heads = null, arrival = "", departure = "", nights = null } = {}, { picked = false, noCar = false } = {}) => {
   if (!fit) return "";
   const { people, season } = houseReading({ travellers, heads, arrival, departure });
   const house = housePerHead(people, season, nights);
@@ -1475,7 +1500,7 @@ export const summerhouseWhy = (fit, { travellers = "", heads = null, arrival = "
     : plan.rooms.length ? "a hostel room and bunks"
     : "a hostel bunk";
   const band = (b) => (b.low === b.high ? `${b.low}` : `${b.low} to ${b.high}`);
-  return `A whole house works out at ${band(house)} kr a head a night against ${band(bunk)} for ${against}, with a kitchen and no strangers in the room. ${houseStaySays(houseNightsPaid(nights) < HOUSE_NIGHTS)}`;
+  return `A whole house works out at ${band(house)} kr a head a night against ${band(bunk)} for ${against}, with a kitchen and no strangers in the room.${picked ? "" : ` ${houseStaySays(houseNightsPaid(nights) < HOUSE_NIGHTS, season)}`}${noCar ? ` ${houseNoCarSays}` : ""}`;
 };
 
 export const ENABLE_LABEL = "Enable my budget and preferences";

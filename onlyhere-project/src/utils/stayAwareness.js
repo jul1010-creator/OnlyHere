@@ -26,6 +26,7 @@ import { haversineKm } from "./helpers";
 import { containsName } from "./danishNames";
 import { hasTheme } from "./placeThemes";
 import { placeCoords } from "./guideEnrichment";
+import { houseCoastSays, houseCoastWeek } from "./summerhouse";
 
 const clean = (v) => String(v == null ? "" : v).trim();
 const km = (a, b) => {
@@ -285,9 +286,13 @@ export const houseBase = (points, opts = {}) => houseAreasFor(points, opts)[0] |
 // calls and had never been told where the house is, so it put one where the
 // first day happened to end. The base is picked from the planner's skeleton
 // now, before the writer runs, and this is what the writer reads.
-export const houseBaseBlock = (base) => base
-  ? `\n\nTHE SOMMERHUS FOR THE WHOLE TRIP IS AT ${base.name.toUpperCase()}, on the ${base.coast} coast near ${base.nearTown}. It is one house, rented through a holiday-house agency. Every day starts from the house at ${base.name} and ends back there: write the first day's arrival as getting the keys at ${base.name}, never put the house in any other town, and never say they settle in anywhere else.`
-  : "";
+// With the season and the party, the writer is also told what a week near
+// that coast cost when it was read, so the guide can say it rather than guess.
+export const houseBaseBlock = (base, { season = null, heads = null } = {}) => {
+  if (!base) return "";
+  const cost = heads ? houseCoastSays(base.name, season, heads) : "";
+  return `\n\nTHE SOMMERHUS FOR THE WHOLE TRIP IS AT ${base.name.toUpperCase()}, on the ${base.coast} coast near ${base.nearTown}. It is one house, rented through a holiday-house agency. Every day starts from the house at ${base.name} and ends back there: write the first day's arrival as getting the keys at ${base.name}, never put the house in any other town, and never say they settle in anywhere else.${cost ? ` ${cost} If you give a price for the house, give that one and say it is the cheapest week Novasol listed.` : ""}`;
+};
 
 // ── AND HOW FAR THE HOUSE IS FROM THIS DAY ─────────────────────────
 //
@@ -319,17 +324,18 @@ const spreadOf = (points) => {
   return most;
 };
 
-export const houseAreaLine = (a) => {
+export const houseAreaLine = (a, { season = null, heads = null } = {}) => {
   const coast = a.coast ? ` on the ${a.coast} coast` : "";
   const town = a.kmToTown ? `, ${a.kmToTown} km from ${a.nearTown}` : `, near ${a.nearTown}`;
   const who = a.agencies?.length ? ` Houses there are let by ${listed(a.agencies)}.` : "";
   const fam = a.family?.length
     ? ` Family places Gemlyx has published within ${FAMILY_NEAR_KM} km: ${a.family.slice(0, 3).map(f => `${f.name} (about ${round(f.km)} km)`).join(", ")}.`
     : "";
-  return `${a.name}${coast}${town}; the trip's stops average about ${round(a.meanKm)} km from it.${who}${fam}`;
+  const cost = heads ? houseCoastSays(a.name, season, heads) : "";
+  return `${a.name}${coast}${town}; the trip's stops average about ${round(a.meanKm)} km from it.${who}${fam}${cost ? ` ${cost}` : ""}`;
 };
 
-export const houseAreaBlock = (points, { places = [], kids = false, base: chosen = null } = {}) => {
+export const houseAreaBlock = (points, { places = [], kids = false, base: chosen = null, season = null, heads = null } = {}) => {
   const pts = (Array.isArray(points) ? points : []).filter(p => Number.isFinite(p?.lat) && Number.isFinite(p?.lon));
   if (!pts.length) return "";
   const picks = houseAreasFor(pts, { places, kids });
@@ -341,9 +347,12 @@ export const houseAreaBlock = (points, { places = [], kids = false, base: chosen
   const others = picks.filter(a => a.name !== base.name).slice(0, HOUSE_AREA_PICKS - 1);
   const spread = spreadOf(pts);
   const lines = [`THE SOMMERHUS BASE GEMLYX HAS PICKED for this trip, from the areas a holiday-house agency's own page confirmed on ${STAY_PLACES_CHECKED_AT}:`];
-  lines.push(`- ${houseAreaLine(base)}`);
+  lines.push(`- ${houseAreaLine(base, { season, heads })}`);
   lines.push(`Return '${base.name}' as 'recommendedStay', spelled exactly so, and say in 'accommodation' which town it is near and that it is rented through a holiday-house agency. Every other night of this guide is told the house is at ${base.name}, so do not suggest a different area.`);
-  if (others.length) lines.push(`Other checked areas near this trip, for context only: ${others.map(a => `${a.name} (near ${a.nearTown})`).join(", ")}.`);
+  // With a price each, so a cheaper coast nearby can be named as the
+  // alternative it is. Only the week, never a per night figure.
+  const from = (a) => { const w = heads ? houseCoastWeek(a.name, season, heads) : null; return w ? `, from ${w.kr.toLocaleString("en-US")} kr the week` : ""; };
+  if (others.length) lines.push(`Other checked areas near this trip, for context only: ${others.map(a => `${a.name} (near ${a.nearTown}${from(a)})`).join(", ")}.`);
   lines.push("Name a family place only if it is on this list. Write no dashes: commas and full stops only.");
   if (kids && base.family?.length) lines.push("There are children on this trip and the base was chosen partly for the family place in reach: say which, and how far.");
   if (spread > ONE_BASE_KM) lines.push(`THIS TRIP'S STOPS ARE ABOUT ${round(spread)} KM APART, too far for one house to be the base for all of them. Say so plainly in 'accommodation': the house suits the part of the trip near it, and the rest is a long day out or a night elsewhere.`);

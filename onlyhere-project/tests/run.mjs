@@ -284,13 +284,13 @@ writeFileSync(entry, `
   export { measuredLeg, mapsRouteUrl, foundAPlace, looseStop } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { festivalScale } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
   export { needsTier, proposedTier, BACKFILL_SORTS, BACKFILL_SORT_DEFAULT, sortForBackfill, tierSpread, backfillPrompt, readBackfill, missedByPass, proposeTiersWithReason, PASS_FAILED } from ${JSON.stringify(join(root, "src/utils/tierBackfill.js"))};
-  export { HOUSE_WEEK, HOUSE_SIZES, HOUSE_NIGHTS, HOUSE_FIT, HOUSE_SOURCE, HOUSE_CHECKED_AT, HOUSE_SEASON_CHECK, houseFor, houseWeek, housePerHeadNight, houseFit, houseSays, houseSuits } from ${JSON.stringify(join(root, "src/utils/summerhouse.js"))};
+  export { HOUSE_WEEK, HOUSE_SIZES, HOUSE_NIGHTS, HOUSE_FIT, HOUSE_SOURCE, HOUSE_CHECKED_AT, HOUSE_SEASON_CHECK, houseFor, houseWeek, housePerHeadNight, houseFit, houseSays, houseSuits, HOUSE_COAST, HOUSE_COAST_THIN, houseCoastWeek, houseCoastSays, houseWhereSays } from ${JSON.stringify(join(root, "src/utils/summerhouse.js"))};
   export { STAY_CHOICES, STAY_KEYS, stayChoiceOf, stayIsBooked, stayProblem, staySaid } from ${JSON.stringify(join(root, "src/utils/stayChoice.js"))};
   export { HOSTELS, HOUSE_AREAS, STAY_TOWN_POINTS, STAY_PLACES_CHECKED_AT, HOSTEL_LIST_SOURCE, DORM } from ${JSON.stringify(join(root, "src/data/stayPlaces.js"))};
   export { houseBase, houseBaseBlock, houseNightSays, houseDistanceSays, sellsDorm, dormForKids, hostelOpenOn, dormTowns, hostelTowns, roomsOnlyTowns, hostelChipSays, stayPointFor, dayPoints, hostelsNear, nearestDorm, hostelLine, hostelBlock, HOSTEL_NEAR_KM, HOSTEL_LINES, isFamilyPlace, familyPlacesNear, FAMILY_NEAR_KM, houseAreasFor, houseAreaLine, houseAreaBlock, HOUSE_AREA_PICKS, ONE_BASE_KM } from ${JSON.stringify(join(root, "src/utils/stayAwareness.js"))};
   export { FIGURES, FIGURE_LIFE, figureAge, figureAges, figureAgeNote } from ${JSON.stringify(join(root, "src/utils/figureAge.js"))};
   export { TRIP_SCOPES, TRIP_SCOPE_KEYS, scopeOf as tripScopeOf, scopeSaid, scopeOffersOtherTowns, scopeAllowsTown } from ${JSON.stringify(join(root, "src/utils/tripScopeChoice.js"))};
-  export { BED_TIERS, EXCLUDED, estimateDay, estimateShort, estimateSays, estimateForBrief, ENABLE_LABEL, ENABLE_SAYS, HOPS_PER_DAY, STOREBAELT, TRAIN_HOP, HOP_KM, movingMode, hopCost, movingProblem, movingNote, LONG_HAUL_MODES, ROOM_KR, DORM_KR, SUMMER_BED, DORM_SUMMER_PCT, BED_SEASON, bedSeasonOf, straddlesSeason, dormBand, HOSTEL_ROOM_SIZES, summerhouseFit, summerhouseWhy, SUMMERHOUSE_MARK, bunkPerHeadIn, ROOM_SLEEPS_MAX, HOTEL_SLEEPS, bedPerNight, RECOMMENDED, recommendedModes, recommendedWhy, isRecommended, showMoney, BUDGET_CURRENCIES, currencyOf } from ${JSON.stringify(join(root, "src/utils/budgetEstimate.js"))};
+  export { BED_TIERS, EXCLUDED, estimateDay, estimateShort, estimateSays, estimateLead, estimateDetail, estimateForBrief, ENABLE_LABEL, ENABLE_SAYS, HOPS_PER_DAY, STOREBAELT, TRAIN_HOP, HOP_KM, movingMode, hopCost, movingProblem, movingNote, LONG_HAUL_MODES, ROOM_KR, DORM_KR, SUMMER_BED, DORM_SUMMER_PCT, BED_SEASON, bedSeasonOf, straddlesSeason, dormBand, HOSTEL_ROOM_SIZES, summerhouseFit, summerhouseWhy, SUMMERHOUSE_MARK, bunkPerHeadIn, ROOM_SLEEPS_MAX, HOTEL_SLEEPS, bedPerNight, RECOMMENDED, recommendedModes, recommendedWhy, isRecommended, showMoney, BUDGET_CURRENCIES, currencyOf } from ${JSON.stringify(join(root, "src/utils/budgetEstimate.js"))};
   export { matchedPlaces, previewPools, mentionsPlace, parentTownOf, isDeparturePlace, isRejectedPlace, onlyAskedAbout, isPassedThrough, regionsNamed, placeIsInRegion, REGION_TOWN_CAP, regionPickLimit } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
   export { wantedCategories, groupKeyOf, foodIsPlanned } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
   export { saysWord, briefThemes, fitsBrief, rankOffers, offerReason, profilePull, THEME_WORDS, MODE_WORDS, THEMES_WITHOUT_WORDS, OFFER_LIMIT, essentialsForTrip, essentialsBlock, reservedEssential, nightlifeWanted, nightlifeNotAsked, RESERVED_THEME, ESSENTIALS_IN_GUIDE } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
@@ -76359,7 +76359,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     ok("the figure is in the corner", /estimateShort\(budgetEstimate, budgetCurrency, fromDkk\)/.test(app));
     // SHOWN WHENEVER THERE IS A NUMBER, not only when the day is complete.
     ok("and shows from the first tick", /budgetEstimate\.low != null/.test(app));
-    ok("and what it covers is spelled out", /\{estimateSays\(budgetEstimate\)\}/.test(app));
+    ok("and what it covers is spelled out, the working one tap away", /\{estimateLead\(budgetEstimate\)\}/.test(app) && /\{budgetWhyOpen && <div style=\{\{ marginTop: 4 \}\}>\{estimateDetail\(budgetEstimate\)\}<\/div>\}/.test(app));
     // AND THE BRIEF READS THE ESTIMATE RATHER THAN A SECOND COPY OF IT.
     ok("the brief slot is the estimate", /const intakeBudgetText = estimateForBrief\(budgetEstimate\);/.test(app));
     // ── AND NOTHING IS WELDED ONTO THE END OF IT ────────────────
@@ -78324,8 +78324,8 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     ok("and says the week", /let by the week/.test(estimateSays(july)));
     // A July house is told it is the cheapest July week in Jutland and that a
     // popular coast costs more, with the two coasts read on 26 Sep 2026.
-    ok("and that a popular coast costs more in July", /cheapest July week Novasol had in all of Jutland[\s\S]*near Blokhus was 5,640 kr and the cheapest near Skagen 10,700/.test(estimateSays(july)));
-    ok("which is not said over January, where no coast was read", !/near Blokhus/.test(estimateSays(jan)));
+    ok("and that a popular coast costs more in July", /across the 62 coasts read, the cheapest week that time of year in a house sleeping four ran from 3,673 kr near Søndervig to 10,961 kr near Hornbæk/.test(estimateSays(july)));
+    ok("and January has its own spread", /cheapest week that time of year in a house sleeping four ran from 1,514 kr near Houstrup/.test(estimateSays(jan)));
     {
       const short = trip({ travellers: "family of 4", arrival: "2027-07-10", departure: "2027-07-13", nights: 3 });
       ok("three July nights cost more a day than the July week", short.low > july.low && short.houseShort);
@@ -78373,7 +78373,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     // took the season from the two dates; the sentence was handed
     // budgetEstimate.season, which is the season THE BED was priced in and is
     // null until a stay chip is ticked. Two readers of one value.
-    ok("and the reason is shown under the row", /summerhouseWhy\(houseVerdict, houseAsked\)/.test(appH));
+    ok("and the reason is shown under the row", /summerhouseWhy\(houseVerdict, houseAsked, \{ picked: stayIsHouse\(intakeStay\), noCar: !!budgetEstimate\.noCar \}\)/.test(appH));
     ok("off the same facts, so the two cannot disagree",
        !/summerhouseWhy\(houseVerdict, \{/.test(appH) && !/season: budgetEstimate\.season/.test(appH));
     {
@@ -79085,7 +79085,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   const app = readFileSync(join(root, "src/App.jsx"), "utf8");
   ok("the base is picked from the skeleton before the writer runs",
      /plannerSkeleton = JSON\.stringify\(\{ days: planDays \}\);\s*if \(stayIsHouse\(intakeStay\)\) \{\s*houseBaseForTrip = houseBase\(/.test(app)
-     && /houseBaseSays = houseBaseBlock\(houseBaseForTrip\);/.test(app));
+     && /houseBaseSays = houseBaseBlock\(houseBaseForTrip, \{ season: bedSeasonOf\(intakeArrival, intakeDeparture\), heads: guideBrief\.known\?\.party\?\.total \|\| null \}\);/.test(app));
   ok("and the same base is handed to the per-day calls", /places: freeEntrance,\s*base: houseBaseForTrip,/.test(app));
   // A base handed in wins over the block's own ranking, so day one cannot name
   // a different coast from the one the writer was given.
@@ -79150,6 +79150,61 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   const app = readFileSync(join(root, "src/App.jsx"), "utf8");
   ok("the panel hands it the kids box, the ticks and the chat with refusals taken out",
      /const houseWho = \{\s*kids: intakeFamilyMode,\s*interests: intakeInterest,\s*said: withoutRefused\(aiMessages\.filter\(m => m\.role === "user" && !m\.isError\)\.map\(m => m\.text \|\| ""\)\.join\(" "\)\),\s*\};/.test(app));
+}
+
+// ── THE SOMMERHUS PANEL, AFTER THE LIVE TEST OF 27 SEP 2026 ─────────
+// Oliver: "just fix it all.." Four things seen on the live panel.
+{
+  const { summerhouseWhy, estimateDay, estimateSays, estimateLead, estimateDetail, estimateForBrief } = M;
+  const trip = (o) => estimateDay({ food: "self", scope: "town", stay: "summerhouse", travellers: "6 adults", ...o });
+  const oct = trip({ arrival: "2026-10-09", departure: "2026-10-12", nights: 3, transport: ["🚗 Car"] });
+  const jul = trip({ arrival: "2027-07-09", departure: "2027-07-12", nights: 3, transport: ["🚗 Car"] });
+  // 1. The summer clause only where summer is possible.
+  ok("an October short stay is not told about July", /shorter than a week/.test(estimateSays(oct)) && !/summer holidays it is the week/.test(estimateSays(oct)));
+  ok("a July short stay is", /summer holidays it is the week or nothing/.test(estimateSays(jul)));
+  // 2. No car said, no car assumed; public transport alone gets the warning.
+  const bus = trip({ arrival: "2026-10-09", departure: "2026-10-12", nights: 3, transport: ["🚆 Public transport"] });
+  ok("public transport alone is told a house is hard to reach", bus.noCar && /without a car pick one close to a town with a bus stop/.test(estimateSays(bus)));
+  ok("and the planner is told to base them by a bus", /They have no car, so put the base in or right next to a town with a bus or train/.test(estimateForBrief(bus)));
+  ok("a car is not warned", !oct.noCar && !/without a car/.test(estimateSays(oct)));
+  ok("nothing picked is not no car", !trip({ nights: 7 }).noCar);
+  const asked = { travellers: "6 adults", arrival: "2026-10-09", departure: "2026-10-12", nights: 3 };
+  ok("the reason under the chip warns too", /without a car/.test(summerhouseWhy("strong", asked, { noCar: true })));
+  // 3. Said once: when the house is the picked stay, the budget box explains the week.
+  ok("unpicked, the chip reason explains the week", /shorter than a week/.test(summerhouseWhy("strong", asked)));
+  ok("picked, it keeps to the prices", !/shorter than a week/.test(summerhouseWhy("strong", asked, { picked: true })) && /kr a head a night/.test(summerhouseWhy("strong", asked, { picked: true })));
+  // 4. One line, and the rest behind a tap, split off the same sentence.
+  const lead = estimateLead(oct), rest = estimateDetail(oct);
+  ok("the lead is the first sentence", /^A bed and food, per person, split between the 6 of you\.$/.test(lead));
+  is("and lead plus working is the whole", `${lead} ${rest}`, estimateSays(oct));
+}
+
+// ── EVERY COAST, PRICED ─────────────────────────────────────────────
+// Oliver, 27 Sep 2026: "just fix it all.." The 68 Novasol areas behind
+// HOUSE_AREAS, read at three Saturday arrivals on 27 Sep 2026.
+{
+  const { HOUSE_COAST, HOUSE_COAST_THIN, houseCoastWeek, houseCoastSays, houseWhereSays, houseBaseBlock, houseAreaBlock, HOUSE_AREAS } = M;
+  is("68 coasts were read", Object.keys(HOUSE_COAST.weeks).length, 68);
+  ok("every coast read is one Gemlyx knows", Object.keys(HOUSE_COAST.weeks).every(n => HOUSE_AREAS.some(a => a.name === n)));
+  ok("and each has all three seasons as count, cheapest, cheapest for six",
+     Object.values(HOUSE_COAST.weeks).every(r => ["high", "low", "winter"].every(k => Array.isArray(r[k]) && r[k].length === 3 && r[k].every(Number.isFinite))));
+  is("a family of four near Blokhus in July", houseCoastWeek("Blokhus", "high", 4).kr, 5379);
+  is("six near Skagen's Kandestederne in July take the six-sleeper", houseCoastWeek("Kandestederne", "high", 6).kr, 15917);
+  ok("eight are told a bigger house costs more", houseCoastWeek("Blokhus", "high", 8).atLeast && /a bigger one costs more/.test(houseCoastSays("Blokhus", "high", 8)));
+  is("no season, no single week", houseCoastWeek("Blokhus", null, 4), null);
+  ok("but the sentence gives October and July", /2,559 kr in October and 5,379 kr in July/.test(houseCoastSays("Blokhus", null, 4)));
+  is("a coast Novasol has no area for gets nothing rather than a neighbour's price", houseCoastSays("Grønhøj", "high", 4), "");
+  // Kandestederne had two houses in July, the dearest of them 15,917 kr: one
+  // house, not a market, and it would otherwise be the top of the spread.
+  ok("the spread leaves out a thin market", !/Kandestederne|Henne Strand/.test(houseWhereSays("high", 6)) && HOUSE_COAST.weeks["Kandestederne"].high[0] < HOUSE_COAST_THIN);
+  is("and says nothing with no season", houseWhereSays(null, 4), "");
+  const b = HOUSE_AREAS.find(a => a.name === "Blokhus");
+  ok("the writer is told the week near the base", /cheapest week near Blokhus in a house sleeping four was 2,559 kr for the week of 16 Oct 2027, read on 27 Sep 2026/.test(houseBaseBlock(b, { season: "low", heads: 4 })));
+  ok("and without a party, no price", !/kr/.test(houseBaseBlock(b)));
+  const pts = [{ lat: 57.24, lon: 9.58 }, { lat: 57.05, lon: 9.92 }];
+  const block = houseAreaBlock(pts, { base: { ...b, meanKm: 20, family: [] }, season: "high", heads: 6 });
+  ok("the day card carries the base's week", /near Blokhus in a house sleeping six was 5,379 kr/.test(block));
+  ok("and the others near it carry theirs", /Other checked areas near this trip[^\n]*from [\d,]+ kr the week/.test(block));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

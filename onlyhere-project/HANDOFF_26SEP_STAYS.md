@@ -178,3 +178,43 @@ Suite 22,011, build clean.
 
 - **A price for every coast.** Two coasts were read. The other 29 Novasol coasts need the same July read, and ideally a spring or autumn week too. I stopped because it runs in your Chrome and would take over the browser for a while.
 - **Bus and bike reach per coast**, for trips without a car.
+
+---
+
+## After the live test: four panel fixes and every coast priced (batch 136)
+
+> "It's pushed.. go test it and give me some suggestions." Then: "just fix it all.."
+
+### The live test (27 Sep, 9 to 12 Oct, 3 nights)
+
+The new rules worked: 4 adults got no mark, 6 adults with Nature ticked got ★ at 113 to 126 kr a head against 145 to 153 for hostel rooms and bunks, and a 3 night stay was priced as the week and said so. Four things were wrong, all fixed:
+
+1. **No car, still strongly recommended.** With only Public transport ticked, nothing warned. Now the reason under the chip and the budget box both say: "Most holiday houses sit out on the coast, away from buses and bike rental, so without a car pick one close to a town with a bus stop, and check how far the house is from it before booking." The planner is told to put the base in or right next to a town with a bus or train. Nothing ticked is not treated as no car.
+2. **A summer line in October.** "In the summer holidays it is the week or nothing" now only shows when the dates are in summer or unknown.
+3. **The same sentence twice.** When the sommerhus is the picked stay, the reason under the chip keeps to the two prices, and the budget box explains the week.
+4. **A long budget box.** It now shows one line (what the number covers and who it's split between) and a "Why this number" link for the rest.
+
+### Every coast, read on Novasol
+
+All 68 Novasol areas behind the coasts list, read on 27 Sep 2026 through Novasol's own search: seven nights from Sat 10 Jul 2027, Sat 16 Oct 2027 and Sat 9 Jan 2027, four adults, cheapest first. For each: how many houses were listed, the cheapest, and the cheapest sleeping six. Stored in `HOUSE_COAST` in `utils/summerhouse.js` and registered in the Studio's figure age panel.
+
+Some of what it shows, for a house sleeping six:
+
+| Week | Cheapest coast | Dearest coast |
+|---|---|---|
+| July | Houstrup 3,696 kr | Liseleje 12,598 kr |
+| October | Søndervig 2,468 kr | Vejers Strand 6,635 kr |
+| January | Houstrup 1,514 kr | Balka 5,770 kr |
+
+Coasts with fewer than 8 houses listed are left out of that spread, because one house is not a market (Henne Strand had 5, Kandestederne 2). Grønhøj and Hou on Langeland have no Novasol area of their own and get no price.
+
+**Where it shows up:**
+- **The budget panel** (which doesn't know the coast yet) says how far apart the coasts are for this party in this season, and that its own figure is the cheap end.
+- **The guide writer** is told what a week near the chosen base cost, and to quote that one if it gives a price.
+- **Day one's card** gets the base's week and a "from X kr the week" for each other coast near the trip, so a cheaper coast nearby can be named.
+
+The base is still picked by distance and family places, not price. Price only informs.
+
+### Still open
+
+- Bus and bike reach per coast. The no-car line names the risk but not which coasts are fine.
