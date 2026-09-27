@@ -582,7 +582,8 @@ export const UI_STRINGS = {
   "auth.ageLead":       { en: "You have to be at least", da: "Du skal være mindst", de: "Du musst mindestens" },
   "auth.ageTail":       { en: "to make an account.", da: "år for at oprette en konto.", de: "sein, um ein Konto zu erstellen." },
   // ── THE SMALL PRINT, WHICH IS THE PART THAT HAS TO BE READABLE ────
-  "auth.agreeLead":     { en: "By creating an account you agree to the", da: "Når du opretter en konto, accepterer du vores", de: "Mit dem Erstellen eines Kontos akzeptierst du unsere" },
+  "auth.iAccept":       { en: "I accept the",      da: "Jeg accepterer",      de: "Ich akzeptiere die" },
+  "auth.mustAccept":    { en: "Tick the box to accept the Terms of Service and the Privacy Policy.", da: "Sæt flueben for at acceptere servicevilkårene og privatlivspolitikken.", de: "Setze das Häkchen, um die Nutzungsbedingungen und die Datenschutzerklärung zu akzeptieren." },
   "auth.terms":         { en: "Terms of Service",   da: "Servicevilkår",        de: "Nutzungsbedingungen" },
   "auth.andThe":        { en: "and the",            da: "og vores",             de: "und unsere" },
   "auth.privacy":       { en: "Privacy Policy",     da: "Privatlivspolitik",    de: "Datenschutzerklärung" },

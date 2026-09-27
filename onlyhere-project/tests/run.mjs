@@ -361,6 +361,8 @@ writeFileSync(entry, `
   export { namesInLine, CITY_KM } from ${JSON.stringify(join(root, "src/utils/seasonFit.js"))};
   export { tidyArea } from ${JSON.stringify(join(root, "src/utils/nightsOpen.js"))};
   export { readableAuthor } from ${JSON.stringify(join(root, "src/utils/photoAuthor.js"))};
+  export { changeToApply, onlyRefusals, liveRowIdOf } from ${JSON.stringify(join(root, "src/utils/eventCheckApply.js"))};
+  export { programmeDateProblem, namedNearDate, locateDate, programmeMentions } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
   export { denmarkClock, sunElevation, isNightThere, SUNSET_ELEVATION } from ${JSON.stringify(join(root, "src/utils/denmarkTime.js"))};
   export { weatherIcon } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { readTheDay, skyFor } from ${JSON.stringify(join(root, "src/components/WeatherHeaderStrip.jsx"))};
@@ -43948,7 +43950,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // AFTER the spread, like waitingRow above it: a model that echoed the key
   // back would otherwise be handing itself the evidence line.
   ok("and hands them over after the model's own fields",
-     /\.\.\.parsed, waitingRow: isWaiting\(ev\) \? ev : null, evidence \}\)/.test(appD));
+     /\.\.\.parsed, waitingRow: isWaiting\(ev\) \? ev : null, row: ev, evidence \}\)/.test(appD));
   ok("every tier that reads a date off a page records that page",
      (appD.match(/fromSite = \{[^}]*\}/g) || []).length === 3
      && (appD.match(/fromSite = \{[^}]*\}/g) || []).every(m => /\burl:/.test(m)));
@@ -46914,15 +46916,21 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // ── THE LINE THAT MAKES IT AN ACCEPTANCE ────────────────────────
   // A record of agreement to something nobody was shown is worse than no
   // record. The line and its two links are what the stamp refers to.
-  ok("the signup screen says what creating an account agrees to",
-     /uiT\("auth\.agreeLead", lang\)/.test(sheet)
-     && /By creating an account you agree to the/.test(M.UI_STRINGS["auth.agreeLead"].en)
+  // 27 Sep 2026, Oliver: "make people click 'accept terms of use'". The line
+  // became a tick box, so this asserts the box and its words.
+  ok("the signup screen asks them to accept, in words",
+     /uiT\("auth\.iAccept", lang\)/.test(sheet)
+     && /I accept the/.test(M.UI_STRINGS["auth.iAccept"].en)
      // Consent has to be readable to be consent, so this one is asserted in
      // all three rather than only in the source language.
-     && ["en", "da", "de"].every(c => String(M.UI_STRINGS["auth.agreeLead"][c] || "").trim()));
+     && ["en", "da", "de"].every(c => String(M.UI_STRINGS["auth.iAccept"][c] || "").trim() && String(M.UI_STRINGS["auth.mustAccept"][c] || "").trim()));
   ok("and links both documents",
      /href="\/terms\.html"/.test(sheet) && /href="\/privacy\.html"/.test(sheet));
-  ok("and says it only on the signup screen", /\{mode === "up" && <div/.test(sheet));
+  ok("and asks it only on the signup screen", /\{mode === "up" && \(\s*<label/.test(sheet));
+  ok("with a tick box nobody can skip, on both routes in",
+     /<input type="checkbox" checked=\{termsTicked\}/.test(sheet)
+     && (sheet.match(/if \(!termsTicked\) \{ setError\(uiT\("auth\.mustAccept", lang\)\); return; \}/g) || []).length === 2
+     && /setTermsTicked\(false\)/.test(sheet));
 }
 
 // ── 21 AUGUST 2026: "IT CANNOT MAKE A BUILD WITHOUT DATES" ──────────
@@ -74866,7 +74874,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   ok("a page of one gem draws no filters", !one.categories.length && !one.kinds.length && !one.students);
   ok("the prompt asks for the category", /"category":"food\|shop\|stay\|travel\|other"/.test(M.GEMS_PROMPT("Aarhus", [])));
   const { renderSurface } = await import(pathToFileURL(join(root, "tests/render.mjs")).href);
-  const page = await renderSurface("src/components/CheapGemsPage.jsx", "CheapGemsPage", { rows: G });
+  const page = await renderSurface("src/components/CheapGemsPage.jsx", "CheapGemsPage", { rows: G, initialFiltersOpen: true });
   for (const label of ["Food and drink", "Beds", "Discounts you have to ask for", "For students"]) ok(`the page draws "${label}"`, page.text.includes(label));
   const pg = stripComments(readFileSync(join(root, "src/components/CheapGemsPage.jsx"), "utf8"));
   ok("a filter that empties the page offers to clear it", /Nothing published matches that\./.test(pg) && /onClick=\{clearAll\}/.test(pg));
@@ -74874,7 +74882,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   const appI = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
   ok("islands can be narrowed by region, whatever the case", /if \(islandRegion && String\(i\.region \|\| ""\)\.trim\(\)\.toLowerCase\(\) !== islandRegion\.toLowerCase\(\)\) return false;/.test(appI));
   ok("and a region written as a sentence is not a pill", /if \(!r \|\| r\.length > 28 \|\| \/,\/\.test\(r\) \|\| \/\^the\\s\/i\.test\(r\)\) continue;/.test(appI));
-  ok("with the pill only when there are two regions or more", /if \(regions\.length < 2\) return null;/.test(appI));
+  ok("with the pill only when there are two regions or more", /\{regions\.length > 1 && \(\s*<Row title="Where">/.test(appI));
   ok("and Clear clears it", /setIslandLink\(null\); setIslandRegion\(null\);/.test(appI));
   ok("no box-drawing dash on the bridge pill", !/─ Bridge or causeway/.test(appI));
 }
@@ -79487,6 +79495,77 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("the template links to our own domain", /<a href="https:\/\/www\.gemlyxtravel\.com\/\?token_hash=\{\{ \.TokenHash \}\}&type=email&gx_theme=\{\{ \.Data\.theme \}\}"/.test(setup)
      && !/href="\{\{ \.ConfirmationURL \}\}"/.test(setup) && /type=recovery/.test(setup));
   ok("and the screen tells them to mark it not spam", /mark it as not spam so the next one reaches your inbox/.test(M.UI_STRINGS["auth.openIt"].en) && /ikke spam/.test(M.UI_STRINGS["auth.openIt"].da));
+}
+
+// ── BATCH 143: WHERE IS A FILTER ON THE TOWNS PAGE ───────────────────
+// Oliver, 27 Sep 2026: "why is this still not fixed? Put locations into
+// filters and put filters into the position under the text bar".
+{
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const start = app.indexOf('{tab === "visits" && (');
+  const page = app.slice(start, app.indexOf('<div className="towns-grid">', app.indexOf("setTownFiltersOpen(o => !o)", start)));
+  const panelAt = page.indexOf("{townFiltersOpen && (() => {");
+  const searchAt = page.indexOf("placeholder={uiT(\"search.towns\", uiLang)}");
+  ok("the location pills are inside the panel", /<Row title="Where">[\s\S]{0,400}label: "All of Denmark"[\s\S]{0,300}setTownPart\(/.test(page.slice(panelAt)));
+  ok("and nowhere outside it", page.slice(0, panelAt).indexOf("All of Denmark") === -1);
+  ok("the panel comes straight after the search bar", searchAt > 0 && panelAt > searchAt && !/<Pill/.test(page.slice(searchAt, panelAt)));
+  ok("Where is the panel's first row", page.indexOf('<Row title="Where">', panelAt) < page.indexOf('<Row title="What it is for">', panelAt));
+  ok("and counted with every other filter but itself", /const nWithPart = \(p\) => towns\.filter\(t => townSearchOk\(t\) && townKindOk\(t\) && townSizeOk\(t\) && townThemeOk\(t\) && townIslandOk\(t\) && \(!p \|\| partOfCountry\(t\) === p\)\)\.length;/.test(page));
+  ok("a chosen place still counts as an active filter", /const activeTownFilters = \[townPart, /.test(app));
+}
+
+// ── BATCH 144: SAVE THE DATE CHECK'S FINDINGS FROM THE CHECK ─────────
+// Oliver, 27 Sep 2026: "I don't want to go in and individually change every
+// draft", "make me able to directly change the drafts from there", "keep the
+// link. So I can see where it got the source from", and "'Sommer på Tobakken'
+// makes no sense.. the link used is refering to a whole bunch of events."
+{
+  const today = new Date("2026-09-27T12:00:00Z");
+  const live = { id: 100047, name: "Distortion", date: "", town: "Copenhagen" };
+  const c = { name: "Distortion", row: live, dateChanged: "2027-06-02", dateEndChanged: "2027-06-06", evidence: ["https://cphdistortion.dk/tickets"], notes: "Read off the official site." };
+  const plan = M.changeToApply(c, today);
+  ok("a found date is saved to the entry it came from", plan.rowId === 47 && plan.set.date === "2027-06-02" && plan.set.dateEnd === "2027-06-06");
+  ok("and the page it was read off goes with it", JSON.stringify(plan.set.__checked.from) === JSON.stringify(["https://cphdistortion.dk/tickets"]) && plan.set.__checked.at === "2026-09-27");
+  ok("a start with no end clears last year's end", M.changeToApply({ ...c, dateEndChanged: "" }, today).set.dateEnd === "");
+  ok("a ticket status is normalised", M.changeToApply({ name: "X", row: live, ticketStatusChanged: "Sold out" }, today).set.ticketStatus === M.normaliseTicketStatus("Sold out"));
+  ok("a date that has passed is not saved", M.changeToApply({ ...c, dateChanged: "2026-09-12", dateEndChanged: "" }, today).set === null);
+  ok("nor an end before the start", M.changeToApply({ ...c, dateEndChanged: "2027-06-01" }, today).set === null);
+  ok("an event in the code, not the database, says so", /into the app's code, not the database/.test(M.changeToApply({ ...c, row: { id: 12 } }, today).why));
+  ok("a possible cancellation is his call, not a button's", M.changeToApply({ name: "X", row: live, stillHappening: false }, today).set === null && /may be cancelled/.test(M.changeToApply({ name: "X", row: live, stillHappening: false }, today).why));
+  ok("a waiting entry keeps its own button", M.changeToApply({ ...c, waitingRow: live }, today).set === null);
+  ok("rows that only say what was ignored are folded away", M.onlyRefusals({ ignoredDate: "2026-09-12" }) && !M.onlyRefusals(c) && !M.onlyRefusals({ stillHappening: false }));
+  // Tobakken: a venue's programme, one date the parser could pin down, and it
+  // is a November concert, not the summer series.
+  const prog = "Tobakken. Kommende koncerter: Fre 3/10 Nephew. Lør 10/10 Seebach. Fre 17/10 Stand up. Kim Larsen hyldest lørdag 28. november 2026. Fre 5/12 Julekoncert.";
+  const read = M.anchoredEdition(prog, today);
+  ok("the fixture is the shape that got through", read.found && M.isoDay(read.found.start) === "2026-11-28");
+  is("a programme date without the event's name is refused", M.programmeDateProblem(prog, read, "Sommer på Tobakken", "Esbjerg"), "programme-date-not-named");
+  is("the concert whose date it is keeps it", M.programmeDateProblem(prog, read, "Kim Larsen hyldest", "Esbjerg"), "");
+  const list = "Tobakken. Se alle arrangementer. 3. oktober Nephew. 10. oktober Seebach. 17. oktober Stand up. Kim Larsen hyldest 28. november 2026. 5. december Julekoncert.";
+  const r2 = M.anchoredEdition(list, today);
+  ok("a name further down the list does not claim the date above it", M.programmeDateProblem(list, r2, "Kim Larsen hyldest", "Esbjerg") === "programme-date-not-named" && M.programmeDateProblem(list, r2, "Nephew", "Esbjerg") === "");
+  const fest = "Smukfest 2027. Danmarks smukkeste festival i Skanderborg Dyrehave, 4. august 2027. Billetsalg og program kommer.";
+  is("a festival's own page is left alone", M.programmeDateProblem(fest, M.anchoredEdition(fest, today), "Smukfest", "Skanderborg"), "");
+  ok("the refusal has words", /programme of many dates/.test(M.CHECK_STEP_WORDS["programme-date-not-named"]));
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the check reads it", /const programme = programmeDateProblem\(text, read, ev\.name, ev\.town\);\s*if \(programme\) return \{ found: null, why: programme/.test(app));
+  ok("every proposal carries its entry", (app.match(/row: ev[,\s]/g) || []).length >= 2);
+  ok("the panel saves one or all", /onClick=\{\(\) => applyEventChange\(c\)\}/.test(app) && /onClick=\{\(\) => applyAllEventChanges\(acts\)\}/.test(app) && /const out = await patchRowPayload\(rowId, set\);/.test(app));
+  ok("the old homework line is gone", !/This only flags it/.test(app.replace(/\/\/[^\n]*/g, "")));
+  ok("the found-by link is still on every row", /<span>Read off:<\/span>/.test(app));
+  ok("and the model's notes lose their dashes", /\{stripDashes\(c\.notes\)\}/.test(app));
+}
+
+// ── BATCH 144: ISLANDS AND CHEAP GEMS GET THE TOWNS LAYOUT ───────────
+{
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const isl = app.slice(app.indexOf('{tab === "islands" && ('), app.indexOf("const q = String(islandSearch || \"\").trim().toLowerCase();"));
+  ok("Islands: search and a Filters button on one row", /placeholder="Search an island"[\s\S]{0,900}onClick=\{\(\) => setIslandFiltersOpen\(o => !o\)\}/.test(isl));
+  ok("Islands: where and the crossing inside the panel", /\{islandFiltersOpen && \([\s\S]*<Row title="Where">[\s\S]*<Row title="Getting there">/.test(isl));
+  ok("Islands: no loose pills outside it", isl.slice(0, isl.indexOf("{islandFiltersOpen && (")).split("<Pill").length === 1);
+  const gems = readFileSync(join(root, "src/components/CheapGemsPage.jsx"), "utf8");
+  ok("Cheap gems: the same", /onClick=\{\(\) => setFiltersOpen\(o => !o\)\}/.test(gems) && /\{filtersOpen && hasFilters && \([\s\S]*<Row title="Where">/.test(gems)
+     && gems.slice(gems.indexOf("SEARCH, A FILTERS BUTTON"), gems.indexOf("{filtersOpen && hasFilters && (")).split("<Pill").length === 1);
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

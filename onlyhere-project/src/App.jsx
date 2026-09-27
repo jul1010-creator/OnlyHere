@@ -68,6 +68,7 @@ import { aiDisclosureFor, aiImageNoteFor } from "./utils/aiDisclosure";
 // caps the party, and the budget estimate reads the same box through it.
 import { partyOf, withoutCountedNote } from "./utils/costLedger";
 import { houseChosen } from "./utils/houseTrip";
+import { changeToApply, onlyRefusals } from "./utils/eventCheckApply";
 import { SupportPage } from "./components/SupportPage";
 // ── THE PAGE THAT SAYS HOW THIS IS PAID FOR ─────────────────────────
 // Oliver, 9 Sep 2026: "make an 'affiliate' in the burgermenu where we list all
@@ -310,7 +311,7 @@ import { proposals as waitingProposals, describeProposals, writeFor, MOVE as WAI
 import { socialPlan as buildSocialPlan, describeSocialPlan, socialWriteFor, preTicked as socialPreTicked, describeFinding, canWrite as socialCanWrite, REQUESTS_PER_SEARCH } from "./utils/socialSweep";
 import { avatarUrl } from "./utils/accountAvatar";
 import { WAITING_TYPE, waitingReason, waitingPayload, waitingLine, waitingDays, waitingOrder, promoted, isWaiting } from "./utils/undatedEvents";
-import { eventDateIssues, dateProbeQueries, danishDay, numericDay, nextEditionYear, splitFinishedCandidates, isPastDate, byEventDate, eventMonthShort, eventMonths, isUndated, UNDATED, parseEventDate, datePropositionProblem, DATE_PROPOSITION_WHY, datePropositionWhy, nextEdition, isoDay, stepWords, STEP_LABELS, unresolvedTraces, anchoredEdition, venueRatherThanEvent, statusRefusalFor, STATUS_REFUSAL_WHY } from "./utils/eventDates";
+import { eventDateIssues, dateProbeQueries, danishDay, numericDay, nextEditionYear, splitFinishedCandidates, isPastDate, byEventDate, eventMonthShort, eventMonths, isUndated, UNDATED, parseEventDate, datePropositionProblem, DATE_PROPOSITION_WHY, datePropositionWhy, nextEdition, isoDay, stepWords, STEP_LABELS, unresolvedTraces, anchoredEdition, venueRatherThanEvent, programmeDateProblem, statusRefusalFor, STATUS_REFUSAL_WHY } from "./utils/eventDates";
 import { languageBarrier } from "./utils/languageBarrier";
 import { newStreamState, readStreamEvent, visibleText, streamContent, streamContentForApi, streamDiagnosis, streamTrace, ranOutThinking } from "./utils/streamRead";
 import { heroNeedsReplacing, heroPatch, heroStatusLine, isAbsolutePhoto } from "./utils/heroPhoto";
@@ -1406,6 +1407,10 @@ function GemlyxApp() {
   const [islandLink, setIslandLink] = useState(null);
   // Oliver, 21 Sep 2026: "Bring some filters in on our new navigations as well."
   const [islandRegion, setIslandRegion] = useState(null);
+  // Islands gets the Towns layout: search, a Filters button, the panel under
+  // it. Oliver, 27 Sep 2026, answering "Want me to give them the same search
+  // bar and Filters layout?" with "Yes".
+  const [islandFiltersOpen, setIslandFiltersOpen] = useState(false);
   const [nightlifeDetail, setNightlifeDetail] = useState(null);
   // A shop or the street it stands in. One state for both, because DetailPage
   // renders them the same way and the only difference is which array the row
@@ -3346,6 +3351,11 @@ function GemlyxApp() {
   // a sweep can find dates for several waiting entries in one run, and a single
   // status would make the second press look like it undid the first.
   const [promoting, setPromoting] = useState({});
+  // What the date check has written to each entry this session, keyed by the
+  // entry's id: "saving", "done", or the reason it could not. See
+  // utils/eventCheckApply.js.
+  const [eventApplied, setEventApplied] = useState({});
+  const [applyingAllEvents, setApplyingAllEvents] = useState(null);
   const [updateEventsError, setUpdateEventsError] = useState(null);
   const [updateEventsProgress, setUpdateEventsProgress] = useState(null); // "7 / 20" while running
   const [aiTellFlags, setAiTellFlags] = useState([]); // results of the last scan
@@ -12449,6 +12459,42 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
     }
   };
 
+  // ── AND WRITE WHAT THE DATE CHECK FOUND, FROM THE CHECK ───────────
+  // Oliver, 27 Sep 2026: "make me able to directly change the drafts from
+  // there." One row, or all of them in turn. patchRowPayload re-reads the row
+  // right before merging, so nothing typed elsewhere since the check ran is
+  // written over. See utils/eventCheckApply.js for what is never written.
+  const eventKey = (c) => String(c?.row?.id || c?.name || "");
+  const applyEventChange = async (c, { quiet = false } = {}) => {
+    const { set, why, rowId } = changeToApply(c, new Date());
+    const key = eventKey(c);
+    if (!set) { setEventApplied(p => ({ ...p, [key]: why || "Nothing to apply." })); return false; }
+    setEventApplied(p => ({ ...p, [key]: "saving" }));
+    try {
+      const out = await patchRowPayload(rowId, set);
+      if (!out.ok) { setEventApplied(p => ({ ...p, [key]: `Not saved: ${out.why}` })); return false; }
+      setEventApplied(p => ({ ...p, [key]: "done" }));
+      if (!quiet) { await refreshLiveContent(); bumpLiveContent(v => v + 1); }
+      return true;
+    } catch (err) {
+      setEventApplied(p => ({ ...p, [key]: `Not saved: ${String(err?.message || err).slice(0, 160)}` }));
+      return false;
+    }
+  };
+  const applyAllEventChanges = async (list) => {
+    const todo = (list || []).filter(c => changeToApply(c, new Date()).set && eventApplied[eventKey(c)] !== "done");
+    if (!todo.length || applyingAllEvents) return;
+    let done = 0;
+    for (let i = 0; i < todo.length; i++) {
+      setApplyingAllEvents({ at: i + 1, of: todo.length });
+      if (await applyEventChange(todo[i], { quiet: true })) done++;
+      await new Promise(r => setTimeout(r, 250));
+    }
+    setApplyingAllEvents(null);
+    await refreshLiveContent(); bumpLiveContent(v => v + 1);
+    showToast(`📅 ${done} of ${todo.length} event${todo.length === 1 ? "" : "s"} updated`, 3500);
+  };
+
   // ── PROPOSE, THEN WRITE, AND NEVER THE OTHER WAY ROUND ────────────
   //
   // The read is one request and no model calls. Every question this sweep asks
@@ -13130,6 +13176,13 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
           // said 3 June 2026 and that is in the past" is the sentence that would
           // have explained Distortion the first time he asked.
           if (problem) return { found: null, why: `refused-${problem}`, refused: isoDay(found.start) };
+          // AND ON A VENUE'S PROGRAMME, THE DATE NEEDS THE EVENT'S NAME BESIDE
+          // IT. The fix above stops a page with two parsed dates. tobakken.dk
+          // still got through on 27 Sep with ONE parsed date among a programme
+          // written in formats the parser skips, so "Sommer på Tobakken" was
+          // offered a November concert. See programmeDateProblem.
+          const programme = programmeDateProblem(text, read, ev.name, ev.town);
+          if (programme) return { found: null, why: programme, refused: isoDay(found.start) };
           return { found, why: "", labelled: read.labelled };
         };
         const readForEdition = async (url) => {
@@ -13272,6 +13325,9 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
             // whole payload and re-reading it from Supabase would be a second
             // source of truth for a thing already in hand.
             waitingRow: isWaiting(ev) ? ev : null,
+            // And the entry itself, so the panel can write the date to it.
+            // See applyEventChange.
+            row: ev,
             // A date read off a picture SAYS it was read off a picture, and
             // quotes the characters it read. That is the only way he can check
             // one without opening the site himself, and a poster read is the one
@@ -13423,7 +13479,7 @@ ${researchRules("festival", ev)}`
             // defaults a model reply is allowed to overrule; this one is ours,
             // it decides whether a Publish button appears, and a model that
             // happened to echo the key back would be handing itself one.
-            changed.push({ name: ev.name, town: ev.town, currentDate: ev.date, ...parsed, waitingRow: isWaiting(ev) ? ev : null, evidence });
+            changed.push({ name: ev.name, town: ev.town, currentDate: ev.date, ...parsed, waitingRow: isWaiting(ev) ? ev : null, row: ev, evidence });
           }
           trace.push({ step: "search", why: parsed.dateChanged ? "" : parsed.ignoredDate ? `refused-${parsed.ignoredWhy || "backwards"}` : "search-found-nothing", refused: parsed.ignoredDate || "", found: parsed.dateChanged || "" });
           // A refused status with nothing else on the row makes no card, by
@@ -26398,7 +26454,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: updateEventsResults || updateEventsError ? 10 : 0 }}>
                           <div>
                             <div style={{ fontSize: 12.5, fontWeight: 700, color: C.text }}>🔄 Update current events</div>
-                            <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>Re-checks your existing upcoming events for cancellations, date changes, or ticket status changes — run this weekly, not on every visit.</div>
+                            <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>Re-checks your existing upcoming events for cancellations, date changes or ticket status changes. Run it weekly, not on every visit.</div>
                           </div>
                           <button onClick={updateCurrentEvents} disabled={updateEventsLoading}
                             style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 10, padding: "8px 14px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", flexShrink: 0, fontFamily: "'Inter', sans-serif" }}>
@@ -26411,14 +26467,20 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                             <div style={{ fontSize: 11, color: C.muted, marginBottom: updateEventsResults.changed.length ? 8 : 0 }}>
                               Checked {updateEventsResults.checked} upcoming event{updateEventsResults.checked === 1 ? "" : "s"}{updateEventsResults.skipped > 0 ? ` (${updateEventsResults.skipped} more upcoming not checked this run, click again to continue)` : ""}.{updateEventsResults.imagesRead > 0 ? ` ${updateEventsResults.imagesRead} poster${updateEventsResults.imagesRead === 1 ? " was" : "s were"} read as a picture.` : ""}
                             </div>
-                            {updateEventsResults.changed.length === 0 ? (
-                              <div style={{ fontSize: 12, color: C.light }}>Nothing changed. Everything checked still matches what is on file.</div>
-                            ) : (
-                              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                                {updateEventsResults.changed.map((c, i) => (
+                            {(() => {
+                              // ── THE CHANGES FIRST, THE REFUSALS FOLDED AWAY ──
+                              // Oliver, 27 Sep 2026, scrolling a run where most
+                              // rows only said what was IGNORED. Those have
+                              // nothing to save, so they sit in one fold under
+                              // the rows that do. See onlyRefusals.
+                              const all = updateEventsResults.changed;
+                              const acts = all.filter(c => !onlyRefusals(c));
+                              const leftAlone = all.filter(c => onlyRefusals(c));
+                              const savable = acts.filter(c => changeToApply(c, new Date()).set && eventApplied[eventKey(c)] !== "done");
+                              const card = (c, i) => (
                                   <div key={i} style={{ background: C.bg, border: "1px solid #FFB34755", borderRadius: 10, padding: "10px 12px" }}>
-                                    <div style={{ fontSize: 12.5, fontWeight: 700, color: C.text, marginBottom: 3 }}>{c.name}{c.town ? ` — ${c.town}` : ""}</div>
-                                    {c.stillHappening === false && <div style={{ fontSize: 11.5, color: "#FFB347" }}>⚠ May no longer be happening as scheduled — verify before your next guide references it.</div>}
+                                    <div style={{ fontSize: 12.5, fontWeight: 700, color: C.text, marginBottom: 3 }}>{c.name}{c.town ? `, ${c.town}` : ""}</div>
+                                    {c.stillHappening === false && <div style={{ fontSize: 11.5, color: "#FFB347" }}>⚠ May no longer be happening as scheduled. Verify it before your next guide uses it.</div>}
                                     {/* "Date on file:  → possibly now: ..." with nothing on the
                                         left is a row whose date was never stored, and a bare arrow
                                         does not say that. */}
@@ -26428,7 +26490,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                         indistinguishable from a check that found nothing. */}
                                     {c.ignoredDate && <div style={{ fontSize: 11.5, color: C.muted }}>Ignored a suggested date of {c.ignoredDate}, because {c.ignoredWhy}.</div>}
                                     {c.ignoredStatus && <div style={{ fontSize: 11.5, color: C.muted }}>Ignored a suggested ticket status of {c.ignoredStatus}, because {c.ignoredStatusWhy}.</div>}
-                                    {c.notes && <div style={{ fontSize: 11.5, color: C.light, marginTop: 3 }}>{c.notes}</div>}
+                                    {c.notes && <div style={{ fontSize: 11.5, color: C.light, marginTop: 3 }}>{stripDashes(c.notes)}</div>}
                                     {/* ── AND THE PAGE IT WAS READ OFF ─────
                                         Oliver, 10 Sep 2026: "you can add the
                                         link to its evidence. So I can
@@ -26470,12 +26532,54 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                         )}
                                       </div>
                                     ) : (
-                                      <div style={{ fontSize: 10.5, color: C.muted, marginTop: 4 }}>This only flags it — update the real entry in your events data file by hand once you've verified.</div>
+                                      (() => {
+                                        // ── ONE PRESS, NOT HOMEWORK ────────────
+                                        // Oliver, 27 Sep 2026: "make me able to
+                                        // directly change the drafts from there."
+                                        // What it would write is on the button,
+                                        // and the link it was read off stays
+                                        // above. See utils/eventCheckApply.js.
+                                        const plan = changeToApply(c, new Date());
+                                        const savedState = eventApplied[eventKey(c)];
+                                        if (!plan.set) return plan.why ? <div style={{ fontSize: 10.5, color: C.muted, marginTop: 6 }}>{plan.why}</div> : null;
+                                        const what = [plan.set.date ? `date ${plan.set.date}${plan.set.dateEnd && plan.set.dateEnd !== plan.set.date ? ` to ${plan.set.dateEnd}` : ""}` : "", plan.set.ticketStatus ? `tickets ${plan.set.ticketStatus.replace(/_/g, " ")}` : ""].filter(Boolean).join(" and ");
+                                        return (
+                                          <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                                            <button onClick={() => applyEventChange(c)} disabled={savedState === "saving" || savedState === "done" || !!applyingAllEvents}
+                                              style={{ background: savedState === "done" ? C.surface : C.gold, border: `1px solid ${C.gold}`, borderRadius: 100, padding: "6px 14px", fontSize: 11, fontWeight: 700, color: savedState === "done" ? C.gold : C.onGold, cursor: savedState === "saving" || savedState === "done" ? "default" : "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                              {savedState === "saving" ? "Saving…" : savedState === "done" ? `✓ Saved: ${what}` : `Save ${what} to the entry`}
+                                            </button>
+                                            {savedState && !["saving", "done"].includes(savedState) && <span style={{ fontSize: 10.5, color: "#FFB347" }}>{savedState}</span>}
+                                          </div>
+                                        );
+                                      })()
                                     )}
                                   </div>
-                                ))}
-                              </div>
-                            )}
+                              );
+                              if (!all.length) return <div style={{ fontSize: 12, color: C.light }}>Nothing changed. Everything checked still matches what is on file.</div>;
+                              return (
+                                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                                  {savable.length > 1 && (
+                                    <button onClick={() => applyAllEventChanges(acts)} disabled={!!applyingAllEvents}
+                                      style={{ alignSelf: "flex-start", background: C.gold, border: `1px solid ${C.gold}`, borderRadius: 100, padding: "8px 16px", fontSize: 12, fontWeight: 700, color: C.onGold, cursor: applyingAllEvents ? "default" : "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                      {applyingAllEvents ? `Saving ${applyingAllEvents.at} of ${applyingAllEvents.of}…` : `Save all ${savable.length} changes to their entries`}
+                                    </button>
+                                  )}
+                                  {acts.length === 0 && <div style={{ fontSize: 12, color: C.light }}>No new dates or ticket changes to save.</div>}
+                                  {acts.map((c, i) => card(c, `a${i}`))}
+                                  {leftAlone.length > 0 && (
+                                    <details style={{ marginTop: 4 }}>
+                                      <summary style={{ fontSize: 11.5, color: C.muted, cursor: "pointer" }}>
+                                        Left alone: {leftAlone.length}. What was found for these was this year's edition, already over, or nothing new.
+                                      </summary>
+                                      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
+                                        {leftAlone.map((c, i) => card(c, `l${i}`))}
+                                      </div>
+                                    </details>
+                                  )}
+                                </div>
+                              );
+                            })()}
                             {/* ── WHAT IT TRIED, ON THE ROWS THAT ARE STILL WRONG ──
                                 Oliver has read "Nothing changed. Everything checked still
                                 matches what is on file." three times on runs where the event
@@ -29817,21 +29921,15 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 </button>
               </div>
 
-              {/* DERIVED FROM A COORDINATE, so this row is five chips at most and
-                  can never grow a sixth because somebody typed a name
-                  differently. Only parts something is published in appear. */}
-              {(() => {
-                const parts = partsPresent(towns);
-                if (parts.length < 2) return null;
-                return (
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
-                    {[{ id: null, label: "All of Denmark" }, ...parts.map(x => ({ id: x, label: x }))].map(k => (
-                      <Pill key={k.label} label={k.label} active={townPart === k.id} onClick={() => setTownPart(townPart === k.id ? null : k.id)} />
-                    ))}
-                  </div>
-                );
-              })()}
-
+              {/* ── WHERE IS A FILTER, AND THE FILTERS SIT UNDER THE SEARCH ──
+                  Oliver, 27 Sep 2026, of this page: "why is this still not
+                  fixed? Put locations into filters and put filters into the
+                  position under the text bar". The part-of-the-country pills
+                  were their own row between the search and the panel, so the
+                  panel opened a row away from the button that opens it, and
+                  location was the one axis that was not inside Filters. It is
+                  now the panel's first row, counted like the others, and the
+                  panel opens straight under the search bar. */}
               {townFiltersOpen && (() => {
                 // COUNTS ON EVERY OPTION. A filter that leads to an empty grid
                 // should say so before it is tapped, not after. Each count is the
@@ -29851,6 +29949,12 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 // counts above as well as having its own. A count that ignores a
                 // live filter promises a number the grid will not deliver.
                 const nWithIsland = (v) => towns.filter(t => base(t) && townKindOk(t) && townSizeOk(t) && townThemeOk(t) && (!v || islandOfTown(t) === v)).length;
+                // WHERE: counted with every other filter and never with itself,
+                // the same rule as the rows below. Only parts something is
+                // published in appear, derived from a coordinate, so it is
+                // five chips at most.
+                const parts = partsPresent(towns);
+                const nWithPart = (p) => towns.filter(t => townSearchOk(t) && townKindOk(t) && townSizeOk(t) && townThemeOk(t) && townIslandOk(t) && (!p || partOfCountry(t) === p)).length;
                 const islands = islandsPresent(towns, islandOfTown);
                 const kinds = ["city", "town", "village", "area"].filter(k => towns.some(t => placeKindOf(t) === k));
                 const themeList = themesPresent(towns);
@@ -29862,6 +29966,13 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 );
                 return (
                   <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px 15px", marginBottom: 14 }}>
+                    {parts.length > 1 && (
+                      <Row title="Where">
+                        {[{ id: null, label: "All of Denmark" }, ...parts.map(x => ({ id: x, label: x, n: nWithPart(x) }))].map(k => (
+                          <Pill key={k.label} label={k.id ? `${k.label} (${k.n})` : k.label} active={townPart === k.id} onClick={() => setTownPart(townPart === k.id ? null : k.id)} />
+                        ))}
+                      </Row>
+                    )}
                     {themeList.length > 1 && (
                       <Row title="What it is for">
                         {[{ id: null, label: "Anything" }, ...themeList.map(th => ({ id: th, label: `${THEME_EMOJI[th]} ${THEME_LABEL[th]}`, n: nWithTheme(th) }))].map(k => (
@@ -30100,31 +30211,18 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   </div>
                 </div>
               ) : (<>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 16 }}>
-                  <input value={islandSearch} onChange={e => setIslandSearch(e.target.value)}
-                    placeholder="Search an island"
-                    style={{ flex: "1 1 220px", minWidth: 0, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 100, padding: "10px 16px", fontSize: 13, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif" }} />
-                  {/* Reading `fixedLink`, which the draft either states or leaves
-                      empty. An island with an empty fixedLink is filed under
-                      "ferry" because that is what an unstated bridge means in
-                      Denmark: there is no bridge. The reverse inference, calling
-                      a place bridgeless in PROSE because nobody wrote it down, is
-                      the one this page must never make, and it does not: the chip
-                      narrows a list, it does not print a claim. */}
-                  {/* "Bridge or causeway" had a box-drawing line in front of
-                      it, which reads as a dash. No dashes, 21 Sep 2026. */}
-                  {[{ id: "bridge", label: "Bridge or causeway" }, { id: "ferry", label: "⛴ Ferry only" }].map(o => (
-                    <Pill key={o.id} label={o.label} active={islandLink === o.id} onClick={() => setIslandLink(islandLink === o.id ? null : o.id)} />
-                  ))}
-                </div>
-                {/* BY REGION, when the islands published sit in more than one.
-                    A pill that matches every island is a pill nobody needs. */}
                 {(() => {
+                  // ── SEARCH, A FILTERS BUTTON, AND THE PANEL UNDER IT ──
+                  // The same layout as Towns (see "WHERE IS A FILTER" there):
+                  // the crossing and the region were two loose pill rows. They
+                  // are now rows of one panel that opens straight under the
+                  // search bar, each option counted with every other filter
+                  // applied.
                   // Seen live, 22 Sep 2026: the region field is free text, so the
                   // pills read "South Funen Archipelago" and "South Funen
                   // archipelago" side by side, and "the Baltic Sea, east of the
                   // rest of Denmark" as a button. Folded on case, and a region
-                  // written as a sentence is not offered as a pill.
+                  // written as a sentence is not offered.
                   const seenRegion = new Map();
                   for (const i of islands) {
                     const r = String(i.region || "").trim();
@@ -30133,14 +30231,54 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     if (!seenRegion.has(k)) seenRegion.set(k, r.charAt(0).toUpperCase() + r.slice(1));
                   }
                   const regions = [...seenRegion.values()].sort((a, b) => a.localeCompare(b, "da"));
-                  if (regions.length < 2) return null;
-                  return (
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
-                      {regions.map(r => (
-                        <Pill key={r} label={r} active={islandRegion === r} onClick={() => setIslandRegion(islandRegion === r ? null : r)} />
-                      ))}
+                  // Reading `fixedLink`, which the draft either states or leaves
+                  // empty. An island with an empty fixedLink is filed under
+                  // "ferry" because that is what an unstated bridge means in
+                  // Denmark. The chip narrows a list; it never prints a claim.
+                  const linkOk = (i, v) => !v || (v === "bridge" ? !!String(i.fixedLink || "").trim() : !String(i.fixedLink || "").trim());
+                  const regionOk = (i, v) => !v || String(i.region || "").trim().toLowerCase() === v.toLowerCase();
+                  const nLink = (v) => islands.filter(i => linkOk(i, v) && regionOk(i, islandRegion)).length;
+                  const nRegion = (v) => islands.filter(i => regionOk(i, v) && linkOk(i, islandLink)).length;
+                  const activeIsland = [islandLink, islandRegion].filter(Boolean).length;
+                  const Row = ({ title, children }) => (
+                    <div style={{ marginBottom: 12 }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 7 }}>{title}</div>
+                      <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>{children}</div>
                     </div>
                   );
+                  return (<>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
+                      <input value={islandSearch} onChange={e => setIslandSearch(e.target.value)}
+                    placeholder="Search an island"
+                    style={{ flex: "1 1 220px", minWidth: 0, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 100, padding: "10px 16px", fontSize: 13, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif" }} />
+                      <button onClick={() => setIslandFiltersOpen(o => !o)}
+                        style={{ background: islandFiltersOpen || activeIsland ? `${C.gold}1a` : "none", border: `1px solid ${activeIsland ? C.gold : C.border}`, color: activeIsland ? C.gold : C.light, borderRadius: 100, padding: "9px 16px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                        Filters{activeIsland ? ` · ${activeIsland}` : ""}
+                      </button>
+                    </div>
+                    {islandFiltersOpen && (
+                      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px 15px", marginBottom: 14 }}>
+                        {regions.length > 1 && (
+                          <Row title="Where">
+                            {[{ id: null, label: "All of Denmark" }, ...regions.map(r => ({ id: r, label: r, n: nRegion(r) }))].map(k => (
+                              <Pill key={k.label} label={k.id ? `${k.label} (${k.n})` : k.label} active={islandRegion === k.id} onClick={() => setIslandRegion(islandRegion === k.id ? null : k.id)} />
+                            ))}
+                          </Row>
+                        )}
+                        <Row title="Getting there">
+                          {[{ id: null, label: "Any way" }, { id: "bridge", label: "Bridge or causeway" }, { id: "ferry", label: "⛴ Ferry only" }].map(k => (
+                            <Pill key={k.label} label={k.id ? `${k.label} (${nLink(k.id)})` : k.label} active={islandLink === k.id} onClick={() => setIslandLink(islandLink === k.id ? null : k.id)} />
+                          ))}
+                        </Row>
+                        {activeIsland > 0 && (
+                          <button onClick={() => { setIslandLink(null); setIslandRegion(null); }}
+                            style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "6px 14px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>
+                            Clear all
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </>);
                 })()}
                 {(() => {
                   const q = String(islandSearch || "").trim().toLowerCase();

@@ -812,6 +812,7 @@ export const CHECK_STEP_WORDS = {
   // deadline — so the answer is that this page does not carry the event's own
   // date, not that it carries none.
   "only-other-dates": "every future date on the page belongs to a ticket sale or a deadline rather than to the event itself, so none of them was used",
+  "programme-date-not-named": "the page is a programme of many dates, and the one it had does not have this event's name beside it, so it was not used",
   "no-text": "the page returned almost no readable text",
   "unreadable": "the page could not be read",
   // NOT A PAGE PROBLEM AT ALL. This one is our own endpoint refusing the request
@@ -1153,6 +1154,93 @@ export const venueRatherThanEvent = (text, read) => {
     dates,
     signals,
   };
+};
+
+// ── AND A VENUE'S NEXT DATE IS NOT THIS EVENT'S ─────────────────────
+//
+// Oliver, 27 Sep 2026, of a row in the date check: "'Sommer på Tobakken,
+// Esbjerg' makes no sense.. the link used is refering to a whole bunch of
+// events. And the date refers to a specific event." tobakken.dk is the
+// venue's own site. It lists its whole programme, and the one date the parser
+// could pin down, 28 November, belongs to some concert there, not to a summer
+// series. anchoredEdition took it because only one future date parsed, and a
+// venue's programme is exactly the page where the parser finds one date among
+// many written in ways it skips.
+//
+// So on a page that mentions a pile of dates (dateMentions, the same count
+// venueRatherThanEvent uses), an unlabelled date is only the event's when the
+// event's own name stands beside it. A date with no position cannot show
+// that, so on such a page it is refused too. A page that labels its dates
+// ("Dates: 2-6 June 2027") has already said whose they are and is not asked.
+export const NAME_NEAR_CHARS = 250;
+const NAME_STOP = new Set(["festival", "festivalen", "festivals", "koncert", "koncerter", "marked", "markedet", "dage", "dagene", "days", "with", "from", "that", "this", "event", "events", "denmark", "danmark", "copenhagen"]);
+const nameTokens = (name, town = "") => {
+  const place = String(town || "").toLowerCase();
+  return [...new Set(String(name || "").toLowerCase().split(/[^a-z0-9æøåäöüé]+/)
+    .filter(w => w.length >= 4 && !NAME_STOP.has(w) && w !== place))];
+};
+// Where on the page a date is written, for a date the parser found without a
+// position ("28. november 2026" comes back with at -1). Every spelling of that
+// day is looked for: 28. november, 28 nov, 28.11, 28/11, november 28.
+export const locateDate = (text, date) => {
+  const d = date instanceof Date ? date : parseEventDate(date);
+  if (!d) return -1;
+  const day = d.getDate(), month = d.getMonth();
+  const words = MONTH_WORDS[month].replace(/\(\?=[^)]*\)/g, "");
+  const mm = String(month + 1);
+  const pats = [
+    `(?<!\\d)0?${day}\\.?\\s*(?:${words})\\b`,
+    `\\b(?:${words})\\.?\\s*0?${day}(?!\\d)`,
+    `(?<!\\d)0?${day}[./]0?${mm}(?!\\d)`,
+  ];
+  let best = -1;
+  for (const p of pats) {
+    const m = new RegExp(p, "i").exec(String(text || ""));
+    if (m && (best < 0 || m.index < best)) best = m.index;
+  }
+  return best;
+};
+
+// Dates a venue's programme writes that dateMentions does not count: a weekday
+// and a day/month, "Fre 3/10". That is how a concert list is usually set out.
+const WEEKDAY_SHORT_DATE = /\b(?:man|tir|ons|tor|fre|lør|lor|søn|son|mon|tue|wed|thu|fri|sat|sun)[a-zæøå]*\.?\s*\d{1,2}[./]\d{1,2}(?![./]\d)/gi;
+export const programmeMentions = (text) => {
+  const t = String(text || "");
+  return dateMentions(t) + new Set([...t.matchAll(WEEKDAY_SHORT_DATE)].map(m => m[0].toLowerCase())).size;
+};
+
+export const namedNearDate = (text, at, name, town = "") => {
+  if (!Number.isFinite(at) || at < 0) return false;
+  const words = nameTokens(name, town);
+  if (!words.length) return true;
+  const t = String(text || "").toLowerCase();
+  // A word counts only when no OTHER date is written between it and this one.
+  // On a concert list every act's name is within a few lines of every date,
+  // so distance alone let "Kim Larsen" claim the Nephew date above it.
+  const otherDateBetween = (a, b) => {
+    const seg = t.slice(Math.min(a, b), Math.max(a, b));
+    const lo = Math.min(a, b);
+    const found = [...seg.matchAll(DATE_MENTION), ...seg.matchAll(WEEKDAY_SHORT_DATE), ...seg.matchAll(/\b\d{1,2}[./]\d{1,2}(?:[./]\d{2,4})?\b/g)];
+    // The date itself sits at `at`; anything else in the gap is another date.
+    return found.some(m => Math.abs(lo + m.index - at) > 3);
+  };
+  const hits = words.filter(w => {
+    let i = t.indexOf(w), best = -1;
+    while (i >= 0) {
+      if (Math.abs(i - at) <= NAME_NEAR_CHARS && (best < 0 || Math.abs(i - at) < Math.abs(best - at))) best = i;
+      i = t.indexOf(w, i + 1);
+    }
+    return best >= 0 && !otherDateBetween(best, at);
+  }).length;
+  const need = words.length <= 2 ? words.length : Math.ceil(words.length * 2 / 3);
+  return hits >= need;
+};
+// "" when the date may stand, or the reason it may not.
+export const programmeDateProblem = (text, read, name, town = "") => {
+  if (!read?.found || read.labelled) return "";
+  if (programmeMentions(text) < PROGRAMME_DATES) return "";
+  const at = Number.isFinite(read.found.at) && read.found.at >= 0 ? read.found.at : locateDate(text, read.found.start);
+  return namedNearDate(text, at, name, town) ? "" : "programme-date-not-named";
 };
 
 // ── AN OFFICE IS NOT WHERE THE FESTIVAL HAPPENS ─────────────────────

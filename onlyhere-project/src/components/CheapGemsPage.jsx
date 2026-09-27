@@ -86,10 +86,11 @@ const Grid = ({ rows, point, me }) => (
   </div>
 );
 
-export const CheapGemsPage = ({ rows = [], title = "Cheap gems", pointFor = null, userCoords = null }) => {
+export const CheapGemsPage = ({ rows = [], title = "Cheap gems", pointFor = null, userCoords = null, initialFiltersOpen = false }) => {
   const [town, setTown] = useState("");
   const [kind, setKind] = useState("");
   const [category, setCategory] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(!!initialFiltersOpen);
   const [students, setStudents] = useState(false);
   const [q, setQ] = useState("");
   const narrowed = rows.filter(g => gemMatches(g, { category, students, q }));
@@ -118,28 +119,66 @@ export const CheapGemsPage = ({ rows = [], title = "Cheap gems", pointFor = null
           </div>
         </div>
       ) : (<>
-        {opts.search && (
-          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search cheap gems" aria-label="Search cheap gems"
-            style={{ width: "100%", maxWidth: 420, boxSizing: "border-box", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 100, padding: "10px 16px", fontSize: 13, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif", marginBottom: 12 }} />
-        )}
-        {all.towns.length > 0 && (
-          <div style={row}>
-            {[{ id: "", label: "All of Denmark" }, ...all.towns.map(t => ({ id: t, label: t }))].map(o => (
-              <Pill key={o.id || "all"} label={o.label} active={town === o.id} onClick={() => setTown(o.id)} />
-            ))}
-          </div>
-        )}
-        {(opts.categories.length > 0 || opts.kinds.length > 0 || opts.students) && (
-          <div style={{ ...row, marginBottom: 18 }}>
-            {opts.categories.map(c => (
-              <Pill key={c} label={GEM_CATEGORY_LABEL[c]} active={category === c} onClick={() => setCategory(category === c ? "" : c)} />
-            ))}
-            {opts.kinds.map(k => (
-              <Pill key={k} label={GEM_SECTION[k]} active={kind === k} onClick={() => setKind(kind === k ? "" : k)} />
-            ))}
-            {opts.students && <Pill label="For students" active={students} onClick={() => setStudents(!students)} />}
-          </div>
-        )}
+        {/* ── SEARCH, A FILTERS BUTTON, AND THE PANEL UNDER IT ──────────
+            Oliver, 27 Sep 2026: the same layout as Towns and Islands. The
+            town row and the kind row were loose pills under the search; they
+            are now rows of one panel that opens straight under it. */}
+        {(() => {
+          const hasFilters = all.towns.length > 0 || opts.categories.length > 0 || opts.kinds.length > 0 || opts.students;
+          const active = [town, kind, category, students].filter(Boolean).length;
+          const Row = ({ title, children }) => (
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 7 }}>{title}</div>
+              <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>{children}</div>
+            </div>
+          );
+          return (<>
+            {(opts.search || hasFilters) && (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
+                {opts.search && <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search cheap gems" aria-label="Search cheap gems"
+            style={{ flex: "1 1 220px", minWidth: 0, boxSizing: "border-box", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 100, padding: "10px 16px", fontSize: 13, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif", marginBottom: 12 }} />}
+                {hasFilters && (
+                  <button onClick={() => setFiltersOpen(o => !o)}
+                    style={{ background: filtersOpen || active ? `${C.gold}1a` : "none", border: `1px solid ${active ? C.gold : C.border}`, color: active ? C.gold : C.light, borderRadius: 100, padding: "9px 16px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                    Filters{active ? ` · ${active}` : ""}
+                  </button>
+                )}
+              </div>
+            )}
+            {filtersOpen && hasFilters && (
+              <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px 15px", marginBottom: 16 }}>
+                {all.towns.length > 0 && (
+                  <Row title="Where">
+                    {[{ id: "", label: "All of Denmark" }, ...all.towns.map(t => ({ id: t, label: t }))].map(o => (
+                      <Pill key={o.id || "all"} label={o.label} active={town === o.id} onClick={() => setTown(o.id)} />
+                    ))}
+                  </Row>
+                )}
+                {opts.categories.length > 0 && (
+                  <Row title="What">
+                    {opts.categories.map(c => (
+                      <Pill key={c} label={GEM_CATEGORY_LABEL[c]} active={category === c} onClick={() => setCategory(category === c ? "" : c)} />
+                    ))}
+                  </Row>
+                )}
+                {(opts.kinds.length > 0 || opts.students) && (
+                  <Row title="Kind">
+                    {opts.kinds.map(k => (
+                      <Pill key={k} label={GEM_SECTION[k]} active={kind === k} onClick={() => setKind(kind === k ? "" : k)} />
+                    ))}
+                    {opts.students && <Pill label="For students" active={students} onClick={() => setStudents(!students)} />}
+                  </Row>
+                )}
+                {active > 0 && (
+                  <button onClick={clearAll}
+                    style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "6px 14px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>
+                    Clear all
+                  </button>
+                )}
+              </div>
+            )}
+          </>);
+        })()}
         {/* ── ONE GRID, AND THE FILTERS DO THE SORTING ──────────────
             Oliver, 22 Sep 2026: "remove 'Cheap anyway', swap it out with
             filters." Two headings over two short lists read as two pages;

@@ -350,3 +350,25 @@ You: "apparently, the confirmation mail tends to end in junk mail. That happened
 - **SETUP_EMAIL.md, Part 3:** the new links for Confirm signup and Reset password, mail-tester.com, and a DMARC reports address.
 - **YOU NEED TO:** push first, then paste the new templates into Supabase. The old site does not understand the new link.
 - 12 new checks. Browser and network are stubbed. All 10 mutants went red.
+
+## Batch 143: Where is a filter on the Towns page
+
+You: "why is this still not fixed? Put locations into filters and put filters into the position under the text bar".
+
+- The All of Denmark / Jutland / Funen / Zealand / Lolland-Falster row sat by itself between the search bar and the panel, so the panel opened one row away from its button, and location was the only axis outside Filters.
+- It is now the first row of the panel, titled "Where". It has counts like the other rows, counted with every other filter applied but not itself. The panel opens straight under the search bar.
+- A chosen place still counts in "Filters · N" and is cleared by Clear all, as before.
+- Not touched: Islands (region pills and no Filters button) and Cheap gems (a town row and no Filters button). Say if they should get the same treatment.
+- 6 new checks, including that nothing sits between the search bar and the panel. 3 mutants all red.
+
+## Batch 144: save the date check's findings from the check, the programme-page date, and a terms tick box
+
+Your words: "I don't want to go in and individually change every draft", "make me able to directly change the drafts from there", "keep the link. So I can see where it got the source from", "'Sommer på Tobakken' makes no sense.. the link used is refering to a whole bunch of events. And the date refers to a specific event", "Yes" (Islands and Cheap gems layout), and "on account creation, remember to make people click 'accept terms of use'".
+
+- **Save from the check.** Every row that found a new date or ticket status now has a "Save ... to the entry" button, and the top has "Save all N changes to their entries". It writes the date, the end date (empty if none was found, so last year's end can't sit after this year's start) and the ticket status. It also writes `__checked` with the day and the links it was read off. The "Read off:" links stay on every row. It re-reads the row right before writing, so nothing typed elsewhere is overwritten. See `utils/eventCheckApply.js`.
+  - It never writes a possible cancellation (your call, it says so), an event that lives in the code rather than the database, a waiting entry (that has its own "Publish it now" button), a date already passed, or an end before a start.
+  - The rows that only say what was ignored are folded under "Left alone: N". The old "This only flags it" line is gone, as are the dashes in the panel. The model's notes are passed through stripDashes.
+- **Sommer på Tobakken.** tobakken.dk is the venue's programme. The parser pinned down one date, 28 November, which belongs to a concert there. On a page with many dates (now counting "Fre 3/10" style too), an unlabelled date is only used when the event's own name stands beside it with no other date in between. Dates written in words are located on the page for that check. `programmeDateProblem` and friends are in `eventDates.js`. The trace says "the page is a programme of many dates...".
+- **Islands and Cheap gems** now use the Towns layout: search, a Filters button, and the panel under it (Where and Getting there on Islands; Where, What and Kind on Cheap gems). Islands rows have counts.
+- **Terms tick box.** Signup now has "I accept the Terms of Service and the Privacy Policy" as a box that must be ticked, on both the email and Google routes. It starts unticked every time the sheet opens. The accepted version is still stamped by acceptedNow. Screenshot checked in a browser.
+- 26 new checks and 8 older ones updated to the new layout and names. Every mutant tried went red (17).

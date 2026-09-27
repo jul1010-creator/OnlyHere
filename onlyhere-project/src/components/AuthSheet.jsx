@@ -141,6 +141,12 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
   // button. A form that scolds before you have typed anything is a worse form.
   const [showGaps, setShowGaps] = useState(false);
   const [confirm, setConfirm] = useState("");
+  // ── A TICK, NOT A LINE ─────────────────────────────────────────────
+  // Oliver, 27 Sep 2026: "on account creation, remember to make people click
+  // 'accept terms of use'". The line under the button said creating an account
+  // agreed to them; now nobody gets an account without ticking it, on either
+  // route in (email or Google).
+  const [termsTicked, setTermsTicked] = useState(false);
   const [wide, setWide] = useState(() => typeof window !== "undefined" && window.innerWidth >= 720);
 
   // The sheet is hidden with an early return rather than unmounted, so its
@@ -171,7 +177,7 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
     if (!open) return;
     setMode(initialMode || "in");
     setError(null); setNotice(null); setShowGaps(false);
-    setEmail(""); setPassword(""); setConfirm("");
+    setEmail(""); setPassword(""); setConfirm(""); setTermsTicked(false);
     setAnswers(EMPTY_PROFILE);
     setSentTo(""); setResendAt(0);
     // busy was the one flag this reset forgot, and the sheet is hidden rather
@@ -291,6 +297,7 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
       // is made, because a typo caught afterwards is an account somebody cannot
       // get back into without the reset flow.
       if (password !== confirm) { setError(uiT("auth.noMatch", lang)); return; }
+      if (!termsTicked) { setError(uiT("auth.mustAccept", lang)); return; }
       const gaps = missingRequired(answers);
       if (gaps.length) {
         setError(`${uiT("auth.stillNeeded", lang)} ${gaps.map(k => REQUIRED_LABEL[k]).join(", ")}.`);
@@ -649,6 +656,7 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
         <button onClick={() => {
           if (mode === "up") {
             setShowGaps(true);
+            if (!termsTicked) { setError(uiT("auth.mustAccept", lang)); return; }
             const gaps = missingRequired(answers);
             if (gaps.length) {
               setError(`${uiT("auth.stillNeeded", lang)} ${gaps.map(k => REQUIRED_LABEL[k]).join(", ")}.`);
@@ -770,28 +778,33 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
         {error && <div style={{ fontSize: 12, color: "#FF8A80", lineHeight: 1.5, marginBottom: 10 }}>{error}</div>}
         {notice && <div style={{ fontSize: 12, color: C.gold, lineHeight: 1.5, marginBottom: 10 }}>{notice}</div>}
 
+        {/* ── ACCEPTANCE, AT THE MOMENT OF ACCEPTANCE ──────────────
+            A tick box now, above the button that creates the account. It was a
+            line under the button saying that creating one agreed to the terms;
+            Oliver, 27 Sep 2026, asked for people to click to accept. Which
+            version was accepted is still written to the row by acceptedNow.
+            The links open beside the form (target _blank), because leaving it
+            would lose every answer in it. */}
+        {mode === "up" && (
+          <label style={{ display: "flex", alignItems: "flex-start", gap: 9, fontSize: 12, color: C.light, lineHeight: 1.5, marginBottom: 12, cursor: "pointer" }}>
+            <input type="checkbox" checked={termsTicked} onChange={e => { setTermsTicked(e.target.checked); if (e.target.checked) setError(null); }}
+              style={{ marginTop: 2, width: 16, height: 16, accentColor: C.gold, flexShrink: 0, cursor: "pointer" }} />
+            <span>
+              {uiT("auth.iAccept", lang)}{" "}
+              <a href="/terms.html" target="_blank" rel="noopener noreferrer" style={{ color: C.gold }}>{uiT("auth.terms", lang)}</a>
+              {" "}{uiT("auth.andThe", lang)}{" "}
+              <a href="/privacy.html" target="_blank" rel="noopener noreferrer" style={{ color: C.gold }}>{uiT("auth.privacy", lang)}</a>
+              {showGaps && !termsTicked ? <span style={{ color: "#FF8A80" }}> *</span> : null}
+            </span>
+          </label>
+        )}
+
         <button onClick={submit} disabled={busy}
           style={{ width: "100%", background: C.gold, border: "none", color: C.onGold, borderRadius: 11, padding: "13px", fontSize: 15, fontWeight: 700, cursor: busy ? "default" : "pointer", fontFamily: "'Inter', sans-serif", opacity: busy ? 0.6 : 1, marginBottom: 12 }}>
           {busy ? uiT("auth.working", lang) : label}
         </button>
 
-        {/* ── ACCEPTANCE, AT THE MOMENT OF ACCEPTANCE ──────────────
-            A line under the button rather than a tick box. For a free account a
-            linked line is the ordinary pattern, and a box would be one more
-            thing to argue with on a form he has already asked to be shorter.
-            Revisit when there is money involved and evidence of acceptance is
-            worth the friction. Which version was agreed to is written to the
-            row by acceptedNow, so the line and the record cannot drift.
 
-            target="_blank" on purpose: these open beside a half filled form.
-            Navigating away from it would lose every answer, which is the same
-            fault the Google button had. */}
-        {mode === "up" && <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.55, marginTop: -2, marginBottom: 12 }}>
-          {uiT("auth.agreeLead", lang)}{" "}
-          <a href="/terms.html" target="_blank" rel="noopener noreferrer" style={{ color: C.gold }}>{uiT("auth.terms", lang)}</a>
-          {" "}{uiT("auth.andThe", lang)}{" "}
-          <a href="/privacy.html" target="_blank" rel="noopener noreferrer" style={{ color: C.gold }}>{uiT("auth.privacy", lang)}</a>.
-        </div>}
 
         <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
           {/* Nothing to switch to mid-recovery: they are here holding a token
