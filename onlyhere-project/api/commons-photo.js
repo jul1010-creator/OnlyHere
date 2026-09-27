@@ -1,4 +1,5 @@
 import { fold } from "../src/utils/danishNames.js";
+import { readableAuthor } from "../src/utils/photoAuthor.js";
 // /api/commons-photo.js
 // ── Find a freely licensed photo on Wikimedia Commons, WITH its credit ──
 //
@@ -482,7 +483,7 @@ export default async function handler(req, res) {
         // A photographer we cannot name cannot be credited, and an uncreditable
         // CC BY image is not usable. Public domain is the exception: it genuinely
         // needs no author.
-        const photographer = strip(m.Artist?.value);
+        const photographer = readableAuthor(strip(m.Artist?.value));
         const isPD = /^(cc0|public domain|pd-)/i.test(license);
         if (!photographer && !isPD) continue;
 

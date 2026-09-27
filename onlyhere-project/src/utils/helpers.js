@@ -53,7 +53,11 @@ export const detectLegMode = (how, primaryMode) => {
   if (/bike|cycl/i.test(text)) return "bicycling";
   if (/drive|car\b/i.test(text)) return "driving";
   if (/walk/i.test(text)) return "walking";
-  if (/train|bus|transit/i.test(text)) return "transit";
+  // Metro, S-train and tram are public transport too. Measured live, 27 Sep
+  // 2026: "~10 min by subway" on a car trip read as nothing here, fell to the
+  // car, and printed "13 mins by car" under a stop whose own note said to
+  // leave the car parked and take the Metro.
+  if (/train|bus|transit|metro|subway|underground|s-tog|tram|letbane|light rail/i.test(text)) return "transit";
   return primaryMode === "bike" ? "bicycling" : primaryMode === "car" ? "driving" : "transit";
 };
 

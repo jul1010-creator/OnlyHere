@@ -131,6 +131,30 @@ export const tripDays = (arrival, departure) => {
   return span;
 };
 
+// ── AND THE NIGHT BEFORE A MORNING FLIGHT ───────────────────────────
+//
+// Measured live, 27 Sep 2026: 16 Oct 12:00 to 21 Oct 12:00. tripDays above
+// gives five days, dropping the 21st because it holds only the trip to the
+// airport. Every bed reader then counted a plan of five days as four nights,
+// the way a trip ending in the EVENING of its last day is counted. So the
+// family got no bed for the 20th, and day 5 was written as "before the
+// flight" with a 1h12 drive at 9:00, a day early.
+//
+// True when they still sleep in Denmark after the last day of the plan: the
+// departure date comes after it. Needs both dates, and says nothing otherwise.
+// The nights between two dates, whatever the hours: 16 Oct to 21 Oct is five.
+export const nightsBetween = (arrival, departure) => {
+  const span = daysBetween(arrival, departure);
+  return span && span > 1 ? span - 1 : 0;
+};
+
+export const sleepsAfterLastDay = (arrival, departure, planDays) => {
+  const span = daysBetween(arrival, departure);
+  const days = Math.floor(Number(planDays) || 0);
+  if (!span || days < 1) return false;
+  return span - 1 >= days;
+};
+
 // The last date the plan may put a stop on, which is the same answer read the
 // other way round. Both are here so a caller cannot take one and derive the
 // other slightly differently. `days` is the length once the traveller has had

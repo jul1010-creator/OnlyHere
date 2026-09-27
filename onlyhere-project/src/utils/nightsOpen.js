@@ -29,9 +29,16 @@
 // day card and the writer's prompt cannot each hold their own version of it.
 
 // The nights a plan of this many days contains, as day numbers.
-export const nightsIn = (dayCount) => {
+//
+// ── UNLESS THEY FLY THE MORNING AFTER ───────────────────────────────
+//
+// 27 Sep 2026: a noon departure is not a day in the plan (see tripDays and
+// sleepsAfterLastDay in tripEvents.js), so a five day plan ending the day
+// before a noon flight has five nights, not four. `sleepsAfter` says so.
+export const nightsIn = (dayCount, sleepsAfter = false) => {
   const n = Math.max(0, Math.floor(Number(dayCount) || 0));
-  return n > 1 ? Array.from({ length: n - 1 }, (_, i) => i + 1) : [];
+  const count = sleepsAfter ? n : n - 1;
+  return count > 0 ? Array.from({ length: count }, (_, i) => i + 1) : [];
 };
 
 // ── THE ONE ANSWER ──────────────────────────────────────────────────
@@ -50,8 +57,8 @@ export const nightsIn = (dayCount) => {
 // `unknown` is that third state, and it is the one the cost row was getting
 // wrong. It is reported rather than resolved: the fix for it is asking the
 // traveller, not picking a likely answer.
-export const bedState = ({ dayCount = 0, booked = [], hasBooking = false } = {}) => {
-  const nights = nightsIn(dayCount);
+export const bedState = ({ dayCount = 0, booked = [], hasBooking = false, sleepsAfter = false } = {}) => {
+  const nights = nightsIn(dayCount, sleepsAfter);
   const inPlan = new Set(nights);
   const bookedNights = [...new Set(
     (Array.isArray(booked) ? booked : []).map(d => Math.floor(Number(d))).filter(d => inPlan.has(d))
@@ -91,8 +98,27 @@ export const needsABed = (dayNo, state) => {
 // know where. NOT a sentence about what the link does: his standing rule is
 // that nothing explains a control to a reader, and the button's own label
 // already says where it goes.
+//
+// ── AND WHERE, SAID LIKE A PLACE ────────────────────────────────────
+//
+// 27 Sep 2026, a live guide: "The plan puts you in Hellerup Copenhagen." The
+// area is the writer's stayArea, a neighbourhood and its city with nothing
+// between them, so the comma goes in. And that guide moved beds four times, so
+// naming the first night's area alone told them one place for five nights: a
+// list of areas says where the nights are.
+const CITY_TAIL = /^(.+?)\s+(Copenhagen|København|Aarhus|Odense|Aalborg)$/i;
+export const tidyArea = (area) => {
+  const t = String(area || "").trim().replace(/\s+/g, " ");
+  if (!t || /,/.test(t)) return t;
+  const m = t.match(CITY_TAIL);
+  return m && !/^(?:central|centre|center|inner|greater|north|south|east|west|old)$/i.test(m[1]) ? `${m[1]}, ${m[2]}` : t;
+};
+const inLine = (list) => list.length <= 1 ? (list[0] || "") : `${list.slice(0, -1).join(", ")} and ${list[list.length - 1]}`;
 export const openNightsLine = (state, area = "") => {
-  const where = String(area || "").trim() ? ` The plan puts you in ${String(area).trim()}.` : "";
+  const areas = [...new Set((Array.isArray(area) ? area : [area]).map(tidyArea).filter(Boolean))];
+  const where = areas.length > 1
+    ? ` The plan moves you between ${inLine(areas.map(a => a.includes(",") ? a.split(",")[0].trim() : a))}.`
+    : areas.length ? ` The plan puts you in ${areas[0]}.` : "";
   if (!state) return "";
   if (state.unknown) {
     return `Your booking covers part of this trip and the plan does not know which nights, so the nights it does not cover are still open.${where}`;
@@ -113,4 +139,5 @@ export const bedStateOf = (guide) => bedState({
   dayCount: Array.isArray(guide?.days) ? guide.days.length : 0,
   booked: guide?._stay?.nights || [],
   hasBooking: !!guide?._stay?.booked,
+  sleepsAfter: !!guide?._sleepsAfterLast,
 });

@@ -1,4 +1,5 @@
 import { EntryLink } from "./EntryLink";
+import { readableAuthor } from "../utils/photoAuthor";
 import { creditIsRequired } from "../utils/imageCredits";
 import { cardLine } from "../utils/cardLine";
 import { t as uiT } from "../utils/uiLanguage";
@@ -68,7 +69,7 @@ const PHOTO_CSS = `
 `;
 
 const creditLine = (credit) => {
-  const who = String(credit?.photographer || "").trim();
+  const who = readableAuthor(credit?.photographer);
   const lic = String(credit?.license || "").trim();
   if (!who) return "";
   return lic ? `${who} · ${lic}` : who;

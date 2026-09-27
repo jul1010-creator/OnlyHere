@@ -354,6 +354,12 @@ writeFileSync(entry, `
   export { SWEEPS, sweepById, selectRows, applyCap, knownPlacesFor, parentheticalHint, deterministicTaxonomy, quoteIsInEntry, entryText, cleanPatch, looksLikePlaceName, dropSelfReferences, applySweepPatch, buildSnapshot, readSnapshot, snapshotFilename, proposeSweep, parseLooseFields, MARKS, weakestMark, openFields, changedOnly, FROM_ENTRY_PROMPT } from ${JSON.stringify(join(root, "src/utils/sweeps.js"))};
   export { readFactCheck, describeFactCheck, relabel, admitsNotFound, rootOf, withRoots, datesIn, datesConfirmedBy, CONTRADICTED, UNVERIFIED, readInventedCheck, researchForCheck, RESEARCH_CHECK_CAP, INVENTED_CHECK_FORMAT, correctionLanded, claimLanded, describeCorrection, correctionBanner, correctionPublisherNote, MAX_LISTED_CLAIMS, hasAnchor } from ${JSON.stringify(join(root, "src/utils/factCheckRead.js"))};
   export { foodOnNav, FOOD_VERDICTS, foreignCuisineIn, groceryIn, splitOffForeignFood, DANISH_FOOD_FRAMING, DANISH_FOOD_EXTRACT } from ${JSON.stringify(join(root, "src/utils/danishFood.js"))};
+  export { sleepsAfterLastDay, nightsBetween } from ${JSON.stringify(join(root, "src/utils/tripEvents.js"))};
+  export { houseChosen } from ${JSON.stringify(join(root, "src/utils/houseTrip.js"))};
+  export { CAR_TRIP_TRANSIT_KM } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
+  export { namesInLine, CITY_KM } from ${JSON.stringify(join(root, "src/utils/seasonFit.js"))};
+  export { tidyArea } from ${JSON.stringify(join(root, "src/utils/nightsOpen.js"))};
+  export { readableAuthor } from ${JSON.stringify(join(root, "src/utils/photoAuthor.js"))};
   export { shapeForLive, madeHeading, isPublisherNote, PUBLISHER_NOTE, cleanCredit } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
   export { longestEcho, echoWords, isNameEcho, echoInDraft, describeEcho, ECHO_RUN } from ${JSON.stringify(join(root, "src/utils/echoCheck.js"))};
   export { CHOICE_LIMIT, cleanCandidates, sameSubject, sameCandidate, needsChoosing, choicesFor, describeChoosing, applyChoice, choiceNote, subjectCore, listingMatchesSubject, streetListingMatches, describeListingRefusal } from ${JSON.stringify(join(root, "src/utils/placeChoice.js"))};
@@ -15622,7 +15628,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("the picture comes off a published row", /const row = rows\.find\(t => samePlaceName\(t\.name, key\)\) \|\| null;/.test(gpPhoto));
   ok("through the same licence check the cards use", /const shot = showablePhoto\(row\);/.test(gpPhoto));
   ok("and a required credit is carried onto the card",
-     /credit && creditIsRequired\(credit\) \? String\(credit\.photographer \|\| ""\)\.trim\(\) : ""/.test(gpPhoto));
+     /credit && creditIsRequired\(credit\) \? readableAuthor\(credit\.photographer\) : ""/.test(gpPhoto));
   ok("every stop knows which town it is in, precise or not", /townName: String\(st\.town \|\| ""\)\.trim\(\) \|\| town \|\| townKeyFor\(st\.name\) \|\| ""/.test(gpPhoto));
   ok("and the map is handed the resolver", /photoFor=\{townPhotoFor\}/.test(gpPhoto));
   // A map with no resolver draws no cards rather than throwing, which is what
@@ -40823,7 +40829,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   //
   // The booked-stay clause above is the precedent and this is the same shape.
   ok("the per-day call is told the stay they chose, not only what it costs",
-     /const glances = await enrichGuideDays\([^)]*, bookedName, intakeStay, \{/.test(stayApp));
+     /const glances = await enrichGuideDays\([^)]*, bookedName, stayForBuild, \{/.test(stayApp));
   ok("and it takes it as a parameter rather than reaching for the state",
      /const enrichGuideDays = async \([^)]*, bookedName = "", stayKind = "",/.test(stayApp));
   // Day one answers with WHERE to take a house, because the area is the
@@ -47401,7 +47407,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("nor a date regex", !/const dateRe\s*=/.test(code));
     ok("nor a day-count regex", !/dayCountMatch|weekWordMatch|singleWeekMatch|fortnightMatch/.test(code));
     ok("the shared readers are imported instead",
-       /import \{ tripWindow, tripDays, dayCountIn, arrivalDateIn, monthOnlyIn, latestRelativeAnswer, INTAKE_TURN_MARK, isIntakeTurn \} from "\.\/utils\/tripEvents"/.test(appD));
+       /import \{ tripWindow, tripDays, tripLastDay, sleepsAfterLastDay, nightsBetween, dayCountIn, arrivalDateIn, monthOnlyIn, latestRelativeAnswer, INTAKE_TURN_MARK, isIntakeTurn \} from "\.\/utils\/tripEvents"/.test(appD));
     // tripDays joined the list on 19 Sep, and it is the same rule: the length
     // of a trip is read in one place or it is read four ways. The form's own
     // "Exact trip length" line is a reader too, and it was the fourth.
@@ -58829,7 +58835,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
           // Upstream of all three: the day that has no night is told so, rather
           // than writing a stay area nobody downstream is allowed to draw.
           ok("the writer is told the last day has no night after it",
-             /THIS DAY HAS NO NIGHT AFTER IT/.test(appB) && /idx \+ 1 >= days\.length/.test(appB));
+             /THIS DAY HAS NO NIGHT AFTER IT/.test(appB) && /i \+ 1 >= days\.length/.test(appB));
           ok("and the finished guide carries what the conversation knew",
              /_stay: \{ booked: stayKnown\.stay\?\.value === "booked" \|\| !!bookedName, nights: bookedNights/.test(appB));
         }
@@ -78380,7 +78386,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
        /const houseAsked = \{ travellers: intakeTravelers, arrival: intakeArrival, departure: intakeDeparture, nights: houseNights \|\| null \};/.test(appH) &&
        /summerhouseFit\(\{ \.\.\.houseAsked, \.\.\.houseWho \}\)/.test(appH));
     ok("and the bed is priced over the same nights", /arrival: intakeArrival, departure: intakeDeparture, nights: houseNights \|\| null \}\)/.test(appH));
-    ok("and the nights come from tripDays", /const houseNights = intakeArrival && intakeDeparture \? tripDays\(intakeArrival, intakeDeparture\) : 0;/.test(appH));
+    ok("and the nights come from nightsBetween", /const houseNights = intakeArrival && intakeDeparture \? nightsBetween\(intakeArrival, intakeDeparture\) : 0;/.test(appH));
     ok("the chip carries the mark", /SUMMERHOUSE_MARK\[houseVerdict\]/.test(appH));
     // ── AND THE REASON READS THE SAME FACTS THE VERDICT DID ───────
     //
@@ -78930,7 +78936,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
   ok("the per-day call takes what the call site knows",
      /const enrichGuideDays = async \(days, travelMode, mixedModes, budgetSays = "", langBlock = "", bookedNights = \[\], bookedName = "", stayKind = "", stayAware = null\) =>/.test(app));
-  ok("the hostel block is for the hostel chip only", /const hostelSays = stayKind === "cheapest" && idx \+ 1 < days\.length && !\(bookedNights \|\| \[\]\)\.includes\(idx \+ 1\)/.test(app));
+  ok("the hostel block is for the hostel chip only", /const hostelSays = stayKind === "cheapest" && !noNightAfter\(idx\) && !\(bookedNights \|\| \[\]\)\.includes\(idx \+ 1\)/.test(app));
   ok("the coast block is measured over the trip's nights, not one day",
      /const housePoints = stayIsHouse\(stayKind\) \? days\.slice\(0, Math\.max\(1, days\.length - 1\)\)\.flatMap\(d => dayPoints\(d, stayResolve\)\) : \[\];/.test(app)
      && /houseAreaBlock\(housePoints, \{ \.\.\.houseOpts, base: houseBaseArea \}\)/.test(app));
@@ -78943,7 +78949,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   ok("a night is told its straight-line distance to the house", /about (4|5)\d km from Blokhus in a straight line/.test(asaa));
   ok("and that the road is longer, never shorter", /somewhat longer than that and never shorter/.test(asaa));
   is("no base, no distance", M.houseDistanceSays(null, [{ lat: 57, lon: 10 }]), "");
-  ok("and reaches day one only", /\$\{houseAreaSays && idx === 0 && idx \+ 1 < days\.length \?/.test(app));
+  ok("and reaches day one only", /\$\{houseAreaSays && idx === 0 && !noNightAfter\(idx\) \?/.test(app));
   ok("the call site hands over children, the published places and a DAY only",
      /kids: !!guideBrief\.known\?\.party\?\.hasKids,/.test(app) && /arrival: datePrecision === "day" \? arrivalDate : null,/.test(app) && /places: freeEntrance,/.test(app));
   ok("and both blocks sit inside the prompt the call sends", /\$\{hostelSays \? `/.test(app));
@@ -79101,7 +79107,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   is("no base, no block", M.houseBaseBlock(null), "");
   const app = readFileSync(join(root, "src/App.jsx"), "utf8");
   ok("the base is picked from the skeleton before the writer runs",
-     /plannerSkeleton = JSON\.stringify\(\{ days: planDays \}\);\s*if \(stayIsHouse\(intakeStay\)\) \{\s*houseBaseForTrip = houseBase\(/.test(app)
+     /plannerSkeleton = JSON\.stringify\(\{ days: planDays \}\);\s*if \(stayIsHouse\(stayForBuild\)\) \{\s*houseBaseForTrip = houseBase\(/.test(app)
      && /houseBaseSays = houseBaseBlock\(houseBaseForTrip, \{ season: bedSeasonOf\(intakeArrival, intakeDeparture\), heads: guideBrief\.known\?\.party\?\.total \|\| null \}\);/.test(app));
   ok("and the same base is handed to the per-day calls", /places: freeEntrance,\s*base: houseBaseForTrip,/.test(app));
   // A base handed in wins over the block's own ranking, so day one cannot name
@@ -79256,7 +79262,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   ok("the page makes the whole stay one run", /const houseStay = houseDoor\(guide, stayNights\);/.test(page) && /\(houseStay \? \[\] : staysIn\(days, stayNights\)\)/.test(page));
   ok("and no hotel door is drawn on a house trip", /\{!houseStay && doors\.door && doors\.list\?\.length > 0 && \(/.test(page));
   const app = readFileSync(join(root, "src/App.jsx"), "utf8");
-  ok("new guides record the pick and the base", /kind: intakeStay \|\| "", house: houseBaseForTrip\?\.name \|\| "" \}/.test(app));
+  ok("new guides record the pick and the base", /kind: stayForBuild \|\| "", house: houseBaseForTrip\?\.name \|\| "" \}/.test(app));
 }
 
 // ── THE FORM IS NOT THE LAST WORD ───────────────────────────────────
@@ -79323,6 +79329,74 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   ok("the food search is told, and checked", /\+ \(type === "food" \? DANISH_FOOD_FRAMING : ""\)/.test(app) && /const foodCut = type === "food" \? splitOffForeignFood\(candidates\)/.test(app));
   ok("and says how many it left out", /left out as not Danish food\./.test(app));
 }
+
+// ── BATCH 140: WHAT A LIVE TEST OF THE AI FOUND, 27 SEP 2026 ─────────
+// Family of four, kids 6 and 9, 16 Oct 12:00 to 21 Oct 12:00, Nature, a
+// rental car, nothing booked. Guide sgd0yrp3lzx.
+{
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  // 1. The night before a morning flight.
+  const A = "2026-10-16T12:00", NOON = "2026-10-21T12:00", EVE = "2026-10-21T20:00";
+  ok("a noon flight leaves them a night after the last day", M.sleepsAfterLastDay(A, NOON, M.tripDays(A, NOON)) === true);
+  ok("an evening flight does not", M.sleepsAfterLastDay(A, EVE, M.tripDays(A, EVE)) === false);
+  ok("and no dates says nothing", M.sleepsAfterLastDay(null, NOON, 5) === false && M.sleepsAfterLastDay(A, NOON, 0) === false);
+  is("five days before a noon flight is five nights", M.bedStateOf({ days: [1, 2, 3, 4, 5], _sleepsAfterLast: true }).nights.length, 5);
+  is("and without the flag it is still four", M.bedStateOf({ days: [1, 2, 3, 4, 5] }).nights.length, 4);
+  ok("so the last day asks for a bed", M.needsABed(5, M.bedStateOf({ days: [1, 2, 3, 4, 5], _sleepsAfterLast: true })));
+  is("nights are nights whatever the hour", [M.nightsBetween(A, NOON), M.nightsBetween(A, EVE)].join(), "5,5");
+  ok("the guide carries it", /_sleepsAfterLast: sleepsAfterLastDay\(intakeArrival, intakeDeparture, parsed\.days\.length\)/.test(app));
+  ok("the day writer is told the last day has a night", /const noNightAfter = \(i\) => i \+ 1 >= days\.length && !stayAware\?\.sleepsAfter;/.test(app)
+     && /\$\{noNightAfter\(idx\) \? `\\n\\nTHIS DAY HAS NO NIGHT AFTER IT\./.test(app)
+     && /sleepsAfter: sleepsAfterLastDay\(intakeArrival, intakeDeparture, parsed\.days\.length\),/.test(app));
+  ok("the planner and the writer are told in dates", /arrival\/departure buffer on the first and last days\.\$\{lastDaySays\}/.test(app)
+     && /\$\{lastDaySays\}\nIf the conversation only covers a single day/.test(app)
+     && /THE LAST DAY IS A FULL DAY, NOT THE DAY THEY LEAVE/.test(app));
+  ok("and so is the chat, on the form's length line", /they sleep in Denmark after the last one and leave the next morning/.test(app));
+  ok("the sommerhus counts nights, not days", /const houseNights = intakeArrival && intakeDeparture \? nightsBetween\(intakeArrival, intakeDeparture\) : 0;/.test(app));
+  // 2. No hostel for a family who said nothing about money.
+  ok("with no budget, the bed is not steered cheap", /AND DO NOT STEER THEM CHEAP\./.test(app) && /stayKind === "cheapest" \? "" : "AND DO NOT STEER THEM CHEAP/.test(app));
+  ok("children never get a dorm", /\$\{stayKids \? "THEY HAVE CHILDREN WITH THEM: never a dorm bed/.test(app));
+  ok("and the bed search does not ask for hostels unless they did", /best \$\{stayKind === "cheapest" \? "hostel hotel" : stayKids \? "family hotel apartment" : "hotel"\} names/.test(app));
+  // 3. A holiday house, offered in the chat.
+  const brief = (text, extra = {}) => M.briefBlock(M.readBrief({ travellerText: text, intake: extra }));
+  const fam = "We are 2 adults and 2 kids, 6 and 9, for 5 days in October. We'll rent a car. We love nature.";
+  ok("a family with a car is offered a holiday house", /A HOLIDAY HOUSE MAY SUIT THIS TRIP/.test(brief(fam)));
+  ok("not when they have booked a hotel", !/A HOLIDAY HOUSE MAY SUIT/.test(brief(fam + " We have booked a hotel in Copenhagen.")));
+  ok("not for a couple in the city", !/A HOLIDAY HOUSE MAY SUIT/.test(brief("Two of us for 5 days, we love museums and food, we'll take the train.")));
+  ok("nor for one with a car who came for museums", !/A HOLIDAY HOUSE MAY SUIT/.test(brief("Two of us for 5 days, we love museums and food, we'll rent a car.")));
+  ok("and children mean few bed changes", /Keep the bed changes few/.test(brief(fam)));
+  ok("a house said in chat is a house", M.houseChosen({ said: "We would love a summerhouse" }) && M.houseChosen({ said: "Sounds good", proposal: "I would base you in a sommerhus near Gilleleje." }));
+  ok("a house turned down is not", !M.houseChosen({ said: "We don't want a summerhouse", proposal: "a sommerhus near Gilleleje" }) && !M.houseChosen({ said: "Hotel is fine", proposal: "Hellerup, Gilleleje, Dragør" }));
+  ok("the build uses it", /if \(stayIsHouse\(stayForBuild\)\) \{/.test(app) && /bookedNights, bookedName, stayForBuild, \{/.test(app) && /kind: stayForBuild \|\| ""/.test(app));
+  ok("and the house search counts the whole family", /adult=4/.test(M.houseDoor({ _stay: { kind: "summerhouse", house: "Gilleleje" }, _travelers: "2 adults and 2 kids, 6 and 9", _arrivalDate: "2026-10-16", days: [{ glance: { recommendedStay: "Gilleleje" } }] }, [1, 2]).href));
+  // 4. A car trip does not take the train between towns.
+  const far = { A: { lat: 55.7780, lon: 12.5700 }, B: { lat: 55.9690, lon: 12.5430 } };
+  is("a train leg between towns on a car trip is driven", resolveLeg("~40 min by train via Copenhagen", "car", far), "driving");
+  is("on a train trip it stays a train", resolveLeg("~40 min by train via Copenhagen", "public transport", far), "transit");
+  const near = { A: { lat: 55.6761, lon: 12.5683 }, B: { lat: 55.6861, lon: 12.5883 } };
+  is("a metro inside the city stays a metro", resolveLeg("~10 min by metro", "car", near), "transit");
+  ok("and the leg writer is told the car goes with them", /A CAR GOES WHERE THEY GO/.test(app));
+  is("a subway leg is public transport", M.detectLegModeX("~10 min by subway", "car"), "transit");
+  is("so is the S-train", M.detectLegModeX("~20 min on the S-tog", "car"), "transit");
+  // 5. One season line for the coast towns, and a suburb is not one.
+  ok("Hellerup is not a summer town", M.summerLeaning({ name: "Hellerup", themes: ["coast"], __lat: 55.731, __lon: 12.573 }).level === "");
+  ok("Gilleleje still is", M.summerLeaning({ name: "Gilleleje", themes: ["coast"], __lat: 56.121, __lon: 12.310 }).level === "leaning");
+  is("the names read as a list", M.namesInLine(["Humlebæk", "Dragør", "Gilleleje"]), "Humlebæk, Dragør and Gilleleje");
+  const prev = readFileSync(join(root, "src/components/GuidePreviewScreen.jsx"), "utf8");
+  ok("the preview says it once", !/leans on the summer, the way a Danish coast town does/.test(prev) && /are coast towns, and some of what they have is summer only\./.test(prev));
+  // 6. No Copenhagen Card for people who drive.
+  ok("the airport tip is about the car when they drive", (app.match(/IF THEY ARE DRIVING \(their own car or a rental\), the airport tip is about the car instead/g) || []).length === 2
+     && (app.match(/Do not sell a Copenhagen Card or a train ticket to people who drive/g) || []).length === 2);
+  // 7. The small ones.
+  is("a neighbourhood and its city get a comma", M.tidyArea("Hellerup Copenhagen"), "Hellerup, Copenhagen");
+  is("but central Odense stays as it is", M.tidyArea("central Odense"), "central Odense");
+  ok("a trip that moves says so", /moves you between Hellerup, Vesterbro and Humlebæk\./.test(M.openNightsLine(M.bedState({ dayCount: 4 }), ["Hellerup Copenhagen", "Vesterbro", "Humlebæk"])));
+  is("the Commons template gives the name", M.readableAuthor("No machine-readable author provided. EPO assumed (based on copyright claims)."), "EPO");
+  is("a plain name is left alone", M.readableAuthor("Andersbruun"), "Andersbruun");
+  const picker = readFileSync(join(root, "src/components/DateTimePicker.jsx"), "utf8");
+  ok("an empty departure opens on the arrival month", /if \(open && !value && minDate\) setViewMonth\(new Date\(min\.getFullYear\(\), min\.getMonth\(\), 1\)\);/.test(picker));
+}
+function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B", false, geo); }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
 if (failed) { fails.forEach(f => console.log("  FAIL " + f + "\n")); process.exit(1); }

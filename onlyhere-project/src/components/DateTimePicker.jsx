@@ -42,6 +42,16 @@ export const DateTimePicker = forwardRef(({ value, onChange, minDate, label, hin
     openPicker: () => setOpen(true),
   }));
 
+  // ── AND AN EMPTY FIELD OPENS ON THE FIRST MONTH IT CAN TAKE ─────────
+  // Measured live, 27 Sep 2026: arrival picked in October, and departure
+  // opened on September with every day greyed out, one click from the month
+  // anybody needed. With nothing picked yet, the calendar starts where minDate
+  // does, which for departure is the arrival.
+  useEffect(() => {
+    if (open && !value && minDate) setViewMonth(new Date(min.getFullYear(), min.getMonth(), 1));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
   useEffect(() => {
     const onClickOutside = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); };
     document.addEventListener("mousedown", onClickOutside);

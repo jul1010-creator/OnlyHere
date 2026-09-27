@@ -47,6 +47,7 @@
 import { arrivalDateIn, dateRangeIn, departureDateIn, monthOnlyIn, latestRelativeAnswer, daysBetween, tripDays, daysTheySaidFor, latestSpokenLength, isIntakeTurn, MAX_TRIP_DAYS } from "./tripEvents";
 import { PARTY_BARE, PARTY_POSSESSIVE, PARTY_POSSESSIVES, PARTY_COUNT, TRAVEL_VERBS, FROM_WORDS, TRANSPORT_PREPS, VEHICLE_WORDS, TRANSPORT_VERBS, PUBLIC_TRANSPORT, alt, LETTER, INTEREST_ALL_WORDS, INTEREST_WORD_TERM, NAMES_A_CHILD } from "./travellerWords";
 import { dayStart } from "./calendarDay";
+import { houseSuits } from "./summerhouse";
 import { travelModeKey, withoutNonModes, tickedTravelMode } from "./routeOrder";
 import { directAnswers, isRefusal } from "./directAnswer";
 
@@ -2168,10 +2169,30 @@ export const briefBlock = (brief, conflicts = [], { picked = [], turnedDown = []
   // their own words and from the form, so both routes reach this.
   if (brief.known?.party) {
     lines.push(brief.known.party.hasKids
-      ? `THERE ARE CHILDREN ON THIS TRIP. Say what a place is like with them along when it matters, and never plan a night out.`
+      ? `THERE ARE CHILDREN ON THIS TRIP. Say what a place is like with them along when it matters, and never plan a night out. Keep the bed changes few: one base for two or three nights at a time beats a new bed every night with children, unless they ask to move around.`
       : `NO CHILDREN HAVE BEEN MENTIONED ON THIS TRIP. Do not offer a place because it suits kids, do not call anything family friendly, and do not build the day around a child's pace. If they name one later, that is the moment it changes.`);
   } else {
     lines.push(`NOBODY HAS SAID WHO IS COMING. Do not assume children either way: nothing is offered because it suits kids, and nothing is left out for the same reason.`);
+  }
+  // ── AND A HOLIDAY HOUSE, WHEN THE TRIP IS THE KIND IT SUITS ─────────
+  //
+  // Measured live, 27 Sep 2026: a family of four, kids 6 and 9, Nature ticked,
+  // a rental car and nothing booked. Asked "What would you suggest?", the chat
+  // said "splitting the base makes more sense" and the guide moved them four
+  // times in five nights. That family is who a sommerhus is for (Oliver, 26
+  // Sep: "nature or kids"), and the chat only knew that when the preferences
+  // panel was switched on. So the brief says it too: offered as one named
+  // option when where they sleep comes up, never decided for them.
+  {
+    const booked = brief.known?.stay?.value === "booked";
+    const nights = typeof brief.known?.days?.value === "number" ? brief.known.days.value : 0;
+    const suits = houseSuits({ kids: !!brief.known?.party?.hasKids, said: String(brief.known?.interests?.value || "") });
+    const mode = String(brief.known?.transport?.mode || brief.known?.transport?.value || "");
+    const car = /\b(?:car|cars|bil|drive|driving|rental|hire car|campervan|motorhome)\b/i.test(mode);
+    const noCar = !!mode && !car;
+    if (!booked && suits && nights >= 3 && !noCar) {
+      lines.push(`A HOLIDAY HOUSE MAY SUIT THIS TRIP. Nothing is booked, and ${brief.known?.party?.hasKids ? "there are children" : "they came for nature"}. A Danish sommerhus is a whole house with a kitchen on the coast or in the countryside, one base for the whole stay${car ? "" : ", and most of them need a car"}. When where they sleep comes up, offer it by name as one of the options beside a hotel base, with the one line on why it fits them, and let them choose. Never pick it for them, and never mention it again once they have said no.`);
+    }
   }
   // Names only, folded once, with the empties out. A tap holds a name and
   // nothing else, and a name repeated is one decision, not two.

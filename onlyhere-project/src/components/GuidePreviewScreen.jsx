@@ -10,7 +10,7 @@ import { C } from "../utils/theme";
 import { testTravelerLine, getEventDate } from "../utils/helpers";
 import { matchedPlaces, previewPools, mentionsPlace, wantedCategories, groupKeyOf, parentTownOf, tripAnchorFor, eventReachBand, tripPoints } from "../utils/previewMatch";
 import { ruledOutFor, excludedNote } from "../utils/exclusions";
-import { seasonWarnings } from "../utils/seasonFit";
+import { seasonWarnings, namesInLine } from "../utils/seasonFit";
 import { tripWindow, tripEvents, describePicks } from "../utils/tripEvents";
 import { briefThemes, rankOffers, offerReason, OFFER_LIMIT, FIT_STRONG, profileFromWords } from "../utils/interestFit";
 import { cardLine } from "../utils/cardLine";
@@ -786,12 +786,26 @@ export const GuidePreviewScreen = ({
                 is here on its theme alone says only that much, which is all the
                 evidence there is for it. */}
             <div style={{ fontSize: 12, color: C.light, lineHeight: 1.55, marginTop: 5 }}>
-              {season.rows.map(r => (
+              {/* ── ONE LINE FOR THE COAST TOWNS, NOT ONE EACH ──────
+                  27 Sep 2026, a live October preview: the same sentence four
+                  times over, "X leans on the summer, the way a Danish coast
+                  town does." A row with its own words keeps them; the ones
+                  here on their theme alone share a sentence. */}
+              {season.rows.filter(r => r.level === "said" && r.quote).map(r => (
                 <div key={`season-${r.name}`} style={{ marginTop: 3 }}>
-                  <b style={{ color: C.text }}>{r.name}</b>
-                  {r.level === "said" && r.quote ? `: its own page says "${r.quote}"` : " leans on the summer, the way a Danish coast town does."}
+                  <b style={{ color: C.text }}>{r.name}</b>{`: its own page says "${r.quote}"`}
                 </div>
               ))}
+              {(() => {
+                const coast = season.rows.filter(r => !(r.level === "said" && r.quote)).map(r => r.name).filter(Boolean);
+                if (!coast.length) return null;
+                return (
+                  <div style={{ marginTop: 3 }}>
+                    <b style={{ color: C.text }}>{namesInLine(coast)}</b>
+                    {coast.length === 1 ? " is a coast town, and some of what it has is summer only." : " are coast towns, and some of what they have is summer only."}
+                  </div>
+                );
+              })()}
             </div>
           </div>
         )}

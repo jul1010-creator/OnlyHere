@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { readableAuthor } from "../utils/photoAuthor";
 import { C } from "../utils/theme";
 import { loadImageCredits, creditFor, licenseUrl } from "../utils/imageCredits";
 import { aiLabel, isAiImage } from "../utils/aiImages";
@@ -39,7 +40,7 @@ export const PhotoCredit = ({ photo, credit, align = "left", style }) => {
   // count: without this, an uploaded AI picture would print its chip, then the
   // made-with lead, then the words "AI image", all saying one thing three
   // times.
-  const said = generated ? entry.photographer : (entry.photographer || entry.source);
+  const said = generated ? entry.photographer : (readableAuthor(entry.photographer) || entry.source);
   const more = said || entry.license || entry.sourceUrl;
 
   const url = licenseUrl(entry.license);

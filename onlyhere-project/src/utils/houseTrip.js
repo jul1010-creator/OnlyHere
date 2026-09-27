@@ -22,8 +22,28 @@ import { HOUSE_AREAS } from "../data/stayPlaces";
 import { containsName } from "./danishNames";
 import { dayStart } from "./calendarDay";
 import { houseSearchUrl } from "./summerhouse";
+import { withoutRefused } from "./tripBrief";
+import { partyOf } from "./costLedger";
 
 const HOUSE_WORDS = /\b(?:sommerhus\w*|summer ?houses?|holiday (?:house|home|cottage)s?|feriehus\w*)\b/i;
+
+// ── AND A HOUSE CHOSEN IN THE CHAT, NOT ON THE FORM ─────────────────
+//
+// 27 Sep 2026. The chat now offers a sommerhus to a trip it suits whether or
+// not the preferences panel is on (see briefBlock in tripBrief.js). A house
+// agreed there has to reach the build the way the form's pick does, or the
+// guide books a hotel a night for somebody who said yes to one house.
+//
+// Chosen when their own words ask for one, or when the reply they pressed
+// Build on proposes one and they never turned it down. `said` is their turns
+// without the form's, because the form's estimate can name a sommerhus they
+// did not pick; the form's own pick arrives as intakeStay and wins anyway.
+export const houseChosen = ({ said = "", proposal = "" } = {}) => {
+  const theirs = String(said || "");
+  if (HOUSE_WORDS.test(theirs) && !HOUSE_WORDS.test(withoutRefused(theirs))) return false;
+  if (HOUSE_WORDS.test(withoutRefused(theirs))) return true;
+  return HOUSE_WORDS.test(String(proposal || ""));
+};
 
 const firstNightOf = (guide) => (Array.isArray(guide?.days) ? guide.days : []).find(d => d?.glance?.accommodation || d?.glance?.recommendedStay) || null;
 
@@ -47,8 +67,10 @@ export const houseTripOf = (guide) => {
 // then a number in what they typed, else two.
 const partyFor = (guide) => {
   const p = guide?._party || null;
-  const typed = String(guide?._travelers || "").match(/\d+/);
-  const total = Number(p?.total) || (typed ? Number(typed[0]) : 0) || 2;
+  // The same reader the costs block uses, so "2 adults and 2 kids" is four
+  // and not the first number in it. See partyOf in costLedger.js.
+  const typed = partyOf(guide?._travelers)?.heads || 0;
+  const total = Number(p?.total) || typed || 2;
   const kids = Number(p?.kids) || 0;
   const adults = Number(p?.adults) || Math.max(1, total - kids);
   return { adults, kids };

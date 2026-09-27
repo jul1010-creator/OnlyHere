@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
+import { readableAuthor } from "../utils/photoAuthor";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { C } from "../utils/theme";
 import { languageBlock } from "../utils/readerLanguage";
@@ -709,7 +710,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
       return {
         photo: shot.photo,
         town: row.name,
-        credit: credit && creditIsRequired(credit) ? String(credit.photographer || "").trim() : "",
+        credit: credit && creditIsRequired(credit) ? readableAuthor(credit.photographer) : "",
       };
     };
     // libraryTick for the same reason mapLibrary reads it: the arrays are

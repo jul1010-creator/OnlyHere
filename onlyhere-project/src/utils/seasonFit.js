@@ -33,6 +33,7 @@
 // everything is one nobody reads. So the theme rule is narrow, and it is the
 // only one that fires without the entry having said something itself.
 import { themesOf } from "./placeThemes";
+import { haversineKm } from "./helpers";
 
 // ── THE THREE SEASONS THIS ANSWERS IN ───────────────────────────────
 //
@@ -104,6 +105,26 @@ const proseOf = (entry) => [entry?.desc, entry?.description, entry?.highlight, e
 // the whole thing switched off.
 const SEASONAL_THEME = "coast";
 
+// ── AND A SUBURB BY THE WATER IS STILL A CITY ───────────────────────
+//
+// Measured live, 27 Sep 2026, on an October trip: "Hellerup leans on the
+// summer, the way a Danish coast town does." Hellerup is Copenhagen, six km
+// from the Town Hall, and nothing there shuts for the winter. The theme is
+// the weak evidence, so it does not fire inside the four big cities. An entry
+// that says its own season still does, wherever it is.
+export const CITY_KM = 10;
+const CITIES = [
+  { lat: 55.6761, lon: 12.5683 }, // Copenhagen, Rådhuspladsen
+  { lat: 56.1567, lon: 10.2108 }, // Aarhus
+  { lat: 55.3959, lon: 10.3883 }, // Odense
+  { lat: 57.0488, lon: 9.9217 },  // Aalborg
+];
+const inACity = (entry) => {
+  const lat = Number(entry?.__lat ?? entry?.lat), lon = Number(entry?.__lon ?? entry?.lon ?? entry?.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return false;
+  return CITIES.some(c => (haversineKm({ lat, lon }, c) ?? Infinity) <= CITY_KM);
+};
+
 // What an entry says about its own year, and how firmly.
 //
 //   said     the entry states a season, and `quote` is the sentence
@@ -119,7 +140,7 @@ export const summerLeaning = (entry) => {
     const words = SEASON_WORDS.exec(text);
     if (words) return { level: "said", quote: sentenceAt(text, words.index) };
   }
-  if (themesOf(entry).includes(SEASONAL_THEME)) return { level: "leaning", quote: "" };
+  if (themesOf(entry).includes(SEASONAL_THEME) && !inACity(entry)) return { level: "leaning", quote: "" };
   return { level: "", quote: "" };
 };
 
@@ -204,4 +225,12 @@ export const seasonBlock = (entries, date) => {
     + `${expect}\n`
     + `These of the places in play are affected:\n${lines.join("\n")}\n`
     + `SAY IT ONCE, PLAINLY, AND KEEP THE PLACE ON THE TABLE. This is a heads-up, not a refusal: a quiet coast in winter is what some people come for, and they can say so. Never claim a specific place is closed unless the line above quotes its own entry saying so. Do not repeat this in later turns.`;
+};
+
+// "Humlebæk, Dragør and Gilleleje", for the one line the preview writes about
+// the coast towns on the trip.
+export const namesInLine = (names) => {
+  const list = (Array.isArray(names) ? names : []).map(n => String(n || "").trim()).filter(Boolean);
+  if (list.length <= 1) return list[0] || "";
+  return `${list.slice(0, -1).join(", ")} and ${list[list.length - 1]}`;
 };

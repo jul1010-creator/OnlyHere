@@ -291,3 +291,37 @@ A test guide for "2 adults and 2 kids, 6 and 9" said "For 8 of you that is from 
 - `costLedger.js`: `partyOf` takes the note's number as the count when it is there, and `withoutCountedNote` strips it.
 - `App.jsx`: `_travelers` is saved without the note.
 - Tests: five new checks, each seen failing with its piece taken out. Guides already saved with the note now read 4 as well, since the fix is in the reader.
+
+## Batch 140: what the live AI test found, fixed
+
+The test guide was sgd0yrp3lzx: a family of 4, kids 6 and 9, 16 Oct 12:00 to 21 Oct 12:00, Nature, a rental car, nothing booked. You said "ALL".
+
+1. **The night before a morning flight.** A noon departure is not a day in the plan (tripDays), but every bed reader counted the last planned day as the day they leave. So the family got 4 nights for 5, and day 5 was written as "before the flight".
+   - New `sleepsAfterLastDay` and `nightsBetween` in `tripEvents.js`.
+   - The guide carries `_sleepsAfterLast`, and `bedStateOf` counts that night.
+   - The day writer gets a bed on the last day (`noNightAfter`).
+   - The planner and the writer are told in dates that the last day is a full day.
+   - The chat's form line says "all of them full days".
+   - The sommerhus counts nights, not days.
+2. **No hostel for a family who said nothing about money.**
+   - With no budget: no hostel, no dorm, no "budget choice", unless they picked the hostel chip.
+   - With children: never a dorm.
+   - The bed search asks for hotels, or family hotels and apartments, not hostels.
+3. **A holiday house from the chat, not only the panel.**
+   - `briefBlock` offers a sommerhus as one named option when the trip suits one: kids or nature, 3 or more days, nothing booked, not a no-car trip. It also tells the chat to keep bed changes few with children.
+   - If they say yes, `houseChosen` (houseTrip.js) makes the build treat the stay as a house, the same as the form's pick (`stayForBuild` in App.jsx).
+   - The Novasol link now counts "2 adults and 2 kids" as 4, not 2.
+4. **Car trips.**
+   - A train leg between towns more than 10 km apart is driven on a car trip.
+   - "Metro", "subway", "S-tog" and "tram" now read as public transport. Before, they fell to the car and printed "13 mins by car" under "leave the car parked".
+   - The leg writer is told the car goes where they go.
+5. **Season line.** The coast-theme line no longer fires inside Copenhagen, Aarhus, Odense or Aalborg (Hellerup). The preview writes one sentence for all coast towns instead of the same sentence four times.
+6. **No Copenhagen Card for people who drive.** When they drive, the airport tip (chat and guide) is about the car.
+7. **Small ones:**
+   - "Hellerup, Copenhagen" gets its comma.
+   - A trip that moves says "The plan moves you between...".
+   - The Commons "No machine-readable author provided. X assumed" credit shows just X (`photoAuthor.js`, at the source and on every stored credit).
+   - An empty departure picker opens on the arrival's month.
+   - The "chat fired on arrival alone" was my own click: picking a day closes the picker, so my "Done" landed on Build my trip.
+
+Tests: 41 new checks. Each was seen failing with its piece taken out (24 mutants), and older checks pinned to changed lines were updated.

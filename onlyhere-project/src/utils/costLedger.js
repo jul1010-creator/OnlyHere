@@ -587,7 +587,9 @@ export const costLines = ({
   // sentence too, so this file cannot drift away from the writer's again.
   const beds = bedStateOf(guide);
   const stayArea = days.find(d => d?.glance?.stayArea)?.glance?.stayArea || "";
-  const bedLine = openNightsLine(beds, stayArea);
+  // Every open night's area, in order, so a trip that moves says so.
+  const openAreas = days.filter((d, i) => (beds.open || []).includes(Number(d?.day || i + 1))).map(d => d?.glance?.stayArea).filter(Boolean);
+  const bedLine = openNightsLine(beds, openAreas.length ? openAreas : stayArea);
   if (bedLine) {
     const area = stayArea;
     // ── THROUGH THE ONE STAY DOOR ──────────────────────────────────

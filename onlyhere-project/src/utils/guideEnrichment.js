@@ -778,9 +778,19 @@ export const resolveLegMode = (how, primaryMode, originName, destName, onlyWalki
     // That makes this branch STRICTER than the transit one, which is the right
     // way round: somebody who chose a car may have luggage in it.
     else if (mode === "driving" && distKm <= WALK_MAX_KM && !isFerryText(how)) mode = "walking";
+    // ── AND A CAR TRIP DOES NOT TAKE THE TRAIN BETWEEN TOWNS ────────────
+    //
+    // Measured live, 27 Sep 2026, on a family trip with a rental car: they
+    // drove to Jægersborg Dyrehave, and the next leg to Louisiana in Humlebæk
+    // read "~40 min by train via Copenhagen", 47 minutes on DSB. The car is
+    // parked at the deer park; nobody leaves it there to ride a train 25 km. A
+    // leg inside a city, where they left the car for the day, may still be a
+    // metro or a bus, so this only fires past CAR_TRIP_TRANSIT_KM.
+    if (primaryMode === "car" && mode === "transit" && distKm > CAR_TRIP_TRANSIT_KM && !isFerryText(how)) mode = "driving";
   }
   return mode;
 };
+export const CAR_TRIP_TRANSIT_KM = 10;
 
 // SAME-TOWN RULE (Oliver, second report of this class: "It still does it..
 // Ribe Vikingecenter to Ribe Old Town.. No direct route, check Rome2Rio"):
