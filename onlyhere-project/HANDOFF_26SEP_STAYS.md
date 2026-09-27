@@ -337,3 +337,16 @@ You, at 20:18: "Put time in Denmark on front page and the weather need a 'night'
   - After dark the cards switch to night colours: deep blue when clear, darker grey or blue for cloud and rain. The line above them talks about tonight ("A clear night across the country.", "Rain around Aalborg tonight.") instead of "the kind of day the coast is for".
 - Tested in a browser with the clock set to 20:18 and 12:18 and a faked forecast. Screenshots are in the chat.
 - 20 new checks, each seen failing with its piece taken out, including one that reads the clock from a machine set to Sydney.
+
+## Batch 142: the confirmation mail landing in junk
+
+You: "apparently, the confirmation mail tends to end in junk mail. That happened to my friend."
+
+- **Read from DNS:** the mail is sent through Resend and signed. There's a DKIM key at resend._domainkey, Resend's return path on send.gemlyxtravel.com, SPF for Google Workspace on the domain, and DMARC `p=none`. So the sending side checks out on paper.
+- **The odd one out was the link.** `{{ .ConfirmationURL }}` goes to vpxfahjnerkkkoueovhl.supabase.co, and the template printed it twice. A mail from one domain whose only link goes to a random-looking other one is the phishing shape filters look for.
+- **Code:** `verifyEmailLink` in `src/utils/auth.js` reads `?token_hash=...&type=email` (or `type=recovery`) on our own address, verifies it with Supabase by POST, signs them in, and flags a confirmation or a reset exactly as the old path did. `captureRedirectSession` tries it first. The token leaves the address bar before the call. This also stops Outlook's link scanner from spending the one-use token before the person clicks.
+- **Signup** now carries the theme in the account metadata, so the template can put it on the link.
+- **The check-your-email screen** now asks them to mark it as not spam if it lands there (en, da, de).
+- **SETUP_EMAIL.md, Part 3:** the new links for Confirm signup and Reset password, mail-tester.com, and a DMARC reports address.
+- **YOU NEED TO:** push first, then paste the new templates into Supabase. The old site does not understand the new link.
+- 12 new checks. Browser and network are stubbed. All 10 mutants went red.

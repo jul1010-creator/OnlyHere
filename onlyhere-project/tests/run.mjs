@@ -169,6 +169,7 @@ writeFileSync(entry, `
   export { decodePastedText, looksPercentEncoded } from ${JSON.stringify(join(root, "src/utils/pastedText.js"))};
   export { placesNamedIn, rejectedIn, correctedTo, CHAT_PLACE_CAP } from ${JSON.stringify(join(root, "src/utils/chatPlaces.js"))};
   export { isOwnRoute, RETURN_PARAM, captureRedirectSession, startGoogleSignIn } from ${JSON.stringify(join(root, "src/utils/auth.js"))};
+  export { emailLinkIn, verifyEmailLink, TOKEN_HASH_PARAM, signUpWithPassword as signUpWithPasswordX } from ${JSON.stringify(join(root, "src/utils/auth.js"))};
   export { SIGNUP_CARRY_KEY, fetchSignupCarry, clearSignupCarry } from ${JSON.stringify(join(root, "src/utils/auth.js"))};
   export { CARRY_FIELDS, signupCarry, claimSignupCarry } from ${JSON.stringify(join(root, "src/utils/profile.js"))};
   export { DELETE_REASONS, deleteReasonMessage, NOTE_MAX as DELETE_NOTE_MAX } from ${JSON.stringify(join(root, "src/components/DeleteAccountSheet.jsx"))};
@@ -79441,6 +79442,51 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("every card reads the sun", /const night = isNightThere\(\{ condition: ready \? d\.condition : "", lat: c\.lat, lon: c\.lon, date: now \}\);/.test(strip)
      && /weatherIcon\(d\.condition, night\)/.test(strip) && /const sky = skyFor\(ready \? d\.condition : null, night\);/.test(strip));
   ok("the header pills too", /weatherIcon\(d\.condition, isNightThere\(\{ condition: d\.condition, lat: c\.lat, lon: c\.lon, date: now \}\)\)/.test(strip));
+}
+
+// ── BATCH 142: THE CONFIRMATION MAIL IN JUNK ─────────────────────────
+// Oliver, 27 Sep 2026: "apparently, the confirmation mail tends to end in junk
+// mail. That happened to my friend." The mail's only link went to
+// vpxfahjnerkkkoueovhl.supabase.co. It now goes to our own domain and the app
+// verifies it. Browser and network are stubbed; nothing here leaves the box.
+{
+  ok("a signup link is read off our own address", JSON.stringify(M.emailLinkIn("?token_hash=abc&type=email")) === JSON.stringify({ tokenHash: "abc", type: "email" }));
+  ok("the old name for it too, and a reset", M.emailLinkIn("?token_hash=abc&type=signup")?.type === "signup" && M.emailLinkIn("?token_hash=abc&type=recovery")?.type === "recovery");
+  ok("anything else is not a link", M.emailLinkIn("?type=email") === null && M.emailLinkIn("?token_hash=abc&type=magiclink") === null && M.emailLinkIn("") === null);
+  const saved = { window: globalThis.window, history: globalThis.history, localStorage: globalThis.localStorage, fetch: globalThis.fetch };
+  const run = async (search, reply) => {
+    const store = {}; const calls = []; let url = null;
+    globalThis.window = { location: { search, pathname: "/", hash: "", origin: "https://www.gemlyxtravel.com" } };
+    globalThis.history = { replaceState: (_a, _b, u) => { url = u; } };
+    globalThis.localStorage = { getItem: k => store[k] ?? null, setItem: (k, v) => { store[k] = String(v); }, removeItem: k => { delete store[k]; } };
+    globalThis.fetch = async (u, init) => { calls.push({ u: String(u), body: init?.body ? JSON.parse(init.body) : null }); return reply(String(u)); };
+    try { return { out: await M.captureRedirectSession(), calls, url, store }; }
+    finally { Object.assign(globalThis, saved); }
+  };
+  const ok200 = (body) => ({ ok: true, status: 200, json: async () => body });
+  const good = await run("?token_hash=h1&type=email&gx_theme=warm", () => ok200({ access_token: "t", refresh_token: "r", expires_in: 3600, user: { id: "u1", email: "a@b.dk" } }));
+  ok("the link is verified with Supabase by its hash", good.calls.length >= 1 && /\/auth\/v1\/verify$/.test(good.calls[0].u) && good.calls[0].body.token_hash === "h1" && good.calls[0].body.type === "email");
+  ok("and signs them in, told it was a confirmation", good.out.session?.userId === "u1" && good.out.confirmed === true && good.out.recovery === false && !good.out.error);
+  ok("the token leaves the address bar", good.url === "/" && !/token_hash|gx_theme/.test(good.url));
+  const reset = await run("?token_hash=h2&type=recovery", () => ok200({ access_token: "t", refresh_token: "r", expires_in: 3600, user: { id: "u1" } }));
+  ok("a reset link opens the new-password screen", reset.out.recovery === true && reset.out.confirmed === false);
+  const spent = await run("?token_hash=h3&type=email", () => ({ ok: false, status: 403, json: async () => ({ msg: "Email link is invalid or has expired" }) }));
+  ok("a spent link says so, and tells them to sign in", spent.out.session === null && /expired or has already been used\. If you already confirmed, just sign in\./.test(spent.out.error) && spent.url === "/");
+  const none = await run("", () => ok200({}));
+  ok("an ordinary visit asks nobody anything", none.calls.length === 0 && none.out.session === null && !none.out.error);
+  // The theme goes in the signup, so the template can put it on the link.
+  {
+    const store = { gemlyx_theme: "warm" }; let sent = null;
+    globalThis.window = { location: { search: "", pathname: "/", hash: "", origin: "https://www.gemlyxtravel.com" } };
+    globalThis.localStorage = { getItem: k => store[k] ?? null, setItem: (k, v) => { store[k] = String(v); }, removeItem: k => { delete store[k]; } };
+    globalThis.fetch = async (_u, init) => { sent = JSON.parse(init.body); return ok200({ user: { identities: [{}] } }); };
+    try { await M.signUpWithPasswordX("a@b.dk", "pw123456", "Ann"); } finally { Object.assign(globalThis, saved); }
+    ok("the signup carries the name and the theme to the template", sent?.data?.name === "Ann" && "theme" in (sent?.data || {}));
+  }
+  const setup = readFileSync(join(root, "SETUP_EMAIL.md"), "utf8");
+  ok("the template links to our own domain", /<a href="https:\/\/www\.gemlyxtravel\.com\/\?token_hash=\{\{ \.TokenHash \}\}&type=email&gx_theme=\{\{ \.Data\.theme \}\}"/.test(setup)
+     && !/href="\{\{ \.ConfirmationURL \}\}"/.test(setup) && /type=recovery/.test(setup));
+  ok("and the screen tells them to mark it not spam", /mark it as not spam so the next one reaches your inbox/.test(M.UI_STRINGS["auth.openIt"].en) && /ikke spam/.test(M.UI_STRINGS["auth.openIt"].da));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

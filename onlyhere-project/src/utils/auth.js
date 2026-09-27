@@ -282,7 +282,11 @@ export const signUpWithPassword = async (email, password, name = "", carry = nul
   // Sent under one key rather than spread across the metadata object, so
   // clearing it later is one field and so nothing here can collide with a
   // claim GoTrue defines itself.
-  const meta = { ...(clean ? { name: clean } : {}), ...(carry && typeof carry === "object" ? { [SIGNUP_CARRY_KEY]: carry } : {}) };
+  // The theme rides in the metadata too, because the confirmation link now
+  // points at our own domain and the template can only read the auth row. See
+  // verifyEmailLink and SETUP_EMAIL.md.
+  const theme = storedTheme();
+  const meta = { ...(clean ? { name: clean } : {}), ...(theme ? { theme } : {}), ...(carry && typeof carry === "object" ? { [SIGNUP_CARRY_KEY]: carry } : {}) };
   const data = await post(withReturn("signup"), { email: email.trim(), password, ...(Object.keys(meta).length ? { data: meta } : {}) });
   // With email confirmation ON in Supabase, signup returns a user but no token.
   // That is not an error, it means "go and check your inbox", and the caller
@@ -398,8 +402,73 @@ const withUser = async (session) => {
 //
 // ASYNC NOW, and the caller must await it. See fault one above: returning before
 // the user id has arrived is what broke every cloud call for the whole visit.
+// ── A LINK TO OUR OWN DOMAIN, VERIFIED HERE ─────────────────────────
+//
+// Oliver, 27 Sep 2026: "apparently, the confirmation mail tends to end in junk
+// mail. That happened to my friend." The mail is sent through Resend from
+// gemlyxtravel.com, and SPF, DKIM and DMARC all check out. The link inside it
+// was the odd one out: {{ .ConfirmationURL }} is
+// https://vpxfahjnerkkkoueovhl.supabase.co/auth/v1/verify?token=..., printed
+// twice, on a host with nothing to do with the sender. A mail from one domain
+// whose only link goes to a random-looking other one is the textbook phishing
+// shape, and filters weigh it that way.
+//
+// So the templates now link to www.gemlyxtravel.com itself, carrying the
+// token's hash (see SETUP_EMAIL.md), and this verifies it with one POST. Two
+// things come with it for free: the link a person sees is the site they signed
+// up on, and a mail scanner that opens every link to check it (Outlook's Safe
+// Links does) can no longer spend the one-use token, because nothing is spent
+// until this script runs in a real browser.
+//
+// `email` is what Supabase's docs put in the template for a signup; `signup`
+// is its older name and is read the same. Recovery comes the same way.
+export const TOKEN_HASH_PARAM = "token_hash";
+const CONFIRM_TYPES = new Set(["email", "signup"]);
+export const emailLinkIn = (search) => {
+  const q = new URLSearchParams(String(search || ""));
+  const hash = q.get(TOKEN_HASH_PARAM) || "";
+  const type = q.get("type") || "";
+  if (!hash || !(CONFIRM_TYPES.has(type) || type === "recovery")) return null;
+  return { tokenHash: hash, type };
+};
+export const verifyEmailLink = async () => {
+  const link = emailLinkIn(window.location.search);
+  if (!link) return null;
+  // The token leaves the address bar before anything else happens, success or
+  // not, so it is never in history and a refresh cannot try to spend it twice.
+  const search = new URLSearchParams(window.location.search);
+  [TOKEN_HASH_PARAM, "type", THEME_PARAM].forEach(k => search.delete(k));
+  const back = search.get(RETURN_PARAM) || "";
+  search.delete(RETURN_PARAM);
+  const q = search.toString();
+  history.replaceState(null, "", window.location.pathname + (q ? `?${q}` : "") + (isOwnRoute(back) ? back : ""));
+  const recovery = link.type === "recovery";
+  let data;
+  try {
+    data = await post("verify", { type: link.type, token_hash: link.tokenHash });
+  } catch (e) {
+    const said = String(e?.message || "");
+    const spent = /expired|invalid|not found|already/i.test(said);
+    return {
+      session: null, recovery: false, confirmed: false,
+      error: recovery
+        ? "That password reset link has expired or has already been used. Ask for a new one."
+        : spent
+          ? "That confirmation link has expired or has already been used. If you already confirmed, just sign in."
+          : "Your email could not be confirmed just now. Try the link again in a minute.",
+    };
+  }
+  const session = shape(data);
+  if (!session) return { session: null, recovery: false, confirmed: false, error: "That link came back without a usable session." };
+  write(session);
+  const full = await withUser(session);
+  return { session: full, recovery, confirmed: !recovery, error: full.userId ? null : "Signed in, but your account could not be identified. Reload the page and try again." };
+};
+
 export const captureRedirectSession = async () => {
   if (typeof window === "undefined") return { session: null, error: null, recovery: false, confirmed: false };
+  const fromLink = await verifyEmailLink();
+  if (fromLink) return fromLink;
   const hash = window.location.hash || "";
   const isToken = hash.includes("access_token");
   const isError = hash.includes("error=") || hash.includes("error_description=");

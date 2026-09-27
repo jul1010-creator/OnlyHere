@@ -480,7 +480,9 @@ export const UI_STRINGS = {
   // ── THE SCREEN THAT ENDS, AND THE ADDRESS ON IT ───────────────────
   "auth.checkEmail":    { en: "Check your email",   da: "Tjek din mail",        de: "Sieh in deine Mails" },
   "auth.linkOnWay":     { en: "A confirmation link is on its way to", da: "Et bekræftelseslink er på vej til", de: "Ein Bestätigungslink ist unterwegs an" },
-  "auth.openIt":        { en: "Open it and you are in. It can take a minute or two, and it does sometimes land in spam.", da: "Åbn det, så er du inde. Der kan gå et minut eller to, og det ender nogle gange i spam.", de: "Öffne ihn und du bist drin. Es kann ein oder zwei Minuten dauern, und manchmal landet er im Spam." },
+  // 27 Sep 2026: a friend's landed in junk. Marking it "not spam" is the one
+  // thing a reader can do that teaches their mail provider to trust the next.
+  "auth.openIt":        { en: "Open it and you are in. It can take a minute or two, and it does sometimes land in spam or junk. If it does, mark it as not spam so the next one reaches your inbox.", da: "Åbn det, så er du inde. Der kan gå et minut eller to, og det ender nogle gange i spam eller uønsket post. Gør det, så markér det som ikke spam, så det næste lander i din indbakke.", de: "Öffne ihn und du bist drin. Es kann ein oder zwei Minuten dauern, und manchmal landet er im Spam. Dann markiere ihn als kein Spam, damit der nächste im Posteingang ankommt." },
   // Reworded 15 Sep 2026. It used to say "confirm in this same browser and they
   // come with you", which was an honest description of a limitation and also an
   // instruction most people cannot follow: the mail opens where the mail opens.

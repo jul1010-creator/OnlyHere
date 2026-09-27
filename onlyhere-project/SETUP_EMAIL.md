@@ -1,5 +1,11 @@
 # The signup email
 
+> **27 Sep 2026: read Part 3 first.** A friend's confirmation landed in junk.
+> The template below now links to www.gemlyxtravel.com instead of Supabase's
+> own address, and the app verifies the link itself. Paste the new template
+> into Supabase for BOTH Confirm signup and Reset password, or the change
+> does nothing.
+
 Written 22 August 2026, after "Nothing gets to my mail btw.. I try to create an
 account.. but I can't."
 
@@ -154,7 +160,7 @@ Notes on why it is built this way, since email HTML is its own world:
             <table role="presentation" cellpadding="0" cellspacing="0" border="0">
               <tr>
                 <td align="center" bgcolor="#E0AE4E" style="border-radius:11px;">
-                  <a href="{{ .ConfirmationURL }}" target="_blank" style="display:inline-block;padding:14px 32px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;font-weight:bold;color:#12100B;text-decoration:none;border-radius:11px;">Confirm email address</a>
+                  <a href="https://www.gemlyxtravel.com/?token_hash={{ .TokenHash }}&type=email&gx_theme={{ .Data.theme }}" target="_blank" style="display:inline-block;padding:14px 32px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;font-weight:bold;color:#12100B;text-decoration:none;border-radius:11px;">Confirm email address</a>
                 </td>
               </tr>
             </table>
@@ -164,7 +170,7 @@ Notes on why it is built this way, since email HTML is its own world:
           <td style="padding:24px 32px 0 32px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:12.5px;line-height:1.6;color:#968C76;">
             If the button does not work, copy this into your browser:
             <br />
-            <a href="{{ .ConfirmationURL }}" target="_blank" style="color:#E0AE4E;word-break:break-all;">{{ .ConfirmationURL }}</a>
+            <a href="https://www.gemlyxtravel.com/?token_hash={{ .TokenHash }}&type=email&gx_theme={{ .Data.theme }}" target="_blank" style="color:#E0AE4E;word-break:break-all;">https://www.gemlyxtravel.com/?token_hash={{ .TokenHash }}&type=email&gx_theme={{ .Data.theme }}</a>
           </td>
         </tr>
         <tr>
@@ -205,3 +211,69 @@ lands somewhere that is not your site.
 Supabase default. The same block works for it with the heading changed to
 "Choose a new password" and the button to "Reset password". Worth doing, since
 `utils/auth.js` now has a real recovery flow behind that link.
+
+
+---
+
+## Part 3. When it lands in junk (27 Sep 2026)
+
+Your friend's confirmation went to junk. What I checked, read live from DNS:
+
+    SPF      v=spf1 include:_spf.google.com ~all        (the domain, for Google Workspace)
+    SPF      send.gemlyxtravel.com, Resend's return path  present
+    DKIM     resend._domainkey.gemlyxtravel.com          present
+    DKIM     google._domainkey.gemlyxtravel.com          present
+    DMARC    v=DMARC1; p=none;                            present, no reports
+
+So Resend is set up and the mail is signed. The sending side is not the problem
+on paper. Three things are, in the order worth doing them.
+
+### 1. The link went to a different domain (fixed in code, needs the template)
+
+`{{ .ConfirmationURL }}` is `https://vpxfahjnerkkkoueovhl.supabase.co/auth/v1/verify?token=...`,
+and the old template printed it twice. A mail from gemlyxtravel.com whose only
+link goes to a random-looking other host is the classic phishing shape, and
+spam filters score it that way, Outlook and Hotmail hardest.
+
+The app now reads a link to its own domain and confirms it with Supabase
+itself (`verifyEmailLink` in `src/utils/auth.js`). In Supabase:
+**Authentication, Emails**:
+
+- **Confirm signup**: paste the Part 2 template again. Its button now points at
+
+      https://www.gemlyxtravel.com/?token_hash={{ .TokenHash }}&type=email&gx_theme={{ .Data.theme }}
+
+- **Reset password**: the same template with the heading "Choose a new password",
+  the button "Reset password", and this link:
+
+      https://www.gemlyxtravel.com/?token_hash={{ .TokenHash }}&type=recovery
+
+**Push the code BEFORE you change the templates.** The old site does not know
+what a token_hash is, so a mail sent with the new template to the old site
+confirms nothing.
+
+It also fixes a second fault nobody reported yet: Outlook's Safe Links opens
+every link in a mail to check it, and on the old link that visit spent the
+one-use token, so the person's own click said "expired". Nothing is spent now
+until the page runs in a real browser.
+
+### 2. Tell people to mark it "not spam"
+
+The check-your-email screen now says so. Every "not spam" click teaches that
+person's provider to trust the next mail from gemlyxtravel.com, and a brand-new
+sending domain has no trust to start from.
+
+### 3. See what the providers see
+
+- **mail-tester.com**: it gives you an address; sign up on Gemlyx with it (or
+  press Resend on that screen) and it scores the real mail out of 10 and says
+  what cost points. Worth doing once after the template change.
+- **DMARC reports**: change the DMARC record to
+
+      v=DMARC1; p=none; rua=mailto:dmarc@gemlyxtravel.com
+
+  and make that address deliver somewhere. Gmail and Outlook then send a daily
+  report of every mail claiming to be you and whether it passed. After a few
+  clean weeks, `p=quarantine` is a small trust signal on its own.
+- **Resend dashboard, Domains**: every record should say Verified. A record that
+  went back to pending sends mail that quietly lands in junk.
