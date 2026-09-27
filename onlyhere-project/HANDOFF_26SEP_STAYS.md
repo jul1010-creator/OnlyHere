@@ -266,11 +266,28 @@ And of the food halls: "Street Food Halls should still exist. It's part of Denma
 4. otherwise, out only if its category or name is another country's cuisine
 
 **The 34 entries:**
-- **Stay (16):** the six food halls and markets (Torvehallerne, Reffen, Aalborg Streetfood, Esbjerg Street Food, Storms Pakhus, Det Fedtede Hjørne), plus Dragsholm Slot, Sømods Bolcher, Aro, Café Broløs, Geranium, Niels Bugges Kro, Surt & Sødt, Smagsloet Vesterbro (flæskesteg sandwiches), Hyttefadet (smørrebrød and herring) and Alma.
+- **Stay (16):** the six food halls and markets (Torvehallerne, Reffen, Aalborg Streetfood, Esbjerg Street Food, Storms Pakhus, Det Fedtede Hjørne), plus Dragsholm Slot, Sømods Bolcher, Aro, Café Broløs, Geranium, Niels Bugges Kro, Surt & Sødt, Smagsloet Vesterbro (flæskesteg sandwiches), Hyttefadet (smørrebrød and herring). Alma was here too until you said no grocery stores (see below).
 - **Off the Food page (18):** SanGiovanni, Pizza by WH, Tony's, Flammen, Restau74, JOJO, Seoul BBQ, Burger Boom, Chickie's, Restaurant Provence, Grillen Burgerbar, both Hookeds, Rosita bistro, Catch me Sushi, Prinsens pizza & grill, Flamestone Pizzaria and Bones.
 
 Nothing is deleted. The 18 are still published, so the chat, the guide and the preview can still name them, and the guide can still say a kebab shop is a cheap meal.
 
 **Finding new ones:** the Studio's "search the web" for food is told to look only for Danish food (smørrebrød, pølsevogne, flæskestegssandwich, bakeries, røgerier, kroer, Danish and New Nordic, food halls), and what comes back is checked. A plain foreign-cuisine candidate is dropped, and the panel says "N more were left out as not Danish food". Food halls always pass.
 
-**Calls I made you may want to change:** Alma (a supermarket, but Irma's successor) stays. Flammen, Grillen Burgerbar and Bones are Danish chains serving grill, burgers and BBQ, and are off.
+**Calls I made you may want to change:** Flammen, Grillen Burgerbar and Bones are Danish chains serving grill, burgers and BBQ, and are off.
+
+## Batch 139: no grocery stores on the Food page
+
+You: "We probably shouldn't include grocery stores.. that's ridiculous.."
+
+- `danishFood.js`: Alma is now `false`, and a new step zero runs before everything else in `foodOnNav`: a row whose category or name says supermarket, grocery, dagligvare or similar, or whose name is a Danish chain (Netto, Føtex, Bilka, Rema 1000, Lidl, Aldi, Kvickly, SuperBrugsen, Dagli'Brugsen, Løvbjerg, Meny, Min Købmand, 7-Eleven, Irma, Coop 365), is off the Food page even if the Studio draft said it was Danish. Food halls and markets are untouched. Spar is not on the list, since it is also the Danish word for "save".
+- The Studio search is told to leave out supermarkets and grocery stores, and anything it brings back with a grocery word or chain name is dropped, same as a pizzeria.
+- The food draft's `danish` field says FALSE for a supermarket or grocery store.
+- Tests: five new checks, each seen failing with its piece of the change taken out.
+
+### And a family of four priced as eight (found testing the AI live, same batch)
+
+A test guide for "2 adults and 2 kids, 6 and 9" said "For 8 of you that is from 1200 DKK". The form sends the party with a note, "(that is 4 people in total, counted from what they typed...)", so the model does not re-guess it. The guide kept that whole line as `_travelers`, the brief had no counts for a form party so `_party` was empty, and `partyOf` added the note's 4 to the sentence's 2 and 2.
+
+- `costLedger.js`: `partyOf` takes the note's number as the count when it is there, and `withoutCountedNote` strips it.
+- `App.jsx`: `_travelers` is saved without the note.
+- Tests: five new checks, each seen failing with its piece taken out. Guides already saved with the note now read 4 as well, since the fix is in the reader.

@@ -66,7 +66,7 @@ import { aiDisclosureFor, aiImageNoteFor } from "./utils/aiDisclosure";
 // The app's one reader of how many people are coming. It already refuses a
 // number that is not a headcount ("2 weeks with friends" is not two people) and
 // caps the party, and the budget estimate reads the same box through it.
-import { partyOf } from "./utils/costLedger";
+import { partyOf, withoutCountedNote } from "./utils/costLedger";
 import { SupportPage } from "./components/SupportPage";
 // ── THE PAGE THAT SAYS HOW THIS IS PAID FOR ─────────────────────────
 // Oliver, 9 Sep 2026: "make an 'affiliate' in the burgermenu where we list all
@@ -18646,7 +18646,10 @@ If the conversation only covers a single day or a few stops with no explicit day
       // need, and it carries `adults: null` HONESTLY: a figure for a party whose
       // adult count nobody has given is a figure nobody should print.
       const partyKnown = guideBrief.known.party || null;
-      const travellersSaid = travelersMatch ? travelersMatch[1].trim() : "";
+      // The form's own count note goes: it is Gemlyx's arithmetic, not their
+      // words, and read back as a sentence it was counted twice. See
+      // withoutCountedNote in utils/costLedger.js.
+      const travellersSaid = travelersMatch ? withoutCountedNote(travelersMatch[1]) : "";
       // Test-pipeline transparency: attach the fabricated profile + the
       // planner's raw skeleton ONLY when this conversation is genuinely the
       // test brief (see randomTestProfileRef's comment for the guard's why).

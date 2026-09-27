@@ -767,9 +767,25 @@ export const partyFrom = (party) => {
   return { heads, hasKids: !!party.hasKids };
 };
 
+// ── AND THE COUNT THE FORM ALREADY WROTE DOWN ──────────────────────
+//
+// Measured live, 27 Sep 2026: the form sent "2 adults and 2 kids, 6 and 9
+// (that is 4 people in total, counted from what they typed...)" so the model
+// would not re-guess the party. The guide kept that whole line as _travelers,
+// this reader added the note's 4 to the sentence's 2 and 2, and a family of
+// four read "For 8 of you that is from 1200 DKK". The note IS a count, so it is
+// taken as the count, and stripped wherever the sentence is kept.
+export const COUNTED_NOTE_RE = /\s*\(that is (\d{1,2}) (?:person|people) in total\b[^)]*\)/i;
+export const withoutCountedNote = (said) => String(said ?? "").replace(COUNTED_NOTE_RE, "").trim();
+
 export const partyOf = (said) => {
-  const text = String(said ?? "").trim();
-  if (!text) return null;
+  const noted = String(said ?? "").match(COUNTED_NOTE_RE);
+  const text = withoutCountedNote(said);
+  if (!text && !noted) return null;
+  if (noted) {
+    const heads = Number(noted[1]) || 0;
+    return heads >= 1 && heads <= PARTY_CAP ? { heads, hasKids: KIDS.test(text) } : null;
+  }
   const hasKids = KIDS.test(text);
   let heads = 0;
   for (const m of text.matchAll(new RegExp(`(\\d{1,2})\\s*(?:more\\s+)?(?:${PEOPLE})\\b`, "gi"))) {

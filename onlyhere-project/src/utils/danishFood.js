@@ -22,10 +22,19 @@
 //
 // ── HOW A ROW IS DECIDED, IN ORDER ──────────────────────────────────
 //
+//   0. a supermarket or grocery store is never on it, whatever else says so
 //   1. its own `danish` field, set by the Studio draft (see studioPrompts.js)
 //   2. a food street or market, always in
 //   3. the verdict read off the 34 entries published on 27 Sep 2026, below
 //   4. its category and name: a foreign cuisine word is out, anything else in
+//
+// ── A SUPERMARKET IS NOT A FOOD PLACE ───────────────────────────────
+//
+// Alma was kept on 27 Sep as "Irma's successor". Oliver, the same day: "We
+// probably shouldn't include grocery stores.. that's ridiculous.." So step
+// zero comes before the draft's own answer: a supermarket, grocery store or
+// supermarket chain is out, even one with a Danish story behind it. A food
+// hall or market is not a grocery store and is untouched by this.
 //
 // Four is deliberately the lenient direction. A row nobody has judged is not
 // proven foreign, and a Danish place wrongly hidden is a loss nobody sees.
@@ -46,7 +55,8 @@ export const FOOD_VERDICTS = {
   "Restaurant Surt & Sødt": true,
   "Smagsloet Vesterbro": true,
   "Hyttefadet": true,
-  "Alma": true,
+  // A supermarket chain, out with every grocery store (see step zero).
+  "Alma": false,
   // Somebody else's cuisine.
   "SanGiovanni": false,
   "Pizza by WH": false,
@@ -81,6 +91,20 @@ export const foreignCuisineIn = (text) => {
   return FOREIGN.find(w => hasWord(hay, w)) || "";
 };
 
+// Grocery words read off the category and name, and the Danish chains read off
+// the name alone, so "successor to Irma" in a category does not do the work.
+const GROCERY = ["supermarket", "supermarkets", "supermarked", "supermarkeder", "supermarket chain", "grocery", "groceries",
+  "grocer", "grocers", "grocery store", "dagligvare", "dagligvarer", "dagligvarebutik", "convenience store", "discount store", "hypermarket"];
+// Spar is left out: it is also the Danish word for "save", and a Spar Kro is
+// a kro. Written folded (ø as o), since fold() is what they are matched on.
+const GROCERY_CHAINS = ["netto", "fotex", "bilka", "rema 1000", "lidl", "aldi", "kvickly", "superbrugsen",
+  "dagli brugsen", "lovbjerg", "meny", "min kobmand", "7 eleven", "irma", "coop 365"];
+export const groceryIn = (row) => {
+  const hay = fold(`${row?.category || ""} ${row?.name || ""}`);
+  const name = fold(String(row?.name || ""));
+  return GROCERY.find(w => hasWord(hay, w)) || GROCERY_CHAINS.find(w => hasWord(name, w)) || "";
+};
+
 const verdictFor = (name) => {
   const n = String(name || "").trim();
   if (Object.prototype.hasOwnProperty.call(FOOD_VERDICTS, n)) return FOOD_VERDICTS[n];
@@ -90,6 +114,7 @@ const verdictFor = (name) => {
 
 export const foodOnNav = (row) => {
   if (!row || !row.name) return false;
+  if (!row.isFoodStreet && groceryIn(row)) return false;
   if (typeof row.danish === "boolean") return row.danish;
   if (row.isFoodStreet) return true;
   const said = verdictFor(row.name);
@@ -101,12 +126,12 @@ export const foodOnNav = (row) => {
 // The Studio's "search the web" for food is told to look for Danish food and
 // nothing else, and what it brings back is filtered on the same words, because
 // a prompt is not a filter (discovery.js has learned that five times).
-export const DANISH_FOOD_FRAMING = "\n\nONLY DANISH FOOD. Look for places a visitor could not get the same way at home: smørrebrød, pølsevogne and other Danish street food such as flæskestegssandwich, bakeries and konditorier, fish smokehouses (røgerier), old kroer, Danish and New Nordic restaurants, and food halls and markets. Search in Danish as well as English. Leave out any restaurant whose point is another country's cuisine, however good it is: pizza, sushi, burgers, Thai, Indian, Mexican, French bistros and the like.";
-export const DANISH_FOOD_EXTRACT = "\n\nTHIS IS A SEARCH FOR DANISH FOOD ONLY. Leave out every restaurant whose point is another country's cuisine (pizza, sushi, burgers, Thai, Indian, Mexican, a French bistro and the like). A food hall or market stays whatever its stalls sell. In each hook, say what Danish food it serves.";
+export const DANISH_FOOD_FRAMING = "\n\nONLY DANISH FOOD. Look for places a visitor could not get the same way at home: smørrebrød, pølsevogne and other Danish street food such as flæskestegssandwich, bakeries and konditorier, fish smokehouses (røgerier), old kroer, Danish and New Nordic restaurants, and food halls and markets. Search in Danish as well as English. Leave out any restaurant whose point is another country's cuisine, however good it is: pizza, sushi, burgers, Thai, Indian, Mexican, French bistros and the like. Leave out supermarkets and grocery stores too: they are not food places.";
+export const DANISH_FOOD_EXTRACT = "\n\nTHIS IS A SEARCH FOR DANISH FOOD ONLY. Leave out every restaurant whose point is another country's cuisine (pizza, sushi, burgers, Thai, Indian, Mexican, a French bistro and the like). Leave out supermarkets and grocery stores. A food hall or market stays whatever its stalls sell. In each hook, say what Danish food it serves.";
 export const splitOffForeignFood = (candidates) => {
   const kept = [], dropped = [];
   for (const c of Array.isArray(candidates) ? candidates : []) {
-    const said = foreignCuisineIn(`${c?.name || ""} ${c?.hook || ""}`);
+    const said = foreignCuisineIn(`${c?.name || ""} ${c?.hook || ""}`) || groceryIn({ name: c?.name, category: c?.hook });
     const hall = /\b(street ?food|food ?hall|food ?market|madmarked|torvehal\w*|market hall|markethall)\b/i.test(`${c?.name || ""} ${c?.hook || ""}`);
     (said && !hall ? dropped : kept).push(c);
   }

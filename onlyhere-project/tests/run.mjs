@@ -182,7 +182,7 @@ writeFileSync(entry, `
   export { mapPlaces, railCss, railMapCss, RAIL_CLASS, INLINE_CARDS_CLASS, RAIL_BREAKPOINT_PX, MAP_CLASS, POPUP_CLASS, MAP_PIN_CAP, CHAT_PANEL_HEIGHT, MSG_ROW_CLASS, LABEL_CLASS, LABEL_SIDES, LABEL_GAP, labelBox, labelSides, SPOT_PIN_ZOOM, isSpotPin, spotsShowAt, PHONE_MAP_PINS, phoneMapShows, placesAround, AROUND_KM, AROUND_CAP } from ${JSON.stringify(join(root, "src/utils/chatRail.js"))};
   export { homeCountryIn, onlyACountry, skyscannerBlock } from ${JSON.stringify(join(root, "src/utils/homeCountry.js"))};
   export { readMapBeats, beatsDue, beatTarget, MAP_BEAT_CAP, MAP_DIRECTION_RULE, withoutRouteMoves, namesIn, ROUTE_NAMES, cameraArrive, cameraLanded, frameFor, SLIDE_HOLD_MS, makeCamera, unplayedBeat, outHeldByOffer } from ${JSON.stringify(join(root, "src/utils/mapDirections.js"))};
-  export { costLines, byUrgency, costAction, linkGaps, readPrice, readableFigure, refuseTicket, REFUSAL, COST_KIND, estimateFrom, describeEstimate, partyOf, partyFrom, describeGroup, stopHasADoor } from ${JSON.stringify(join(root, "src/utils/costLedger.js"))};
+  export { costLines, byUrgency, costAction, linkGaps, readPrice, readableFigure, refuseTicket, REFUSAL, COST_KIND, estimateFrom, describeEstimate, partyOf, partyFrom, describeGroup, stopHasADoor, withoutCountedNote } from ${JSON.stringify(join(root, "src/utils/costLedger.js"))};
   export { freeButPriced, moneyProblems, LODGING_FLOOR_DKK } from ${JSON.stringify(join(root, "src/utils/moneyClaims.js"))};
   export { clampNote, NOTE_SHOW_WHOLE_MAX, NOTE_CLAMP_AT, NOTE_MIN_HIDDEN } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { budgetCharacterised } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
@@ -353,7 +353,7 @@ writeFileSync(entry, `
   export { SWEEP_INTENT, SWEEP_PROMPT } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
   export { SWEEPS, sweepById, selectRows, applyCap, knownPlacesFor, parentheticalHint, deterministicTaxonomy, quoteIsInEntry, entryText, cleanPatch, looksLikePlaceName, dropSelfReferences, applySweepPatch, buildSnapshot, readSnapshot, snapshotFilename, proposeSweep, parseLooseFields, MARKS, weakestMark, openFields, changedOnly, FROM_ENTRY_PROMPT } from ${JSON.stringify(join(root, "src/utils/sweeps.js"))};
   export { readFactCheck, describeFactCheck, relabel, admitsNotFound, rootOf, withRoots, datesIn, datesConfirmedBy, CONTRADICTED, UNVERIFIED, readInventedCheck, researchForCheck, RESEARCH_CHECK_CAP, INVENTED_CHECK_FORMAT, correctionLanded, claimLanded, describeCorrection, correctionBanner, correctionPublisherNote, MAX_LISTED_CLAIMS, hasAnchor } from ${JSON.stringify(join(root, "src/utils/factCheckRead.js"))};
-  export { foodOnNav, FOOD_VERDICTS, foreignCuisineIn, splitOffForeignFood, DANISH_FOOD_FRAMING, DANISH_FOOD_EXTRACT } from ${JSON.stringify(join(root, "src/utils/danishFood.js"))};
+  export { foodOnNav, FOOD_VERDICTS, foreignCuisineIn, groceryIn, splitOffForeignFood, DANISH_FOOD_FRAMING, DANISH_FOOD_EXTRACT } from ${JSON.stringify(join(root, "src/utils/danishFood.js"))};
   export { shapeForLive, madeHeading, isPublisherNote, PUBLISHER_NOTE, cleanCredit } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
   export { longestEcho, echoWords, isNameEcho, echoInDraft, describeEcho, ECHO_RUN } from ${JSON.stringify(join(root, "src/utils/echoCheck.js"))};
   export { CHOICE_LIMIT, cleanCandidates, sameSubject, sameCandidate, needsChoosing, choicesFor, describeChoosing, applyChoice, choiceNote, subjectCore, listingMatchesSubject, streetListingMatches, describeListingRefusal } from ${JSON.stringify(join(root, "src/utils/placeChoice.js"))};
@@ -54191,6 +54191,18 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       const { partyOf, describeGroup } = M;
       is("two adults", partyOf("2 adults").heads, 2);
       is("two adults and two children is four heads", partyOf("2 adults and 2 kids").heads, 4);
+      // Live, 27 Sep 2026: "For 8 of you" on a family of four, because the form's
+      // own count note was read as more people.
+      {
+        const noted = "2 adults and 2 kids, 6 and 9 (that is 4 people in total, counted from what they typed: use this number and do not work out your own)";
+        is("the form's count note is the count, not four more people", partyOf(noted).heads, 4);
+        ok("and it keeps the children", partyOf(noted).hasKids === true);
+        is("and it counts what the sentence cannot", partyOf("Me, my wife and our 2 kids (that is 4 people in total, counted from what they typed)").heads, 4);
+        is("the note comes off the sentence", M.withoutCountedNote(noted), "2 adults and 2 kids, 6 and 9");
+        const appSrc = readFileSync(join(root, "src/App.jsx"), "utf8");
+        ok("the guide keeps their words without the note", /const travellersSaid = travelersMatch \? withoutCountedNote\(travelersMatch\[1\]\) : "";/.test(appSrc));
+        ok("and the note the form writes is the one that is read", /\(that is \$\{counted\.heads\} \$\{counted\.heads === 1 \? "person" : "people"\} in total/.test(appSrc));
+      }
       is("and it knows there are children in it", partyOf("2 adults and 2 kids").hasKids, true);
       is("a family of four", partyOf("family of 4").heads, 4);
       is("a bare count, which is what the intake field mostly holds", partyOf("4").heads, 4);
@@ -77828,7 +77840,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
        /Who's traveling: \$\{intakeTravelers\.trim\(\)\}/.test(app));
     // ONE READER, and it is the one the budget already uses.
     ok("through partyOf, which the budget reads the same box with",
-       /import \{ partyOf \} from "\.\/utils\/costLedger"/.test(app));
+       /import \{ partyOf(?:, [^}]*)? \} from "\.\/utils\/costLedger"/.test(app));
   }
 
   // ── AND THE PICTURES THAT ARE NOT PHOTOGRAPHS ───────────────────
@@ -79284,6 +79296,13 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   is("whole words only, so a Danish word is not read as pizza", foreignCuisineIn("Thaibokseren smørrebrød"), "");
   // 34 published on 27 Sep 2026, six of them food streets that need none.
   is("every published entry of 27 Sep 2026 that is not a food street has a verdict", Object.keys(FOOD_VERDICTS).length, 28);
+  // Oliver, 27 Sep 2026: "We probably shouldn't include grocery stores.. that's ridiculous.."
+  ok("a supermarket is not on the Food page, not even Alma", !foodOnNav({ name: "Alma", category: "Food market / supermarket chain, spiritual successor to Irma" })
+     && FOOD_VERDICTS["Alma"] === false);
+  ok("a grocery store is out even when the draft calls it Danish", !foodOnNav({ name: "Netto Nørrebro", category: "Shop", danish: true })
+     && !foodOnNav({ name: "Løvbjerg", category: "Shop" }) && !foodOnNav({ name: "Hjørnet", category: "Dagligvarebutik", danish: true }));
+  ok("a food hall and a kro that shares a chain's word stay", foodOnNav({ name: "Torvehallerne", category: "Market hall with a grocery, a bakery and food stalls", isFoodStreet: true })
+     && foodOnNav({ name: "Spar Kro", category: "Kro" }) && M.groceryIn({ name: "Irmas Café", category: "Café, successor to Irma" }) === "");
   // The search finds Danish food, and drops the plain foreign ones it brings back.
   const { kept, dropped } = splitOffForeignFood([
     { name: "Pizzeria Roma", hook: "wood-fired pizza" },
@@ -79291,6 +79310,9 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     { name: "Bager Jensen", hook: "rye bread and wienerbrød since 1920" },
   ]);
   ok("a pizzeria candidate is dropped, a food hall and a bakery are kept", dropped.length === 1 && kept.length === 2);
+  ok("a supermarket the search brings back is dropped too", splitOffForeignFood([{ name: "Rema 1000 Vesterbro", hook: "cheap snacks" }, { name: "Meyers Bageri", hook: "kanelsnegle" }]).dropped.map(c => c.name).join() === "Rema 1000 Vesterbro");
+  ok("the search and the draft are told no grocery stores", /supermarkets and grocery stores/.test(M.DANISH_FOOD_FRAMING) && /supermarkets and grocery stores/.test(M.DANISH_FOOD_EXTRACT)
+     && /FALSE for a supermarket or grocery store too/.test(readFileSync(join(root, "src/utils/studioPrompts.js"), "utf8")));
   // The draft carries its answer through publish.
   ok("a food draft's danish answer is kept on publish", shapeForLive("food", { name: "X", danish: false }).danish === false && shapeForLive("food", { name: "Y", danish: "true" }).danish === true);
   ok("and a draft that did not answer carries nothing", !("danish" in shapeForLive("food", { name: "Z" })));
