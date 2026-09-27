@@ -362,6 +362,7 @@ writeFileSync(entry, `
   export { tidyArea } from ${JSON.stringify(join(root, "src/utils/nightsOpen.js"))};
   export { readableAuthor } from ${JSON.stringify(join(root, "src/utils/photoAuthor.js"))};
   export { changeToApply, onlyRefusals, liveRowIdOf } from ${JSON.stringify(join(root, "src/utils/eventCheckApply.js"))};
+  export { dueForCheck, lastCheckOf, checkRecord, checkKey } from ${JSON.stringify(join(root, "src/utils/eventCheckDue.js"))};
   export { programmeDateProblem, namedNearDate, locateDate, programmeMentions } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
   export { denmarkClock, sunElevation, isNightThere, SUNSET_ELEVATION } from ${JSON.stringify(join(root, "src/utils/denmarkTime.js"))};
   export { weatherIcon } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
@@ -44293,7 +44294,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // Anchored inside updateCurrentEvents: askPerplexity(prompt) appears earlier
     // in App.jsx for an unrelated feature, and an unanchored indexOf would have
     // compared this exit against that one and passed for the wrong reason.
-    const from = appN.indexOf("const updateCurrentEvents = async () => {");
+    const from = appN.indexOf("const updateCurrentEvents = async ({ force = false } = {}) => {");
     const exit = appN.indexOf("if (fromSite) {", from);
     const paid = appN.indexOf("const result = await askPerplexity(prompt);", from);
     return from !== -1 && exit !== -1 && paid !== -1 && exit < paid;
@@ -67683,7 +67684,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     // festival held back for having no date was invisible to the one machine
     // whose entire job is finding a date.
     ok("the sweep batch includes the waiting rows",
-       /const allUpcoming = \[\.\.\.undatedEvents, \.\.\.events, \.\.\.majorEvents, \.\.\.vikingEvents\]/.test(appW));
+       /const eventsForCheck = \(from\) => \[\.\.\.undatedEvents, \.\.\.events, \.\.\.majorEvents, \.\.\.vikingEvents\]/.test(appW) && /const allUpcoming = eventsForCheck\(checkFrom\);/.test(appW));
     ok("and they go first", /isWaiting\(e\) \? -1 :/.test(appW));
     ok("a found date is offered as one press", /🎪 Publish it now/.test(appW));
     ok("which checks the date again before writing", /const out = promoted\(row, \{ start: change\.dateChanged/.test(appW));
@@ -79566,6 +79567,42 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const gems = readFileSync(join(root, "src/components/CheapGemsPage.jsx"), "utf8");
   ok("Cheap gems: the same", /onClick=\{\(\) => setFiltersOpen\(o => !o\)\}/.test(gems) && /\{filtersOpen && hasFilters && \([\s\S]*<Row title="Where">/.test(gems)
      && gems.slice(gems.indexOf("SEARCH, A FILTERS BUTTON"), gems.indexOf("{filtersOpen && hasFilters && (")).split("<Pill").length === 1);
+}
+
+// ── BATCH 145: THE DATE CHECK ONLY SPENDS ON WHAT IS DUE ─────────────
+// Oliver, 27 Sep 2026: "But it costs me money to update all the time though :S"
+{
+  const today = new Date("2026-09-27T12:00:00Z");
+  const at = (d) => ({ at: d, outcome: "nothing" });
+  ok("never checked is due", M.dueForCheck({ date: "" }, today, null).due);
+  ok("no date, checked 3 days ago, rests", !M.dueForCheck({ date: "" }, today, at("2026-09-24")).due);
+  ok("no date, checked 14 days ago, is due", M.dueForCheck({ date: "" }, today, at("2026-09-13")).due);
+  ok("a date that has passed counts as no date", !M.dueForCheck({ date: "2026-09-12" }, today, at("2026-09-20")).due && M.dueForCheck({ date: "2026-09-12" }, today, at("2026-09-10")).due);
+  ok("on within 45 days: every 7 days", !M.dueForCheck({ date: "2026-10-20" }, today, at("2026-09-22")).due && M.dueForCheck({ date: "2026-10-20" }, today, at("2026-09-20")).due);
+  ok("further off: every 30 days", !M.dueForCheck({ date: "2027-06-02" }, today, at("2026-09-10")).due && M.dueForCheck({ date: "2027-06-02" }, today, at("2026-08-27")).due);
+  is("and it says when it is due again", M.dueForCheck({ date: "2027-06-02" }, today, at("2026-09-10")).days, 13);
+  ok("the entry's own record wins, the browser's is the fallback",
+     M.lastCheckOf({ name: "A", __lastCheck: at("2026-09-20") }, { [M.checkKey({ name: "A" })]: at("2026-01-01") }).at === "2026-09-20"
+     && M.lastCheckOf({ name: "A" }, { [M.checkKey({ name: "A" })]: at("2026-01-01") }).at === "2026-01-01");
+  is("a record is the day and what came of it", JSON.stringify(M.checkRecord(today, "found")), JSON.stringify({ at: "2026-09-27", outcome: "found" }));
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("a run takes only the due ones unless told otherwise", /const dueList = force \? brokenFirst : brokenFirst\.filter\(e => dueForCheck\(e, checkFrom, lastCheckOf\(e, localChecks\)\)\.due\);/.test(app) && /const batch = dueList\.slice\(0, UPDATE_EVENTS_BATCH_CAP\);/.test(app));
+  ok("and every event it looked at remembers", /const out = await patchRowPayload\(rowId, \{ __lastCheck: rec \}\);/.test(app) && /localChecks\[checkKey\(ev\)\] = rec;/.test(app));
+  ok("the panel says what is due before the press, with a way round it", /const due = pool\.filter\(e => dueForCheck\(e, now, lastCheckOf\(e, local\)\)\.due\)\.length;/.test(app) && /updateCurrentEvents\(\{ force: true \}\)/.test(app) && /onClick=\{\(\) => updateCurrentEvents\(\)\}/.test(app));
+  ok("the panel and the run count one list", (app.match(/eventsForCheck\(/g) || []).length === 2 && /const allUpcoming = eventsForCheck\(checkFrom\);/.test(app) && /const pool = eventsForCheck\(now\);/.test(app));
+  ok("the last run comes back on reload", /localStorage\.setItem\(LAST_CHECK_RESULTS_KEY, JSON\.stringify\(results\)\)/.test(app) && /JSON\.parse\(localStorage\.getItem\(LAST_CHECK_RESULTS_KEY\) \|\| "null"\)/.test(app));
+}
+
+// ── BATCH 146: NO RESPONSIBILITY FOR WRONG INFORMATION, ANYWHERE ─────
+// Oliver, 27 Sep 2026: "note in the Terms of Use that we take no
+// responsibility for wrong information". Clauses 12 and 19.2.1 said it of
+// Guides only; the entries, the events list and the chat's answers are said too.
+{
+  const terms = readFileSync(join(root, "public/terms.html"), "utf8");
+  ok("clause 12.6 extends the accuracy clauses to all other content", /<span class="n">12\.6<\/span> Clauses 12\.2 to 12\.4 apply equally to all other Gemlyx Content[\s\S]{0,400}any answer given through the conversation interface[\s\S]{0,200}accepts no responsibility for any such information being incorrect, incomplete or out of date, save as provided in clause 19\.1\./.test(terms));
+  ok("and reliance on it is excluded like a Guide's", /19\.2\.1<\/span> reliance upon a price, timetable, opening hour, event date, availability or other item of information contained in a Guide or in any other Gemlyx Content, or given in an answer/.test(terms));
+  ok("still never beyond what the law allows", /19\.1<\/span> Nothing in these Terms shall exclude or limit the liability of Gemlyx for death or personal injury/.test(terms));
+  ok("the version moved and says why", M.TERMS_VERSION === "2.2" && /Version 2\.2 · In force from 27 September 2026/.test(terms) && /Version 2\.2, in force from 27 September 2026, adds clause 12\.6/.test(terms));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

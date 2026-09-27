@@ -372,3 +372,29 @@ Your words: "I don't want to go in and individually change every draft", "make m
 - **Islands and Cheap gems** now use the Towns layout: search, a Filters button, and the panel under it (Where and Getting there on Islands; Where, What and Kind on Cheap gems). Islands rows have counts.
 - **Terms tick box.** Signup now has "I accept the Terms of Service and the Privacy Policy" as a box that must be ticked, on both the email and Google routes. It starts unticked every time the sheet opens. The accepted version is still stamped by acceptedNow. Screenshot checked in a browser.
 - 26 new checks and 8 older ones updated to the new layout and names. Every mutant tried went red (17).
+
+## Batch 145: the date check only spends on what is due
+
+You: "But it costs me money to update all the time though :S"
+
+- **What costs money in a run:** the search (Perplexity) for every event its own site did not answer, Firecrawl when a plain page read fails, and the poster reader (a vision model, capped at 30 a run). Every run redid all of it for up to 60 events, including the ones that said "not announced yet" last week.
+- **Now each event remembers its last check.** For a database event that is `__lastCheck` on the entry. For an event in the code it is this browser's memory. A run only takes events that are due:
+  - no date yet, or the date has passed: every 14 days;
+  - on within 45 days: every 7 days;
+  - further off: every 30 days.
+  The numbers are `RECHECK_DAYS` in `utils/eventCheckDue.js`.
+- **Before you press:** the panel says "N of M are due; the rest were checked recently". There is a "Check all anyway" link for the day you want everything.
+- **The last run's results are kept in this browser**, so reopening Studio shows them without paying for another run. The summary says when it ran and how many rested.
+- 14 new checks, all 7 mutants red.
+
+## Batch 146: terms version 2.2, no responsibility for wrong information
+
+You: "note in the Terms of Use that we take no responsibility for wrong information".
+
+- **Most of it was already there, for Guides.** Clause 12 (a Guide may contain errors and go out of date, verify before relying on it), clause 18.1 (no warranty as to accuracy) and clause 19.2.1 (no liability for relying on a price, timetable or opening hour in a Guide).
+- **What was missing:** everything that is not a Guide.
+  - New clause 12.6 applies the same to all other Gemlyx Content: published entries, event dates and ticket information, cost estimates, weather, and the chat's and Ask Gemlyx's answers. It says in words that Gemlyx accepts no responsibility for any of it being incorrect, incomplete or out of date.
+  - Clause 19.2.1 now names event dates, other content and chat answers too.
+- **Clause 19.1 is unchanged.** Danish and EU law do not let you exclude liability for gross negligence, intent, personal injury or mandatory consumer rights, so no clause can promise more than that.
+- **Version 2.2, in force from 27 September 2026,** with a version-history note. `TERMS_VERSION` is 2.2, so new signups record 2.2. Clause 21.3 says a material change needs 30 days' notice to existing account holders. This one widens a disclaimer the Service already made in 18.1, but if you want to follow your own terms strictly, email the few existing accounts.
+- 4 new checks.

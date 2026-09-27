@@ -68,7 +68,9 @@ import { aiDisclosureFor, aiImageNoteFor } from "./utils/aiDisclosure";
 // caps the party, and the budget estimate reads the same box through it.
 import { partyOf, withoutCountedNote } from "./utils/costLedger";
 import { houseChosen } from "./utils/houseTrip";
-import { changeToApply, onlyRefusals } from "./utils/eventCheckApply";
+import { changeToApply, onlyRefusals, liveRowIdOf } from "./utils/eventCheckApply";
+import { dueForCheck, lastCheckOf, checkRecord, checkKey, LOCAL_CHECKS_KEY } from "./utils/eventCheckDue";
+const LAST_CHECK_RESULTS_KEY = "gemlyx_event_check_results";
 import { SupportPage } from "./components/SupportPage";
 // ── THE PAGE THAT SAYS HOW THIS IS PAID FOR ─────────────────────────
 // Oliver, 9 Sep 2026: "make an 'affiliate' in the burgermenu where we list all
@@ -3345,7 +3347,10 @@ function GemlyxApp() {
   // dropdown may say anything.
   const [discoverForType, setDiscoverForType] = useState(null);
   const [updateEventsLoading, setUpdateEventsLoading] = useState(false);
-  const [updateEventsResults, setUpdateEventsResults] = useState(null); // [{name, notes, ticketStatus, dateChanged}] — only ones that changed
+  // The last run comes back on reload, so looking at it again costs nothing.
+  const [updateEventsResults, setUpdateEventsResults] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(LAST_CHECK_RESULTS_KEY) || "null"); } catch { return null; }
+  }); // [{name, notes, ticketStatus, dateChanged}], only the ones that changed
   // Per row of that panel, keyed by the live id: "saving", "done", or the
   // reason the promotion was refused. An object rather than one value because
   // a sweep can find dates for several waiting entries in one run, and a single
@@ -13025,7 +13030,12 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
     showToast(`📌 ${list.length - failed.length} moved to "No confirmed date yet"`, 3200);
   };
 
-  const updateCurrentEvents = async () => {
+  // Every event the date check looks at, in one place, so the panel's "N due"
+  // and the run itself cannot count two different lists.
+  const eventsForCheck = (from) => [...undatedEvents, ...events, ...majorEvents, ...vikingEvents].filter(e =>
+    isCurrentlyLive(e.date, e.dateEnd) || isUpcoming(e.date)
+    || isUndated(e.date) || isPastDate(e.date, from));
+  const updateCurrentEvents = async ({ force = false } = {}) => {
     if (updateEventsLoading) return;
     setUpdateEventsLoading(true); setUpdateEventsError(null); setUpdateEventsResults(null); setUpdateEventsProgress(null);
     try {
@@ -13057,9 +13067,7 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
       // no date was invisible to the one machine whose entire job is finding a
       // date, which is the same shape as the bug in the paragraph above: the
       // rows that most needed the tool were the rows it could not reach.
-      const allUpcoming = [...undatedEvents, ...events, ...majorEvents, ...vikingEvents].filter(e =>
-        isCurrentlyLive(e.date, e.dateEnd) || isUpcoming(e.date)
-        || isUndated(e.date) || isPastDate(e.date, checkFrom));
+      const allUpcoming = eventsForCheck(checkFrom);
       // ── THE BROKEN ONES FIRST ───────────────────────────────────
       // If a cap ever bites again, it must spend on the rows that are wrong.
       // An undated row is the one showing "Dates not confirmed" to a reader; an
@@ -13072,8 +13080,16 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
         const rank = (e) => isWaiting(e) ? -1 : isUndated(e.date) ? 0 : isPastDate(e.date, checkFrom) ? 1 : 2;
         return rank(a) - rank(b);
       });
-      const batch = brokenFirst.slice(0, UPDATE_EVENTS_BATCH_CAP);
-      const skipped = allUpcoming.length - batch.length;
+      // ── AND ONLY THE ONES THAT ARE DUE ───────────────────────────
+      // Oliver, 27 Sep 2026: "it costs me money to update all the time". An
+      // event checked last week that said "not announced yet" is not asked
+      // again until it is due. See utils/eventCheckDue.js for the gaps.
+      let localChecks = {};
+      try { localChecks = JSON.parse(localStorage.getItem(LOCAL_CHECKS_KEY) || "{}") || {}; } catch { localChecks = {}; }
+      const dueList = force ? brokenFirst : brokenFirst.filter(e => dueForCheck(e, checkFrom, lastCheckOf(e, localChecks)).due);
+      const resting = brokenFirst.length - dueList.length;
+      const batch = dueList.slice(0, UPDATE_EVENTS_BATCH_CAP);
+      const skipped = dueList.length - batch.length;
       const changed = [];
       // ── WHAT IT TRIED, PER EVENT ────────────────────────────────
       //
@@ -13498,7 +13514,27 @@ ${researchRules("festival", ev)}`
           traces.push({ name: ev.name, town: ev.town, date: ev.date, steps: trace, resolved: "" });
         }
       }
-      setUpdateEventsResults({ changed, checked: batch.length, skipped, traces, imagesRead });
+      // ── AND EACH ONE REMEMBERS IT WAS ASKED ──────────────────────
+      // On the entry for a published row, in this browser for one in the code.
+      // Written after the run, one row at a time and quietly, then one refresh.
+      setUpdateEventsProgress("Noting what was checked…");
+      const found = new Set(changed.filter(c => c.dateChanged || c.ticketStatusChanged || c.stillHappening === false).map(c => c.row || null).filter(Boolean));
+      let wroteLive = 0;
+      for (const ev of batch) {
+        const rec = checkRecord(checkFrom, found.has(ev) ? "found" : "nothing");
+        const rowId = liveRowIdOf(ev);
+        if (rowId) {
+          try { const out = await patchRowPayload(rowId, { __lastCheck: rec }); if (out.ok) wroteLive++; } catch { /* then the next run checks it again */ }
+        } else {
+          localChecks[checkKey(ev)] = rec;
+        }
+      }
+      try { localStorage.setItem(LOCAL_CHECKS_KEY, JSON.stringify(localChecks)); } catch { /* private mode */ }
+      if (wroteLive) { await refreshLiveContent(); bumpLiveContent(v => v + 1); }
+      const results = { changed, checked: batch.length, skipped, resting, forced: !!force, traces, imagesRead, at: new Date().toISOString() };
+      setUpdateEventsResults(results);
+      // Kept, so reopening Studio shows the last run instead of costing a new one.
+      try { localStorage.setItem(LAST_CHECK_RESULTS_KEY, JSON.stringify(results)); } catch { /* too big or private mode: it is only a convenience */ }
     } catch (err) {
       setUpdateEventsError("Couldn't run the update check — try again.");
     }
@@ -26454,9 +26490,24 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: updateEventsResults || updateEventsError ? 10 : 0 }}>
                           <div>
                             <div style={{ fontSize: 12.5, fontWeight: 700, color: C.text }}>🔄 Update current events</div>
-                            <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>Re-checks your existing upcoming events for cancellations, date changes or ticket status changes. Run it weekly, not on every visit.</div>
+                            {(() => {
+                              // What a run would spend on, before it is pressed.
+                              // See utils/eventCheckDue.js.
+                              const now = new Date();
+                              let local = {};
+                              try { local = JSON.parse(localStorage.getItem(LOCAL_CHECKS_KEY) || "{}") || {}; } catch { local = {}; }
+                              const pool = eventsForCheck(now);
+                              const due = pool.filter(e => dueForCheck(e, now, lastCheckOf(e, local)).due).length;
+                              return (
+                                <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
+                                  Re-checks your events for cancellations, new dates and ticket changes. {due} of {pool.length} {due === 1 ? "is" : "are"} due; the rest were checked recently and wait their turn.
+                                  {" "}<button onClick={() => updateCurrentEvents({ force: true })} disabled={updateEventsLoading}
+                                    style={{ background: "none", border: "none", padding: 0, color: C.muted, textDecoration: "underline", fontSize: 11, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>Check all anyway</button>
+                                </div>
+                              );
+                            })()}
                           </div>
-                          <button onClick={updateCurrentEvents} disabled={updateEventsLoading}
+                          <button onClick={() => updateCurrentEvents()} disabled={updateEventsLoading}
                             style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 10, padding: "8px 14px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", flexShrink: 0, fontFamily: "'Inter', sans-serif" }}>
                             {updateEventsLoading ? (updateEventsProgress || "Checking…") : "Run check"}
                           </button>
@@ -26465,7 +26516,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         {updateEventsResults && (
                           <div>
                             <div style={{ fontSize: 11, color: C.muted, marginBottom: updateEventsResults.changed.length ? 8 : 0 }}>
-                              Checked {updateEventsResults.checked} upcoming event{updateEventsResults.checked === 1 ? "" : "s"}{updateEventsResults.skipped > 0 ? ` (${updateEventsResults.skipped} more upcoming not checked this run, click again to continue)` : ""}.{updateEventsResults.imagesRead > 0 ? ` ${updateEventsResults.imagesRead} poster${updateEventsResults.imagesRead === 1 ? " was" : "s were"} read as a picture.` : ""}
+                              {updateEventsResults.at ? `${new Date(updateEventsResults.at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}: ` : ""}Checked {updateEventsResults.checked} event{updateEventsResults.checked === 1 ? "" : "s"}{updateEventsResults.resting > 0 ? `, and left ${updateEventsResults.resting} that were checked recently` : ""}{updateEventsResults.skipped > 0 ? ` (${updateEventsResults.skipped} more upcoming not checked this run, click again to continue)` : ""}.{updateEventsResults.imagesRead > 0 ? ` ${updateEventsResults.imagesRead} poster${updateEventsResults.imagesRead === 1 ? " was" : "s were"} read as a picture.` : ""}
                             </div>
                             {(() => {
                               // ── THE CHANGES FIRST, THE REFUSALS FOLDED AWAY ──
