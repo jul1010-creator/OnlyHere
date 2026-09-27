@@ -145,7 +145,7 @@ import { buildFoodFacets, FOOD_SORTS, byFoodPrice } from "./utils/foodStyle";
 import { DK_PATHS, dkProject } from "./data/mapShapes";
 import { PageHero } from "./components/PageHero";
 import { LiveEventsHeaderStrip } from "./components/LiveEventsHeaderStrip";
-import { WeatherHeaderStrip } from "./components/WeatherHeaderStrip";
+import { WeatherHeaderStrip, DenmarkClock } from "./components/WeatherHeaderStrip";
 import { StoreBadge } from "./components/StoreBadge";
 import { DateTimePicker } from "./components/DateTimePicker";
 import { GuidePage } from "./pages/GuidePage";
@@ -28246,7 +28246,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   Events, Food and Attractions grids instead of sitting in a narrow
                   column of their own under a full-bleed hero. */}
               <div style={{ padding: "20px 16px 8px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 2, textTransform: "uppercase", marginBottom: 12, textAlign: "center" }}>Today in Denmark</div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 2, textTransform: "uppercase", marginBottom: 12, textAlign: "center" }}>Today in Denmark <span style={{ color: C.muted }}>·</span> <DenmarkClock style={{ color: C.text, letterSpacing: 1 }} /></div>
 
                 <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
                   <WeatherHeaderStrip weather={weather} weatherLoading={weatherLoading} checkWeather={checkWeather} />

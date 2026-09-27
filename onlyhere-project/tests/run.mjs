@@ -360,6 +360,9 @@ writeFileSync(entry, `
   export { namesInLine, CITY_KM } from ${JSON.stringify(join(root, "src/utils/seasonFit.js"))};
   export { tidyArea } from ${JSON.stringify(join(root, "src/utils/nightsOpen.js"))};
   export { readableAuthor } from ${JSON.stringify(join(root, "src/utils/photoAuthor.js"))};
+  export { denmarkClock, sunElevation, isNightThere, SUNSET_ELEVATION } from ${JSON.stringify(join(root, "src/utils/denmarkTime.js"))};
+  export { weatherIcon } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
+  export { readTheDay, skyFor } from ${JSON.stringify(join(root, "src/components/WeatherHeaderStrip.jsx"))};
   export { shapeForLive, madeHeading, isPublisherNote, PUBLISHER_NOTE, cleanCredit } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
   export { longestEcho, echoWords, isNameEcho, echoInDraft, describeEcho, ECHO_RUN } from ${JSON.stringify(join(root, "src/utils/echoCheck.js"))};
   export { CHOICE_LIMIT, cleanCandidates, sameSubject, sameCandidate, needsChoosing, choicesFor, describeChoosing, applyChoice, choiceNote, subjectCore, listingMatchesSubject, streetListingMatches, describeListingRefusal } from ${JSON.stringify(join(root, "src/utils/placeChoice.js"))};
@@ -79397,6 +79400,48 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   ok("an empty departure opens on the arrival month", /if \(open && !value && minDate\) setViewMonth\(new Date\(min\.getFullYear\(\), min\.getMonth\(\), 1\)\);/.test(picker));
 }
 function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B", false, geo); }
+
+// ── BATCH 141: THE TIME IN DENMARK, AND NIGHT ON THE WEATHER CARDS ───
+// Oliver, 27 Sep 2026 at 20:18: "Put time in Denmark on front page and the
+// weather need a 'night' demonstration.." The Copenhagen card showed a sun.
+{
+  const CPH = { lat: 55.6761, lon: 12.5683 };
+  is("the clock is Denmark's, not the machine's", M.denmarkClock(new Date("2026-09-27T18:18:00Z")), "20:18");
+  is("and it knows winter time", M.denmarkClock(new Date("2026-12-01T18:18:00Z")), "19:18");
+  {
+    // Read from a machine somewhere else, it is still Denmark's time.
+    const was = process.env.TZ;
+    process.env.TZ = "Australia/Sydney";
+    const there = M.denmarkClock(new Date("2026-09-27T18:18:00Z"));
+    if (was === undefined) delete process.env.TZ; else process.env.TZ = was;
+    is("from Sydney it is still 20:18 in Denmark", there, "20:18");
+  }
+  ok("20:18 on 27 Sep is night in Copenhagen", M.isNightThere({ ...CPH, date: new Date("2026-09-27T18:18:00Z") }));
+  ok("18:40 is still day", !M.isNightThere({ ...CPH, date: new Date("2026-09-27T16:40:00Z") }));
+  ok("and 07:15 the next morning is day again", !M.isNightThere({ ...CPH, date: new Date("2026-09-28T05:15:00Z") }));
+  ok("16:00 in December is dark", M.isNightThere({ ...CPH, date: new Date("2026-12-21T15:00:00Z") }));
+  ok("the forecast's own word wins", M.isNightThere({ condition: "clearsky_night", ...CPH, date: new Date("2026-06-21T10:00:00Z") })
+     && !M.isNightThere({ condition: "fair_day", ...CPH, date: new Date("2026-09-27T18:18:00Z") }));
+  ok("the sun is high at a June noon", M.sunElevation(CPH.lat, CPH.lon, new Date("2026-06-21T11:10:00Z")) > 55);
+  is("a clear night is a moon", M.weatherIcon("clearsky_night"), "🌙");
+  is("so is a fair night", M.weatherIcon("fair_night"), "🌙");
+  is("a clear day is still a sun", M.weatherIcon("clearsky_day"), "☀️");
+  is("rain is rain at night too", M.weatherIcon("rain", true), "🌧");
+  ok("a night card is a night sky", M.skyFor("clearsky_night", true).a !== M.skyFor("clearsky_night", false).a && M.skyFor("clearsky_night", true).a === "#1F2C52");
+  const cities = [{ key: "a", label: "A" }, { key: "b", label: "B" }];
+  const clearWarm = { a: { condition: "clearsky_night", temperature_c: 19 }, b: { condition: "fair_night", temperature_c: 18 } };
+  ok("after dark the clear line is about the night", /clear night/.test(M.readTheDay(clearWarm, cities, { night: true }).line));
+  ok("and by day it is still the day's", /Clear everywhere, and warm/.test(M.readTheDay(clearWarm, cities).line));
+  const three = [...cities, { key: "c", label: "C" }];
+  const oneWet = { a: { condition: "rain", temperature_c: 12 }, b: { condition: "cloudy", temperature_c: 13 }, c: { condition: "cloudy", temperature_c: 13 } };
+  ok("rain after dark is tonight's", /Rain around A tonight\./.test(M.readTheDay(oneWet, three, { night: true }).line) && /Rain around A today\./.test(M.readTheDay(oneWet, three).line));
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the front page shows the time in Denmark", /Today in Denmark <span style=\{\{ color: C\.muted \}\}>·<\/span> <DenmarkClock/.test(app));
+  const strip = readFileSync(join(root, "src/components/WeatherHeaderStrip.jsx"), "utf8");
+  ok("every card reads the sun", /const night = isNightThere\(\{ condition: ready \? d\.condition : "", lat: c\.lat, lon: c\.lon, date: now \}\);/.test(strip)
+     && /weatherIcon\(d\.condition, night\)/.test(strip) && /const sky = skyFor\(ready \? d\.condition : null, night\);/.test(strip));
+  ok("the header pills too", /weatherIcon\(d\.condition, isNightThere\(\{ condition: d\.condition, lat: c\.lat, lon: c\.lon, date: now \}\)\)/.test(strip));
+}
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
 if (failed) { fails.forEach(f => console.log("  FAIL " + f + "\n")); process.exit(1); }

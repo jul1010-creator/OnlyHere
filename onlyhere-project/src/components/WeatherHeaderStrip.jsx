@@ -4,6 +4,7 @@ import { C } from "../utils/theme";
 import { weatherIcon } from "../utils/helpers";
 import { WEATHER_CITIES } from "../data/mapShapes";
 import { WeatherStrip } from "./WeatherStrip";
+import { denmarkClock, isNightThere } from "../utils/denmarkTime";
 
 // ── TODAY IN DENMARK ─────────────────────────────────────────────────
 // Oliver, 7 Aug 2026: "I also find the weather in the middle of explore page
@@ -29,6 +30,20 @@ import { WeatherStrip } from "./WeatherStrip";
 // Colour from the condition, not from the palette: a clear day should look
 // different from a wet one at a glance, and this is the one place in the app
 // where the data has a natural colour of its own.
+// ── AND AFTER DARK, A NIGHT SKY ─────────────────────────────────────
+// Oliver, 27 Sep 2026: "the weather need a 'night' demonstration". A clear
+// sky at 20:18 was painted in afternoon gold. After sunset the card goes to
+// night colours, darker for cloud and rain, with a moon where the sun was.
+const nightSkyOf = (code) => {
+  const c = String(code || "");
+  if (/thunder/.test(c)) return { a: "#2E2548", b: "#15112A", ink: "#E3DDF5" };
+  if (/rain|sleet/.test(c)) return { a: "#1F3347", b: "#0E1822", ink: "#D6E4F2" };
+  if (/snow/.test(c)) return { a: "#34404F", b: "#1A212B", ink: "#EEF3F9" };
+  if (/cloudy|fog/.test(c) && !/partlycloudy/.test(c)) return { a: "#2B313A", b: "#14181E", ink: "#E2E6EC" };
+  return { a: "#1F2C52", b: "#0B1024", ink: "#E6ECFF" };
+};
+export const skyFor = (code, night = false) => (night ? nightSkyOf(code) : skyOf(code));
+
 const skyOf = (code) => {
   const c = String(code || "");
   if (/thunder/.test(c)) return { a: "#4A3B6B", b: "#2A2340", ink: "#E8E2F5" };
@@ -41,7 +56,9 @@ const skyOf = (code) => {
 
 // One sentence, or nothing. Deliberately built from counts rather than from a
 // single city, because "Today in Denmark" is a claim about the country.
-export const readTheDay = (weather, cities) => {
+// After dark in all of them, "the kind of day the coast is for" is a sentence
+// about a day that is over. `night` swaps the clear lines for the evening.
+export const readTheDay = (weather, cities, { night = false } = {}) => {
   const loaded = cities.map(c => weather[c.key]).filter(d => d && !d.error);
   if (loaded.length < cities.length) return null;          // see the honesty rule above
   const codes = loaded.map(d => String(d.condition || ""));
@@ -53,11 +70,18 @@ export const readTheDay = (weather, cities) => {
   const coldest = Math.round(Math.min(...temps));
 
   if (wet >= Math.ceil(cities.length / 2)) {
-    return { line: "Wet across most of the country today.", hint: "A good day for the indoor half of a plan.", mood: "wet" };
+    return night
+      ? { line: "Wet across most of the country tonight.", hint: "Tap a city for tomorrow's forecast.", mood: "wet" }
+      : { line: "Wet across most of the country today.", hint: "A good day for the indoor half of a plan.", mood: "wet" };
   }
   if (wet > 0) {
     const wetCity = cities.find(c => /rain|sleet|thunder/.test(String(weather[c.key]?.condition || "")));
-    return { line: `Rain around ${wetCity?.label || "parts of Denmark"} today.`, hint: "Dry elsewhere, so it is worth checking before you commit to a day outside.", mood: "mixed" };
+    return night
+      ? { line: `Rain around ${wetCity?.label || "parts of Denmark"} tonight.`, hint: "Dry elsewhere. Tap a city for tomorrow's forecast.", mood: "mixed" }
+      : { line: `Rain around ${wetCity?.label || "parts of Denmark"} today.`, hint: "Dry elsewhere, so it is worth checking before you commit to a day outside.", mood: "mixed" };
+  }
+  if (night && clear === cities.length) {
+    return { line: "A clear night across the country.", hint: "Away from the town lights, the stars are out.", mood: "clear" };
   }
   if (clear === cities.length && warmest >= 18) {
     return { line: "Clear everywhere, and warm.", hint: "The kind of day the coast and the open-air places are for.", mood: "clear" };
@@ -78,8 +102,12 @@ export const WeatherHeaderStrip = ({ weather, weatherLoading, checkWeather, comp
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // The clock the night colours read, ticking so a page left open at sunset
+  // turns over without a reload.
+  const now = useDenmarkNow();
   const openCityData = WEATHER_CITIES.find(c => c.key === openCity);
-  const day = compact ? null : readTheDay(weather, WEATHER_CITIES);
+  const allDark = WEATHER_CITIES.every(c => isNightThere({ condition: weather[c.key]?.condition || "", lat: c.lat, lon: c.lon, date: now }));
+  const day = compact ? null : readTheDay(weather, WEATHER_CITIES, { night: allDark });
 
   // The compact form lives in a header where there is genuinely no room for
   // anything more, so it stays as pills. Only the Explore band gets the cards.
@@ -92,7 +120,7 @@ export const WeatherHeaderStrip = ({ weather, weatherLoading, checkWeather, comp
             return (
               <button key={c.key} onClick={() => setOpenCity(c.key)}
                 style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 100, padding: "4px 9px", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                <span style={{ fontSize: 11 }}>{d && !d.error ? weatherIcon(d.condition) : "·"}</span>
+                <span style={{ fontSize: 11 }}>{d && !d.error ? weatherIcon(d.condition, isNightThere({ condition: d.condition, lat: c.lat, lon: c.lon, date: now })) : "·"}</span>
                 <span style={{ fontSize: 11, color: C.text, fontWeight: 700 }}>{d && !d.error ? `${Math.round(d.temperature_c)}°` : "--"}</span>
               </button>
             );
@@ -115,7 +143,8 @@ export const WeatherHeaderStrip = ({ weather, weatherLoading, checkWeather, comp
         {WEATHER_CITIES.map(c => {
           const d = weather[c.key];
           const ready = d && !d.error;
-          const sky = skyOf(ready ? d.condition : null);
+          const night = isNightThere({ condition: ready ? d.condition : "", lat: c.lat, lon: c.lon, date: now });
+          const sky = skyFor(ready ? d.condition : null, night);
           const rain = ready && typeof d.forecast?.[0]?.precipitation_mm === "number" ? d.forecast[0].precipitation_mm : null;
           const wind = ready && typeof d.wind_speed_ms === "number" ? Math.round(d.wind_speed_ms) : null;
           return (
@@ -124,7 +153,7 @@ export const WeatherHeaderStrip = ({ weather, weatherLoading, checkWeather, comp
                 background: ready ? `linear-gradient(158deg, ${sky.a} 0%, ${sky.b} 78%)` : C.surface }}>
               <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 6 }}>
                 <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 0.8, textTransform: "uppercase", color: ready ? `${sky.ink}b0` : C.muted }}>{c.label}</span>
-                <span style={{ fontSize: 17, lineHeight: 1 }}>{ready ? weatherIcon(d.condition) : "·"}</span>
+                <span style={{ fontSize: 17, lineHeight: 1 }}>{ready ? weatherIcon(d.condition, night) : "·"}</span>
               </div>
               <div style={{ fontSize: 27, fontWeight: 600, fontFamily: "'Fraunces', serif", color: ready ? sky.ink : C.muted, lineHeight: 1.1, marginTop: 6 }}>
                 {ready ? `${Math.round(d.temperature_c)}°` : "--"}
@@ -141,6 +170,24 @@ export const WeatherHeaderStrip = ({ weather, weatherLoading, checkWeather, comp
       {openCityData && createPortal(<CityPopup city={openCityData} onClose={() => setOpenCity(null)} {...{ weather, weatherLoading, checkWeather }} />, document.body)}
     </div>
   );
+};
+
+// ── THE TIME IN DENMARK ─────────────────────────────────────────────
+// Oliver, 27 Sep 2026: "Put time in Denmark on front page". Denmark's clock,
+// not the reader's, next to "Today in Denmark". Ticks on the minute.
+export const useDenmarkNow = () => {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 30000);
+    return () => clearInterval(id);
+  }, []);
+  return now;
+};
+export const DenmarkClock = ({ style }) => {
+  const now = useDenmarkNow();
+  const time = denmarkClock(now);
+  if (!time) return null;
+  return <span style={style} aria-label={`The time in Denmark is ${time}`}>{time}</span>;
 };
 
 // Portalled to document.body deliberately. This strip renders inside a

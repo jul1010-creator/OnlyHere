@@ -325,3 +325,15 @@ The test guide was sgd0yrp3lzx: a family of 4, kids 6 and 9, 16 Oct 12:00 to 21 
    - The "chat fired on arrival alone" was my own click: picking a day closes the picker, so my "Done" landed on Build my trip.
 
 Tests: 41 new checks. Each was seen failing with its piece taken out (24 mutants), and older checks pinned to changed lines were updated.
+
+## Batch 141: the time in Denmark, and night on the weather cards
+
+You, at 20:18: "Put time in Denmark on front page and the weather need a 'night' demonstration.." The Copenhagen card showed a sun an hour after sunset.
+
+- **The clock.** "Today in Denmark · 20:18" on the front page. It uses Denmark's time zone whatever the reader's clock says, and ticks every 30 seconds (`DenmarkClock` in WeatherHeaderStrip.jsx, `denmarkClock` in the new `utils/denmarkTime.js`).
+- **Night.**
+  - `weatherIcon` now reads MET's `_night` suffix and shows a moon for a clear or fair night. Before, it only read "clearsky" and always drew a sun.
+  - Cloud, rain and fog codes carry no day or night suffix, so each card also works out the sun's height for its own city (`isNightThere`, dark below the almanac's -0.833 degrees). In a check against Copenhagen on 27 Sep, it turns dark at 18:55 to 19:00 and light at 07:00 to 07:15.
+  - After dark the cards switch to night colours: deep blue when clear, darker grey or blue for cloud and rain. The line above them talks about tonight ("A clear night across the country.", "Rain around Aalborg tonight.") instead of "the kind of day the coast is for".
+- Tested in a browser with the clock set to 20:18 and 12:18 and a faked forecast. Screenshots are in the chat.
+- 20 new checks, each seen failing with its piece taken out, including one that reads the clock from a machine set to Sydney.

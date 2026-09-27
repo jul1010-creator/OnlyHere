@@ -326,8 +326,14 @@ export const soonestFirst = (rows, today = new Date()) => {
 export const isCurrentlyLive = (start, end, today = new Date()) => dayWithin(start, end, today);
 
 
-export const weatherIcon = (code) => {
-  if (!code) return "🌤";
+// ── AND A MOON AFTER DARK ───────────────────────────────────────────
+// Oliver, 27 Sep 2026, at 20:18: the Copenhagen card showed a sun. MET's code
+// was "clearsky_night" or "fair_night" and this only ever read the first
+// half. `night` lets a caller that knows the sun is down say so for the codes
+// that carry no suffix. See utils/denmarkTime.js.
+export const weatherIcon = (code, night = false) => {
+  if (!code) return night ? "🌙" : "🌤";
+  if ((night || /_night\b/.test(code)) && (code.includes("clearsky") || code.includes("fair"))) return "🌙";
   if (code.includes("rain") || code.includes("sleet")) return "🌧";
   if (code.includes("snow")) return "❄️";
   if (code.includes("thunder")) return "⛈";
