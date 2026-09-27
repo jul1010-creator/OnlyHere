@@ -79,6 +79,7 @@ import { showsTicketForKind } from "./journeyScope";
 import { stampDay } from "./provenance";
 import { bedStateOf, openNightsLine, needsABed } from "./nightsOpen";
 import { staysIn } from "./stayDoors";
+import { houseDoor } from "./houseTrip";
 import { describeFuel } from "./fuel";
 
 export const COST_KIND = {
@@ -599,11 +600,14 @@ export const costLines = ({
     // and the row would be promising a listing for this area that nobody gets.
     // The door answers with what it may be labelled, and this row's `forWhat`
     // says the area only when the link will show it.
-    const door = stayDoorUrl({ area, slot: "costs-stay" });
-    const href = door?.href || "";
+    // A HOUSE IS NOT A HOTEL SEARCH. A sommerhus trip gets houses near its
+    // base on its dates, and no Booking link. See utils/houseTrip.js.
+    const house = houseDoor(guide, beds.nights.filter(n => needsABed(n, beds)));
+    const door = house ? null : stayDoorUrl({ area, slot: "costs-stay" });
+    const href = house ? house.href : (door?.href || "");
     out.push({
       kind: COST_KIND.STAY,
-      name: "Somewhere to sleep",
+      name: house ? "A holiday house" : "Somewhere to sleep",
       day: 1,
       // Written by nightsOpen, not here. See the block above.
       forWhat: bedLine,

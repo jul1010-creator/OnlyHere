@@ -304,6 +304,11 @@ const shapeForLiveFields = (type, t) => {
       ...bulletsBlock("Things to Know", t.thingsToKnow),
     ] };
   if (type === "food" || type === "foodStreet") return { name: t.name, isFoodStreet: type === "foodStreet", emoji: t.emoji || (type === "foodStreet" ? "🍜" : "🍽"), category: t.category || (type === "foodStreet" ? "Food market" : ""), location: t.location || "", price: t.price || PRICE_UNKNOWN, photo: `/food/${slugify(t.name)}.jpg`, desc: t.vibeLocation, mapHint: t.mapHint || "", color: t.color || "#D9A441", gemlyxFind: t.gemlyxFind || "",
+    // Whether it belongs on the Food page, which is Danish food only. Carried
+    // only when the draft answered it; a food street never needs to. See
+    // utils/danishFood.js.
+    ...(type === "food" && (t.danish === true || t.danish === "true") ? { danish: true } : {}),
+    ...(type === "food" && (t.danish === false || t.danish === "false") ? { danish: false } : {}),
     blogBody: [
       ...bbData([[madeHeading(type), t.howItsMade], ["The Reality Check", t.realityCheck]]),
     ] };

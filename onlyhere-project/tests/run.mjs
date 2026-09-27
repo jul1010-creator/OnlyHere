@@ -284,7 +284,7 @@ writeFileSync(entry, `
   export { measuredLeg, mapsRouteUrl, foundAPlace, looseStop } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { festivalScale } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
   export { needsTier, proposedTier, BACKFILL_SORTS, BACKFILL_SORT_DEFAULT, sortForBackfill, tierSpread, backfillPrompt, readBackfill, missedByPass, proposeTiersWithReason, PASS_FAILED } from ${JSON.stringify(join(root, "src/utils/tierBackfill.js"))};
-  export { HOUSE_WEEK, HOUSE_SIZES, HOUSE_NIGHTS, HOUSE_FIT, HOUSE_SOURCE, HOUSE_CHECKED_AT, HOUSE_SEASON_CHECK, houseFor, houseWeek, housePerHeadNight, houseFit, houseSays, houseSuits, HOUSE_COAST, HOUSE_COAST_THIN, houseCoastWeek, houseCoastSays, houseWhereSays } from ${JSON.stringify(join(root, "src/utils/summerhouse.js"))};
+  export { HOUSE_WEEK, HOUSE_SIZES, HOUSE_NIGHTS, HOUSE_FIT, HOUSE_SOURCE, HOUSE_CHECKED_AT, HOUSE_SEASON_CHECK, houseFor, houseWeek, housePerHeadNight, houseFit, houseSays, houseSuits, HOUSE_COAST, HOUSE_COAST_THIN, houseCoastWeek, houseCoastSays, houseWhereSays, houseSearchUrl } from ${JSON.stringify(join(root, "src/utils/summerhouse.js"))};
   export { STAY_CHOICES, STAY_KEYS, stayChoiceOf, stayIsBooked, stayProblem, staySaid } from ${JSON.stringify(join(root, "src/utils/stayChoice.js"))};
   export { HOSTELS, HOUSE_AREAS, STAY_TOWN_POINTS, STAY_PLACES_CHECKED_AT, HOSTEL_LIST_SOURCE, DORM } from ${JSON.stringify(join(root, "src/data/stayPlaces.js"))};
   export { houseBase, houseBaseBlock, houseNightSays, houseDistanceSays, sellsDorm, dormForKids, hostelOpenOn, dormTowns, hostelTowns, roomsOnlyTowns, hostelChipSays, stayPointFor, dayPoints, hostelsNear, nearestDorm, hostelLine, hostelBlock, HOSTEL_NEAR_KM, HOSTEL_LINES, isFamilyPlace, familyPlacesNear, FAMILY_NEAR_KM, houseAreasFor, houseAreaLine, houseAreaBlock, HOUSE_AREA_PICKS, ONE_BASE_KM } from ${JSON.stringify(join(root, "src/utils/stayAwareness.js"))};
@@ -337,6 +337,7 @@ writeFileSync(entry, `
   export { isOwnSiteFor, urlNames, isKommuneHost, isTownWord, ownershipWords, subjectIsEvent, EVENT_SUBJECT_TYPES, isTourismHost, KOMMUNE_HOSTS } from ${JSON.stringify(join(root, "src/utils/pageScan.js"))};
   export { detectLegMode as detectLegModeX, isFerryText } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { fold as foldName } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
+  export { houseTripOf, houseDoor, sameHouseLine } from ${JSON.stringify(join(root, "src/utils/houseTrip.js"))};
   export { stopKind, namesAPlace, tripScaleLine, tripCharacter, bookingActions, tripDayDate, stopEventWhen } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { stripDashes, stripDashesDeep } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { routeTowns, countStops, orderedStops, shareSummary, shareMessage, shareTitle, metaDescription, hasMeasuredTravel, escapeHtml } from ${JSON.stringify(join(root, "src/utils/share.js"))};
@@ -352,6 +353,7 @@ writeFileSync(entry, `
   export { SWEEP_INTENT, SWEEP_PROMPT } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
   export { SWEEPS, sweepById, selectRows, applyCap, knownPlacesFor, parentheticalHint, deterministicTaxonomy, quoteIsInEntry, entryText, cleanPatch, looksLikePlaceName, dropSelfReferences, applySweepPatch, buildSnapshot, readSnapshot, snapshotFilename, proposeSweep, parseLooseFields, MARKS, weakestMark, openFields, changedOnly, FROM_ENTRY_PROMPT } from ${JSON.stringify(join(root, "src/utils/sweeps.js"))};
   export { readFactCheck, describeFactCheck, relabel, admitsNotFound, rootOf, withRoots, datesIn, datesConfirmedBy, CONTRADICTED, UNVERIFIED, readInventedCheck, researchForCheck, RESEARCH_CHECK_CAP, INVENTED_CHECK_FORMAT, correctionLanded, claimLanded, describeCorrection, correctionBanner, correctionPublisherNote, MAX_LISTED_CLAIMS, hasAnchor } from ${JSON.stringify(join(root, "src/utils/factCheckRead.js"))};
+  export { foodOnNav, FOOD_VERDICTS, foreignCuisineIn, splitOffForeignFood, DANISH_FOOD_FRAMING, DANISH_FOOD_EXTRACT } from ${JSON.stringify(join(root, "src/utils/danishFood.js"))};
   export { shapeForLive, madeHeading, isPublisherNote, PUBLISHER_NOTE, cleanCredit } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
   export { longestEcho, echoWords, isNameEcho, echoInDraft, describeEcho, ECHO_RUN } from ${JSON.stringify(join(root, "src/utils/echoCheck.js"))};
   export { CHOICE_LIMIT, cleanCandidates, sameSubject, sameCandidate, needsChoosing, choicesFor, describeChoosing, applyChoice, choiceNote, subjectCore, listingMatchesSubject, streetListingMatches, describeListingRefusal } from ${JSON.stringify(join(root, "src/utils/placeChoice.js"))};
@@ -8375,9 +8377,9 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     // And then, the same evening: the AREA is the link, to rooms there on
     // those nights, not a button that opens the whole panel.
     ok("and links the area on the night that opens a stay",
-       /\{doors\.door && doors\.list\?\.length > 0 && \([\s\S]{0,1400}?stayHere\.door\.area/.test(src));
-    ok("saying how many nights it is", /\{doors\.door && doors\.list\?\.length > 0 && \([\s\S]{0,160}nightsLabel\(doors\.list, guide\?\._arrivalDate \|\| null\)/.test(src));
-    ok("one room door per stay, built once for the page", /const partnerStays = staysIn\(days, stayNights\)\.map\(/.test(src));
+       /\{!houseStay && doors\.door && doors\.list\?\.length > 0 && \([\s\S]{0,1400}?stayHere\.door\.area/.test(src));
+    ok("saying how many nights it is", /\{!houseStay && doors\.door && doors\.list\?\.length > 0 && \([\s\S]{0,160}nightsLabel\(doors\.list, guide\?\._arrivalDate \|\| null\)/.test(src));
+    ok("one room door per stay, built once for the page", /const partnerStays = \(houseStay \? \[\] : staysIn\(days, stayNights\)\)\.map\(/.test(src));
     // THE STANDING RULE SURVIVES THE CUT, and it is the half that must not
     // break while fixing the other half. Oliver, 7 Aug 2026: "why does the
     // accommodation/booking affiliation keep getting removed". The card and
@@ -8386,7 +8388,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     ok("the card itself is still on every night that needs a bed",
        /\{day\.glance\?\.accommodation && needsABed\(day\.day \|\| dayIdx \+ 1, bedStateOf\(guide\)\) && \(\(\) => \{/.test(src));
     ok("and which night opens a stay is decided once for the page",
-       /const stayDoors = doorsFor\(days, stayNights\);/.test(src));
+       /: doorsFor\(days, stayNights\);/.test(src));
     ok("the second booking site is offered once on the whole guide rather than beside the first every night",
        /compare: i === 0 \? \(tripcomStayUrl\(place\) \|\| ""\) : "",/.test(src));
     // A night with no button has to say why, or the page reads as broken.
@@ -13136,9 +13138,12 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // 2. The tick-box reply is conditional now.
   ok("the absolute never-plan rule is gone", !/THIS RULE IS ABSOLUTE, NO EXCEPTIONS/.test(sysPrompt));
   ok("and so is the 100% of the time wording", !/This is true 100% of the time/.test(sysPrompt));
-  ok("a complete form goes straight to the handoff", /go straight to the ready-to-build handoff/.test(sysPrompt));
-  ok("a question is only for something genuinely missing", /WHAT COMES AFTER THAT LINE DEPENDS ENTIRELY ON WHETHER ANYTHING IS STILL MISSING/.test(sysPrompt));
-  ok("inventing one to fill the slot is forbidden", /do NOT manufacture a question to fill the slot/.test(sysPrompt));
+  // Reversed by Oliver on 27 Sep 2026: "The AI just instantly builds
+  // afterwards.. as if it has no point." The form is answered with one
+  // question about what the boxes could not say, and never with the marker.
+  ok("a complete form is answered with a question", /AFTER THAT LINE, ASK ONE QUESTION, AND NEVER BUILD FROM THE FORM ALONE/.test(sysPrompt));
+  ok("about what the boxes could not say", /Ask ONE question about the thing the boxes could not say/.test(sysPrompt));
+  ok("and never with the marker", /NEVER put the ready marker on a reply to the form/.test(sysPrompt));
   // The Applied line survives: it is what tells someone their ticks landed.
   ok("the Applied line is still required", /"Applied: \.\.\." line/.test(sysPrompt));
   // And the follow-on rule no longer assumes a question was asked.
@@ -34768,7 +34773,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 
   // ── THE BRIEF CAN NOW SAY YES ───────────────────────────────────
   ok("a complete brief latches the button on its own",
-     /if \(brief\.ready\) setEverReadyToBuild\(true\);/.test(appB));
+     /if \(brief\.ready && !answeringForm\) setEverReadyToBuild\(true\);/.test(appB));
   ok("and a surviving marker latches it too",
      /isReadyToBuild\(replyText\)\)\s*\{[\s\S]{0,200}setEverReadyToBuild\(true\);/.test(appB));
   ok("the strip still happens when the brief is short, because that rule was right",
@@ -34780,7 +34785,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   {
     const gate = appB.slice(appB.indexOf("if (aiLoading) return false;"));
     const cut = gate.slice(0, gate.indexOf("})() && ("));
-    ok("the gate was found", cut.length > 50 && cut.length < 1200);
+    ok("the gate was found", cut.length > 50 && cut.length < 1600);
     ok("and it answers from the latch before it looks at any message",
        cut.indexOf("everReadyToBuild") < cut.indexOf("lastAssistantMsg"));
     ok("the latch is a state, not a recomputation",
@@ -47396,7 +47401,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("nor a date regex", !/const dateRe\s*=/.test(code));
     ok("nor a day-count regex", !/dayCountMatch|weekWordMatch|singleWeekMatch|fortnightMatch/.test(code));
     ok("the shared readers are imported instead",
-       /import \{ tripWindow, tripDays, dayCountIn, arrivalDateIn, monthOnlyIn, latestRelativeAnswer, INTAKE_TURN_MARK \} from "\.\/utils\/tripEvents"/.test(appD));
+       /import \{ tripWindow, tripDays, dayCountIn, arrivalDateIn, monthOnlyIn, latestRelativeAnswer, INTAKE_TURN_MARK, isIntakeTurn \} from "\.\/utils\/tripEvents"/.test(appD));
     // tripDays joined the list on 19 Sep, and it is the same rule: the length
     // of a trip is read in one place or it is read four ways. The form's own
     // "Exact trip length" line is a reader too, and it was the fourth.
@@ -48173,7 +48178,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 
   // ── AND THE THREE OLD ROWS ARE GONE FROM THE PAGE ───────────────
   const app = readFileSync(join(root, "src/App.jsx"), "utf8");
-  ok("Food renders the shared FilterBar", /items=\{foodSpots\}[\s\S]{0,400}facets=\{foodFacets\}/.test(app));
+  ok("Food renders the shared FilterBar", /items=\{foodNav\}[\s\S]{0,400}facets=\{foodFacets\}/.test(app));
   ok("the inline three-way predicate is gone", !/foodSpots\.filter\(f => \(foodTab === "All"/.test(app));
   ok("the kind pill row is gone", !/\["All", "Restaurants", "Food Streets"\]\.map/.test(app));
   ok("the price tab row is gone", !/setFoodTab\(t\.id\)/.test(app));
@@ -76374,7 +76379,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     // so itself, and the tail repeated the bed and put "a day" after a full
     // stop.
     ok("and nothing is appended to a sentence that is already complete",
-       /parts\.push\(`Budget: \$\{intakeBudgetText\.trim\(\)\}`\)/.test(app));
+       /parts\.push\(`What their picks cost, Gemlyx's estimate and not a budget they set: \$\{intakeBudgetText\.trim\(\)\}`\)/.test(app));
     ok("the old typed-figure tail is gone", !/has to cover where they sleep as well as everything else/.test(app));
     ok("and nothing else can set it", !/setIntakeBudgetText/.test(app));
   }
@@ -79205,6 +79210,96 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   const block = houseAreaBlock(pts, { base: { ...b, meanKm: 20, family: [] }, season: "high", heads: 6 });
   ok("the day card carries the base's week", /near Blokhus in a house sleeping six was 5,379 kr/.test(block));
   ok("and the others near it carry theirs", /Other checked areas near this trip[^\n]*from [\d,]+ kr the week/.test(block));
+}
+
+// ── A HOUSE TRIP OFFERS A HOUSE, NOT A HOTEL A NIGHT ────────────────
+// Oliver, 27 Sep 2026, of guide bh99oe98lje: "this guide chose a
+// summerhouse, yet filled a bunch of booking.com affiliates in." Nine days
+// from one house on Rømø and seven "Find a room on Booking.com" links.
+{
+  const { houseTripOf, houseDoor, sameHouseLine, houseSearchUrl, costLines, bookingActions, COST_KIND } = M;
+  const night = (day, text, rec = "") => ({ day, stops: [{ name: "Ribe", town: "Ribe" }], glance: { accommodation: text, recommendedStay: rec } });
+  // The guide he sent, in shape: no pick recorded, built before the pick was.
+  const old = { _arrivalDate: "2026-10-08", _travelers: "3 people", _stay: { booked: false, nights: [], name: "" },
+    days: [night(1, "Take a holiday house on Rømø on the Wadden Sea coast near Skærbæk, rented through a holiday-house agency.", "Rømø"),
+           night(2, "After the VikingeCenter, drive back to your sommerhus at Rømø."), night(3, "Drive back to the house."), { day: 4, stops: [] }] };
+  is("a guide with no recorded pick is read from its first night", houseTripOf(old)?.name, "Rømø");
+  const hotel = { ...old, days: [night(1, "Stay at Danhostel Ribe in the old town.", "Danhostel Ribe"), night(2, "Same hostel.")] };
+  is("a hotel guide is not a house", houseTripOf(hotel), null);
+  is("a recorded pick that is not a house is never one, whatever the text", houseTripOf({ ...old, _stay: { kind: "cheapest", nights: [] } }), null);
+  is("and a booked stay is left alone", houseTripOf({ ...old, _stay: { booked: true, nights: [1, 2, 3] } }), null);
+  is("a new guide carries its pick and its base", houseTripOf({ ...hotel, _stay: { kind: "summerhouse", house: "Blokhus", nights: [] } })?.name, "Blokhus");
+  const door = houseDoor(old, [1, 2, 3]);
+  ok("one link, to houses near the base on the trip's dates, for the party",
+     /novasol\.dk\/search\?/.test(door.href) && /placesId=54&/.test(door.href) && /start=08-10-2026/.test(door.href) && /nights=3&/.test(door.href) && /adult=3&/.test(door.href) && /sort=priceasc/.test(door.href));
+  is("labelled for what it opens", door.label, "Houses near Rømø on Novasol");
+  is("an area Novasol has no id for gets its front page, not a guess", houseSearchUrl({ area: "Grønhøj" }), "https://www.novasol.dk/danmark");
+  is("the later nights say it is the same house", sameHouseLine(1), "Same house as night 1, so there is nothing new to book tonight.");
+  const rows = costLines({ guide: old, rowFor: () => null });
+  const stay = rows.find(r => r.kind === COST_KIND.STAY);
+  ok("the costs list offers the house, not Booking", stay && stay.name === "A holiday house" && /novasol\.dk/.test(stay.href) && !stay.partner);
+  const act = bookingActions(old, () => null).find(a => /house|sleep/i.test(a.what));
+  ok("and book-ahead says one booking near the base, not small towns in summer", act?.what === "The holiday house" && /near Rømø/.test(act.why) && !/summer/.test(act.why));
+  const page = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+  ok("the page makes the whole stay one run", /const houseStay = houseDoor\(guide, stayNights\);/.test(page) && /\(houseStay \? \[\] : staysIn\(days, stayNights\)\)/.test(page));
+  ok("and no hotel door is drawn on a house trip", /\{!houseStay && doors\.door && doors\.list\?\.length > 0 && \(/.test(page));
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("new guides record the pick and the base", /kind: intakeStay \|\| "", house: houseBaseForTrip\?\.name \|\| "" \}/.test(app));
+}
+
+// ── THE FORM IS NOT THE LAST WORD ───────────────────────────────────
+// Oliver, 27 Sep 2026: "The AI just instantly builds afterwards.. as if it has
+// no point." And on what to do: ask first, and "in the left corner where the
+// process is, have a 'build from here'".
+{
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("a reply to the form loses its ready marker", /const answeringForm = isIntakeTurn\(msg\);\s*if \(answeringForm && replyText && isReadyToBuild\(replyText\)\) replyText = stripReadyMarker\(replyText\);/.test(app));
+  ok("and does not latch the build card", /if \(brief\.ready && !answeringForm\) setEverReadyToBuild\(true\);/.test(app));
+  ok("the card waits for a reply after the form", /if \(lastUserMsg && isIntakeTurn\(lastUserMsg\.text\)\) return false;/.test(app));
+  ok("and Build from here sits by the progress bar", /briefProgress\(liveIntakeBrief\)\.ready && !aiLoading && !everReadyToBuild && \(\s*<button onClick=\{\(\) => setGuideModal\("preview"\)\}[\s\S]{0,400}Build from here/.test(app));
+  ok("the chat is told to ask one question after the form", /AFTER THAT LINE, ASK ONE QUESTION, AND NEVER BUILD FROM THE FORM ALONE\./.test(app));
+  ok("and that the figure is not a budget they set", /the daily figure in the form is Gemlyx's estimate of what their picks cost, NOT a budget they set/.test(app));
+  ok("the old skip-the-question rule is gone", !/go straight to the ready-to-build handoff in this same reply/.test(app));
+  // Into sits above the rows it can change, and outside the budget switch.
+  const into = app.indexOf(">Into <span"), far = app.indexOf(">How far do you want to go<"), move = app.indexOf(">Getting around <span"), sleep = app.indexOf(">Where you sleep<"), lock = app.indexOf("── EVERYTHING THAT MOVES THE FIGURE, BEHIND ONE SWITCH ──");
+  ok("what they are into comes before how they move and where they sleep", into > 0 && into < far && into < move && into < sleep);
+  ok("and above the budget switch, since it is not a cost", into < lock);
+}
+
+// ── THE FOOD PAGE IS DANISH FOOD ────────────────────────────────────
+// Oliver, 27 Sep 2026: "program it to only find Danish Cousines", "That
+// includes Danish Streetfood", "So this is only about the navigation", and of
+// the food halls: "Street Food Halls should still exist. It's part of Denmark."
+{
+  const { foodOnNav, FOOD_VERDICTS, foreignCuisineIn, splitOffForeignFood, shapeForLive } = M;
+  ok("a pizzeria is off the Food page", !foodOnNav({ name: "SanGiovanni", category: "Trattoria & Pizzeria, family-run since 1988" }));
+  ok("a sushi bar too", !foodOnNav({ name: "Catch me Sushi", category: "Sushi Bar and Cocktail Venue" }));
+  ok("a kro stays", foodOnNav({ name: "Niels Bugges Kro", category: "Fine-dining inn with rooms" }));
+  ok("a food hall stays whatever its stalls sell", foodOnNav({ name: "Reffen Copenhagen", category: "Street food market", isFoodStreet: true })
+     && foodOnNav({ name: "Some New Hall", category: "Burger and taco hall", isFoodStreet: true }));
+  ok("the unclear ones he kept stay", ["Aro", "Café Broløs"].every(n => foodOnNav({ name: n, category: "Restaurant" })));
+  ok("a curly apostrophe is the same name", !foodOnNav({ name: "Chickie's", category: "Comfort food restaurant" }));
+  ok("the draft's own answer wins over everything", foodOnNav({ name: "Tony's", danish: true }) && !foodOnNav({ name: "New Nordic Place", danish: false }));
+  ok("an unjudged row is out only on a foreign cuisine word", !foodOnNav({ name: "Pho House", category: "Vietnamese noodle bar" }) && foodOnNav({ name: "Kiosken", category: "Pølsevogn" }));
+  is("whole words only, so a Danish word is not read as pizza", foreignCuisineIn("Thaibokseren smørrebrød"), "");
+  // 34 published on 27 Sep 2026, six of them food streets that need none.
+  is("every published entry of 27 Sep 2026 that is not a food street has a verdict", Object.keys(FOOD_VERDICTS).length, 28);
+  // The search finds Danish food, and drops the plain foreign ones it brings back.
+  const { kept, dropped } = splitOffForeignFood([
+    { name: "Pizzeria Roma", hook: "wood-fired pizza" },
+    { name: "Aarhus Street Food", hook: "burgers, tacos and smørrebrød under one roof" },
+    { name: "Bager Jensen", hook: "rye bread and wienerbrød since 1920" },
+  ]);
+  ok("a pizzeria candidate is dropped, a food hall and a bakery are kept", dropped.length === 1 && kept.length === 2);
+  // The draft carries its answer through publish.
+  ok("a food draft's danish answer is kept on publish", shapeForLive("food", { name: "X", danish: false }).danish === false && shapeForLive("food", { name: "Y", danish: "true" }).danish === true);
+  ok("and a draft that did not answer carries nothing", !("danish" in shapeForLive("food", { name: "Z" })));
+  const prompts = readFileSync(join(root, "src/utils/studioPrompts.js"), "utf8");
+  ok("the food draft is asked the question", /"danish": "true or false, as a JSON boolean\./.test(prompts));
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the Food page lists Danish food only", /const foodNav = foodSpots\.filter\(foodOnNav\);/.test(app) && /applyFacets\(foodNav, foodFacets, foodFacetState\)/.test(app) && /<FilterBar\s*items=\{foodNav\}/.test(app));
+  ok("the food search is told, and checked", /\+ \(type === "food" \? DANISH_FOOD_FRAMING : ""\)/.test(app) && /const foodCut = type === "food" \? splitOffForeignFood\(candidates\)/.test(app));
+  ok("and says how many it left out", /left out as not Danish food\./.test(app));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

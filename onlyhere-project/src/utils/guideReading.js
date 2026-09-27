@@ -6,6 +6,7 @@ import { entryPrice } from "./entryPrice";
 import { unbackedClaims } from "./entryAudit";
 import { KOMMUNER, K } from "../data/kommuner";
 import { bedStateOf, needsABed } from "./nightsOpen";
+import { houseTripOf } from "./houseTrip";
 // ── READING A GUIDE WHEN YOU HAVE NEVER BEEN TO DENMARK ─────────────
 // Oliver, 7 Aug 2026, asking whether the guide would still be overwhelming to
 // someone who has never been. It would, and not for the reason I had been
@@ -382,7 +383,12 @@ export const bookingActions = (guide, lookupRealPlace) => {
   // See utils/nightsOpen.js.
   const beds = bedStateOf(guide);
   if (beds.nights.some(n => needsABed(n, beds))) {
-    out.push({ what: "Somewhere to sleep", why: "Small Danish towns have very few rooms, and the good ones go first in summer." });
+    // A house trip books one house, and the hotel line under it was about
+    // rooms in small towns, in summer, on an October house trip.
+    const house = houseTripOf(guide);
+    out.push(house
+      ? { what: "The holiday house", why: `One booking for the whole stay${house.name ? `, near ${house.name}` : ""}, through a holiday-house agency.` }
+      : { what: "Somewhere to sleep", why: "Small Danish towns have very few rooms, and the good ones go first in summer." });
   }
 
   // ── AND WHEN THE WATER IS CROSSED MORE THAN ONCE ────────────

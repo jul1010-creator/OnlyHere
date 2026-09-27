@@ -218,3 +218,59 @@ The base is still picked by distance and family places, not price. Price only in
 ### Still open
 
 - Bus and bike reach per coast. The no-car line names the risk but not which coasts are fine.
+
+---
+
+## A house trip offers a house, the form is not the last word, and Into moves up (batch 137)
+
+### Booking.com on a sommerhus guide
+
+> "this guide chose a summerhouse, yet filled a bunch of booking.com affiliates in" (guide bh99oe98lje)
+
+Nine days from one house on Rømø, and seven "Find a room on Booking.com" links, one per night: the page split the stay wherever a day ended in a different town and offered a hotel for each piece.
+
+Now a house trip (`utils/houseTrip.js`):
+- is **one stay** covering every night. Night 1 shows "8 nights, Thu 8 Oct to Fri 16 Oct · Houses near Rømø on Novasol ↗"; later nights say "Same house as night 1".
+- The link is **Novasol's own search** for that coast, on the trip's dates, for the party, cheapest first. The Novasol id for each of the 68 coasts was read in the same session as the prices. It is a plain link, not a partner one.
+- **No hotel links** anywhere: not on the cards, not in the partners panel, not in the costs list, which now says "A holiday house".
+- Book before you go says "The holiday house: one booking for the whole stay, near Rømø, through a holiday-house agency" instead of the hotel line about small towns in summer.
+- New guides record the pick and the base (`_stay.kind`, `_stay.house`). Old guides like bh99oe98lje are read from their first night's text, so that guide is fixed too, once pushed.
+
+### "Why does the AI just assume it wants to be a cheap trip and instantly builds?"
+
+What happened on bh99oe98lje, read from the guide itself: the only message was the form. The panel's picks were a summerhouse and "Cheapest" food, and the form sent the panel's cost estimate as **"Budget: about 120 to 230 kr a day"**. The chat read that as a limit and wrote "your daily figure is tight", then offered to build straight away, because the form fills every slot the brief checks and the prompt said a complete form goes straight to the handoff.
+
+Fixed, with your choice ("1, but, in the left corner where the process is, have a 'build from here'"):
+- The form's line now reads **"What their picks cost, Gemlyx's estimate and not a budget they set: ..."**, and the chat is told never to call it tight or plan cheaper than they chose.
+- **The reply to the form asks one question** about what the boxes can't say (a place they'd be sorry to miss, what a good day looks like), in the named-places shape. The ready marker is stripped from a reply to the form in code, and the "Shall I build your guide?" card waits until they've answered once.
+- **"Build from here"** sits next to the progress bar once the brief has enough, for anyone who doesn't want to talk.
+
+### Into moved up
+
+> "this has to be put up before transport.. because everything that can recommend summerhouse, has to be before the summerhouse field"
+
+"Into" now sits at the top of the panel, above how far, getting around and where you sleep, and above the budget switch, since it isn't a cost.
+
+---
+
+## The Food page is Danish food (batch 138)
+
+> "Nobody comes to Denmark thinking 'I'm in Denmark for 4 days.. imma get myself some Thai Food.' So program it to only find Danish Cousines." / "That includes Danish Streetfood." / "So this is only about the navigation."
+
+And of the food halls: "Street Food Halls should still exist. It's part of Denmark. Like China Town is also a unique part of Britain... It's Danish Tivoli."
+
+**The rule** (`utils/danishFood.js`): the question is whether the PLACE is Danish, not the plate. In order:
+1. the entry's own `danish` field, which every new food draft now answers
+2. a food street or market is always in
+3. the verdict on the 34 entries published on 27 Sep 2026
+4. otherwise, out only if its category or name is another country's cuisine
+
+**The 34 entries:**
+- **Stay (16):** the six food halls and markets (Torvehallerne, Reffen, Aalborg Streetfood, Esbjerg Street Food, Storms Pakhus, Det Fedtede Hjørne), plus Dragsholm Slot, Sømods Bolcher, Aro, Café Broløs, Geranium, Niels Bugges Kro, Surt & Sødt, Smagsloet Vesterbro (flæskesteg sandwiches), Hyttefadet (smørrebrød and herring) and Alma.
+- **Off the Food page (18):** SanGiovanni, Pizza by WH, Tony's, Flammen, Restau74, JOJO, Seoul BBQ, Burger Boom, Chickie's, Restaurant Provence, Grillen Burgerbar, both Hookeds, Rosita bistro, Catch me Sushi, Prinsens pizza & grill, Flamestone Pizzaria and Bones.
+
+Nothing is deleted. The 18 are still published, so the chat, the guide and the preview can still name them, and the guide can still say a kebab shop is a cheap meal.
+
+**Finding new ones:** the Studio's "search the web" for food is told to look only for Danish food (smørrebrød, pølsevogne, flæskestegssandwich, bakeries, røgerier, kroer, Danish and New Nordic, food halls), and what comes back is checked. A plain foreign-cuisine candidate is dropped, and the panel says "N more were left out as not Danish food". Food halls always pass.
+
+**Calls I made you may want to change:** Alma (a supermarket, but Irma's successor) stays. Flammen, Grillen Burgerbar and Bones are Danish chains serving grill, burgers and BBQ, and are off.

@@ -195,6 +195,112 @@ export const HOUSE_COAST = {
   "Dueodde": { high: [56, 4611, 9560], low: [66, 2536, 3551], winter: [29, 1828, 3484] },
   },
 };
+// Novasol's own id for each area, the one its search takes as placesId. Read
+// from its search box's suggestions on 27 Sep 2026, the same session the
+// prices above were read, so the link from a guide opens the same area the
+// price was read in.
+export const HOUSE_COAST_PLACE = {
+  "Kandestederne": 34627,
+  "Tversted": 34604,
+  "Skallerup": 34623,
+  "Lønstrup": 34624,
+  "Nørlev Strand": 34622,
+  "Løkken": 3561,
+  "Blokhus": 3584,
+  "Rødhus": 34621,
+  "Lild Strand": 34616,
+  "Slettestrand": 34614,
+  "Klitmøller": 34606,
+  "Vorupør": 34605,
+  "Agger": 34631,
+  "Ålbæk": 3563,
+  "Lyngså": 34630,
+  "Hals": 3604,
+  "Hou": 34629,
+  "Øster Hurup": 34552,
+  "Læsø": 3589,
+  "Fur": 3610,
+  "Vejlby Klit": 34684,
+  "Thorsminde": 34693,
+  "Vedersø Klit": 34696,
+  "Søndervig": 34699,
+  "Hvide Sande": 3781,
+  "Årgab": 34689,
+  "Bork Havn": 34705,
+  "Nymindegab": 34692,
+  "Henne Strand": 53354,
+  "Vejers Strand": 3760,
+  "Houstrup": 34690,
+  "Blåvand": 3758,
+  "Fanø": 56,
+  "Rømø": 54,
+  "Kegnæs": 34646,
+  "Nordborg": 3618,
+  "Hejlsminde": 34512,
+  "Juelsminde": 3461,
+  "Saksild Strand": 34556,
+  "Samsø": 3444,
+  "Ebeltoft": 3545,
+  "Fjellerup Strand": 34577,
+  "Skødshoved Strand": 34576,
+  "Grenaa Strand": 3542,
+  "Følle Strand": 34566,
+  "Knebel": 3534,
+  "Hasmark Strand": 34715,
+  "Bogense": 3877,
+  "Spodsbjerg": 34530,
+  "Ristinge": 34529,
+  "Bagenkop": 3407,
+  "Ærø": 131001,
+  "Hornbæk": 3729,
+  "Dronningmølle": 3643,
+  "Gilleleje": 3625,
+  "Vejby Strand": 3715,
+  "Tisvildeleje": 3722,
+  "Liseleje": 3665,
+  "Rørvig": 3737,
+  "Sjællands Odde": 3656,
+  "Gudmindrup Lyng": 34674,
+  "Drøsselbjerg": 34664,
+  "Rødvig": 3687,
+  "Ulvshale": 34520,
+  "Marielyst": 34726,
+  "Hummingen": 34710,
+  "Balka": 34542,
+  "Dueodde": 34543,
+};
+
+// ── THE WAY TO BOOK A HOUSE, WHICH IS NOT A HOTEL SEARCH ─────────────
+//
+// Oliver, 27 Sep 2026, of guide bh99oe98lje: "this guide chose a
+// summerhouse, yet filled a bunch of booking.com affiliates in." Seven of them,
+// one per night. A sommerhus is one booking with a holiday-house agency, so the
+// link is Novasol's own search for the area on the trip's dates, cheapest
+// first. It is not a partner link and earns Gemlyx nothing; it is the page a
+// person would have to find anyway. The search format was checked on
+// novasol.dk the same day.
+export const houseSearchUrl = ({ area = "", arrival = null, nights = 7, adults = 2, kids = 0 } = {}) => {
+  const id = HOUSE_COAST_PLACE[String(area || "")];
+  if (!id) return "https://www.novasol.dk/danmark";
+  const two = (n) => String(n).padStart(2, "0");
+  const d = arrival instanceof Date && !Number.isNaN(arrival.getTime()) ? arrival : null;
+  const q = [
+    `adult=${Math.max(1, Math.floor(Number(adults)) || 2)}`,
+    `child=${Math.max(0, Math.floor(Number(kids)) || 0)}`,
+    "pets=0",
+    d ? "range=0" : "",
+    d ? `nights=${Math.max(1, Math.floor(Number(nights)) || 7)}` : "",
+    "accommodationType=novasol_cottages",
+    `placesId=${id}`,
+    `regionName=${encodeURIComponent(area)}`,
+    d ? `start=${two(d.getDate())}-${two(d.getMonth() + 1)}-${d.getFullYear()}` : "",
+    "sort=priceasc",
+    "salesMarket=208",
+    "displayMode=LIST",
+  ].filter(Boolean).join("&");
+  return `https://www.novasol.dk/search?${q}`;
+};
+
 // The date in words, for sentences a traveller reads.
 export const HOUSE_COAST_READ = "27 Sep 2026";
 // Below this many houses the cheapest is one house, not a market.

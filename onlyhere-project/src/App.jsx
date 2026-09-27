@@ -22,7 +22,7 @@ import { splitForCheck, CHECK_SCOPE_BLOCK, admissible, checkModeOf, fieldIn } fr
 // ── THE GUIDE BUILDER READS WHAT THE BRIEF READS ────────────────────
 // It carried its own copies of all three of these, English only, while the
 // brief has read six languages since 22 August. See the swap in generateGuide.
-import { tripWindow, tripDays, dayCountIn, arrivalDateIn, monthOnlyIn, latestRelativeAnswer, INTAKE_TURN_MARK } from "./utils/tripEvents";
+import { tripWindow, tripDays, dayCountIn, arrivalDateIn, monthOnlyIn, latestRelativeAnswer, INTAKE_TURN_MARK, isIntakeTurn } from "./utils/tripEvents";
 import { denmarkFacts } from "./data/denmarkFacts";
 import { orderFor, nextSeed, advancePos, factAt } from "./utils/factRotation";
 import { events, majorEvents, vikingEvents, undatedEvents } from "./data/events";
@@ -97,6 +97,7 @@ import { startLog, endLog, note, decide, recentLogs, summariseLog, formatLog, fo
 import { domainOf, isListingHost, scrapeTier, faqWorthReading, FAQ_RULE, isApiCoveredHost, STALE_BEFORE_YEAR, MAX_FACT_AGE_MONTHS, rankSources, sourceOrderBlock, perishableSentence, EXISTENCE_RULE, PERISHABLE, MAX_TICKET_PAGES, isOwnSiteFor, urlNames, isKommuneHost, menuImagesToRead, MAX_MENU_READS } from "./utils/pageScan";
 import { weatherSourceFor, weatherBadge, normalsNote, dayWeather, FORECAST, NORMALS } from "./utils/weather";
 import { foodSpots } from "./data/food";
+import { foodOnNav, DANISH_FOOD_FRAMING, DANISH_FOOD_EXTRACT, splitOffForeignFood } from "./utils/danishFood";
 import { essentials } from "./data/essentials";
 import { roadTrips, seasonalItineraries } from "./data/roadtrips";
 import { WEATHER_CITIES } from "./data/mapShapes";
@@ -3315,6 +3316,8 @@ function GemlyxApp() {
   // edition has finished" are two different reasons a list came back shorter,
   // and one number covering both would tell him neither.
   const [discoverCovered, setDiscoverCovered] = useState(0);
+  // How many a food search dropped as another country's cuisine. See utils/danishFood.js.
+  const [discoverForeign, setDiscoverForeign] = useState(0);
   // And a third reason, from 16 Aug: the run answered a different region than
   // the one it was aimed at. A sentence rather than a count, because the
   // interesting part is WHERE it went instead. See describeOffTarget.
@@ -10913,7 +10916,7 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
     if (discoverLoading) return;
     const type = typeOverride || studioType;
     setDiscoverForType(type);
-    setDiscoverLoading(true); setDiscoverError(null); setDiscoverResults(null); setDiscoverPicked([]); setDiscoverDropped(0); setDiscoverCovered(0); setDiscoverOffTarget(""); setDiscoverOffMonth(""); setDiscoverOffStreet("");
+    setDiscoverLoading(true); setDiscoverError(null); setDiscoverResults(null); setDiscoverPicked([]); setDiscoverDropped(0); setDiscoverCovered(0); setDiscoverForeign(0); setDiscoverOffTarget(""); setDiscoverOffMonth(""); setDiscoverOffStreet("");
     try {
       const existing = (discoverSourceArrays()[type] || []).map(i => i.name).filter(Boolean);
       const typeLabel = DISCOVER_TYPE_LABEL[type] || "places in Denmark";
@@ -10947,6 +10950,8 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
       // own, either way, so a search and a page cannot disagree.
       const onIt = type === "shop" ? inShopPlace : onThisStreet;
       const discoverAim = framingForTarget(discoverTarget, manageItems || [], { typeLabel, town: discoverTown })
+        // Food is Danish food. See utils/danishFood.js.
+        + (type === "food" ? DANISH_FOOD_FRAMING : "")
         // The month, appended rather than replacing: where and when are separate
         // questions and a brief can carry both.
         + framingForMonth(discoverMonth, new Date())
@@ -11045,6 +11050,7 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
       if (!allText.trim()) throw new Error("Tavily returned nothing usable for these queries");
 
       const existingList = existing.length ? existing.join("; ") : "(nothing yet)";
+      const foodOnly = type === "food" ? DANISH_FOOD_EXTRACT : "";
       const synthResult = await withRetry(
         () => askOpenAI(
           `From the raw search results below, extract real, SPECIFICALLY NAMED ${typeLabel} — real candidates worth someone researching and writing a full guide entry about next. Only include something if it is named in the search results below — never invent a plausible-sounding name. Skip anything vague or generic (a category, not a specific named place).
@@ -11059,7 +11065,7 @@ For each one also give WHEN it runs, in its own words from the search results: a
 
 For each one also give its STREET ADDRESS exactly as the search results print it, and an empty string when they do not print one. Never work an address out from the name of the place or from a phrase like "in the heart of the old town": this field is read by code to decide whether a venue stands on a particular street, and a worked-out address puts a real bar on the wrong street.
 
-Respond with ONLY a JSON array: [{"name": "...", "region": "...", "when": "...", "street": "...", "hook": "..."}]
+Respond with ONLY a JSON array: [{"name": "...", "region": "...", "when": "...", "street": "...", "hook": "..."}]${foodOnly}
 
 TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 16000)}`,
           2200
@@ -11083,7 +11089,13 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
       // where it used to live in utils/helpers.js. This one also HANDS BACK what
       // it dropped, because the line below already promises a list is never
       // silently shorter and that promise only covered the finished editions.
+      // ── AND FOOD IS DANISH FOOD, CHECKED AS WELL AS ASKED ──────
+      // A name or hook that is plainly another country's cuisine is dropped,
+      // counted and said under the list so it never shrinks silently. A food hall stays whatever its stalls sell.
+      const foodCut = type === "food" ? splitOffForeignFood(candidates) : { kept: candidates, dropped: [] };
+      candidates = foodCut.kept;
       const { kept: fresh, dropped: covered } = splitAlreadyCovered(candidates, existing);
+      setDiscoverForeign(foodCut.dropped.length);
       const { kept: dated, dropped } = splitFinishedCandidates(fresh, new Date());
       // ── AND THE THIRD FILTER, FOR THE SAME REASON AS THE FIRST TWO ──
       // Oliver, 16 Aug: "it told me that more content was needed for south
@@ -18758,7 +18770,7 @@ If the conversation only covers a single day or a few stops with no explicit day
         if (claims.length) planProblems = [...planProblems, guideClaimNote(claims)];
       }
 
-      setGuideModal({ _gid: gid, _fx: fxLine, _constraints: guideConstraints, _mode: travelMode, _onlyWalking: onlyWalking, _lightMode: mode === "plain", _travelers: travellersSaid || String(partyKnown?.value || ""), _party: partyKnown && (partyKnown.adults != null || partyKnown.kids != null || partyKnown.total != null) ? { adults: partyKnown.adults ?? null, kids: partyKnown.kids ?? null, total: partyKnown.total ?? null, hasKids: !!partyKnown.hasKids } : null, _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: dayKey(arrivalDate), _arrivalPoint: arrivalPoint(saidByTravellerForGuide, { townPoint: townPointFor }), _geo: freshGeo, _weatherFetchedAt: new Date().toISOString(), _exactDurations: exactFound, _noRouteFound: routeFailed, _testProfile: testProfile, _testPlan: testProfile ? plannerSkeleton : null, _planProblems: planProblems.length ? planProblems : null, _stay: { booked: stayKnown.stay?.value === "booked" || !!bookedName, nights: bookedNights, name: bookedName || "" }, _food: intakeFood || "", /* ── AND WHICH WAY THEY EAT, CARRIED OVER ──
+      setGuideModal({ _gid: gid, _fx: fxLine, _constraints: guideConstraints, _mode: travelMode, _onlyWalking: onlyWalking, _lightMode: mode === "plain", _travelers: travellersSaid || String(partyKnown?.value || ""), _party: partyKnown && (partyKnown.adults != null || partyKnown.kids != null || partyKnown.total != null) ? { adults: partyKnown.adults ?? null, kids: partyKnown.kids ?? null, total: partyKnown.total ?? null, hasKids: !!partyKnown.hasKids } : null, _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: dayKey(arrivalDate), _arrivalPoint: arrivalPoint(saidByTravellerForGuide, { townPoint: townPointFor }), _geo: freshGeo, _weatherFetchedAt: new Date().toISOString(), _exactDurations: exactFound, _noRouteFound: routeFailed, _testProfile: testProfile, _testPlan: testProfile ? plannerSkeleton : null, _planProblems: planProblems.length ? planProblems : null, _stay: { booked: stayKnown.stay?.value === "booked" || !!bookedName, nights: bookedNights, name: bookedName || "", /* The pick and the base, so the page offers one house and not a hotel a night. See utils/houseTrip.js. */ kind: intakeStay || "", house: houseBaseForTrip?.name || "" }, _food: intakeFood || "", /* ── AND WHICH WAY THEY EAT, CARRIED OVER ──
       Found by a review pass, 26 Sep 2026. The guide's cost block has three food
       tiers and opened on the default one whatever the traveller ticked on the
       panel, so somebody who picked Flexible saw their week priced at Cheap until
@@ -21659,7 +21671,7 @@ Transport matters: if the person hasn't said how they're getting around, ask whi
 ASK BEFORE YOU PLAN, ONLY WHEN THEY HAVE ASKED FOR ONE. This applies specifically when someone asks for a plan, route, or itinerary, not to casual questions about Denmark ("what's Copenhagen like", "is X worth visiting", "what's the food scene like"). Casual questions get a real, substantive answer immediately. Never redirect a simple question into an intake questionnaire. Only when they are asking you to build a route or plan, and you don't yet know their STARTING POINT, budget, how much time they have, and roughly what they enjoy, ask ONE short, warm question that covers those things together. For example: "Happy to help! Where are you starting from, flying into Copenhagen/Kastrup, Billund, or somewhere else? Roughly how many days do you have, what's your budget looking like, and what do you enjoy most: real hidden gems, the well-known popular spots, or a mix?" A bare request like "I wanna go to Denmark, plan me something" gives you ZERO of those things. This is exactly the case that must trigger the question, not skip straight to a plan; don't treat "plan me something" as license to just start somewhere (Copenhagen by default is not a substitute for knowing what they want). STARTING POINT SPECIFICALLY IS NON-NEGOTIABLE: never build a real day-by-day plan without knowing where the trip begins. A guess here breaks the whole route, not just one detail. Keep it to one message, not a wall of separate questions, and don't re-ask anything they've already told you. ONCE YOU KNOW ENOUGH TO BUILD, BUILD. Do not ask one last confirming question first, and in particular never ask how detailed or how simple they want it. The interface puts that choice on its own screen right after they tap the button, and that screen is the only place the answer is ever read, so asking here buys a whole extra round trip and changes nothing about the guide that gets built.
 NEVER SEND A "WORKING ON IT" STALLING REPLY: THIS IS ABSOLUTE. You cannot do background work after sending a message. There is no "one moment, let me dive in" that leads anywhere; once your reply is sent, nothing further happens until the traveler does something next. So every single reply must be complete and immediately actionable on its own: either (1) the one clarifying question above, or (2) the FULL actual plan itself, written out completely, right now, in this message. Never write something like "Let me put together a detailed itinerary for you, one moment!" or "I'll get started on that now". That promises work that will never happen and leaves the person stuck looking at a dead end. If you have enough information to build, build the real thing immediately in this same reply. Don't announce it, don't preview it, just do it.
 IF SOMEONE NAMES A SPECIFIC PLACE, IT MUST BE IN THE PLAN: if the traveler explicitly says they want to visit somewhere specific (e.g. "I really want to see King's Garden"), that place is not optional. Work it into the itinerary for real, don't quietly drop it in favor of your own picks.
-IF A MESSAGE LOOKS LIKE STRUCTURED PREFERENCES (arrival/departure timestamps, starting point, budget, interests, travel style, preference, transport listed together, not written as a natural sentence). This came from someone ticking boxes on the intake form, not typing. NEVER ANSWER IT WITH A DAY-BY-DAY BREAKDOWN, because that belongs to the guide and not to this chat. Open with a short, warm "Applied: ..." line naturally restating what they picked (not robotic form-confirmation). NAME EVERY CHOICE THEY MADE, AND HOW FAR THEY WANT TO GO IS ONE OF THEM. Measured on two live runs: somebody ticked "Explore Denmark", it reached this brief, the route later obeyed it, and the Applied line listed the start, the car, the pace, the interests, the sleeping and the eating and never once said the traveller had chosen to roam. A pick that is silently obeyed is a pick they cannot tell you heard, and the one they are least sure about is the one they most want read back. So the line covers all of them: where they start, HOW FAR THEY WANT TO GO, how they are getting around, where they sleep, what they eat, free-entry-only if they asked for it, the pace and what they are into. And say what a choice MEANS rather than repeating its label: "happy to move around, so I am treating the whole country as fair game" is the pick read back, "Explore Denmark" is the form read aloud. WHAT COMES AFTER THAT LINE DEPENDS ENTIRELY ON WHETHER ANYTHING IS STILL MISSING. If a detail is missing or ambiguous AND knowing it would change the plan, ask ONE specific question about that detail and stop there. If nothing is missing, do NOT manufacture a question to fill the slot: go straight to the ready-to-build handoff in this same reply. Somebody who filled in every box has already told you what they want, and asking anyway is the single fastest way to make a planner feel like a form. The rule here used to force a question 100% of the time no matter how complete the boxes were, which meant the traveler who did the most work to be clear got the most friction, and that is backwards. A missing field is not the same as an ambiguous one: leaving budget blank is a real answer (no strong constraint), and "Starting point: not specified" is covered by the Copenhagen Airport default below, so neither of those on its own is a reason to ask anything. BE CURIOUS, NOT A FORM: never default to a stock closer like "Anything else you want me to know, or should I just plan you something?" repeated the same way every time. That's exactly the robotic pattern to avoid. Instead, engage with what's interesting or still unclear about THIS specific trip: ask about something relevant that hasn't been covered yet, or that would meaningfully shape the plan if you knew it, phrased differently each time, the way a real person curious about someone's trip would ask. Only fall back to a plain "want me to just plan it?" offer if you have nothing specific left worth asking. PROBE INFORMATION THAT MATTERS, DON'T JUST ACKNOWLEDGE IT: if something the traveler mentions could reshape the plan (a friend joining a few days late, kids in the group, a mobility limitation, a special occasion) and your reply doesn't yet reflect a real decision about how that changes things, ask ONE focused follow-up about its actual implication (e.g. "Want the itinerary split for those first two days before your friend arrives, or keep it light until everyone's together?") rather than just noting it and moving on as if it doesn't affect anything. Cap this at one extra round beyond the initial question, though. Don't turn this into an endless interview; if the traveler's follow-up reply doesn't add another must-ask detail, that's your signal everything's covered and you can offer to build. A QUESTION MAY CARRY A RECOMMENDATION, AND WHEN THEY SOUND UNSURE IT HAS TO. A menu of abstract categories ("history, nature, something low-key, or a mix?") hands the work back to the person who came here to have it done: those are labels rather than options, and somebody who does not already know what they want cannot answer them. Whenever you are about to offer categories, offer NAMED PLACES instead, two or three at most, each with the one line that says why it fits what they have already told you, and then ask which of those sounds more like them. "Ribe for the oldest town in the country, or Skagen where the two seas meet and the kids can stand in both at once. Which of those sounds more like your week?" is a question and a recommendation at once, and that is the shape to aim for. AND WHEN SOMEBODY IS PLAINLY UNSURE, DECIDE FOR THEM. "I don't know", "you pick", "whatever you think", "what would you do", "we're open to anything", or an answer with no shape to it, are all the same request: stop asking and recommend. Name the thing, say in one line why it suits them, and move the plan on from there. A local friend does not answer "I'm not sure" with another question. This is not a licence to interview. It REPLACES a question rather than adding one, and the cap above still holds. TRIP LENGTH is always exact. "Exact trip length" is computed directly from real arrival and departure timestamps, so never treat it as vague and never ask for a day count separately; just use the precise figure you're given. STARTING POINT: if a real one was given, use it. If the message says "Starting point: not specified, assume Copenhagen Airport", build the plan starting from Copenhagen Airport (Kastrup). Do NOT ask the traveler where they're starting from in this case, since leaving it blank was itself a deliberate choice covered by that default; this default only applies to the structured tick-box flow, not to a freeform typed message with zero starting-point info (that case still needs a real question). WHENEVER THE STARTING POINT IS COPENHAGEN AIRPORT (whether given explicitly or assumed by default), always weave in one practical, positively-framed transport tip early in the plan, for example suggesting a Copenhagen Card for easy unlimited transport plus free museum entry, or mentioning buying a ticket via the DOT/DSB app before boarding. Never a scary "you'll get fined" warning; frame it as a helpful insider tip, not a threat.
+IF A MESSAGE LOOKS LIKE STRUCTURED PREFERENCES (arrival/departure timestamps, starting point, budget, interests, travel style, preference, transport listed together, not written as a natural sentence). This came from someone ticking boxes on the intake form, not typing. NEVER ANSWER IT WITH A DAY-BY-DAY BREAKDOWN, because that belongs to the guide and not to this chat. Open with a short, warm "Applied: ..." line naturally restating what they picked (not robotic form-confirmation). NAME EVERY CHOICE THEY MADE, AND HOW FAR THEY WANT TO GO IS ONE OF THEM. Measured on two live runs: somebody ticked "Explore Denmark", it reached this brief, the route later obeyed it, and the Applied line listed the start, the car, the pace, the interests, the sleeping and the eating and never once said the traveller had chosen to roam. A pick that is silently obeyed is a pick they cannot tell you heard, and the one they are least sure about is the one they most want read back. So the line covers all of them: where they start, HOW FAR THEY WANT TO GO, how they are getting around, where they sleep, what they eat, free-entry-only if they asked for it, the pace and what they are into. And say what a choice MEANS rather than repeating its label: "happy to move around, so I am treating the whole country as fair game" is the pick read back, "Explore Denmark" is the form read aloud. AFTER THAT LINE, ASK ONE QUESTION, AND NEVER BUILD FROM THE FORM ALONE. The boxes say the shape of the trip and cannot say what they came for: which place they would be sorry to miss, what a good day looks like to them, whether the pace is for the kids or for the adults, what they have seen before. Ask ONE question about the thing the boxes could not say and that would change this plan most, in the recommend-while-asking shape below (two or three named places, one line each on why they fit, then ask which sounds more like them). Keep the whole reply short: the Applied line, at most one sentence of what the trip is shaping up to be, and the question. No money talk beyond what they picked: the daily figure in the form is Gemlyx's estimate of what their picks cost, NOT a budget they set, so never call it tight, never tell them to save, and never plan them cheaper than they chose. And NEVER put the ready marker on a reply to the form: the app removes it and the traveller builds when they choose. A missing field is not the same as an ambiguous one: leaving budget blank is a real answer (no strong constraint), and "Starting point: not specified" is covered by the Copenhagen Airport default below, so neither of those on its own is a reason to ask anything. BE CURIOUS, NOT A FORM: never default to a stock closer like "Anything else you want me to know, or should I just plan you something?" repeated the same way every time. That's exactly the robotic pattern to avoid. Instead, engage with what's interesting or still unclear about THIS specific trip: ask about something relevant that hasn't been covered yet, or that would meaningfully shape the plan if you knew it, phrased differently each time, the way a real person curious about someone's trip would ask. Only fall back to a plain "want me to just plan it?" offer if you have nothing specific left worth asking. PROBE INFORMATION THAT MATTERS, DON'T JUST ACKNOWLEDGE IT: if something the traveler mentions could reshape the plan (a friend joining a few days late, kids in the group, a mobility limitation, a special occasion) and your reply doesn't yet reflect a real decision about how that changes things, ask ONE focused follow-up about its actual implication (e.g. "Want the itinerary split for those first two days before your friend arrives, or keep it light until everyone's together?") rather than just noting it and moving on as if it doesn't affect anything. Cap this at one extra round beyond the initial question, though. Don't turn this into an endless interview; if the traveler's follow-up reply doesn't add another must-ask detail, that's your signal everything's covered and you can offer to build. A QUESTION MAY CARRY A RECOMMENDATION, AND WHEN THEY SOUND UNSURE IT HAS TO. A menu of abstract categories ("history, nature, something low-key, or a mix?") hands the work back to the person who came here to have it done: those are labels rather than options, and somebody who does not already know what they want cannot answer them. Whenever you are about to offer categories, offer NAMED PLACES instead, two or three at most, each with the one line that says why it fits what they have already told you, and then ask which of those sounds more like them. "Ribe for the oldest town in the country, or Skagen where the two seas meet and the kids can stand in both at once. Which of those sounds more like your week?" is a question and a recommendation at once, and that is the shape to aim for. AND WHEN SOMEBODY IS PLAINLY UNSURE, DECIDE FOR THEM. "I don't know", "you pick", "whatever you think", "what would you do", "we're open to anything", or an answer with no shape to it, are all the same request: stop asking and recommend. Name the thing, say in one line why it suits them, and move the plan on from there. A local friend does not answer "I'm not sure" with another question. This is not a licence to interview. It REPLACES a question rather than adding one, and the cap above still holds. TRIP LENGTH is always exact. "Exact trip length" is computed directly from real arrival and departure timestamps, so never treat it as vague and never ask for a day count separately; just use the precise figure you're given. STARTING POINT: if a real one was given, use it. If the message says "Starting point: not specified, assume Copenhagen Airport", build the plan starting from Copenhagen Airport (Kastrup). Do NOT ask the traveler where they're starting from in this case, since leaving it blank was itself a deliberate choice covered by that default; this default only applies to the structured tick-box flow, not to a freeform typed message with zero starting-point info (that case still needs a real question). WHENEVER THE STARTING POINT IS COPENHAGEN AIRPORT (whether given explicitly or assumed by default), always weave in one practical, positively-framed transport tip early in the plan, for example suggesting a Copenhagen Card for easy unlimited transport plus free museum entry, or mentioning buying a ticket via the DOT/DSB app before boarding. Never a scary "you'll get fined" warning; frame it as a helpful insider tip, not a threat.
 
 TRAVEL STYLE AND PREFERENCE ARE TWO SEPARATE AXES, DON'T CONFLATE THEM. "Travel style" (Bucket-list classics / Relaxed / Wander yourself) is purely about PACING: how tightly scheduled the days are: bucket-list classics means a full, efficiently-packed day-by-day schedule hitting the major sights; relaxed means fewer things per day with real breathing room; wander yourself means a loose, open-ended town-to-town structure with minimal fixed planning. "Preference" (Mostly hidden gems / A mix of both / Mostly popular attractions) is purely about WHAT KIND OF PLACES get chosen, independent of pacing. Someone can absolutely want a tightly-scheduled bucket-list trip that's built almost entirely from hidden gems, or a loose wander-yourself trip through famous spots; don't assume one implies the other. If either is ticked, don't ask about it again, just apply it directly. If either is missing, fold asking for it into the combined question.
 
@@ -22193,8 +22205,19 @@ ${languageBlock()}`;
       // when, party, interests, transport and stay are all on the table, and
       // that is the same bar the veto uses. If the bar is met, the traveller
       // gets the button whether or not the token survived the translation.
-      if (brief.ready) setEverReadyToBuild(true);
-      if (replyText && !brief.ready && isReadyToBuild(replyText)) {
+      // ── NEVER FROM THE FORM ALONE ──────────────────────────────
+      // Oliver, 27 Sep 2026: "The AI just instantly builds afterwards.. as if
+      // it has no point." The form fills every slot the brief checks, so the
+      // reply to it was always ready, and the chat never asked anything. Now
+      // the reply to the form asks, and the offer waits for the traveller to
+      // answer once. "Build from here" beside the progress bar is the way
+      // straight through for anybody who does not want to talk.
+      const answeringForm = isIntakeTurn(msg);
+      if (answeringForm && replyText && isReadyToBuild(replyText)) replyText = stripReadyMarker(replyText);
+      if (brief.ready && !answeringForm) setEverReadyToBuild(true);
+      if (answeringForm) {
+        // Nothing further: no latch, and no blocked note, since nothing was claimed.
+      } else if (replyText && !brief.ready && isReadyToBuild(replyText)) {
         console.warn("Gemlyx chat: ready marker withheld, brief incomplete.", { missing: brief.missing });
         replyText = stripReadyMarker(replyText);
         // ── AND THEN SAY SO ─────────────────────────────────────
@@ -22622,7 +22645,12 @@ ${languageBlock()}`;
   // decision that lives in this file can only be tested by a regex over its
   // own source. The three old pieces of state keep their names and values, so
   // everything else that reads foodTab, foodKind or foodCity is untouched.
-  const foodFacets = buildFoodFacets(foodSpots);
+  // ── ONLY DANISH FOOD ON THE FOOD PAGE ──────────────────────────
+  // Oliver, 27 Sep 2026: "program it to only find Danish Cousines", "So this
+  // is only about the navigation." The page lists foodNav; every other reader
+  // of foodSpots is untouched. See utils/danishFood.js.
+  const foodNav = foodSpots.filter(foodOnNav);
+  const foodFacets = buildFoodFacets(foodNav);
   const foodFacetState = {
     ...(foodKind !== "All" ? { kind: foodKind } : {}),
     ...(foodCity !== "All" ? { city: foodCity } : {}),
@@ -22635,7 +22663,7 @@ ${languageBlock()}`;
     setFoodStyleSel(next.style || null);
     setFoodTab(next.price || "All");
   };
-  const filteredFood = applyFacets(foodSpots, foodFacets, foodFacetState)
+  const filteredFood = applyFacets(foodNav, foodFacets, foodFacetState)
     .sort(foodSort === "price" ? (a, b) => byFoodPrice(a, b) || byName(a, b) : byName);
 
   const aiHelperBlock = () => (
@@ -23193,6 +23221,19 @@ ${languageBlock()}`;
                       }} />
                     </div>
                     <span>{progressLine(briefProgress(liveIntakeBrief))}</span>
+                    {/* ── BUILD FROM HERE ─────────────────────────────
+                        Oliver, 27 Sep 2026, choosing that the chat asks first
+                        after the form: "in the left corner where the process
+                        is, have a 'build from here'". The way straight through,
+                        once the brief has enough, for anybody who does not want
+                        to answer. Not while the question card is up, so the
+                        two never offer the same thing twice. */}
+                    {briefProgress(liveIntakeBrief).ready && !aiLoading && !everReadyToBuild && (
+                      <button onClick={() => setGuideModal("preview")}
+                        style={{ background: "none", border: "none", padding: 0, marginLeft: 4, color: C.gold, fontWeight: 700, fontSize: 11, cursor: "pointer", fontFamily: "'Inter', sans-serif", textDecoration: "underline", textUnderlineOffset: 3 }}>
+                        Build from here
+                      </button>
+                    )}
                   </div>
                 )}
 
@@ -23263,6 +23304,10 @@ ${languageBlock()}`;
                   if (everReadyToBuild) return true;
                   const lastAssistantMsg = [...aiMessages].reverse().find(m => m.role === "assistant");
                   if (!lastAssistantMsg) return false;
+                  // Not on the reply to the form, even one that reads like a
+                  // plan: the traveller answers once first. See answeringForm.
+                  const lastUserMsg = [...aiMessages].reverse().find(m => m.role === "user");
+                  if (lastUserMsg && isIntakeTurn(lastUserMsg.text)) return false;
                   return isReadyToBuild(lastAssistantMsg.text) || isFullPlanText(lastAssistantMsg.text);
                 })() && (
                   <>
@@ -25757,6 +25802,11 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                             {discoverOffStreet && (
                               <div style={{ fontSize: 10.5, color: "#FFB347", marginBottom: (discoverCovered || discoverDropped) ? 5 : 10, lineHeight: 1.5 }}>
                                 {discoverOffStreet}
+                              </div>
+                            )}
+                            {discoverForeign > 0 && (
+                              <div style={{ fontSize: 10.5, color: C.muted, marginBottom: 5, lineHeight: 1.5 }}>
+                                {discoverForeign} more {discoverForeign === 1 ? "was" : "were"} left out as not Danish food.
                               </div>
                             )}
                             {discoverCovered > 0 && (
@@ -29184,7 +29234,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   below. Declared once each in foodFacets now, and rendered by
                   the component Events and Attractions already use. */}
               <FilterBar
-                items={foodSpots}
+                items={foodNav}
                 shown={filteredFood.length}
                 noun="places"
                 facets={foodFacets}
@@ -30397,6 +30447,35 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   </button>
 
                   {intakeMoreOpen && (<div style={{ paddingTop: 14 }}>
+                {/* ── WHAT THEY ARE INTO, FIRST ──────────────────
+                    Oliver, 27 Sep 2026: "this has to be put up before
+                    transport.. because evertyhing that can recommend
+                    summerhouse, has to be before the summerhouse field". The
+                    Nature tick decides the sommerhus mark (see houseSuits in
+                    utils/summerhouse.js), so it sits above every row down to
+                    where they sleep, and above the budget switch, because
+                    what they are into is not a cost and was never locked. */}
+                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Into <span style={{ textTransform: "none", fontWeight: 400, color: C.muted }}>(pick as many as apply)</span></div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+                  {/* ── FOUR, AND SHOPPING IS NOT ONE OF THEM ──────────
+                      Oliver, 22 Sep 2026: "I think you should delete
+                      shopping.. people can add it into their trip from 'cheap
+                      gems' if they want."
+
+                      A tick here is a promise that the trip will be built
+                      around it, and this one could not keep it: there is no
+                      shopping theme for a row to carry, so ticking it filled
+                      the brief with a word that steered nothing. Cheap gems is
+                      a national page of real shops with a checked price on
+                      each, which is the answer the tick was standing in front
+                      of. Typed in a sentence it still reads as an interest,
+                      because a person who writes it has said something; this
+                      is only the button that offered it. */}
+                  {["History", "Nature", "Food", "Nightlife"].map(i => (
+                    <Pill key={i} label={i} active={intakeInterest.includes(i)} onClick={() => setIntakeInterest(intakeInterest.includes(i) ? intakeInterest.filter(x => x !== i) : [...intakeInterest, i])} />
+                  ))}
+                </div>
+
                 {/* ── EVERYTHING THAT MOVES THE FIGURE, BEHIND ONE SWITCH ──
                     Oliver, 25 Sep 2026: "Make a 'darkening' of everything that
                     can change the budget. So you have to click on the screen
@@ -30651,26 +30730,6 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   </div>
                 )}
 
-                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Into <span style={{ textTransform: "none", fontWeight: 400, color: C.muted }}>(pick as many as apply)</span></div>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
-                  {/* ── FOUR, AND SHOPPING IS NOT ONE OF THEM ──────────
-                      Oliver, 22 Sep 2026: "I think you should delete
-                      shopping.. people can add it into their trip from 'cheap
-                      gems' if they want."
-
-                      A tick here is a promise that the trip will be built
-                      around it, and this one could not keep it: there is no
-                      shopping theme for a row to carry, so ticking it filled
-                      the brief with a word that steered nothing. Cheap gems is
-                      a national page of real shops with a checked price on
-                      each, which is the answer the tick was standing in front
-                      of. Typed in a sentence it still reads as an interest,
-                      because a person who writes it has said something; this
-                      is only the button that offered it. */}
-                  {["History", "Nature", "Food", "Nightlife"].map(i => (
-                    <Pill key={i} label={i} active={intakeInterest.includes(i)} onClick={() => setIntakeInterest(intakeInterest.includes(i) ? intakeInterest.filter(x => x !== i) : [...intakeInterest, i])} />
-                  ))}
-                </div>
 
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Travel style</div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
@@ -30771,7 +30830,13 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       // says what it covers, who it is for and that Gemlyx
                       // worked it out. Appending the old tail to it repeated
                       // the bed and repeated "a day" after a full stop.
-                      if (intakeBudgetText.trim()) parts.push(`Budget: ${intakeBudgetText.trim()}`);
+                      // ── AN ESTIMATE, NOT A BUDGET ────────────────
+                      // Oliver, 27 Sep 2026: "why does the AI just assume it
+                      // wants to be a cheap trip". Labelled "Budget:", the
+                      // panel's estimate of what their picks cost read as a
+                      // limit they set, and the chat told a family their
+                      // "daily figure is tight". It is what their picks cost.
+                      if (intakeBudgetText.trim()) parts.push(`What their picks cost, Gemlyx's estimate and not a budget they set: ${intakeBudgetText.trim()}`);
                       if (intakeInterest.length) parts.push(`Interests: ${intakeInterest.join(", ")}`);
                       if (intakeGemPref) parts.push(`Travel style: ${intakeGemPref}`);
                       // The shape of the trip, in the traveller's own choice rather

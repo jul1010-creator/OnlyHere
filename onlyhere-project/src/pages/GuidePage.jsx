@@ -61,6 +61,7 @@ import { aiDisclosureFor } from "../utils/aiDisclosure";
 import { stopKind, tripScaleLine, tripCharacter, bookingActions, tripDayDate, stopEventWhen, clampNote } from "../utils/guideReading";
 import { bedStateOf, needsABed } from "../utils/nightsOpen";
 import { doorsFor, doorOn, sameBaseLine, staysIn, nightsLabel } from "../utils/stayDoors";
+import { houseDoor, sameHouseLine } from "../utils/houseTrip";
 import { journeyUrl, journeyLabel } from "../utils/rejseplanen";
 import { moreOnLine } from "../utils/communityEvents";
 import { accessOf, accessNote } from "../utils/eventAccess";
@@ -869,14 +870,23 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
   const stayNights = days
     .map((d, i) => Number(d?.day || i + 1))
     .filter(n => needsABed(n, bedStateOf(guide)));
-  const stayDoors = doorsFor(days, stayNights);
+  // ── ONE HOUSE IS ONE STAY ──────────────────────────────────────
+  // A sommerhus trip books one house for every night, so the whole run is one
+  // stay with one link to houses near the base, and no hotel search anywhere.
+  // See utils/houseTrip.js.
+  const houseStay = houseDoor(guide, stayNights);
+  const stayDoors = houseStay
+    ? { [houseStay.nights[0]]: { door: true, compare: false, featured: false, nights: houseStay.nights.length, list: houseStay.nights.slice() } }
+    : doorsFor(days, stayNights);
   // ── "USE OUR AFFILIATES (OPTIONAL)" ────────────────────────────────
   // Oliver, 21 Sep 2026. Every paid door on the guide, gathered into the one
   // panel a reader opens on purpose: a room per STAY with its nights on it,
   // the tickets What you pay prices, the car, the tours, the bike. See
   // utils/partnerSheet.js for what it says and components/PartnerSheet.jsx for
   // the panel.
-  const partnerStays = staysIn(days, stayNights).map((run, i) => {
+  // Not for a house: Novasol is not a partner, and a hotel for a house trip is
+  // the thing he reported. The house's own link is on its card.
+  const partnerStays = (houseStay ? [] : staysIn(days, stayNights)).map((run, i) => {
     const d = days.find((x, j) => Number(x?.day || j + 1) === run.first) || {};
     const lastTown = (d.stops || []).map(x => x?.town).filter(Boolean).slice(-1)[0] || "";
     const place = d?.glance?.stayArea || lastTown || "";
@@ -2759,7 +2769,9 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
               // utils/stayDoors.js.
               const doors = doorOn(stayDoors, day.day || dayIdx + 1);
               const stayHere = partnerStays.find(p => (p.nights || []).includes(Number(day.day || dayIdx + 1))) || null;
-              const sameBed = doors.door ? "" : sameBaseLine(stayDoors, day.day || dayIdx + 1, days);
+              const sameBed = doors.door ? ""
+                : houseStay ? (houseStay.nights.includes(Number(day.day || dayIdx + 1)) && Number(day.day || dayIdx + 1) > houseStay.nights[0] ? sameHouseLine(houseStay.nights[0]) : "")
+                : sameBaseLine(stayDoors, day.day || dayIdx + 1, days);
               return (
                 <div style={{ display: "flex", gap: 8, alignItems: "flex-start", background: C.surface, border: `1px solid ${C.gold}33`, borderRadius: 12, padding: "12px 14px", marginTop: 16 }}>
                   <span style={{ fontSize: 14, flexShrink: 0 }}>🏡</span>
@@ -2799,7 +2811,18 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                         suggested area." So the area this stay is in is the
                         link, to rooms there on these nights, and it goes
                         nowhere else. The panel keeps the full list. */}
-                    {doors.door && doors.list?.length > 0 && (
+                    {/* The house: its nights, and houses near the base on those
+                        dates. A plain link, not a partner one. */}
+                    {houseStay && doors.door && (
+                      <div style={{ fontSize: 12, color: C.text, fontWeight: 700, marginTop: 6 }}>
+                        {nightsLabel(houseStay.nights, guide?._arrivalDate || null)}
+                        {" · "}
+                        <a href={houseStay.href} target="_blank" rel="noreferrer"
+                          style={{ color: C.gold, textDecoration: "underline", textUnderlineOffset: 3 }}>{houseStay.label}</a>
+                        <span style={{ color: C.muted, fontWeight: 600, fontSize: 11 }}> ↗</span>
+                      </div>
+                    )}
+                    {!houseStay && doors.door && doors.list?.length > 0 && (
                       <div style={{ fontSize: 12, color: C.text, fontWeight: 700, marginTop: 6 }}>
                         {nightsLabel(doors.list, guide?._arrivalDate || null)}
                         {/* Only a search IN the area may carry the area's name. A door
