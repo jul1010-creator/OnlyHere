@@ -580,7 +580,7 @@ export const ticketmasterActive = () => !!TICKETMASTER_AFFILIATE_TEMPLATE;
 // renders it unconditionally still prints nothing.
 export const ticketDisclosure = (url, template = TICKETMASTER_AFFILIATE_TEMPLATE) =>
   !!template && isTicketmasterUrl(url)
-    ? "Booking through this link may earn Gemlyx a small commission. You pay exactly what you would pay reaching the same page without it."
+    ? "We recommend booking through our partners because it is more convenient, and they often offer extra packages or refund deals. Gemlyx may earn a small commission when you do."
     : "";
 
 // ── TIQETS, THROUGH TRAVELPAYOUTS ───────────────────────────────────
@@ -646,7 +646,7 @@ export const tiqetsActive = (template = TIQETS_AFFILIATE_TEMPLATE) => !!template
 
 export const tiqetsDisclosure = (url, template = TIQETS_AFFILIATE_TEMPLATE) =>
   !!template && isTiqetsUrl(url)
-    ? "Booking through this link may earn Gemlyx a small commission. You pay exactly what you would pay reaching the same page without it."
+    ? "We recommend booking through our partners because it is more convenient, and they often offer extra packages or refund deals. Gemlyx may earn a small commission when you do."
     : "";
 
 // ── WEGOTRIP, THROUGH TRAVELPAYOUTS ─────────────────────────────────
@@ -696,7 +696,7 @@ export const wegotripActive = (template = WEGOTRIP_AFFILIATE_TEMPLATE) => !!temp
 
 export const wegotripDisclosure = (url, template = WEGOTRIP_AFFILIATE_TEMPLATE) =>
   !!template && isWegotripUrl(url)
-    ? "Booking through this link may earn Gemlyx a small commission. You pay exactly what you would pay reaching the same page without it."
+    ? "We recommend booking through our partners because it is more convenient, and they often offer extra packages or refund deals. Gemlyx may earn a small commission when you do."
     : "";
 
 // ── GETYOURGUIDE, WHICH TRACKS ON ITS OWN DOMAIN ────────────────────
@@ -756,7 +756,7 @@ export const getyourguideActive = (partner = GETYOURGUIDE_PARTNER_ID) => !!partn
 
 export const getyourguideDisclosure = (url, partner = GETYOURGUIDE_PARTNER_ID) =>
   !!partner && isGetyourguideUrl(url)
-    ? "Booking through this link may earn Gemlyx a small commission. You pay exactly what you would pay reaching the same page without it."
+    ? "We recommend booking through our partners because it is more convenient, and they often offer extra packages or refund deals. Gemlyx may earn a small commission when you do."
     : "";
 
 // ── BAJA BIKES, AND WHAT A SECOND TOUR PARTNER COSTS ────────────────
@@ -844,7 +844,7 @@ export const bajabikesActive = (referral = BAJABIKES_REFERRAL_ID) => !!referral;
 
 export const bajabikesDisclosure = (url, referral = BAJABIKES_REFERRAL_ID) =>
   !!referral && isBajabikesUrl(url)
-    ? "Booking through this link may earn Gemlyx a small commission. You pay exactly what you would pay reaching the same page without it."
+    ? "We recommend booking through our partners because it is more convenient, and they often offer extra packages or refund deals. Gemlyx may earn a small commission when you do."
     : "";
 
 // ── WHO SELLS IT, WHICH IS NOT THE SAME QUESTION AS WHO PAYS US ─────
@@ -1046,7 +1046,7 @@ export const partnerDisclosure = (url) =>
     // link makes "no change to the price", which is true of the LINK and reads
     // as a claim about the gate price. Said the way it is meant: the same page
     // reached without the link charges the same number.
-    ? "Partner link. Gemlyx may earn a small commission, and you pay exactly what you would pay reaching the same page without it."
+    ? "Partner link. We recommend it because booking through our partners is more convenient, and they often offer extra packages or refund deals. Gemlyx may earn a small commission when you do."
     : "";
 
 // ── AND "OFFICIAL SITE" IS A CLAIM ABOUT WHOSE SITE IT IS ───────────

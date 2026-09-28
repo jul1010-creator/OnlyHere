@@ -383,7 +383,7 @@ writeFileSync(entry, `
   export { describeGuide, guideLanguageMix, MIN_PLAIN_WORDS, guideProseOf, proseAt, writeProseAt } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { usableRuns } from ${JSON.stringify(join(root, "src/utils/runLog.js"))};
   export { alertKey, describeWeatherChange, unseenAlerts, usableSeen, seenAlerts, markAlertSeen, alertCountLine, SEEN_KEY, MAX_SEEN } from ${JSON.stringify(join(root, "src/utils/weatherAlerts.js"))};
-  export { classifyTiqetsText, productTitles, placeWords, titleKind, cleanTicketOffer, offerSellsTheDoor, ticketOfferLine, ticketOfferPerks, TICKET_OFFER_KINDS } from ${JSON.stringify(join(root, "src/utils/ticketOffer.js"))};
+  export { classifyTiqetsText, productTitles, placeWords, titleKind, cleanTicketOffer, offerSellsTheDoor, ticketOfferLine, TICKET_OFFER_KINDS, refundFromText, entryProductUrl, withProductRefund, tiqetsReason, officialSiteLabel } from ${JSON.stringify(join(root, "src/utils/ticketOffer.js"))};
   export { shortLabel, LABEL_MAX } from ${JSON.stringify(join(root, "src/utils/cardLine.js"))};
   export { tierRank } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { distanceLine } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
@@ -23041,7 +23041,8 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // A template with no placeholder is the programme's landing page rather than
   // this event. It still tracks, so it is used rather than thrown away.
   is("a template with no placeholder is still used", ticketmasterUrl(TM, "https://tm.evyy.net/c/1/2/3"), "https://tm.evyy.net/c/1/2/3");
-  is("and the disclosure appears once a programme is live", ticketDisclosure(TM, tpl).includes("may earn Gemlyx"), true);
+  // 28 Sep 2026: the disclosure was reworded ("Don't say 'exactly' the same"), so it reads "Gemlyx may earn".
+  is("and the disclosure appears once a programme is live", ticketDisclosure(TM, tpl).includes("Gemlyx may earn"), true);
   is("but not on a link that earns nothing", ticketDisclosure(NOT, tpl), "");
 
   // The config constant exists and is empty, which is the shipped state. The
@@ -28259,8 +28260,9 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       ok("and the merchant named on the button rather than only in the small print",
          /🎒 \{gear\.merchant\}/.test(block));
       ok("with the commission said under it", /is a Gemlyx partner, so this link earns us a commission/.test(block));
-      ok("and the price promise that every other paid link here makes",
-         /you pay exactly what you would pay reaching the same page without it/.test(block));
+      // 28 Sep 2026: "Don't say 'exactly' the same.. because that's a lie."
+      ok("and the reason to use a partner, with no promise about the price",
+         /We recommend our partners because ordering through them is convenient, and they often offer extra packages or refund deals\./.test(block) && !/pay exactly/.test(block));
 
       // ── THE ADVICE IS NOT GATED ON THE PARTNER ──────────────────
       //
@@ -29121,11 +29123,11 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       const lead = (code, who) => M.UI_STRINGS["tour.lead"][code].replace("{merchant}", who);
       ok("a Danish reader gets the whole line in Danish",
          da.includes(lead("da", "GetYourGuide")) && da.includes(M.UI_STRINGS["affiliate.disclosure"].da));
-      ok("and no English is left in it", !da.includes("may earn Gemlyx"));
+      ok("and no English is left in it", !da.includes("Gemlyx may earn"));
       ok("a German reader gets the whole line in German",
          de.includes(lead("de", "GetYourGuide")) && de.includes(M.UI_STRINGS["affiliate.disclosure"].de));
       ok("and an English one is unchanged",
-         en.includes(lead("en", "GetYourGuide")) && en.includes("may earn Gemlyx"));
+         en.includes(lead("en", "GetYourGuide")) && en.includes("Gemlyx may earn"));
 
       // ── AND IT NAMES THE PARTNER IT IS POINTING AT ──────────────
       //
@@ -29139,7 +29141,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
           { url: "https://www.bajabikes.eu/en/copenhagen-by-night/", kind: "nightlife", lang: "en" })).text;
         ok("a Baja ride names Baja Bikes", baja.includes("Baja Bikes"));
         ok("and never the other partner", !baja.includes("GetYourGuide"));
-        ok("and still says it earns", /may earn Gemlyx/.test(baja));
+        ok("and still says it earns", /Gemlyx may earn/.test(baja));
         ok("and the noun is the ride rather than the vehicle", /after dark/.test(baja));
         // RENTAL IS NOT A TOUR, so it draws nothing here however it is passed in.
         is("the rental draws no tour line",
@@ -34419,8 +34421,10 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       // Tiqets is a few kroner off the gate. Oliver: "I don't want to lie to
       // users." So the sentence compares the same page with and without the
       // link, which is the claim that holds.
-      ok(`${what} says it costs the reader nothing`,
-         /you pay exactly what you would pay reaching the same page without it/i.test(said));
+      // 28 Sep 2026: "Don't say 'exactly' the same.. because that's a lie. It
+      // tends to be different price". The reason to use the partner instead.
+      ok(`${what} says why to use a partner and promises no price`,
+         /more convenient, and they often offer extra packages or refund deals/i.test(said) && !/exactly/i.test(said));
       ok(`${what} makes no claim about anybody else's price`, !/does not change the price|no change to the price/i.test(said));
       ok(`${what} carries no dash`, !/[–—]/.test(said));
     }
@@ -79992,28 +79996,76 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
     is(`${key}: and off the plain text copy`, M.classifyTiqetsText(plain(titles), { name, url })?.kind, want);
   }
   ok("a combo is noticed as a combo", M.classifyTiqetsText(md(PAGES.kronborg[2]), { name: "Kronborg Castle", url: PAGES.kronborg[1] }).combos === true);
-  ok("free cancellation only when the page says it", M.classifyTiqetsText(md(PAGES.zoo[2]), { name: "Copenhagen ZOO" }).cancel === false && M.classifyTiqetsText(md(PAGES.zoo[2]) + "\nFree cancellation up to 24 hours before", { name: "Copenhagen ZOO" }).cancel === true);
+  // Batch 152: refunds come off the ticket's own page, in its own words. The
+  // sentences are the ones Tiqets printed on 28 Sep 2026.
+  is("the three answers a ticket page gives", [
+    M.refundFromText("Cancellation is possible until 23:59 on the day before your visit"),
+    M.refundFromText("Cancel for free until 24 hours before your visit date and get a full refund"),
+    M.refundFromText("Get a full refund if you select a refundable ticket during checkout and cancel until 23:59 the day before your visit."),
+    M.refundFromText("This ticket is nonrefundable. Rescheduling is not possible for this ticket."),
+    M.refundFromText("Kronborg is a castle."),
+  ], ["free", "free", "option", "none", ""]);
+  const venue = `### [Kronborg Castle: Entry Ticket](https://www.tiqets.com/en/helsingr-attractions-c65326/tickets-for-kronborg-castle-p991370/?partner=x)\n### [Tivoli Gardens + Kronborg Castle](https://www.tiqets.com/en/x-p1/)`;
+  is("the ticket page is the one that sells the door", M.entryProductUrl(venue, { name: "Kronborg Castle", url: PAGES.kronborg[1] }), "https://www.tiqets.com/en/helsingr-attractions-c65326/tickets-for-kronborg-castle-p991370/");
+  is("and a link that is already a ticket page is its own", M.entryProductUrl("", { url: "https://www.tiqets.com/en/c-c1/tickets-for-x-p9/" }), "https://www.tiqets.com/en/c-c1/tickets-for-x-p9/");
+  is("nonrefundable on the ticket page clears it", M.withProductRefund({ kind: "entry", refund: "free", combos: true }, "This ticket is nonrefundable").refund, "");
+  is("the venue page alone claims nothing", M.classifyTiqetsText(md(PAGES.zoo[2]), { name: "Copenhagen ZOO" }).refund, "");
   is("a page with nothing on it says nothing", M.classifyTiqetsText("", { name: "X" }), null);
   ok("Amalienborg meets Amalienborg Palace on its own name", M.placeWords("Amalienborg Slot", PAGES.amalienborg[1]).includes("amalienborg") && !M.placeWords("Amalienborg Slot").includes("slot"));
-  is("a stored offer outside the four is dropped", [M.cleanTicketOffer({ kind: "ticket" }), M.cleanTicketOffer({ kind: "tour", cancel: 1 })], [null, { kind: "tour", cancel: true, combos: false }]);
+  is("a stored offer outside the four is dropped, and the old cancel flag still reads", [M.cleanTicketOffer({ kind: "ticket" }), M.cleanTicketOffer({ kind: "tour", cancel: true }), M.cleanTicketOffer({ kind: "entry", refund: "maybe" })], [null, { kind: "tour", refund: "free", combos: false }, { kind: "entry", refund: "", combos: false }]);
   ok("a tour or a card is never the door, and an unread page is not refused", !M.offerSellsTheDoor({ kind: "tour" }) && !M.offerSellsTheDoor({ kind: "card" }) && M.offerSellsTheDoor(null) && M.offerSellsTheDoor({ kind: "combo" }));
-  is("with a direct site, the cost and what it buys, together", M.ticketOfferLine({ kind: "entry", combos: true }, { direct: true }), "Also on Tiqets: usually a little dearer than buying direct, with combo deals on other sights");
-  is("and the refund only when there is one", M.ticketOfferLine({ kind: "entry", cancel: true, combos: true }, { direct: true }), "Also on Tiqets: usually a little dearer than buying direct, with free cancellation and combo deals on other sights");
+  // "currently tivoli is cheaper on tiqets than on tivoli's own site". No price claim either way.
+  ok("no line says which is cheaper", ["en", "da", "de"].every(l => !/dearer|cheaper|dyrere|billigere|teurer|günstiger/i.test(M.ticketOfferLine({ kind: "entry", refund: "free", combos: true }, { lang: l }))));
+  is("what Tiqets adds, in its own terms", M.ticketOfferLine({ kind: "entry", refund: "free", combos: true }), "Also on Tiqets: free cancellation up to a day before and combo deals on other sights");
+  is("a refundable option is never called free", M.ticketOfferLine({ kind: "entry", refund: "option" }), "Also on Tiqets: a refundable ticket you can pick at checkout");
+  is("nothing extra, nothing said", M.ticketOfferLine({ kind: "entry" }), "Also on Tiqets");
   is("a tour says tour", M.ticketOfferLine({ kind: "tour" }), "Guided tour on Tiqets");
   is("a card says card", M.ticketOfferLine({ kind: "card" }, { lang: "da" }), "Med i Copenhagen Card, som sælges på Tiqets");
-  is("under a Tiqets button, only the perks", [M.ticketOfferPerks({ kind: "entry", combos: true }), M.ticketOfferPerks({ kind: "entry" }), M.ticketOfferPerks({ kind: "tour", combos: true })], ["Combo deals on other sights", "", ""]);
   const dash = (s) => /[—–]| - /.test(s);
-  ok("no dashes in any line a reader sees", ["en", "da", "de"].every(l => ["entry", "tour", "card"].every(k => !dash(M.ticketOfferLine({ kind: k, cancel: true, combos: true }, { direct: true, lang: l })))));
+  ok("no dashes in any line a reader sees", ["en", "da", "de"].every(l => ["entry", "tour", "card"].every(k => ["free", "option"].every(r => !dash(M.ticketOfferLine({ kind: k, refund: r, combos: true }, { lang: l }))))));
 
   const detail = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
   ok("the entry page reads the offer only for Tiqets", /const ticketOffer = ticketAgent === "tiqets" \? cleanTicketOffer\(item\?\.__ticketOffer\) : null;/.test(detail));
   ok("a tour or a card never becomes the Tickets row", /const bookRow = ticketHref && ticketSellsDoor/.test(detail));
-  ok("with a site of its own, Tiqets is the quieter line under it", /if \(ticketAgent === "tiqets" && \(!ticketSellsDoor \|\| hasDirectSite\)\)/.test(detail) && /data-testid="tiqets-second"/.test(detail));
+  // "Maybe we should just add both links? For people to decide themselves?"
+  ok("with a site of its own, both links side by side", /const showTicketPair = ticketAgent === "tiqets" && ticketSellsDoor && hasDirectSite;/.test(detail) && /data-testid="ticket-pair"/.test(detail) && /\{!showTicketPair && \(kind === "free" \|\| kind === "event"\) && externalHref\(item\.website\)/.test(detail));
+  ok("a tour or a card is the quieter line, never Tickets", /if \(ticketAgent === "tiqets" && !ticketSellsDoor\)/.test(detail) && /data-testid="tiqets-second"/.test(detail));
+  ok("and the reason sits under the pair and under a lone Tiqets button", (detail.match(/tiqetsReason\(ticketOffer, \{ lang \}\)/g) || []).length === 2);
+  // "Then we can sell the affiliate with 'We recommend Tiqets for its 24-hours refund policy'"
+  is("recommended for free cancellation, and for nothing weaker", [
+    M.tiqetsReason({ kind: "entry", refund: "free", combos: true }),
+    M.tiqetsReason({ kind: "entry", refund: "option" }),
+    M.tiqetsReason({ kind: "entry", combos: true }),
+    M.tiqetsReason({ kind: "entry" }),
+    M.tiqetsReason({ kind: "card", refund: "free" }),
+  ], [
+    "We recommend Tiqets for its free cancellation up to a day before, and it has combo deals on other sights.",
+    "Tiqets lets you pick a refundable ticket at checkout.",
+    "Tiqets also has combo deals on other sights.",
+    "",
+    "",
+  ]);
+  ok("in Danish and German too, with no dashes", ["da", "de"].every(l => { const t = M.tiqetsReason({ kind: "entry", refund: "free", combos: true }, { lang: l }); return t && !/We recommend/.test(t) && !/[—–]| - /.test(t); }) && M.officialSiteLabel("da") === "Officiel side");
   const content = readFileSync(join(root, "src/utils/studioContent.js"), "utf8");
   ok("the offer survives a redraft, beside its link only", /const offer = cleanTicketOffer\(t\?\.__ticketOffer\);\s*if \(offer && out\.ticketUrl\) out = \{ \.\.\.out, __ticketOffer: offer \};/.test(content));
   const app = readFileSync(join(root, "src/App.jsx"), "utf8");
-  ok("the sweep reads the page before he ticks it", /proposal\.verdict === AFF_FOUND && proposal\.agent === "tiqets"[\s\S]{0,200}readSourcePage\(proposal\.url\)[\s\S]{0,200}classifyTiqetsText\(page\?\.text/.test(app));
+  ok("the sweep reads the page before he ticks it, and the ticket page for refunds", /proposal\.verdict === AFF_FOUND && proposal\.agent === "tiqets"[\s\S]{0,200}readSourcePage\(proposal\.url\)[\s\S]{0,200}classifyTiqetsText\(page\?\.text/.test(app) && /withProductRefund\(offer, product === proposal\.url/.test(app));
   ok("and so does a draft", /if \(ticketAgentOf\(t\.ticketUrl\) === "tiqets"\) \{[\s\S]{0,300}classifyTiqetsText\(text, \{ name, url \}\)/.test(app));
+}
+
+
+// ── Batch 153: no "exactly the same price" anywhere ──────────────────
+// Oliver, 28 Sep 2026: "Don't say 'exactly' the same.. because that's a lie.
+// It tends to be different price".
+{
+  const files = ["src/utils/uiLanguage.js", "src/utils/affiliates.js", "src/App.jsx", "src/components/DetailPage.jsx"];
+  const said = files.map(f => stripComments(readFileSync(join(root, f), "utf8")));
+  ok("no reader-facing sentence promises the same price", said.every(t => !/pay exactly what you would pay|præcis det samme, som hvis|genau so viel, wie wenn/.test(t)));
+  ok("every language says why, and still says the commission", ["en", "da", "de"].every(c => /partner|Partner/.test(M.UI_STRINGS["affiliate.disclosure"][c]) && /commission|kommission|Provision/.test(M.UI_STRINGS["affiliate.disclosure"][c])));
+  ok("the short commission line exists in all three", ["en", "da", "de"].every(c => /commission|kommission|Provision/.test(M.UI_STRINGS["affiliate.commission"]?.[c] || "")));
+  const detail = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
+  ok("under a reason, only the commission", /\{reason \? uiT\("affiliate\.commission", lang\) : note\}/.test(detail));
+  ok("no dashes in the new sentences", ["affiliate.disclosure", "affiliate.commission"].every(k => ["en", "da", "de"].every(c => !/[—–]| - /.test(M.UI_STRINGS[k][c]))));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

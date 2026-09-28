@@ -23,7 +23,7 @@ import { PhotoCredit } from "./PhotoCredit";
 import { PlaceMiniMap } from "./PlaceMiniMap";
 import { ticketmasterUrl, ticketDisclosure, tiqetsUrl, tiqetsDisclosure, affiliateHref, affiliateNote, isWegotripUrl, outboundLink } from "../utils/affiliates";
 import { isTiqetsProductUrl, ticketAgentOf, isBookableTicketUrl, isTourUrl, sameShop, priceSourceHost, isResellerUrl } from "../utils/ticketLink";
-import { cleanTicketOffer, offerSellsTheDoor, ticketOfferLine, ticketOfferPerks } from "../utils/ticketOffer";
+import { cleanTicketOffer, offerSellsTheDoor, ticketOfferLine, tiqetsReason, officialSiteLabel } from "../utils/ticketOffer";
 import { branchPoints, branchesOf, hasBranches, branchLine, branchLabel } from "../utils/branches";
 import { offerView, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE } from "../utils/offer";
 import { saveLabel, saveHint, planFromSavedLabel } from "../utils/savedTrip";
@@ -253,15 +253,22 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
   // However, some of them do include packages that make it cheaper and have
   // refunding." Asked how the two should sit: "Up to you."
   //
-  // So where the place has its own site, that button comes first and Tiqets is
-  // a quieter line under it that says the trade: a little dearer, and what the
-  // extra buys, which is only what the Tiqets page itself offers. Where there
-  // is no site of its own, Tiqets is the button, as before. And a page that
+  // First answer, same evening: the site first and Tiqets as a quieter line.
+  // His better one, below: both as equals. No price claim either way: he found
+  // Tivoli cheaper on Tiqets (190 kr against 220 in Tivoli's own shop for 15 Oct), so a
+  // "dearer" line is wrong on some days for some places. Where there
+  // is no site of its own, Tiqets is the button, as before, with the reason
+  // to use it under it when its ticket page gives one. And a page that
   // sells a guided tour or only the Copenhagen Card is offered as exactly that,
   // never under a Tickets label. See utils/ticketOffer.js.
   const ticketOffer = ticketAgent === "tiqets" ? cleanTicketOffer(item?.__ticketOffer) : null;
   const ticketSellsDoor = offerSellsTheDoor(ticketOffer);
   const hasDirectSite = (kind === "free" || kind === "event") && !!externalHref(item?.website) && !isResellerUrl(externalHref(item?.website));
+  // Oliver, 28 Sep 2026: "Maybe we should just add both links? For people to
+  // decide themselves?" So where both exist, the official site and Tiqets sit
+  // side by side as equals, and the separate Website button steps aside so the
+  // site is not offered twice.
+  const showTicketPair = ticketAgent === "tiqets" && ticketSellsDoor && hasDirectSite;
   // The row shape AtAGlanceCard takes, or null when there is nothing to link.
   // Null rather than an empty object, because that card already drops nulls and
   // a caller building this inline should not have to remember to.
@@ -1504,7 +1511,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
           );
         })()}
 
-        {(kind === "free" || kind === "event") && externalHref(item.website) && !isResellerUrl(externalHref(item.website)) && (() => {
+        {!showTicketPair && (kind === "free" || kind === "event") && externalHref(item.website) && !isResellerUrl(externalHref(item.website)) && (() => {
           const dest = externalHref(item.website);
           // affiliateHref rather than ticketmasterUrl: one door, so the day a
           // programme is approved every entry ever published starts earning
@@ -1572,11 +1579,45 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
           if (!ticketAgent) return null;
           const href = ticketHref;
           const note = ticketNote;
-          // THE QUIET LINE: a Tiqets page that is a second choice under the
-          // place's own site, or one that sells a tour or a card rather than
-          // the door. Named and disclosed like the button, just smaller.
-          if (ticketAgent === "tiqets" && (!ticketSellsDoor || hasDirectSite)) {
-            const line = ticketOfferLine(ticketOffer, { direct: hasDirectSite && ticketSellsDoor, lang });
+          // ── BOTH, SIDE BY SIDE ───────────────────────────────────
+          // The reader decides. The line under the pair is the reason to
+          // pick Tiqets, and only when its ticket page gives one. See
+          // tiqetsReason in utils/ticketOffer.js.
+          if (showTicketPair) {
+            const siteDest = externalHref(item.website);
+            const siteHref = affiliateHref(siteDest) || siteDest;
+            const sitePaid = siteHref !== siteDest;
+            const siteHost = (() => { try { return new URL(siteDest).hostname.replace(/^www\./, ""); } catch { return officialSiteLabel(lang); } })();
+            const reason = tiqetsReason(ticketOffer, { lang });
+            const pairBtn = { flex: 1, minWidth: 0, display: "block", textAlign: "center", background: C.surface, borderRadius: 12, padding: "13px 8px", fontSize: 13, fontWeight: 700, textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
+            return (
+              <div data-testid="ticket-pair" style={{ marginBottom: 10 }}>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <a href={siteHref} target="_blank" rel={sitePaid ? "noreferrer sponsored nofollow" : "noreferrer"} title={officialSiteLabel(lang)}
+                    style={{ ...pairBtn, border: `1px solid ${C.border}`, color: C.light }}>
+                    🌐 {siteHost}
+                  </a>
+                  <a href={href} target="_blank" rel={note ? "noreferrer sponsored nofollow" : "noreferrer"}
+                    style={{ ...pairBtn, border: `1px solid ${C.gold}55`, color: C.gold }}>
+                    🎫 Tiqets
+                  </a>
+                </div>
+                {reason && (
+                  <div style={{ fontSize: 11.5, color: C.light, lineHeight: 1.5, marginTop: 6, textAlign: "center" }}>{reason}</div>
+                )}
+                {/* With a reason already said above it, only the commission,
+                    so "we recommend" is not said twice in a row. */}
+                {note && (
+                  <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 4, textAlign: "center" }}>{reason ? uiT("affiliate.commission", lang) : note}</div>
+                )}
+              </div>
+            );
+          }
+          // A Tiqets page that sells a guided tour or only the Copenhagen
+          // Card is offered as exactly that, as a quieter line, never under a
+          // Tickets label.
+          if (ticketAgent === "tiqets" && !ticketSellsDoor) {
+            const line = ticketOfferLine(ticketOffer, { lang });
             const icon = ticketOffer?.kind === "tour" ? "🧭" : "🎟️";
             return (
               <div data-testid="tiqets-second" style={{ marginTop: -4, marginBottom: 12, textAlign: "center" }}>
@@ -1590,7 +1631,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
               </div>
             );
           }
-          const extra = ticketAgent === "tiqets" ? ticketOfferPerks(ticketOffer, { lang }) : "";
+          const extra = ticketAgent === "tiqets" ? tiqetsReason(ticketOffer, { lang }) : "";
           return (
             <div style={{ marginBottom: 10 }}>
               <a href={href} target="_blank" rel={note ? "noreferrer sponsored nofollow" : "noreferrer"}

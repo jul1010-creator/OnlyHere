@@ -545,3 +545,26 @@ Oliver, 28 Sep 2026: "recommending Amalienborg through Getyourguide or zoo throu
   - Free cancellation is only mentioned when the Tiqets page says so. None of today's venue pages do, so nothing claims it yet.
 - **Already filled in live** for the eight rows with a Tiqets link: Zoo, Kronborg, National Museum, Tivoli and Legoland as entry with combos; Experimentarium, Louisiana and Humlebæk as card. It takes effect when this is pushed.
 - The refund SQL (section 1b) is run and verified.
+
+## Batch 152: both links, and a reason to pick Tiqets only when there is one
+
+Oliver, 28 Sep 2026, with Tivoli's own checkout for 15 October at 220 kr against Tiqets' 190: "currently tivoli is cheaper on tiqets than on tivoli's own site". Then: "Maybe we should just add both links? For people to decide themselves? Then we can sell the affiliate with 'We recommend Tiqets for its 24-hours refund policy'", and "we can't rely on this price different forever."
+
+- **No price claim either way.** "Usually a little dearer" from batch 151 is gone. It was wrong for Tivoli and would be wrong on other days elsewhere.
+- **Both links, side by side**, where a place has its own site and a Tiqets ticket: "🌐 tivoli.dk" and "🎫 Tiqets" as equal buttons. The separate Website button steps aside there so the site isn't offered twice.
+- **The line under them is the reason to pick Tiqets**, and only when its ticket page gives one:
+  - Free cancellation: "We recommend Tiqets for its free cancellation up to a day before" (plus combos when there are any). National Museum and Legoland today.
+  - A refundable ticket you choose at checkout, which may cost extra, is said as a fact and not recommended: "Tiqets lets you pick a refundable ticket at checkout." Tivoli today.
+  - Only combos: "Tiqets also has combo deals on other sights." Zoo and Kronborg today, whose Tiqets tickets are nonrefundable.
+- **Refunds are read off the ticket's own page**, because the venue page never mentions them. The sweep and new drafts follow the entry ticket's link from the venue page and read its terms. "This ticket is nonrefundable" clears any claim.
+- Live rows updated to the new shape (`refund`: free, option or empty). A row still holding batch 151's `cancel: true` is read as free.
+- A place with no site of its own keeps Tiqets as the Tickets button, with the same reason line under it. Tours and card-only pages are unchanged from batch 151.
+
+## Batch 153: no "exactly the same price" anywhere
+
+Oliver, 28 Sep 2026: "Don't say 'exactly' the same.. because that's a lie. It tends to be different price... you can instead reword it to 'We recommend using our partners [..] because it makes ordering tickets more convinient and often offer extra packages or refund deals.'"
+
+- The line under every partner link now reads: "We recommend booking through our partners because it is more convenient, and they often offer extra packages or refund deals. Gemlyx may earn a small commission when you do." Same in Danish and German. It says "booking" rather than "ordering tickets" because the same line sits under audio walks, tours and bike rentals.
+- The commission is still said, as the law asks.
+- Under the Tiqets pair, where the line above already gives a reason ("We recommend Tiqets for its free cancellation…"), only the short commission sentence is shown, so "we recommend" is not said twice in a row.
+- The Tips gear partner and the "Partner link." variant lost the same price promise too.

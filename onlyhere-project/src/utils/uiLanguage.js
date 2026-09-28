@@ -436,7 +436,16 @@ export const UI_STRINGS = {
   // answer "does this link earn"; affiliateNote is the one render-facing
   // accessor and it translates. A test asserts this column and their string are
   // the same sentence, or the two drift apart the first time either is edited.
-  "affiliate.disclosure": { en: "Booking through this link may earn Gemlyx a small commission. You pay exactly what you would pay reaching the same page without it.", da: "Booker du gennem dette link, kan Gemlyx få en lille kommission. Du betaler præcis det samme, som hvis du selv fandt den samme side.", de: "Wenn du über diesen Link buchst, kann Gemlyx eine kleine Provision erhalten. Du zahlst genau so viel, wie wenn du dieselbe Seite ohne den Link aufrufst." },
+  // Oliver, 28 Sep 2026: "Don't say 'exactly' the same.. because that's a lie.
+  // It tends to be different price... you can instead reword it to 'We
+  // recommend using our partners [..] because it makes ordering tickets more
+  // convinient and often offer extra packages or refund deals.'" "Booking"
+  // rather than "ordering tickets", because the same sentence sits under an
+  // audio walk, a tour and a bike rental. The commission is still said.
+  "affiliate.disclosure": { en: "We recommend booking through our partners because it is more convenient, and they often offer extra packages or refund deals. Gemlyx may earn a small commission when you do.", da: "Vi anbefaler at booke gennem vores partnere, fordi det er nemmere, og de tilbyder ofte ekstra pakker eller refusion. Gemlyx kan få en lille kommission, når du gør det.", de: "Wir empfehlen, über unsere Partner zu buchen, weil es bequemer ist und sie oft Zusatzpakete oder Erstattungen anbieten. Gemlyx kann dabei eine kleine Provision erhalten." },
+  // The commission alone, for under a line that has already said why to pick
+  // the partner, so a reader is not told "we recommend" twice in a row.
+  "affiliate.commission": { en: "Gemlyx may earn a small commission when you book through this link.", da: "Gemlyx kan få en lille kommission, når du booker gennem dette link.", de: "Gemlyx kann eine kleine Provision erhalten, wenn du über diesen Link buchst." },
 
   // ── THE SCREEN A DANE MEETS WHEN THEY TRY TO KEEP A GUIDE ─────────
   //

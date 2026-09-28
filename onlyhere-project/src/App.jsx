@@ -278,7 +278,7 @@ import { briefThemes , essentialsForTrip, essentialsBlock, reservedEssential, ni
 // render sites on the Essentials card asked for those separately and one of
 // them forgot two of the four. See outboundLink in utils/affiliates.js.
 import { affiliateHref, outboundLink, partnerAdsGear } from "./utils/affiliates";
-import { classifyTiqetsText, offerSellsTheDoor } from "./utils/ticketOffer";
+import { classifyTiqetsText, offerSellsTheDoor, entryProductUrl, withProductRefund } from "./utils/ticketOffer";
 import { sweepPlan, describeSweepPlan, ticketProposal, describeTicketFindings, affiliateWriteFor, agentLabel, FOUND as AFF_FOUND, RESWEEP_DAYS } from "./utils/affiliateSweep";
 import { wegotripProposals, describeWegotrip, wegotripWriteFor, AUDIO as WEGO_AUDIO } from "./utils/wegotripMatch";
 import { CHECKED_ON as WEGO_CHECKED_ON, WEGOTRIP_SOURCE } from "./data/wegotrip";
@@ -8857,14 +8857,17 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         if (ticketAgentOf(t.ticketUrl) === "tiqets") {
           const url = String(t.ticketUrl).trim();
           const text = pagesByUrl[url] || (await readSourcePage(url))?.text || "";
-          const offer = classifyTiqetsText(text, { name, url });
+          let offer = classifyTiqetsText(text, { name, url });
+          // Refunds live on the ticket's own page and never on the venue page.
+          const product = offer?.kind === "entry" ? entryProductUrl(text, { name, url }) : "";
+          if (product) offer = withProductRefund(offer, product === url ? text : (pagesByUrl[product] || (await readSourcePage(product))?.text || ""));
           if (offer) t.__ticketOffer = { ...offer, at: dayKey(new Date()) };
           note("What the Tiqets page sells", {
             provider: "fetch",
             detail: url.slice(0, 120),
             outcome: offer ? "ok" : "empty",
             used: !!offer,
-            got: offer ? `${offer.kind}${offer.cancel ? ", free cancellation" : ""}${offer.combos ? ", combo deals" : ""}` : "no product titles could be read off the page",
+            got: offer ? `${offer.kind}${offer.refund === "free" ? ", free cancellation" : offer.refund === "option" ? ", a refundable option at checkout" : ""}${offer.combos ? ", combo deals" : ""}` : "no product titles could be read off the page",
             why: offer ? "" : "The entry page then offers the link as a second choice under the place's own site, with no claims about what it includes.",
           });
         }
@@ -12893,7 +12896,10 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
         // rides on the write. See utils/ticketOffer.js.
         if (proposal.verdict === AFF_FOUND && proposal.agent === "tiqets") {
           const page = await readSourcePage(proposal.url);
-          const offer = classifyTiqetsText(page?.text, { name, url: proposal.url });
+          let offer = classifyTiqetsText(page?.text, { name, url: proposal.url });
+          // Refunds live on the ticket's own page and never on the venue page.
+          const product = offer?.kind === "entry" ? entryProductUrl(page?.text, { name, url: proposal.url }) : "";
+          if (product) offer = withProductRefund(offer, product === proposal.url ? page?.text : (await readSourcePage(product))?.text);
           if (offer) {
             proposal.set = { ...proposal.set, __ticketOffer: { ...offer, at: proposal.at } };
             if (!offerSellsTheDoor(offer)) proposal.why += ` The page sells ${offer.kind === "tour" ? "a guided tour" : "only the Copenhagen Card"} and no ticket of its own, so the entry page shows it as that and never as Tickets.`;
@@ -31831,7 +31837,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         {/* Named in the block's own prose and not only in the
                             small print. The Copenhagen Card rule, 16 Sep 2026. */}
                         <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 4 }}>
-                          {gear.merchant} is a Gemlyx partner, so this link earns us a commission. Nothing about a trip changes if you buy none of this, which is why it sits under advice rather than beside a place, and you pay exactly what you would pay reaching the same page without it.
+                          {gear.merchant} is a Gemlyx partner, so this link earns us a commission. We recommend our partners because ordering through them is convenient, and they often offer extra packages or refund deals.
                         </div>
                       </div>
                     );
