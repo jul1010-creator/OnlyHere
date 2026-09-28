@@ -398,3 +398,40 @@ You: "note in the Terms of Use that we take no responsibility for wrong informat
 - **Clause 19.1 is unchanged.** Danish and EU law do not let you exclude liability for gross negligence, intent, personal injury or mandatory consumer rights, so no clause can promise more than that.
 - **Version 2.2, in force from 27 September 2026,** with a version-history note. `TERMS_VERSION` is 2.2, so new signups record 2.2. Clause 21.3 says a material change needs 30 days' notice to existing account holders. This one widens a disclaimer the Service already made in 18.1, but if you want to follow your own terms strictly, email the few existing accounts.
 - 4 new checks.
+
+## Batch 147: one guide a day, a daily ceiling, and events in "Fitting your preferences"
+
+You: "Yes, have a cap. And on the review, when someone clicks to build the guide, ask 'are you sure? You can only generate one guide a day.'" and "I want events put into 'your preferences' as well."
+
+**Do these two things, in this order.** Until you do, the site works as it does today.
+1. Run the SQL in `SETUP_GUIDE_CAP.md` in Supabase (SQL Editor, paste, Run).
+2. Add `GEMLYX_UNCAPPED` in Vercel with your Supabase user id or login email, then redeploy. Without it you get one guide a day too, Studio included.
+
+- **The question.** On the preview ("Here's what's coming up"), "Looks good, continue" now asks "Are you sure? You can only generate one guide a day." with "Yes, build it" and "Not yet". Studio (`/#studio`) skips the question.
+- **Once today's guide is built,** the same spot says "You have built today's guide. You can build a new one tomorrow." with a "See ready-made guides" button to /trips. The day is Denmark's, so it resets at midnight in Copenhagen.
+- **The server decides, not the browser.** Before any AI call, a build asks the new `api/build-pass.js`. It counts per Danish day:
+  - each browser: 1
+  - each account: 1, so a second device is not a second guide
+  - each network: 4. More than 1 because phones on the same mobile network, hotel wifi and campus share one address. IPv6 is counted per household (/64), and only a hash is stored.
+  - the whole site: 40. This is your spending ceiling. `GEMLYX_GUIDES_PER_DAY=0` pauses the builder for everyone except you.
+  All numbers can be changed in Vercel; the table in the setup file lists them.
+- **A build that fails halfway** gets 1 retry on the same pass. The retry still counts against the network and the day, since it costs the same.
+- **It fails open.** If the table is missing or Supabase is down, the build goes ahead and the Vercel log says `build-pass not counting:` with the reason. A cap must never turn a traveller away because it is broken.
+- **What it does not cover:** someone calling the AI endpoints directly without the site. The origin check from 17 August is still the only guard there, and a per-call limit is the next step if it ever shows up on the bill.
+- **Events in your preferences.** Under Everything, the "Fitting your preferences" row now leads with up to three events that match your interests and are on now or have a confirmed date in the next 60 days, soonest first, with their dates on the card. The other chips name kinds of place, so events only show under Everything.
+- **Reviewed by Fable,** as you offered. It found 5 things and all 5 are fixed:
+  1. A retry skipped the day's ceiling and the off switch.
+  2. A double tap on Map or Simple could start two builds.
+  3. IPv6 phones got a fresh network count on every request.
+  4. A day of failed builds was labelled "built".
+  5. A cap that stopped counting was silent.
+  The SQL was also run for real against Postgres (PGlite): it refuses a second guide, stops at the ceiling and resets the next day.
+- **Checked:** 22,291 checks green, including about 60 new ones; mutants red; build clean; the browser navigation test 26 of 26; the confirm and "used today" cards clicked through in Chromium, with no sideways scroll at 380px.
+
+### Guide test, and what I could not finish
+- **The summerhouse guide you reported, bh99oe98lje, shows no Booking.com links now.** It has one "Houses near Rømø on Novasol" link with the right dates and party. Every Maps link carries a Google place id. The pins are where they should be: Ribe Cathedral, Ribe VikingeCenter, Rømø, Schackenborg and Haderslev.
+- **Test guide sgd0yrp3lzx:** its stops and geo points are also correct.
+- **A fresh build could not be finished tonight.** Your screen was off, so Chrome ran the Gemlyx tab in the background and slowed the chat to about a word a minute. I tried speeding the tab's timer up from outside, which froze that tab, so I closed it. Your other tabs were not touched. Tomorrow, with the screen on, I can do a full summerhouse build (Hamburg, 2 adults and 2 kids, 10 to 17 Oct).
+- **Two things the test showed:**
+  - **The panel argues against the car.** With "Stay in one part of Denmark" picked, it says "A car is the one that adds a cost this trip does not need". It says that even when the traveller has ticked Car and typed "driving our own car" as the starting point. For a family driving up from Hamburg to a sommerhus in West Jutland, where buses are sparse, that advice is backwards. It is also explanation text under a control. I left it alone because it is a written design choice. Say if it should go, or only show when Car is not ticked.
+  - **The chat counter dropped after a reload.** The chat said "Everything I need, 7 of 7", and after a reload it said "6 of 7, and I still need what kind of trip". Not looked into yet.

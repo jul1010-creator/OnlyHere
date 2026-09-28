@@ -138,6 +138,8 @@ writeFileSync(entry, `
   export { studioPrompts } from ${JSON.stringify(join(root, "src/utils/studioPrompts.js"))};
   export { looksLikeTransit, kindFromName, findRealNearestStop, hasTransitType, geocodePostcode, geocodeIsASettlement, LONG_WALK_MINUTES } from ${JSON.stringify(join(root, "src/utils/geo.js"))};
   export { licenseIsUsable, distinctiveToken, mentionsSubject, looksHistorical, pickDescription, bestCaption } from ${JSON.stringify(join(root, "api/commons-photo.js"))};
+  export { ALLOWANCE_DEFAULTS, copenhagenDay, readLimits, uncappedList, isUncapped, cleanVisitor, allowanceKeys, reasonOfKey, refusalText, makePass, readPass, clientIp, ipKeyOf, visitorIdIn, todayRecord, guideUsedToday, usedTodayReason, askForGuidePass, markGuideBuilt, TODAY_KEY, VISITOR_KEY } from ${JSON.stringify(join(root, "src/utils/guideAllowance.js"))};
+  export { decide as buildPassDecide, secretFrom as buildPassSecret, signerFor as buildPassSigner, hashIp as buildPassHashIp } from ${JSON.stringify(join(root, "api/build-pass.js"))};
   export { testTravelerLine } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { resolveStopCoordsDetailed, legDistanceKm, townInName, townKeyFor, resolveLegMode, coordFitsTown, townPointFor, townFallbackFor } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { lookupRealPlace, placeCoords } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
@@ -379,7 +381,7 @@ writeFileSync(entry, `
   export { describeGuide, guideLanguageMix, MIN_PLAIN_WORDS, guideProseOf, proseAt, writeProseAt } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { usableRuns } from ${JSON.stringify(join(root, "src/utils/runLog.js"))};
   export { alertKey, describeWeatherChange, unseenAlerts, usableSeen, seenAlerts, markAlertSeen, alertCountLine, SEEN_KEY, MAX_SEEN } from ${JSON.stringify(join(root, "src/utils/weatherAlerts.js"))};
-  export { preferenceRowState, PREF_NO_ACCOUNT, PREF_NO_INTERESTS, PREF_READY } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
+  export { preferenceRowState, PREF_NO_ACCOUNT, PREF_NO_INTERESTS, PREF_READY, eventsForYou, EVENTS_FOR_YOU_MAX } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
   export { savableThread, restorableThread, saveThread, loadThread, clearThread, CHAT_KEY, MAX_SAVED_MESSAGES } from ${JSON.stringify(join(root, "src/utils/chatThread.js"))};
   export { affiliateRoster, payingCount, AFFILIATES_PATH, partnerAdsPendingRow } from ${JSON.stringify(join(root, "src/utils/affiliateRoster.js"))};
   export { UI_LANGUAGES, UI_CODES, UI_STRINGS, UI_KEYS, UI_LANGUAGE_KEY, DEFAULT_UI_LANGUAGE, t, resolveUiLanguage, isUiLanguage, uiLanguageMeta, storedUiLanguage, setStoredUiLanguage, currentUiLanguage } from ${JSON.stringify(join(root, "src/utils/uiLanguage.js"))};
@@ -79603,6 +79605,167 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("and reliance on it is excluded like a Guide's", /19\.2\.1<\/span> reliance upon a price, timetable, opening hour, event date, availability or other item of information contained in a Guide or in any other Gemlyx Content, or given in an answer/.test(terms));
   ok("still never beyond what the law allows", /19\.1<\/span> Nothing in these Terms shall exclude or limit the liability of Gemlyx for death or personal injury/.test(terms));
   ok("the version moved and says why", M.TERMS_VERSION === "2.2" && /Version 2\.2 · In force from 27 September 2026/.test(terms) && /Version 2\.2, in force from 27 September 2026, adds clause 12\.6/.test(terms));
+}
+
+// ── BATCH 147: ONE GUIDE A DAY, AND A CEILING ON THE DAY ─────────────
+// Oliver, 28 Sep 2026: "Yes, have a cap. And on the review, when someone
+// clicks to build the guide, ask 'are you sure? You can only generate one guide
+// a day.'" Guides are free, so each build is his money.
+{
+  const mem = () => { const m = new Map(); return { getItem: k => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), _m: m }; };
+  // The day is Denmark's: 23:30 UTC on 27 Sep is already the 28th in Copenhagen.
+  is("the day is Copenhagen's", M.copenhagenDay(new Date("2026-09-27T23:30:00Z")), "2026-09-28");
+  is("and not a minute early", M.copenhagenDay(new Date("2026-09-27T21:59:00Z")), "2026-09-27");
+  const lim = M.readLimits({ GEMLYX_GUIDES_PER_DAY: "0", GEMLYX_GUIDES_PER_IP: "abc", GEMLYX_GUIDES_PER_VISITOR: "0" });
+  ok("a typo in an env var falls back instead of becoming no limit", lim.perIp === 4);
+  ok("0 is the off switch for the day, and only for the day", lim.perDay === 0 && lim.perVisitor === 1);
+  ok("the defaults are one per visitor and account, a few per network", JSON.stringify(M.readLimits({})) === JSON.stringify({ perVisitor: 1, perAccount: 1, perIp: 4, perDay: 40, retries: 1 }));
+  ok("nobody is uncapped by default, not even any signed in account", M.uncappedList({}).length === 0 && !M.isUncapped(M.uncappedList({}), { userId: "u1", email: "a@b.c" }));
+  ok("the uncapped list takes ids or emails, any case", M.isUncapped(M.uncappedList({ GEMLYX_UNCAPPED: " U1 , Me@X.dk" }), { userId: "u1" }) && M.isUncapped(M.uncappedList({ GEMLYX_UNCAPPED: "me@x.dk" }), { email: "ME@x.dk" }) && !M.isUncapped(M.uncappedList({ GEMLYX_UNCAPPED: "me@x.dk" }), { email: "you@x.dk" }));
+  is("a visitor id that is not an id is dropped", M.cleanVisitor("x'; drop"), "");
+  const keys = M.allowanceKeys({ visitor: "abcdefgh-1", ipHash: "h1", userId: "U9" }, M.readLimits({}));
+  is("counted per visitor, account and network, then the site last", keys.map(k => `${k.key}=${k.limit}`), ["v:abcdefgh-1=1", "u:u9=1", "ip:h1=4", "site=40"]);
+  is("a full key is read back as a reason", ["v:x", "u:x", "ip:x", "r:x", "site", "ok", "zz"].map(M.reasonOfKey), ["used", "used", "network", "retries", "site", "ok", ""]);
+  ok("his wording is the rule's wording", /already built today's guide/.test(M.refusalText("used")) && /tomorrow/.test(M.refusalText("site")));
+  // The pass: signed by the server, good only for that day and visitor.
+  const sign = M.buildPassSigner(M.buildPassSecret("service-key"));
+  const pass = M.makePass(sign, { day: "2026-09-28", visitor: "abcdefgh-1", nonce: "n0nce1234567" });
+  ok("a pass reads back on its day, for its visitor", !!M.readPass(sign, pass, { day: "2026-09-28", visitor: "abcdefgh-1" }));
+  ok("not the next day", !M.readPass(sign, pass, { day: "2026-09-29", visitor: "abcdefgh-1" }));
+  ok("not for another visitor", !M.readPass(sign, pass, { day: "2026-09-28", visitor: "zzzzzzzz-2" }));
+  ok("not with a signature somebody made up", !M.readPass(sign, pass.replace(/\.[^.]+$/, ".AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"), { day: "2026-09-28", visitor: "abcdefgh-1" }));
+  ok("and not signed with the public key's secret", !M.readPass(M.buildPassSigner(M.buildPassSecret("anon-key")), pass, { day: "2026-09-28", visitor: "abcdefgh-1" }));
+  ok("no address is stored, only a hash", M.buildPassHashIp("s", "1.2.3.4") !== "1.2.3.4" && M.buildPassHashIp("s", "1.2.3.4").length === 24 && M.buildPassHashIp("s", "") === "");
+  is("an IPv6 household is its /64, however the phone rotates", [M.ipKeyOf("2001:db8:0:1:aaaa::1"), M.ipKeyOf("2001:0db8:0000:0001:bbbb:cccc:dddd:eeee"), M.ipKeyOf("::ffff:10.0.0.1"), M.ipKeyOf("10.0.0.1"), M.ipKeyOf("2001:db8::7")], ["2001:db8:0:1::/64", "2001:db8:0:1::/64", "10.0.0.1", "10.0.0.1", "2001:db8:0:0::/64"]);
+  ok("so two addresses in one /64 share a counter", M.buildPassHashIp("s", "2001:db8:0:1::1") === M.buildPassHashIp("s", "2001:db8:0:1:ffff::9") && M.buildPassHashIp("s", "2001:db8:0:1::1") !== M.buildPassHashIp("s", "2001:db8:0:2::1"));
+  is("the address is Vercel's, not the client's own header first", M.clientIp({ "x-real-ip": "9.9.9.9", "x-forwarded-for": "1.1.1.1, 9.9.9.9" }), "9.9.9.9");
+  // The server, with Supabase stood in by a fake.
+  const site = { origin: "https://www.gemlyxtravel.com", "x-real-ip": "1.2.3.4" };
+  const env = { SUPABASE_SERVICE_ROLE_KEY: "service-key" };
+  const fakeDb = (answer, seen = []) => async (url, opts) => {
+    seen.push({ url, body: opts?.body ? JSON.parse(opts.body) : null, auth: opts?.headers?.Authorization });
+    if (url.endsWith("/auth/v1/user")) return { ok: opts.headers.Authorization === "Bearer good", json: async () => ({ id: "U1", email: "o@g.dk" }) };
+    if (typeof answer === "number") return { ok: false, status: answer, json: async () => ({}) };
+    return { ok: true, status: 200, json: async () => answer };
+  };
+  const now = new Date("2026-09-28T10:00:00Z");
+  {
+    const seen = [];
+    const out = await M.buildPassDecide({ headers: site, body: { visitor: "abcdefgh-1" }, env, fetchImpl: fakeDb("ok", seen), now, nonce: "n0nce1234567" });
+    ok("a first guide today is let through with a pass", out.status === 200 && out.json.ok && out.json.pass === pass);
+    const rpc = seen.find(x => x.url.endsWith("/rpc/gemlyx_take_guide"));
+    ok("it asks the database with the service key, every counter at once", rpc && rpc.auth === "Bearer service-key" && rpc.body.p_day === "2026-09-28" && rpc.body.p_keys.join() === `v:abcdefgh-1,ip:${M.buildPassHashIp(M.buildPassSecret("service-key"), "1.2.3.4")},site`);
+  }
+  {
+    const out = await M.buildPassDecide({ headers: site, body: { visitor: "abcdefgh-1" }, env, fetchImpl: fakeDb("v:abcdefgh-1"), now });
+    ok("a second guide the same day is refused, in his words", out.status === 429 && out.json.reason === "used" && out.json.message === M.refusalText("used"));
+    const full = await M.buildPassDecide({ headers: site, body: { visitor: "abcdefgh-1" }, env, fetchImpl: fakeDb("site"), now });
+    ok("a full day is refused for everyone", full.status === 429 && full.json.reason === "site");
+  }
+  {
+    const out = await M.buildPassDecide({ headers: site, body: { visitor: "abcdefgh-1" }, env, fetchImpl: fakeDb(404), now });
+    ok("before the SQL is run, builds go ahead and say why", out.status === 200 && out.json.ok && out.json.open === "not-set-up");
+    const none = await M.buildPassDecide({ headers: site, body: {}, env: { SUPABASE_ANON_KEY: "anon" }, fetchImpl: fakeDb("site"), now });
+    ok("with only the public key nothing is signed or counted", none.json.ok && none.json.open === "no-service-key" && !none.json.pass);
+  }
+  {
+    const seen = [];
+    const out = await M.buildPassDecide({ headers: { ...site, authorization: "Bearer good" }, body: { visitor: "abcdefgh-1" }, env: { ...env, GEMLYX_UNCAPPED: "u1" }, fetchImpl: fakeDb("site", seen), now });
+    ok("the uncapped account is never counted", out.json.ok && out.json.uncapped && !seen.some(x => x.url.includes("/rpc/")));
+    const signed = [];
+    await M.buildPassDecide({ headers: { ...site, authorization: "Bearer good" }, body: { visitor: "abcdefgh-1" }, env, fetchImpl: fakeDb("ok", signed), now });
+    ok("a signed in traveller is counted as their account too", signed.find(x => x.url.includes("/rpc/")).body.p_keys.includes("u:u1"));
+    const expired = [];
+    const e = await M.buildPassDecide({ headers: { ...site, authorization: "Bearer stale" }, body: { visitor: "abcdefgh-1" }, env, fetchImpl: fakeDb("ok", expired), now });
+    ok("an expired token is a visitor, not an error", e.json.ok && !expired.find(x => x.url.includes("/rpc/")).body.p_keys.some(k => k.startsWith("u:")));
+  }
+  {
+    const seen = [];
+    const out = await M.buildPassDecide({ headers: site, body: { visitor: "abcdefgh-1", retry: pass }, env, fetchImpl: fakeDb("ok", seen), now });
+    const ipH = M.buildPassHashIp(M.buildPassSecret("service-key"), "1.2.3.4");
+    ok("a failed build retries on its pass, counted as a retry and not as their guide", out.json.ok && out.json.retry && seen.find(x => x.url.includes("/rpc/")).body.p_keys.join() === `r:n0nce1234567,ip:${ipH},site`);
+    const paused = await M.buildPassDecide({ headers: site, body: { visitor: "abcdefgh-1", retry: pass }, env: { ...env, GEMLYX_GUIDES_PER_DAY: "0" }, fetchImpl: fakeDb("site"), now });
+    ok("a retry still spends the day, so the off switch stops it", paused.status === 429 && paused.json.reason === "site");
+    const spent = await M.buildPassDecide({ headers: site, body: { visitor: "abcdefgh-1", retry: pass }, env, fetchImpl: fakeDb("r:n0nce1234567"), now });
+    ok("and the retries run out", spent.status === 429 && spent.json.reason === "retries");
+    const forged = [];
+    await M.buildPassDecide({ headers: site, body: { visitor: "abcdefgh-1", retry: pass.slice(0, -2) + "zz" }, env, fetchImpl: fakeDb("v:abcdefgh-1", forged), now });
+    ok("a forged pass is a fresh request, which then counts", forged.find(x => x.url.includes("/rpc/")).body.p_keys.includes("v:abcdefgh-1"));
+  }
+  {
+    const out = await M.buildPassDecide({ headers: { "x-real-ip": "1.2.3.4" }, body: {}, env, fetchImpl: fakeDb("ok"), now });
+    ok("the site's origin check comes first", out.status === 403);
+  }
+  // The browser half.
+  {
+    const store = mem();
+    const reply = (status, json) => async () => ({ ok: status < 300, status, json: async () => json });
+    const got = await M.askForGuidePass({ fetchImpl: reply(200, { ok: true, pass }), storage: store, makeId: () => "abcdefgh-1", now });
+    ok("a pass is kept for today and today is not yet used", got.ok && M.todayRecord(store, "2026-09-28").pass === pass && !M.guideUsedToday(M.todayRecord(store, "2026-09-28")));
+    let body = null;
+    await M.askForGuidePass({ fetchImpl: async (u, o) => { body = JSON.parse(o.body); return { ok: true, status: 200, json: async () => ({ ok: true, pass }) }; }, storage: store, makeId: () => "zzzzzzzz-9", now });
+    ok("the same browser keeps its id, and an unfinished build asks as a retry", body.visitor === "abcdefgh-1" && body.retry === pass);
+    M.markGuideBuilt(store, now);
+    ok("once the guide exists, today is used", M.guideUsedToday(M.todayRecord(store, "2026-09-28")));
+    ok("and tomorrow it is not", !M.guideUsedToday(M.todayRecord(store, "2026-09-29")));
+    const fresh = mem();
+    const no = await M.askForGuidePass({ fetchImpl: reply(429, { ok: false, reason: "used", message: "m" }), storage: fresh, makeId: () => "abcdefgh-1", now });
+    ok("a refusal reaches the screen and is remembered", !no.ok && no.message === "m" && M.usedTodayReason(M.todayRecord(fresh, "2026-09-28")) === "used");
+    const failed = mem();
+    await M.askForGuidePass({ fetchImpl: reply(429, { ok: false, reason: "retries", message: "m" }), storage: failed, makeId: () => "abcdefgh-1", now });
+    ok("a day of failed builds is not called a built guide", M.usedTodayReason(M.todayRecord(failed, "2026-09-28")) === "retries");
+    const full = mem();
+    await M.askForGuidePass({ fetchImpl: reply(429, { ok: false, reason: "site", message: "m" }), storage: full, makeId: () => "abcdefgh-1", now });
+    ok("a full site is not remembered as their guide", !M.guideUsedToday(M.todayRecord(full, "2026-09-28")));
+    const down = await M.askForGuidePass({ fetchImpl: async () => { throw new Error("offline"); }, storage: mem(), makeId: () => "abcdefgh-1", now });
+    const missing = await M.askForGuidePass({ fetchImpl: reply(404, null), storage: mem(), makeId: () => "abcdefgh-1", now });
+    ok("a cap that cannot be reached never turns a traveller away", down.ok && missing.ok);
+    const uncapped = mem();
+    await M.askForGuidePass({ fetchImpl: reply(200, { ok: true, uncapped: true }), storage: uncapped, makeId: () => "abcdefgh-1", now });
+    M.markGuideBuilt(uncapped, now);
+    ok("an uncapped build leaves nothing that would say today is used", !M.guideUsedToday(M.todayRecord(uncapped, "2026-09-28")));
+    const broken = { getItem: () => { throw new Error("blocked"); }, setItem: () => { throw new Error("blocked"); } };
+    ok("a browser with storage blocked still builds", (await M.askForGuidePass({ fetchImpl: reply(200, { ok: true, pass }), storage: broken, makeId: () => "abcdefgh-1", now })).ok);
+  }
+  // Wired in.
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const gen = app.slice(app.indexOf("const generateGuide = async"), app.indexOf("const generateGuide = async") + 20000);
+  ok("the pass is asked for before the build starts spending", gen.indexOf("await askForGuidePass(") > 0 && gen.indexOf("await askForGuidePass(") < gen.indexOf("installFetchMeter();") && gen.indexOf("await askForGuidePass(") > gen.indexOf("lastBuiltGuide.convoText === convoText"));
+  ok("a refusal stops it and says why", /if \(!allowance\.ok\) \{\s*setGuideModal\(null\);\s*setGuideError\(allowance\.message\);[\s\S]{0,80}return;\s*\}/.test(gen));
+  ok("a finished guide spends today", /markGuideBuilt\(guideStore\(\)\);\s*setGuideModal\(\{ _gid: gid/.test(app));
+  ok("the review screen asks, except in Studio", /askBeforeBuild=\{!isStudio\}/.test(app) && /usedToday=\{isStudio \? "" : usedTodayReason\(todayRecord\(guideStore\(\), copenhagenDay\(\)\)\)\}/.test(app));
+  ok("a second tap while the first is asking is ignored", /if \(guidePassPendingRef\.current\) return;\s*guidePassPendingRef\.current = true;\s*const allowance = await askForGuidePass\(/.test(gen) && /\}\)\.finally\(\(\) => \{ guidePassPendingRef\.current = false; \}\);/.test(gen));
+  const bp = readFileSync(join(root, "api/build-pass.js"), "utf8");
+  ok("a cap that is not counting says so in the logs", /if \(out\.json\?\.open\) console\.warn\("build-pass not counting:", out\.json\.open\);/.test(bp));
+  const pv = readFileSync(join(root, "src/components/GuidePreviewScreen.jsx"), "utf8");
+  ok("his question, word for word", pv.includes(">Are you sure?<") && pv.includes("You can only generate one guide a day."));
+  ok("continue asks first, and yes goes on to the build", /\} else if \(askBeforeBuild\) \{\s*setConfirmBuild\(true\);/.test(pv) && /setConfirmBuild\(false\); setGuideModal\("choosing"\);/.test(pv));
+  ok("a used day shows where to go instead of a button", /usedToday && !pendingRandomGuideMode \?/.test(pv) && /See ready-made guides/.test(pv));
+  const sql = readFileSync(join(root, "SETUP_GUIDE_CAP.md"), "utf8");
+  ok("the SQL checks every counter before it bumps any, under a lock", sql.indexOf("pg_advisory_xact_lock") < sql.indexOf("return p_keys[i];") && sql.indexOf("return p_keys[i];") < sql.indexOf("insert into gemlyx_guide_allowance"));
+  ok("and nobody but the server can call it", /revoke all on function public\.gemlyx_take_guide\(date, text\[\], integer\[\]\) from public, anon, authenticated;/.test(sql) && /enable row level security/.test(sql));
+}
+
+// ── BATCH 147: EVENTS IN THE ROW THAT IS ABOUT YOU ───────────────────
+// Oliver, 28 Sep 2026: "I want events put into 'your preferences' as well.
+// So it's not just attractions and towns, but also events."
+{
+  const want = M.preferenceRowState({ interests: ["History", "Food"] }, true).want;
+  const evs = [
+    { name: "Middelalderdage", desc: "A medieval market with knights and history", date: "2026-10-20" },
+    { name: "Rock i Parken", desc: "Loud guitars on a lawn", date: "2026-10-05" },
+    { name: "Middelalderdage", desc: "the same one twice, merged from two lists", date: "2026-10-20" },
+    { name: "Æblefest", desc: "Apple food market with local food", date: "2026-10-02" },
+    { name: "Old history walk", desc: "History walk", date: "2027-05-01" },
+  ];
+  const on = (e) => e.date < "2026-12-01";
+  const got = M.eventsForYou(evs, want, { isOn: on, order: (a, b) => a.date.localeCompare(b.date) });
+  is("fitting events that are on, once each, soonest first", got.map(e => e.name), ["Æblefest", "Middelalderdage"]);
+  ok("nothing without stated interests", M.eventsForYou(evs, null).length === 0 && M.eventsForYou(evs, new Set()).length === 0);
+  ok("a handful, not the whole calendar", M.EVENTS_FOR_YOU_MAX === 3 && M.eventsForYou(Array.from({ length: 9 }, (_, i) => ({ name: `History day ${i}`, desc: "history" })), want).length === 3);
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the row takes live and soon events, under Everything only", /const yourEvents = prefRow\.state === PREF_READY && pickCategory === "all"/.test(app) && /isOn: \(e\) => isCurrentlyLive\(e\.date, e\.dateEnd\) \|\| \(isConfirmedUpcoming\(e\) && \(parseEventDate\(e\.date\)\?\.getTime\(\) \?\? Infinity\) <= eventsUntil\)/.test(app));
+  ok("they open as events and lead the row, with their dates", /_src: "event", _where: e\.town \|\| e\.location, _when: getEventDate\(e\.date, e\.dateEnd\)/.test(app) && /const up = lens\.key === "yours" \? yourEvents\.slice\(0, Math\.max\(1, rowCards - 1\)\) : \[\];/.test(app) && /items: \[\.\.\.up, \.\.\.dealt\(ranked, rowCards, week \* 31 \+ li\)\]\.slice\(0, rowCards\)/.test(app) && /\[entryKindLabel\(x\._src, ""\), x\._when, x\._where\]/.test(app));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

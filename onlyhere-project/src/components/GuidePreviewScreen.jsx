@@ -373,7 +373,18 @@ export const GuidePreviewScreen = ({
   // half of every door on this screen, and it is the REAL conversation the
   // preview was built from rather than a second one.
   askGemlyx = null,
+  // ── ONE GUIDE A DAY ────────────────────────────────────────────
+  // Oliver, 28 Sep 2026: "on the review, when someone clicks to build the
+  // guide, ask 'are you sure? You can only generate one guide a day.'" Guides
+  // are free and every build is his money. askBeforeBuild is off in Studio,
+  // where he builds test guides all evening. usedToday is what this browser
+  // already knows; api/build-pass.js decides either way. See
+  // utils/guideAllowance.js.
+  askBeforeBuild = true,
+  usedToday = "",
+  onReadyMade = null,
 }) => {
+  const [confirmBuild, setConfirmBuild] = useState(false);
   // Which offered sections the traveller has opened, and which card they are
   // asking about. Both local: neither survives closing the preview, and neither
   // should.
@@ -1297,6 +1308,33 @@ export const GuidePreviewScreen = ({
             Nothing here yet, and that is expected: this list only fills in once you have named a place Gemlyx already covers. Your stops get chosen in the next step.
           </div>
         )}
+        {usedToday && !pendingRandomGuideMode ? (
+          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "16px", textAlign: "center" }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif", marginBottom: 4 }}>{usedToday === "retries" ? "Today's guide could not be finished" : "You have built today's guide"}</div>
+            <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6, marginBottom: onReadyMade ? 12 : 0 }}>You can build a new one tomorrow.</div>
+            {onReadyMade && (
+              <button onClick={onReadyMade}
+                style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "9px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                See ready-made guides
+              </button>
+            )}
+          </div>
+        ) : confirmBuild ? (
+          <div role="dialog" aria-label="Build your guide" style={{ background: C.surface, border: `1.5px solid ${C.gold}`, borderRadius: 14, padding: "16px 14px 14px", textAlign: "center" }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif", marginBottom: 4 }}>Are you sure?</div>
+            <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6, marginBottom: 13 }}>You can only generate one guide a day.</div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={() => { setConfirmBuild(false); setGuideModal("choosing"); }}
+                style={{ flex: 1, minHeight: 48, background: `linear-gradient(135deg, ${C.gold}, ${C.accent})`, border: "none", borderRadius: 12, fontSize: 14, fontWeight: 700, color: "#1A1206", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                Yes, build it
+              </button>
+              <button onClick={() => setConfirmBuild(false)}
+                style={{ flex: 1, minHeight: 48, background: "transparent", border: `1.5px solid ${C.border}`, borderRadius: 12, fontSize: 14, fontWeight: 700, color: C.text, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                Not yet
+              </button>
+            </div>
+          </div>
+        ) : (
         <button onClick={() => {
             // PASS 27: the random-guide test button already picked its mode
             // (map/plain) itself and has nothing more to ask — go straight to
@@ -1308,6 +1346,8 @@ export const GuidePreviewScreen = ({
               const mode = pendingRandomGuideMode;
               setPendingRandomGuideMode(null);
               generateGuide(undefined, mode);
+            } else if (askBeforeBuild) {
+              setConfirmBuild(true);
             } else {
               setGuideModal("choosing");
             }
@@ -1320,6 +1360,7 @@ export const GuidePreviewScreen = ({
               written dash in a component, which is why the suite now does. */}
           Looks good, continue →
         </button>
+        )}
         {/* ── REPORT THE PICKS, 4 SEP 2026 ────────────────────────────
             Oliver, on a preview built after he had said he was travelling with
             seven kids: "yet it puts me on a bar/club for 21+ .. Make a studio

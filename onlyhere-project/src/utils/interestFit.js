@@ -741,6 +741,32 @@ export const PREF_NO_ACCOUNT = "no-account";
 export const PREF_NO_INTERESTS = "no-interests";
 export const PREF_READY = "ready";
 
+// ── AND EVENTS, NOT ONLY PLACES ──────────────────────────────────────
+// Oliver, 28 Sep 2026: "I want events put into 'your preferences' as well.
+// So it's not just attractions and towns, but also events."
+//
+// An event is only worth a place in this row while it is on or about to be, so
+// the caller says what "on" means (live now, or a confirmed date inside the
+// window) and this keeps the ones that fit, once each, soonest first. A few and
+// not all of them: the row is a handful, and the events page is one tap away.
+export const EVENTS_FOR_YOU_DAYS = 60;
+export const EVENTS_FOR_YOU_MAX = 3;
+export const eventsForYou = (list, want, { isOn = () => true, order = null, limit = EVENTS_FOR_YOU_MAX } = {}) => {
+  if (!want || !want.size) return [];
+  const seen = new Set();
+  const out = [];
+  for (const e of list || []) {
+    const key = fold(String(e?.name || "")).trim();
+    if (!key || seen.has(key)) continue;
+    if (!isOn(e)) continue;
+    if (!fitsBrief(e, want).fits) continue;
+    seen.add(key);
+    out.push(e);
+  }
+  if (typeof order === "function") out.sort(order);
+  return out.slice(0, Math.max(0, limit));
+};
+
 export const preferenceRowState = (profile, signedIn) => {
   if (!signedIn) return { state: PREF_NO_ACCOUNT, want: null };
   const want = briefThemes("", profile?.interests);

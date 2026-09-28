@@ -81,6 +81,7 @@ import { SupportPage } from "./components/SupportPage";
 // to it too and App.jsx imports AboutMePage.
 import { AffiliatesPage } from "./components/AffiliatesPage";
 import { TripLibraryPage } from "./components/TripLibraryPage";
+import { askForGuidePass, markGuideBuilt, todayRecord, usedTodayReason, copenhagenDay } from "./utils/guideAllowance";
 import { LIBRARY_PATH } from "./utils/tripLibrary";
 import { TourLine } from "./components/TourLine";
 import { AFFILIATES_PATH } from "./utils/affiliateRoster";
@@ -271,7 +272,7 @@ import { travelModeKey, tickedTravelMode, withoutNonModes, overnightMove, daySta
 import { buildChatReport, chatReportFilename } from "./utils/chatReport";
 import { openingThread, withTestBrief, withoutTestBrief, loadThread, saveThread, clearThread } from "./utils/chatThread";
 import { downloadReport } from "./utils/previewReport";
-import { briefThemes , essentialsForTrip, essentialsBlock, reservedEssential, nightlifeWanted, nightlifeNotAsked, fitsBrief, preferenceRowState, PREF_READY, PREF_NO_ACCOUNT } from "./utils/interestFit";
+import { briefThemes , essentialsForTrip, essentialsBlock, reservedEssential, nightlifeWanted, nightlifeNotAsked, fitsBrief, preferenceRowState, PREF_READY, PREF_NO_ACCOUNT, eventsForYou, EVENTS_FOR_YOU_DAYS } from "./utils/interestFit";
 // outboundLink, and no longer partnerDisclosure or linkLabel beside it: both
 // render sites on the Essentials card asked for those separately and one of
 // them forgot two of the four. See outboundLink in utils/affiliates.js.
@@ -16817,6 +16818,16 @@ ${houseDistanceSays(houseBaseArea, dayPoints(day, stayResolve))}` : ""}`;
   // GuidePage renders in its lightMode (see GuidePage.jsx, search
   // "_lightMode"). Defaults to "map" so the random-guide test button and any
   // other caller that doesn't pass one keeps the old full-detail behavior.
+  // ── ONE GUIDE A DAY, COUNTED BEFORE ANY MODEL IS CALLED ────────────
+  // Oliver, 28 Sep 2026: "Yes, have a cap." See utils/guideAllowance.js and
+  // api/build-pass.js. The browser's own record is only what lets the review
+  // screen say so in advance; the server decides.
+  const guideStore = () => { try { return window.localStorage; } catch { return null; } };
+  const guidePassPendingRef = useRef(false);
+  const newVisitorId = () => {
+    try { if (window.crypto?.randomUUID) return window.crypto.randomUUID(); } catch { /* older browser */ }
+    return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+  };
   const generateGuide = async (overrideConvoText, modeOverride) => {
     const convoText = overrideConvoText || aiMessages.slice(1).map(m => `${m.role}: ${m.text}`).join("\n");
     // ── AND THE ARRIVAL IS THEIRS TO STATE ──────────────────────────
@@ -16891,6 +16902,26 @@ ${houseDistanceSays(houseBaseArea, dayPoints(day, stayResolve))}` : ""}`;
       // same as a fresh build does (see the auto-navigate effect near guideModal's
       // declaration), rather than reopening the old in-app summary card.
       navigate("/guide/new", { state: { guide: lastBuiltGuide.guide } });
+      return;
+    }
+    // Studio's token first, so Oliver building test guides is recognised as
+    // himself; the traveller's own account otherwise, so one account is one
+    // guide across devices.
+    // A second tap on Map or Simple while the first is still asking would ask
+    // again, be refused as today's second guide, and close the build the first
+    // tap started. Ignored instead.
+    if (guidePassPendingRef.current) return;
+    guidePassPendingRef.current = true;
+    const allowance = await askForGuidePass({
+      fetchImpl: (...args) => fetch(...args),
+      storage: guideStore(),
+      token: studioSession?.access_token || userSession?.token || "",
+      makeId: newVisitorId,
+    }).finally(() => { guidePassPendingRef.current = false; });
+    if (!allowance.ok) {
+      setGuideModal(null);
+      setGuideError(allowance.message);
+      setTimeout(() => setGuideError(null), 12000);
       return;
     }
     setGuideModal("loading");
@@ -18895,6 +18926,7 @@ If the conversation only covers a single day or a few stops with no explicit day
         if (claims.length) planProblems = [...planProblems, guideClaimNote(claims)];
       }
 
+      markGuideBuilt(guideStore());
       setGuideModal({ _gid: gid, _fx: fxLine, _constraints: guideConstraints, _mode: travelMode, _onlyWalking: onlyWalking, _lightMode: mode === "plain", _travelers: travellersSaid || String(partyKnown?.value || ""), _party: partyKnown && (partyKnown.adults != null || partyKnown.kids != null || partyKnown.total != null) ? { adults: partyKnown.adults ?? null, kids: partyKnown.kids ?? null, total: partyKnown.total ?? null, hasKids: !!partyKnown.hasKids } : null, _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: dayKey(arrivalDate), /* The night before a morning flight. See utils/nightsOpen.js. */ _sleepsAfterLast: sleepsAfterLastDay(intakeArrival, intakeDeparture, parsed.days.length), _arrivalPoint: arrivalPoint(saidByTravellerForGuide, { townPoint: townPointFor }), _geo: freshGeo, _weatherFetchedAt: new Date().toISOString(), _exactDurations: exactFound, _noRouteFound: routeFailed, _testProfile: testProfile, _testPlan: testProfile ? plannerSkeleton : null, _planProblems: planProblems.length ? planProblems : null, _stay: { booked: stayKnown.stay?.value === "booked" || !!bookedName, nights: bookedNights, name: bookedName || "", /* The pick and the base, so the page offers one house and not a hotel a night. See utils/houseTrip.js. */ kind: stayForBuild || "", house: houseBaseForTrip?.name || "" }, _food: intakeFood || "", /* ── AND WHICH WAY THEY EAT, CARRIED OVER ──
       Found by a review pass, 26 Sep 2026. The guide's cost block has three food
       tiers and opened on the default one whatever the traveller ticked on the
@@ -28549,6 +28581,16 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 // a pure test over the pool and the two empty cases are decided
                 // in one place rather than inside a filter that runs per row.
                 const prefRow = preferenceRowState(userProfile, !!userSession);
+                // Events too, not only places. Oliver, 28 Sep 2026. Only under
+                // Everything, since every other chip names a kind of place. See
+                // eventsForYou in utils/interestFit.js.
+                const eventsUntil = dayPlus(new Date(), EVENTS_FOR_YOU_DAYS + 1)?.getTime() ?? Infinity;
+                const yourEvents = prefRow.state === PREF_READY && pickCategory === "all"
+                  ? eventsForYou([...events, ...majorEvents, ...vikingEvents], prefRow.want, {
+                      isOn: (e) => isCurrentlyLive(e.date, e.dateEnd) || (isConfirmedUpcoming(e) && (parseEventDate(e.date)?.getTime() ?? Infinity) <= eventsUntil),
+                      order: byEventDate,
+                    }).map(e => ({ ...e, _src: "event", _where: e.town || e.location, _when: getEventDate(e.date, e.dateEnd) }))
+                  : [];
                 const lenses = [
                   { key: "yours", title: uiT("row.yours.title", uiLang), sub: uiT("row.yours.sub", uiLang),
                     account: prefRow,
@@ -28580,7 +28622,10 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   // seed is unchanged, so a wider screen deals the SAME hand
                   // with more of it visible rather than a different one, and
                   // resizing the window never reshuffles what is on show.
-                  return { ...lens, items: dealt(ranked, rowCards, week * 31 + li) };
+                  // The fitting events lead the row, leaving room for at least
+                  // one place, and the same week's hand fills the rest.
+                  const up = lens.key === "yours" ? yourEvents.slice(0, Math.max(1, rowCards - 1)) : [];
+                  return { ...lens, items: [...up, ...dealt(ranked, rowCards, week * 31 + li)].slice(0, rowCards) };
                   // An empty row is dropped, EXCEPT the one whose emptiness is
                   // the message. "Account needed" over no cards is the whole
                   // point of that row when nobody is signed in.
@@ -28676,7 +28721,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                       money over a pool that now holds Legoland.
                                       entryKindLabel is the same public word the
                                       URL uses. See utils/entryPrice.js. */}
-                                  {[entryKindLabel(x._src, ""), x._where].filter(Boolean).join(" · ")}
+                                  {[entryKindLabel(x._src, ""), x._when, x._where].filter(Boolean).join(" · ")}
                                 </div>
                               </div>
                             </button>
@@ -33114,6 +33159,10 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           setAiMessages={setAiMessages}
           setGuideModal={setGuideModal}
           generateGuide={generateGuide}
+          // One guide a day. No question in Studio, where he tests.
+          askBeforeBuild={!isStudio}
+          usedToday={isStudio ? "" : usedTodayReason(todayRecord(guideStore(), copenhagenDay()))}
+          onReadyMade={() => { setGuideModal(null); navigate(LIBRARY_PATH); }}
           intakeArrival={intakeArrival}
           intakeDeparture={intakeDeparture}
           intakeInterest={intakeInterest}
