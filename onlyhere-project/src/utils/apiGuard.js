@@ -112,6 +112,10 @@ export const STUDIO_ONLY_ENDPOINTS = [
   // them. It is founder-gated in its own file either way; being named here is
   // what makes the suite check that the gate is still there next month.
   "social-find",    // API Direct requests, priced per call
+  // 28 Sep 2026. Free to run, since it only makes plain page reads, but it
+  // fetches any address it is handed, so it is gated like scan-source rather
+  // than left as an open proxy.
+  "find-email",
 ];
 
 // Resolve a bearer token with Supabase. Lifted from api/ask.js rather than

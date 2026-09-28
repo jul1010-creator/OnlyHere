@@ -435,3 +435,113 @@ You: "Yes, have a cap. And on the review, when someone clicks to build the guide
 - **Two things the test showed:**
   - **The panel argues against the car.** With "Stay in one part of Denmark" picked, it says "A car is the one that adds a cost this trip does not need". It says that even when the traveller has ticked Car and typed "driving our own car" as the starting point. For a family driving up from Hamburg to a sommerhus in West Jutland, where buses are sparse, that advice is backwards. It is also explanation text under a control. I left it alone because it is a written design choice. Say if it should go, or only show when Car is not ticked.
   - **The chat counter dropped after a reload.** The chat said "Everything I need, 7 of 7", and after a reload it said "6 of 7, and I still need what kind of trip". Not looked into yet.
+
+## Batch 148: "Draft a mail to..." for photos
+
+You: "next to Wiki and upload picture, you have 'draft a mail to..'"
+
+- **Where:** in Studio, open an entry's media editor (the one with Upload photos and Find on Wikimedia). The new button is "✉ Draft a mail to <name>".
+- **What it opens:** a draft you can edit, in Danish or English, with:
+  - their email to fill in
+  - a subject, e.g. "Billeder af WOW PARK til Gemlyx"
+  - a short body that links the entry on gemlyxtravel.com and asks for one or two photos, only for where you write about them, with their credit line, and confirmation that they own the rights
+- **One line is yours.** The draft has "[Skriv én linje om, hvorfor du valgte stedet]" in it, and the send buttons stay off until you replace it. That personal line is what gets small places to answer.
+- **Sending:**
+  - "Open in Gmail" opens a filled-in Gmail message as oliver@gemlyxtravel.com
+  - "Open in mail app" opens your default mail program
+  - "Copy" copies the subject and text
+- **Links:** "Their site" and "Press photos?" (a search of their own site for press, presse and pressebilleder) sit above the draft, so you can check for a press page before writing at all.
+- **No AI call.** It is a fixed template, so it costs nothing and cannot invent anything about the place.
+- **"Find their email"** sits next to the email field when the entry has a website. It reads their front page and the press and contact pages it links to, and lists every address written there with the page it came from. The best one goes into the To field unless you already typed one. A press or marketing address on their own domain comes first, then info@ or kontakt@, then anything else. It uses plain page reads only, never Firecrawl or AI, so it costs nothing. On WOW PARK it found info@wowpark.dk. It runs through the new `api/find-email.js`, which is Studio only like scan-source.
+- **"Open my profile" was broken.** You: "when you click 'open my profile' to fit preferences, it just swipes to a non-existent page". The button still sent you to the old "me" tab, which was removed when Info about me became its own page on 23 Aug. It now opens Info about me, on the About me section where the interests are. A new check makes sure every button that jumps to a tab points at one that exists.
+- **Free and Paid on Attractions.** You: "put category on attractions called 'free' and 'paid'." There is a new Price dropdown next to Type and Island, with All, Free and Paid.
+  - It reads each entry's own price words, the same rule the price chip on the card uses, and never the category name. That name is the old bug where Legoland showed as free.
+  - **Free** means the entry says free and names no amount.
+  - **Paid** means it names an amount, or says something like "free for children", which implies a price for everyone else.
+  - An entry that says nothing about price is in neither, and shows only under All, so Free can never hand somebody a theme park. The counts beside each option show how many are in each.
+- 28 new checks, and 2 older ones updated for the fixed profile button and the longer mail panel.
+
+## Batch 149: stopping a build, attraction categories, Tiqets tours, and a look at every page
+
+You: "if people cancel the making of the guide, then it doesn't count as their daily limit", "attractions need categories.. like history, nature, family, and (perhaps) unique", "on Amalienborg, an affiliate link has been implemented as a 'website ticket' when the 'ticket' is really just a guide", and "look through all the navigations".
+
+**Run one more SQL block:** section 1b in `SETUP_GUIDE_CAP.md`. Until then, "Stop building" still works, and the traveller gets their one retry instead of the day back.
+
+- **Stop building.** Before this there was no cancel at all: the only button during the wait was "Keep browsing", which keeps the build running. Now there is a "Stop building" button top left.
+  - It ends the build at the next stage, before the next round of AI calls.
+  - The server then takes the build off that browser, account and network for the day. It stays on the site total, because what it spent before stopping was spent.
+  - The traveller is told "Stopped. It did not count as today's guide." only once the server has confirmed it.
+  - One browser can stop 2 builds a day (`GEMLYX_GUIDE_REFUNDS`), and a stopped pass cannot be handed back twice or reused. Checked against a real Postgres.
+- **Categories on Attractions.** A new Category dropdown with History, Nature, Family and Unique, and you can pick several.
+  - History, Nature and Family use the entry's themes when it has them. Attractions never had themes, so until now they're read from each entry's own words.
+  - A theme park, amusement park or water park counts as Family, never Nature.
+  - Unique only when the entry itself says it's one of a kind: the only, the oldest or the largest, "Danmarks eneste" and so on.
+  - New and redrafted attractions are now asked for themes, so the categories get more exact as you redraft.
+  - Word matching is rough. For example, Glyptoteket also lands in Nature because of its winter garden.
+- **Amalienborg.**
+  - The entry page on the live site currently shows no ticket button, so I couldn't see the exact link you saw.
+  - I fixed the two ways it could happen. A Tiqets product whose address says tour, guide, walk or audio and says nothing about a ticket, admission or entry is no longer shown as Tickets.
+  - The Website button no longer shows when the website field holds a shop page (Tiqets, GetYourGuide, Ticketmaster, WeGoTrip, Viator and similar). A shop's page is never the place's own site.
+  - If you saw it inside a guide or in Studio, tell me where and I'll check that exact spot.
+- 35 new checks, and 4 older ones updated for the new stop button, the extra dropdowns and the Website rule.
+
+### What I found wrong with the navigation pages
+
+Checked on the live site, page by page, with the screen off, so I read text rather than looked at every layout.
+
+1. **Shared page links lose their page.** Opening gemlyxtravel.com/#events (or #gems, #tips) in a fresh browser shows "Enter Denmark", and pressing it lands on Explore instead of the page in the link. That matters for anything you advertise with a link to one page.
+2. **Shopping is empty.** It's a top-level page saying "Nothing published yet", one click from the front page. Hide it until it has entries, or fill it.
+3. **The menu is cut off on a laptop.** At 1280 px wide the last items (Shopping, Towns, Islands) hide behind a small arrow after "Sh".
+4. **Three different filter styles.**
+   - Attractions, Food and Events have a row of dropdowns.
+   - Towns, Islands and Cheap gems have a Filters button with a panel.
+   - Nightlife has a town list.
+5. **Search exists only on some pages.** Attractions and Towns have a search box, but Food and Events don't.
+6. **Alphabetical first means weakest first.**
+   - Towns opens on Asaa ("If you're nearby").
+   - Islands opens on Agersø ("Worth a look").
+   - Attractions starts at A.
+
+   The first thing a visitor sees is often your least recommended entry. Sorting by your tier by default would put the best first.
+7. **Stale or wrong page texts.**
+   - Events says "Summer means festival season across Denmark" at the end of September.
+   - Cheap gems says "you can try out the following shops" above a list that includes bars.
+   - Attractions still describes itself as "free places and things worth booking ahead", which is the old free/bookable split.
+8. **Danish text on the English site.**
+   - The AI notices on Events and in the chat ("Mange billeder her er AI-indtryk…", "Du taler med en AI…") follow the browser's language, so a visitor with a Danish browser but an English site gets both languages on one screen.
+9. **Tips and Essentials overlap.** Both cover transport and fines, so a visitor has two places to look for the same thing.
+10. **Food cards.** Some show long category texts as the card's subtitle, e.g. "Fine-dining restaurant, one Michelin Star, awarded 2023, retained 2024-2026, the only Michelin-starred restaurant on Funen".
+
+## Batch 150: the navigation review, fixed (all but the menu arrow)
+
+Oliver, 28 Sep 2026: "Just fix it all except the arrow on." and "It also seems that attractions have no 'Length from you', unlike towns".
+
+- **A correction to finding 1.** Page links work. gemlyxtravel.com/#events, #tips and the rest open their page. My test used #gems, and the real word for that page is #cheap-gems. What did fail was a link to an entry or town that does not exist (for example /denmark/attraction/amalienborg when the entry is amalienborg-slot): it sat on the front door forever. Once the library has loaded, such a link now opens the list it belongs to with a short note: "That page could not be found, so here is the list it belongs to."
+- **Shopping is hidden while it's empty.** It leaves the menu and the swipe order once the library has loaded and has no shops. It comes back by itself when the first one is published, and Studio always shows it.
+- **One filter style.** Attractions, Events and Food now have the same shape as Towns, Islands and Cheap gems: a search box, a Filters button beside it, and the panel opening underneath with every filter as a row of choices with counts. A choice that would empty the list is greyed out; All never is. On 19 Aug you preferred the dropdowns on Events, and this follows your 27 Sep direction instead. Say so if you want the dropdowns back.
+- **Search on every list.** Events searches town, type, description and place. Food searches place, category and description.
+- **Recommended first.** Towns, Islands and Attractions open by your tier (Can't miss, then Highly recommended, then Worth a look), then by name. Attractions has "Recommended" in its sort menu, and A to Z is still there.
+- **Distance on attraction cards.** A card says "~136 km from you" when the reader is in Denmark, and otherwise "~X km from CPH" (nothing for places in Copenhagen itself). It's a straight line from the entry's town, hence the ~. Craft cards keep the travel time they had.
+- **Page texts.**
+  - Events no longer says summer means festival season.
+  - Attractions no longer describes itself by the old free/bookable split.
+  - Cheap gems is unchanged. The line about shops is your own wording, and a test protects it. Say if you want it to say places.
+- **The AI notices.** They follow the page's language when the site can speak the reader's. A Danish browser reading in English gets the English notice. A Dutch or Swedish browser still gets its own language, since the site can't be shown in it and the notice must be clear to that reader. A guide written in a language follows the guide.
+- **Tips and Essentials point at each other.** Each page has a line at the top that opens the other ("Tickets, money and the transit fine are on Essentials →" and "The Copenhagen Card, bikes and other extras are on Tips →").
+- **Food cards.** The small line and the price chip show the first clause only, cut at a word, so "Fine-dining restaurant, one Michelin Star, awarded 2023…" reads "Fine-dining restaurant". The entry page still shows all of it.
+- **Not done:** the menu arrow on laptops (your call).
+- About 30 new checks. About 20 older ones were updated because they asserted the dropdowns, the old tab list, the alphabetical sort or the notice reading only the browser. Each has a comment saying so.
+
+## Batch 151: what a Tiqets page sells, and Tiqets as the second choice
+
+Oliver, 28 Sep 2026: "recommending Amalienborg through Getyourguide or zoo through Tiqets, is bad in the sense that it is 10 kr pricier. However, some of them do include packages that make it cheaper and have refunding." On the layout: "Up to you."
+
+- **What was wrong.** A Tiqets venue page always has "tickets" in its address, whatever it sells. Amalienborg's sold only a guided tour. Experimentarium's and Louisiana's sold only the Copenhagen Card. Langeland and Roskilde, from my list earlier, were already hidden: islands and towns never show a Tickets button.
+- **What the page sells is now stored beside the link** (`__ticketOffer`): entry, combo, tour or card, plus whether the page offers free cancellation or combo deals. The affiliate sweep reads the page before you tick it, and so does a new draft. Nothing is claimed that the page itself doesn't say.
+- **On the entry page:**
+  - A place with its own website: the Website button stays first, and Tiqets becomes a smaller line under it, e.g. "Also on Tiqets: usually a little dearer than buying direct, with combo deals on other sights ↗".
+  - No website of its own: Tiqets stays the Tickets button, with what the extra buys under it when there is anything.
+  - A tour page is offered as "Guided tour on Tiqets", and a card page as "Included in the Copenhagen Card, sold on Tiqets", never as Tickets, and neither becomes the Tickets row in At a Glance.
+  - Free cancellation is only mentioned when the Tiqets page says so. None of today's venue pages do, so nothing claims it yet.
+- **Already filled in live** for the eight rows with a Tiqets link: Zoo, Kronborg, National Museum, Tivoli and Legoland as entry with combos; Experimentarium, Louisiana and Humlebæk as card. It takes effect when this is pushed.
+- The refund SQL (section 1b) is run and verified.

@@ -60,6 +60,7 @@
 // guidance by somebody who is not a lawyer, recorded so the reasoning can be
 // checked by one rather than rediscovered.
 import { readerLanguage } from "./readerLanguage";
+import { UI_CODES } from "./uiLanguage";
 
 // ── THE SENTENCE, IN THE LANGUAGES THE PRODUCT ALREADY READS ────────
 //
@@ -176,7 +177,23 @@ export const aiDisclosure = (lang) => inReaderLanguage(AI_DISCLOSURE, lang);
 // wraps answerInLanguage in readerLanguage.js.
 //
 // `?.tag` and not the object, which is the bug above stated in one character.
-export const aiDisclosureFor = (nav) => aiDisclosure(readerLanguage(nav)?.tag || "en");
+// ── AND THE PAGE'S LANGUAGE WHEN THE PAGE CAN SPEAK THE READER'S ────
+// Navigation review, 28 Sep 2026: a Danish browser reading the site in English
+// got an English page with one Danish sentence under the chat. So the page's
+// own language wins whenever the reader's browser language is one the site
+// could have been shown in (they chose English over Danish; respect it), and
+// whenever the page is in a language chosen on purpose that the menu does not
+// offer (a guide written in Dutch). A Dutch or Swedish browser on an English
+// page still gets the sentence in its own language, because the site cannot
+// speak it and Article 50 asks for the notice to be clear to that reader.
+const baseOf = (tag) => String(tag || "").split("-")[0].toLowerCase();
+export const disclosureLanguage = (nav, pageLang) => {
+  const browser = readerLanguage(nav)?.tag || "";
+  const page = String(pageLang || "");
+  if (page && (!browser || UI_CODES.includes(baseOf(browser)) || !UI_CODES.includes(baseOf(page)))) return page;
+  return browser || page || "en";
+};
+export const aiDisclosureFor = (nav, pageLang) => aiDisclosure(disclosureLanguage(nav, pageLang));
 
 // ── WHERE IT HAS TO APPEAR ──────────────────────────────────────────
 // Named so the assertion and the render agree about the list rather than each
@@ -221,4 +238,4 @@ export const AI_IMAGE_NOTE = {
 };
 
 export const aiImageNote = (lang) => inReaderLanguage(AI_IMAGE_NOTE, lang);
-export const aiImageNoteFor = (nav) => aiImageNote(readerLanguage(nav)?.tag || "en");
+export const aiImageNoteFor = (nav, pageLang) => aiImageNote(disclosureLanguage(nav, pageLang));

@@ -67,80 +67,30 @@ const useCloseOnOutside = (open, close) => {
 // Disabled, never hidden. listControls.js: "an option that vanishes and
 // reappears as you tap makes the sheet jump under your thumb." A zero here is a
 // true statement about the data, which is worth being able to read.
-const OptionRow = ({ label, count, active, disabled, multi, onClick }) => (
-  <button onClick={disabled ? undefined : onClick} disabled={disabled}
-    aria-pressed={active}
+// ── ONE WAY TO FILTER, ON EVERY PAGE ─────────────────────────────────
+//
+// Oliver, 28 Sep 2026, after the navigation review found three filter styles
+// across the site: "Just fix it all". Towns, Islands and Cheap gems already
+// had the shape he asked for on 27 Sep, "put filters into the position under
+// the text bar": a search box, a Filters button beside it, and the panel
+// opening straight underneath with every filter as a row of choices. This
+// component now draws that same shape, so Attractions, Events and Food match
+// the other three. The count of what is applied sits on the button, the sort
+// and the removable chips stay on the line below.
+const Chip = ({ label, count, active, disabled, multi, onClick }) => (
+  <button onClick={disabled ? undefined : onClick} disabled={disabled} aria-pressed={active}
     style={{
-      display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
-      width: "100%", textAlign: "left", background: active ? `${C.gold}14` : "transparent",
-      border: "none", borderRadius: 8, padding: "9px 11px",
-      color: disabled ? C.muted : active ? C.gold : C.text,
-      fontSize: 12.5, fontWeight: active ? 700 : 500,
+      display: "inline-flex", alignItems: "center", gap: 6,
+      background: active ? C.text : "transparent",
+      color: disabled ? C.muted : active ? C.bg : C.light,
+      border: `1px solid ${active ? C.text : C.border}`,
+      borderRadius: 100, padding: "7px 14px", fontSize: 12.5, fontWeight: active ? 700 : 500,
       cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.45 : 1,
-      fontFamily: "'Inter', sans-serif",
+      fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap", flexShrink: 0,
     }}>
-    {/* A BOX FOR A MULTI FACET, A TICK FOR A SINGLE ONE. They behave
-        differently — one adds to a selection, the other replaces it — and the
-        control has to say which before it is pressed, not after. */}
-    <span>{multi ? (active ? "\u2611 " : "\u2610 ") : (active ? "\u2713 " : "")}{label}</span>
-    <span style={{ fontSize: 11, color: C.muted, fontWeight: 500 }}>{count}</span>
+    {multi && active ? "✓ " : ""}{label}{count != null ? ` (${count})` : ""}
   </button>
 );
-
-const Panel = ({ children, width = 240 }) => (
-  <div style={{
-    position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 40,
-    minWidth: width, maxWidth: "min(92vw, 340px)", maxHeight: 320, overflowY: "auto",
-    background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12,
-    padding: 6, boxShadow: "0 14px 40px rgba(0,0,0,0.55)",
-  }}>
-    {children}
-  </div>
-);
-
-const Dropdown = ({ facet, items, facets, state, onChange, openKey, setOpenKey }) => {
-  const open = openKey === facet.key;
-  const ref = useCloseOnOutside(open, () => setOpenKey(null));
-  const counts = facetCounts(items, facets, state, facet.key);
-  const chips = appliedChips([facet], state);
-  const isOn = chips.length > 0;
-  // One value shows its own label; several show the facet plus a count, because
-  // "Harbour, Village, Major city" does not fit on a phone and truncating it
-  // hides which ones are on.
-  const buttonLabel = !isOn ? facet.label
-    : chips.length === 1 ? chips[0].label
-    : `${facet.label} · ${chips.length}`;
-  return (
-    <div ref={ref} style={{ position: "relative" }}>
-      <button onClick={() => setOpenKey(open ? null : facet.key)}
-        aria-expanded={open}
-        style={{ ...btn, padding: "9px 13px", background: "transparent",
-          border: `1px solid ${isOn ? C.gold : C.border}`, color: isOn ? C.gold : C.text }}>
-        {buttonLabel}
-        <span style={{ fontSize: 9, opacity: 0.8 }}>{open ? "▲" : "▼"}</span>
-      </button>
-      {open && (
-        <Panel>
-          {(facet.options || []).map(o => (
-            <OptionRow key={o.value} label={o.label} count={counts[o.value] ?? 0}
-              multi={!!facet.multi && o.value !== "All"}
-              active={isOptionOn(state, facet, o.value)}
-              // "All" is never disabled: it is the way back out of a filter that
-              // emptied the list, and disabling it would strand somebody there.
-              disabled={o.value !== "All" && (counts[o.value] ?? 0) === 0}
-              // A MULTI PANEL STAYS OPEN. Closing it after each tick makes
-              // picking three types three round trips through the same button,
-              // which is the thing "be able to choose more" is asking to avoid.
-              onClick={() => {
-                onChange(o.value === "All" ? clearFacet(state, facet.key) : toggleFacetValue(state, facet, o.value));
-                if (!facet.multi || o.value === "All") setOpenKey(null);
-              }} />
-          ))}
-        </Panel>
-      )}
-    </div>
-  );
-};
 
 export const FilterBar = ({
   items = [],           // everything before any facet applies
@@ -152,8 +102,14 @@ export const FilterBar = ({
   sort = "",
   sortOptions = [],
   onSort = () => {},
+  // The page's own search, drawn in the row with the Filters button. Left
+  // out, the row is the button alone.
+  search = null,
+  onSearch = null,
+  searchPlaceholder = "Search",
 }) => {
   const [openKey, setOpenKey] = useState(null);
+  const [panelOpen, setPanelOpen] = useState(false);
   const sortRef = useCloseOnOutside(openKey === "__sort", () => setOpenKey(null));
   const active = activeFacetCount(facets, state);
   const chips = appliedChips(facets, state);
@@ -161,39 +117,55 @@ export const FilterBar = ({
 
   return (
     <div style={{ marginBottom: 16 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        {/* The dark solid button, first, exactly as on Magasin. It carries the
-            active count so a filtered list explains itself from the one control
-            that is always on screen. */}
-        {/* ── ONE CONTROL PER FACET, AND NO FILTER BUTTON ──────────
-            Oliver, 19 Aug 2026, with the panel open over the row: "it makes no
-            sense. you made it on multiple. Just remove the white filter thing
-            and keep the two other sections."
-
-            He is right and this is my second attempt at the same complaint. The
-            first version put the sections INSIDE the Filter button and left the
-            per-facet dropdowns on the row, so Date existed twice on one screen
-            and tapping either moved the other. I then removed the dropdowns and
-            kept the button, which is the other way of having one of each, and it
-            buried Date and Type behind a tap for no gain.
-
-            This is the version he asked for: Date and Type are the controls, on
-            the row, where a tap opens the thing it is labelled with. The Filter
-            button and its sheet are gone entirely, and with them the duplicated
-            Order section, since the sort already lives on the line below and is
-            not a filter.
-
-            AND THE ROW STAYS SHORT. Oliver, in the same breath: "As long as
-            there aren't 10.000 buttons and it is all filtered easily into
-            drop-down." So a page declares which facets earn a control, with
-            `primary`, and a page that declares none gets the first two rather
-            than all of them: the long row is the thing being fixed, and a
-            default should not quietly reintroduce it. */}
-        {(facets.some(f => f.primary) ? facets.filter(f => f.primary) : facets.slice(0, 2)).map(f => (
-          <Dropdown key={f.key} facet={f} items={items} facets={facets} state={state}
-            onChange={onChange} openKey={openKey} setOpenKey={setOpenKey} />
-        ))}
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        {onSearch && (
+          <div style={{ position: "relative", flex: 1, minWidth: 0 }}>
+            <span style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)", fontSize: 13, color: C.muted, pointerEvents: "none" }}>⌕</span>
+            <input value={search || ""} onChange={e => onSearch(e.target.value)} placeholder={searchPlaceholder}
+              style={{ width: "100%", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 100, padding: "9px 34px 9px 30px", fontSize: 12.5, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif", boxSizing: "border-box" }} />
+            {search && (
+              <button onClick={() => onSearch("")} aria-label="Clear search"
+                style={{ position: "absolute", right: 11, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: C.muted, fontSize: 15, cursor: "pointer", lineHeight: 1 }}>×</button>
+            )}
+          </div>
+        )}
+        {facets.length > 0 && (
+          <button onClick={() => setPanelOpen(o => !o)} aria-expanded={panelOpen}
+            style={{ background: panelOpen || active ? `${C.gold}1a` : "none", border: `1px solid ${active ? C.gold : C.border}`, color: active ? C.gold : C.light, borderRadius: 100, padding: "9px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer", flexShrink: 0, fontFamily: "'Inter', sans-serif" }}>
+            Filters{active ? ` · ${active}` : ""}
+          </button>
+        )}
       </div>
+
+      {/* The panel opens straight under the row, every filter as a row of
+          choices with how many each would leave, counted with the other
+          filters applied. A choice that would empty the list is greyed rather
+          than hidden, and All is never greyed: it is the way back out. */}
+      {panelOpen && facets.length > 0 && (
+        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px 15px", marginTop: 10 }}>
+          {facets.map(f => {
+            const counts = facetCounts(items, facets, state, f.key);
+            return (
+              <div key={f.key} style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 7 }}>{f.label}</div>
+                <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+                  {(f.options || []).map(o => {
+                    const all = o.value === "All";
+                    const n = counts[o.value] ?? 0;
+                    return (
+                      <Chip key={o.value} label={o.label} count={all ? null : n}
+                        multi={!!f.multi && !all}
+                        active={isOptionOn(state, f, all ? null : o.value)}
+                        disabled={!all && n === 0 && !isOptionOn(state, f, o.value)}
+                        onClick={() => onChange(all ? clearFacet(state, f.key) : toggleFacetValue(state, f, o.value))} />
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* ── THE COUNT, AND THE SORT ON THE OTHER SIDE ──────────────
           One line, count left, sort right, the way the screenshot has it. The

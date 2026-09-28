@@ -238,3 +238,21 @@ export const cardLineSource = (place, { want = null } = {}) => {
 // Exported so the suite can assert the vocabulary this file reasons about is
 // the same one placeThemes.js publishes, rather than a copy that drifts.
 export const KNOWN_THEMES = PLACE_THEMES;
+
+// ── A LABEL, NOT A SENTENCE ─────────────────────────────────────────
+// Oliver, 28 Sep 2026, fixing the navigation review. A food card's small
+// uppercase line printed its whole category field, and one read "Fine-dining
+// restaurant, one Michelin Star, awarded 2023, retained 2024-2026, the only
+// Michelin-starred restaurant on Funen". The entry page still shows all of it;
+// the card shows the first clause, and at most a short line of that, cut at a
+// word rather than through one.
+export const LABEL_MAX = 34;
+export const shortLabel = (text, max = LABEL_MAX) => {
+  const s = String(text || "").replace(/\s+/g, " ").trim();
+  if (!s) return "";
+  const first = s.split(/[,;:(]|\.(?:\s|$)|\s(?:with|and the|which)\s/i)[0].trim() || s;
+  if (first.length <= max) return first;
+  const cut = first.slice(0, max + 1);
+  const at = cut.lastIndexOf(" ");
+  return `${(at > max * 0.5 ? cut.slice(0, at) : first.slice(0, max)).trim()}…`;
+};

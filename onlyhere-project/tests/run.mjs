@@ -73,7 +73,7 @@ writeFileSync(entry, `
   export { WEGOTRIP_DK, WEGOTRIP_TOWN_PAGE, CHECKED_ON as WEGOTRIP_CHECKED_ON } from ${JSON.stringify(join(root, "src/data/wegotrip.js"))};
   export { TAB_HASH, hashForTab, tabForHash, isEntryHash, ownsTheAddress, STUDIO_HASH } from ${JSON.stringify(join(root, "src/utils/tabUrl.js"))};
   export { venueCore, venueMentions, venueQuote, venueVerdict, venueVia, describeVenue, VENUE_MIN_MENTIONS, VENUE_MIN_MENTIONS_NO_TOWN, VENUE_MAX_KM, NO_NAME as V_NO_NAME, NOT_NAMED as V_NOT_NAMED, TOO_FAR as V_TOO_FAR, IS_AN_EVENT as V_IS_AN_EVENT, OK as V_OK } from ${JSON.stringify(join(root, "src/utils/venueMatch.js"))};
-  export { wrongEdition, urlYears, editionYearOf, isTiqetsProductUrl, tiqetsPageKind, ticketMatches, pickTicketUrl, describeTicketSearch, ticketQuery, ticketQueries, isBookableTicketUrl, ticketAgentOf, isTicketmasterEventUrl, isTicketmasterHubUrl, isWegotripTicketUrl, ticketUrlSaysElsewhere, ticketmasterVenuePhrase, ticketIsInDenmark, reviewPastedTicketUrl, ticketUrlIsASubEvent, MAX_TICKET_TOWN_KM, sameShop, priceSourceHost, isTourUrl, cleanTourUrl, typeHasAdmission, TICKET_FIELD, TOUR_FIELD, TOUR_TYPES } from ${JSON.stringify(join(root, "src/utils/ticketLink.js"))};
+  export { wrongEdition, urlYears, editionYearOf, isTiqetsProductUrl, tiqetsPageKind, ticketMatches, pickTicketUrl, describeTicketSearch, ticketQuery, ticketQueries, isBookableTicketUrl, ticketAgentOf, isTicketmasterEventUrl, isTicketmasterHubUrl, isWegotripTicketUrl, ticketUrlSaysElsewhere, ticketmasterVenuePhrase, ticketIsInDenmark, reviewPastedTicketUrl, ticketUrlIsASubEvent, MAX_TICKET_TOWN_KM, sameShop, priceSourceHost, isTourUrl, cleanTourUrl, typeHasAdmission, TICKET_FIELD, TOUR_FIELD, TOUR_TYPES, tiqetsSaysTour, isResellerUrl } from ${JSON.stringify(join(root, "src/utils/ticketLink.js"))};
   export { dayStart, dayEnd, dayWithin, dayKey, dayPlus, dayLabel, eventLastDay } from ${JSON.stringify(join(root, "src/utils/calendarDay.js"))};
   export { essentials as ESSENTIALS_FOR_TEST } from ${JSON.stringify(join(root, "src/data/essentials.js"))};
   export { EDITABLE_TYPES, typeOf, isEditable, blockText, withBlockText, editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict, MAX_EDIT_LOG } from ${JSON.stringify(join(root, "src/utils/bodyEdit.js"))};
@@ -100,12 +100,12 @@ writeFileSync(entry, `
   export { whoWrote, modelProvenanceNote, DRAFT_STAGES, readerFacingStages, WRITER, EXTRACTOR, MEASURED } from ${JSON.stringify(join(root, "src/utils/modelProvenance.js"))};
   export { venueStyleOf, venueStyleLabel, VENUE_STYLES, VENUE_STYLE_LABEL, unstyledVenues, venueStyleCoverage, stylesPresent, showVenueStyleFacet, buildNightlifeStyleFacet, VENUE_STYLE_COVERAGE_MIN } from ${JSON.stringify(join(root, "src/utils/venueStyle.js"))};
   export { looksLikeLodging, stayDrift, stayDriftNote, publicAccessAnswered, STAY_TERMS, LODGING_RULE, LODGING_NOTES_RULE, LODGING_WORDS, isLodgingType, LODGING_TYPES } from ${JSON.stringify(join(root, "src/utils/venueSubject.js"))};
-  export { entryPrice, priceChip, entryKindLabel, ENTRY_KIND_LABEL, CHIP_MAX, PAID_LABEL, SAYS_FREE, AMOUNT, isUnqualifiedFree, CONCESSION_SCOPE, entryBooking, bookingChip, BOOKING_FIELDS, NEEDS_BOOKING, WALK_IN } from ${JSON.stringify(join(root, "src/utils/entryPrice.js"))};
+  export { priceClass, entryPrice, priceChip, entryKindLabel, ENTRY_KIND_LABEL, CHIP_MAX, PAID_LABEL, SAYS_FREE, AMOUNT, isUnqualifiedFree, CONCESSION_SCOPE, entryBooking, bookingChip, BOOKING_FIELDS, NEEDS_BOOKING, WALK_IN } from ${JSON.stringify(join(root, "src/utils/entryPrice.js"))};
   export { literalRenderings, literalNote, looksLikeAName, FALSE_FRIENDS, FALSE_FRIEND_RULE, NAME_RULE } from ${JSON.stringify(join(root, "src/utils/literalDanish.js"))};
   export { licenseUrl, creditIsRequired } from ${JSON.stringify(join(root, "src/utils/imageCredits.js"))};
   export { STUDIO_VOICE } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
   export { cleanOffer, offerProblems, offerLive, offerView, hasPaidPlan, OFFER_TEXT_MAX, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE } from ${JSON.stringify(join(root, "src/utils/offer.js"))};
-  export { AI_DISCLOSURE, aiDisclosure, aiDisclosureFor, AI_CHAT_SURFACES, AI_IMAGE_NOTE, aiImageNote, inReaderLanguage } from ${JSON.stringify(join(root, "src/utils/aiDisclosure.js"))};
+  export { AI_DISCLOSURE, aiDisclosure, aiDisclosureFor, disclosureLanguage, AI_CHAT_SURFACES, AI_IMAGE_NOTE, aiImageNote, inReaderLanguage } from ${JSON.stringify(join(root, "src/utils/aiDisclosure.js"))};
   export { splitReport, sortReports, filterReports, reportAge, isHandled, unhandledCount, INBOX_SETUP_SQL, FILTERS as INBOX_FILTERS, topicLabel as inboxTopicLabel } from ${JSON.stringify(join(root, "src/utils/supportInbox.js"))};
   export { SUPPORT_TOPICS, REPORT_TOPIC, topicIds, topicLabel, isTopic, GOOD_FAITH_STATEMENT, messagePrompt, MESSAGE_MIN, MESSAGE_MAX, NAME_MAX, looksLikeEmail, looksLikeUrl, supportProblems, problemFor, supportReference, supportPayload, supportMailto, supportReceipt, SUPPORT_TABLE, SUPPORT_SETUP_SQL, SUPPORT_EMAIL, PRIVACY_EMAIL } from ${JSON.stringify(join(root, "src/utils/support.js"))};
   export { SAFETY_CLAIM_FIELDS, claimIsSupported, unsupportedSafetyClaims, safetyClaimNote } from ${JSON.stringify(join(root, "src/utils/safetyClaims.js"))};
@@ -138,7 +138,9 @@ writeFileSync(entry, `
   export { studioPrompts } from ${JSON.stringify(join(root, "src/utils/studioPrompts.js"))};
   export { looksLikeTransit, kindFromName, findRealNearestStop, hasTransitType, geocodePostcode, geocodeIsASettlement, LONG_WALK_MINUTES } from ${JSON.stringify(join(root, "src/utils/geo.js"))};
   export { licenseIsUsable, distinctiveToken, mentionsSubject, looksHistorical, pickDescription, bestCaption } from ${JSON.stringify(join(root, "api/commons-photo.js"))};
-  export { ALLOWANCE_DEFAULTS, copenhagenDay, readLimits, uncappedList, isUncapped, cleanVisitor, allowanceKeys, reasonOfKey, refusalText, makePass, readPass, clientIp, ipKeyOf, visitorIdIn, todayRecord, guideUsedToday, usedTodayReason, askForGuidePass, markGuideBuilt, TODAY_KEY, VISITOR_KEY } from ${JSON.stringify(join(root, "src/utils/guideAllowance.js"))};
+  export { photoRequestMail, needsOwnLine, gmailComposeUrl, mailtoUrl, pressSearchUrl, OWN_LINE, SENDER, entryAddress } from ${JSON.stringify(join(root, "src/utils/photoRequestMail.js"))};
+  export { emailsIn, cleanEmail, contactPagesIn, rankEmails, findContactEmails } from ${JSON.stringify(join(root, "src/utils/contactEmail.js"))};
+  export { ALLOWANCE_DEFAULTS, copenhagenDay, readLimits, uncappedList, isUncapped, cleanVisitor, allowanceKeys, reasonOfKey, refusalText, makePass, readPass, clientIp, ipKeyOf, visitorIdIn, todayRecord, guideUsedToday, usedTodayReason, askForGuidePass, markGuideBuilt, cancelGuidePass, TODAY_KEY, VISITOR_KEY } from ${JSON.stringify(join(root, "src/utils/guideAllowance.js"))};
   export { decide as buildPassDecide, secretFrom as buildPassSecret, signerFor as buildPassSigner, hashIp as buildPassHashIp } from ${JSON.stringify(join(root, "api/build-pass.js"))};
   export { testTravelerLine } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { resolveStopCoordsDetailed, legDistanceKm, townInName, townKeyFor, resolveLegMode, coordFitsTown, townPointFor, townFallbackFor } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
@@ -381,7 +383,11 @@ writeFileSync(entry, `
   export { describeGuide, guideLanguageMix, MIN_PLAIN_WORDS, guideProseOf, proseAt, writeProseAt } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { usableRuns } from ${JSON.stringify(join(root, "src/utils/runLog.js"))};
   export { alertKey, describeWeatherChange, unseenAlerts, usableSeen, seenAlerts, markAlertSeen, alertCountLine, SEEN_KEY, MAX_SEEN } from ${JSON.stringify(join(root, "src/utils/weatherAlerts.js"))};
-  export { preferenceRowState, PREF_NO_ACCOUNT, PREF_NO_INTERESTS, PREF_READY, eventsForYou, EVENTS_FOR_YOU_MAX } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
+  export { classifyTiqetsText, productTitles, placeWords, titleKind, cleanTicketOffer, offerSellsTheDoor, ticketOfferLine, ticketOfferPerks, TICKET_OFFER_KINDS } from ${JSON.stringify(join(root, "src/utils/ticketOffer.js"))};
+  export { shortLabel, LABEL_MAX } from ${JSON.stringify(join(root, "src/utils/cardLine.js"))};
+  export { tierRank } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
+  export { distanceLine } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
+  export { preferenceRowState, PREF_NO_ACCOUNT, PREF_NO_INTERESTS, PREF_READY, eventsForYou, EVENTS_FOR_YOU_MAX, attractionIs, ATTRACTION_CATEGORIES } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
   export { savableThread, restorableThread, saveThread, loadThread, clearThread, CHAT_KEY, MAX_SAVED_MESSAGES } from ${JSON.stringify(join(root, "src/utils/chatThread.js"))};
   export { affiliateRoster, payingCount, AFFILIATES_PATH, partnerAdsPendingRow } from ${JSON.stringify(join(root, "src/utils/affiliateRoster.js"))};
   export { UI_LANGUAGES, UI_CODES, UI_STRINGS, UI_KEYS, UI_LANGUAGE_KEY, DEFAULT_UI_LANGUAGE, t, resolveUiLanguage, isUiLanguage, uiLanguageMeta, storedUiLanguage, setStoredUiLanguage, currentUiLanguage } from ${JSON.stringify(join(root, "src/utils/uiLanguage.js"))};
@@ -8589,7 +8595,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   is("the type test is written exactly once",
      (app8.match(/hasEventType\(e, v\)/g) || []).length, 1);
   ok("and the counts are computed from the facet's own test",
-     /facetCounts\(items, facets, state, facet\.key\)/.test(readFileSync(join(root, "src/components/FilterBar.jsx"), "utf8")));
+     /facetCounts\(items, facets, state, f\.key\)/.test(readFileSync(join(root, "src/components/FilterBar.jsx"), "utf8")));
 
   // ── "REMOVE THE VIKING SECTION AND MAKE IT A FILTER INSTEAD" ─────
   // It was worse than redundant. data/events.js says in its own comment that
@@ -8606,13 +8612,14 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // option in every facet now, so the count is structural: an option cannot be
   // drawn without one.
   const fbar = readFileSync(join(root, "src/components/FilterBar.jsx"), "utf8");
-  ok("every option carries its count", /<span style=\{\{ fontSize: 11, color: C\.muted, fontWeight: 500 \}\}>\{count\}<\/span>/.test(fbar));
+  // Batch 150: the dropdowns became one Filters panel of chips. Same rules.
+  ok("every option carries its count", /\{count != null \? ` \(\$\{count\}\)` : ""\}/.test(fbar) && /count=\{all \? null : n\}/.test(fbar));
   ok("and an option that would empty the list is disabled, not hidden",
-     /disabled=\{o\.value !== "All" && \(counts\[o\.value\] \?\? 0\) === 0\}/.test(fbar));
+     /disabled=\{!all && n === 0 && !isOptionOn\(state, f, o\.value\)\}/.test(fbar));
   // "All" is the way back out of a filter that emptied the list. Disabling it
   // strands somebody in a list they cannot widen, which is the exact failure
   // listControls.js warns about in its header.
-  ok("but All never is", /o\.value !== "All" && /.test(fbar));
+  ok("but All never is", /const all = o\.value === "All";/.test(fbar) && /disabled=\{!all && /.test(fbar));
 
   // "Soonest is so awkward English." It is, and it did not even rhyme with its
   // own pair: a superlative next to an adjective. Both say what it is ordered BY.
@@ -13360,7 +13367,8 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("and closes it on both the success and the failure path",
      (stripNonCode(appSrc).match(/endLog\(\);/g) || []).length >= 3);
   ok("the stage setter also writes the stage to that log",
-     /const buildStage = \(label, percent\) => \{\s*setGuideBuildStage\(\{ label, percent \}\);\s*note\(label, \{ percent \}\);/.test(stripNonCode(appSrc)));
+     // The stop check comes first since 28 Sep 2026; see guideStopRef.
+     /const buildStage = \(label, percent\) => \{\s*if \(guideStopRef\.current\) throw new Error\(GUIDE_STOPPED\);\s*setGuideBuildStage\(\{ label, percent \}\);\s*note\(label, \{ percent \}\);/.test(stripNonCode(appSrc)));
   is("and no stage bypasses it",
      (stripNonCode(appSrc).match(/setGuideBuildStage\(\{ label:/g) || []).length, 0);
   // A failure has to reach someone who stepped away, or the bar just stops.
@@ -14749,7 +14757,8 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // THE RETRY IS THE WHOLE THING. towns is filled from Supabase after first
   // paint, so a cold visit from a search result finds nothing on the first pass
   // and would silently show the front page instead of what was promised.
-  ok("a cold arrival retries as live content lands", /\}, \[townSlug, liveContentVersion\]\)/.test(app));
+  // Batch 150: liveLoaded joined the deps, so a town that is not there is decided once loading ends.
+  ok("a cold arrival retries as live content lands", /\}, \[townSlug, liveContentVersion(, liveLoaded)?\]\)/.test(app));
   ok("closing a town page puts them inside the app", /window\.location\.pathname\.startsWith\(`\/\$\{COUNTRY\}\/`\)/.test(app));
 
   // ── ONE BRANCH FOR EVERY KIND, NOT A TOWN REGEX ──────────────────
@@ -21622,7 +21631,7 @@ rmSync(dir, { recursive: true, force: true });
   // on Gemlyx, without the second the affiliate programme earns nothing and
   // nobody notices for a month.
   ok("the detail page's website button goes through externalHref",
-     /externalHref\(item\.website\) && \(\(\) => \{/.test(detail) && /const dest = externalHref\(item\.website\);/.test(detail));
+     /externalHref\(item\.website\) && !isResellerUrl\(externalHref\(item\.website\)\) && \(\(\) => \{/.test(detail) && /const dest = externalHref\(item\.website\);/.test(detail));
   ok("and it no longer renders item.website straight into href",
      !/href=\{item\.website\}/.test(detail));
   // ── ONE DOOR, SO A NEW PROGRAMME NEEDS NO REPUBLISH ─────────────
@@ -26414,7 +26423,8 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   is("the month test is written exactly once",
     (appEv.match(/inEventMonth\(e, /g) || []).length, 1);
   ok("and the list runs the facets rather than its own copy of them",
-    /const filteredEvents = applyFacets\(upcomingInTab, eventFacets, eventFacetState\)/.test(appEv));
+    // Batch 150: the search runs first, then the same facets.
+    /const filteredEvents = applyFacets\(eventsSearched, eventFacets, eventFacetState\)/.test(appEv));
 }
 
 // ── "IF SOMEONE ONLY KNOWS MANDARIN CHINESE" ───────────────────────
@@ -28895,7 +28905,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // card already drops nulls and a caller building rows inline should not have
   // to remember to.
   ok("and it is null when there is no link",
-     /const bookRow = ticketHref\s*\n?\s*\? \{ href: ticketHref/.test(detail));
+     // Batch 151: "&& ticketSellsDoor" joined, so a tour or a card is no Tickets row.
+     /const bookRow = ticketHref(?: && ticketSellsDoor)?\s*\n?\s*\? \{ href: ticketHref/.test(detail));
   ok("the link is on the row whenever there is one to give",
      /const bookRow = ticketHref\b(?![^\n]*sameShop)/.test(detail));
 
@@ -32904,7 +32915,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // out and asserted on its own.
     {
       const typedStart = appU.indexOf("const entryRouteDone = useRef(false);");
-      const typed = appU.slice(typedStart, appU.indexOf("}, [entrySeg, entrySlug, liveContentVersion]);", typedStart));
+      const typed = appU.slice(typedStart, appU.indexOf("}, [entrySeg, entrySlug, liveContentVersion, liveLoaded]);", typedStart));
       ok("the typed arrival was found", typedStart > 0 && typed.length > 200);
       ok("it goes straight to the place rather than the front door", /setEntered\(true\);/.test(typed));
       ok("and opens through the setter map the app already had", /ENTRY_SETTERS\[kind\]\?\.\(found\);/.test(typed));
@@ -32913,7 +32924,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       ok("the older hash arrival still opens through it too", /ENTRY_SETTERS\[kind\]\?\.\(found\);/.test(hashFx));
     }
     ok("retrying as live content lands, like the two effects above it",
-       /\}, \[entrySeg, entrySlug, liveContentVersion\]\)/.test(appU));
+       /\}, \[entrySeg, entrySlug, liveContentVersion(, liveLoaded)?\]\)/.test(appU));
     // Every kind in the vocabulary has a pool in that effect, and the pools are
     // read out of the source rather than assumed.
     const poolBlock = appU.slice(appU.indexOf("const pools = {", appU.indexOf("const kind = kindForSeg(entrySeg);")));
@@ -43519,7 +43530,10 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // its own place on the line below because it is not a filter.
   ok("there is no filter sheet left", !/setSheet|const \[sheet\]|Panel width=\{280\}/.test(fb2));
   ok("and no dead state behind it", !/sheetRef/.test(fb2));
-  ok("the facets are the controls", /<Dropdown key=\{f\.key\}/.test(fb2));
+  // Batch 150, 28 Sep: his 27 Sep direction ("put filters into the position
+  // under the text bar") replaced the dropdowns with one Filters button and a
+  // panel of chips, on every list. Each facet is still its own row of controls.
+  ok("the facets are the controls", /\{facets\.map\(f => \{/.test(fb2) && /<Chip key=\{o\.value\}/.test(fb2));
   // ── AND THE SORT IS SOMEWHERE ELSE, WHICH IS THE CLAIM ─────────
   // This read as a text search for "changes the ORDER of what you are looking
   // at and never the contents", and that sentence is a COMMENT in FilterBar
@@ -43536,7 +43550,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // not a control, and above everything drawn.
     const countAt = code.indexOf("${shown} of ${items.length}");
     const filterRow = code.slice(code.lastIndexOf("return (", countAt), countAt);
-    ok("the facet row was found", /<Dropdown/.test(filterRow));
+    ok("the facet row was found", /<Chip/.test(filterRow));
     ok("and no sort control is drawn in it", !/__sort/.test(filterRow));
     ok("the sort is below the count instead",
        code.indexOf("Sort by:") > countAt);
@@ -43593,8 +43607,12 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // the Danish folding, which a City chip never did.
   ["city", "gem", "booking"].forEach(k =>
     ok(`${k} is no longer a facet`, !new RegExp(`key: "${k}"`).test(facetBlock)));
-  is("exactly two facets, both of them controls", (facetBlock.match(/primary: true/g) || []).length, 2);
-  is("and no facet without a control", (facetBlock.match(/\{ key: "/g) || []).length, 2);
+  // Three since 28 Sep 2026, when he asked for Price by name: "put category on
+  // attractions called 'free' and 'paid'", and four the same afternoon:
+  // "attractions need categories.. like history, nature, family". Still one
+  // dropdown each, and a fifth needs him to ask for it the same way.
+  is("exactly four facets, all of them controls", (facetBlock.match(/primary: true/g) || []).length, 4);
+  is("and no facet without a control", (facetBlock.match(/\{ key: "/g) || []).length, 4);
 }
 
 // ── AN EVENT IS IN EVERY MONTH IT RUNS IN ──────────────────────────
@@ -45858,7 +45876,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("and only for towns the TRAVELLER named",
      /mentionsPlace\(travellerTurns\.join\("\\n"\), t\.name\)/.test(app));
   ok("read through cardLine, not the first hundred characters",
-     /import \{ cardLine \} from "\.\/utils\/cardLine"/.test(app));
+     /import \{ cardLine(, shortLabel)? \} from "\.\/utils\/cardLine"/.test(app));
   ok("and bounded, so the prompt does not grow with the library",
      /HELD_TOWNS_IN_A_PROMPT = 3/.test(app));
 
@@ -48199,7 +48217,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 
   // ── AND THE THREE OLD ROWS ARE GONE FROM THE PAGE ───────────────
   const app = readFileSync(join(root, "src/App.jsx"), "utf8");
-  ok("Food renders the shared FilterBar", /items=\{foodNav\}[\s\S]{0,400}facets=\{foodFacets\}/.test(app));
+  // Batch 150: through the search first, which is foodNav filtered by the query.
+  ok("Food renders the shared FilterBar", /items=\{foodSearched\}[\s\S]{0,400}facets=\{foodFacets\}/.test(app) && /const foodSearched = foodNav\.filter\(/.test(app));
   ok("the inline three-way predicate is gone", !/foodSpots\.filter\(f => \(foodTab === "All"/.test(app));
   ok("the kind pill row is gone", !/\["All", "Restaurants", "Food Streets"\]\.map/.test(app));
   ok("the price tab row is gone", !/setFoodTab\(t\.id\)/.test(app));
@@ -65597,7 +65616,9 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
        /row\.account && row\.account\.state !== PREF_READY \? \(\(\) => \{/.test(appP));
     // Two states, two buttons: one opens the account, one opens the profile.
     ok("no account offers the account", /setAuthReason\(null\); setAuthMode\("in"\); setAuthOpen\(true\);/.test(appP));
-    ok("and no interests offers the profile", /goTab\("me"\)/.test(appP));
+    // It said goTab("me") until 28 Sep 2026, a tab removed on 23 Aug, so the
+    // button slid to an empty page. It opens the interests now.
+    ok("and no interests offers the profile", /navigate\(`\$\{ABOUT_ME_PATH\}\/about`\)/.test(appP));
     // Both rows and both empty states are translated, or this page is the next
     // place the English frame leaks back in.
     for (const k of ["row.yours.title", "row.yours.sub", "row.trend.title", "row.trend.sub"])
@@ -69296,7 +69317,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   // Read out of App.jsx rather than restated, because a page added to the nav
   // and not to this map gets no address and says nothing about it.
   {
-    const order = (appT.match(/const TAB_ORDER = \[([^\]]*)\]/) || [])[1] || "";
+    const order = (appT.match(/const TAB_ORDER(?:_ALL)? = \[([^\]]*)\]/) || [])[1] || "";
     const ids = order.split(",").map(x => x.trim().replace(/^"|"$/g, "")).filter(Boolean);
     ok("the nav is findable", ids.length > 5);
     is("every page in the nav has an address", ids.filter(id => !TAB_HASH[id]), []);
@@ -77898,7 +77919,8 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     ok("off the field the rows actually carry", !/isAiImage\(e\?\.photoCredit\)/.test(app));
     ok("and through the same reader the per-image label uses",
        /import \{ aiCredit, isAiImage \} from "\.\/utils\/aiImages"/.test(app));
-    ok("in the reader's own language", /\{aiImageNoteFor\(typeof navigator === "undefined" \? null : navigator\)\}/.test(app));
+    // Batch 150: and the page's language too, see disclosureLanguage.
+    ok("in the reader's own language", /\{aiImageNoteFor\(typeof navigator === "undefined" \? null : navigator, uiLang\)\}/.test(app));
   }
 
   // ── AND NO NIGHTPAY TIP ─────────────────────────────────────────
@@ -79340,7 +79362,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   const prompts = readFileSync(join(root, "src/utils/studioPrompts.js"), "utf8");
   ok("the food draft is asked the question", /"danish": "true or false, as a JSON boolean\./.test(prompts));
   const app = readFileSync(join(root, "src/App.jsx"), "utf8");
-  ok("the Food page lists Danish food only", /const foodNav = foodSpots\.filter\(foodOnNav\);/.test(app) && /applyFacets\(foodNav, foodFacets, foodFacetState\)/.test(app) && /<FilterBar\s*items=\{foodNav\}/.test(app));
+  ok("the Food page lists Danish food only", /const foodNav = foodSpots\.filter\(foodOnNav\);/.test(app) && /applyFacets\(foodSearched, foodFacets, foodFacetState\)/.test(app) && /<FilterBar\s*items=\{foodSearched\}/.test(app));
   ok("the food search is told, and checked", /\+ \(type === "food" \? DANISH_FOOD_FRAMING : ""\)/.test(app) && /const foodCut = type === "food" \? splitOffForeignFood\(candidates\)/.test(app));
   ok("and says how many it left out", /left out as not Danish food\./.test(app));
 }
@@ -79619,7 +79641,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const lim = M.readLimits({ GEMLYX_GUIDES_PER_DAY: "0", GEMLYX_GUIDES_PER_IP: "abc", GEMLYX_GUIDES_PER_VISITOR: "0" });
   ok("a typo in an env var falls back instead of becoming no limit", lim.perIp === 4);
   ok("0 is the off switch for the day, and only for the day", lim.perDay === 0 && lim.perVisitor === 1);
-  ok("the defaults are one per visitor and account, a few per network", JSON.stringify(M.readLimits({})) === JSON.stringify({ perVisitor: 1, perAccount: 1, perIp: 4, perDay: 40, retries: 1 }));
+  ok("the defaults are one per visitor and account, a few per network", JSON.stringify(M.readLimits({})) === JSON.stringify({ perVisitor: 1, perAccount: 1, perIp: 4, perDay: 40, retries: 1, refunds: 2 }));
   ok("nobody is uncapped by default, not even any signed in account", M.uncappedList({}).length === 0 && !M.isUncapped(M.uncappedList({}), { userId: "u1", email: "a@b.c" }));
   ok("the uncapped list takes ids or emails, any case", M.isUncapped(M.uncappedList({ GEMLYX_UNCAPPED: " U1 , Me@X.dk" }), { userId: "u1" }) && M.isUncapped(M.uncappedList({ GEMLYX_UNCAPPED: "me@x.dk" }), { email: "ME@x.dk" }) && !M.isUncapped(M.uncappedList({ GEMLYX_UNCAPPED: "me@x.dk" }), { email: "you@x.dk" }));
   is("a visitor id that is not an id is dropped", M.cleanVisitor("x'; drop"), "");
@@ -79766,6 +79788,232 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const app = readFileSync(join(root, "src/App.jsx"), "utf8");
   ok("the row takes live and soon events, under Everything only", /const yourEvents = prefRow\.state === PREF_READY && pickCategory === "all"/.test(app) && /isOn: \(e\) => isCurrentlyLive\(e\.date, e\.dateEnd\) \|\| \(isConfirmedUpcoming\(e\) && \(parseEventDate\(e\.date\)\?\.getTime\(\) \?\? Infinity\) <= eventsUntil\)/.test(app));
   ok("they open as events and lead the row, with their dates", /_src: "event", _where: e\.town \|\| e\.location, _when: getEventDate\(e\.date, e\.dateEnd\)/.test(app) && /const up = lens\.key === "yours" \? yourEvents\.slice\(0, Math\.max\(1, rowCards - 1\)\) : \[\];/.test(app) && /items: \[\.\.\.up, \.\.\.dealt\(ranked, rowCards, week \* 31 \+ li\)\]\.slice\(0, rowCards\)/.test(app) && /\[entryKindLabel\(x\._src, ""\), x\._when, x\._where\]/.test(app));
+}
+
+// ── BATCH 148: ASKING A PLACE FOR ITS PHOTOS ─────────────────────────
+// Oliver, 28 Sep 2026: "next to Wiki and upload picture, you have 'draft a
+// mail to..'"
+{
+  const da = M.photoRequestMail({ name: "WOW PARK", type: "free", lang: "da" });
+  const en = M.photoRequestMail({ name: "WOW PARK", type: "free", lang: "en" });
+  ok("a Danish draft by default, naming the place", da.subject === "Billeder af WOW PARK til Gemlyx" && /Hej,/.test(da.body) && /siden om WOW PARK/.test(da.body));
+  ok("and an English one", en.subject === "Photos of WOW PARK for Gemlyx" && /page about WOW PARK/.test(en.body));
+  ok("it links the entry on the live site", da.body.includes(M.entryAddress("free", "WOW PARK")) && M.entryAddress("free", "WOW PARK").startsWith("https://www.gemlyxtravel.com/denmark/"));
+  ok("it asks for what makes a yes worth keeping: the use, the credit and the rights", /kun, hvor vi skriver om jer/.test(da.body) && /fotograf/.test(da.body) && /rettighederne/.test(da.body) && /hold the rights/.test(en.body));
+  ok("it leaves his own line to write, and cannot go out until he has", M.needsOwnLine(da.body) && M.needsOwnLine(en.body) && !M.needsOwnLine(da.body.replace(M.OWN_LINE.da, "Vi var der i sommer.")));
+  ok("signed from the Gemlyx address", da.body.trim().endsWith(M.SENDER.email) && M.SENDER.email === "oliver@gemlyxtravel.com");
+  ok("no dashes and none of his banned words in either draft", ![da.subject, da.body, en.subject, en.body].some(t => /[–—]| - |\b(actually|genuine|genuinely|truly|simply)\b/i.test(t)));
+  const g = M.gmailComposeUrl({ to: "info@wowpark.dk", subject: "Å & B", body: "linje 1\nlinje 2" });
+  ok("Gmail opens as the Gemlyx account with everything filled in", g.startsWith("https://mail.google.com/mail/?authuser=oliver%40gemlyxtravel.com&view=cm") && g.includes("to=info%40wowpark.dk") && g.includes("su=%C3%85%20%26%20B") && g.includes("body=linje%201%0Alinje%202"));
+  ok("the mail app link carries the same", M.mailtoUrl({ to: "a@b.dk", subject: "s", body: "b" }) === "mailto:a%40b.dk?subject=s&body=b");
+  ok("a press photo search on their own site", M.pressSearchUrl("https://www.wowpark.dk/en") === "https://www.google.com/search?q=" + encodeURIComponent("site:wowpark.dk presse OR press OR pressebilleder") && M.pressSearchUrl("") === "");
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const media = app.slice(app.indexOf("🔎 Find on Wikimedia"), app.indexOf("🔎 Find on Wikimedia") + 16000);
+  ok("the button sits next to Wikimedia in the media editor", /✉ Draft a mail to \{p\.name \|\| "them"\}/.test(media));
+  ok("the send buttons wait for his own line", /const unfinished = needsOwnLine\(photoMail\.body\);/.test(media) && (media.match(/onClick=\{e => \{ if \(unfinished\) e\.preventDefault\(\); \}\}/g) || []).length === 2 && /<button disabled=\{unfinished\}/.test(media));
+}
+
+// ── BATCH 148: THE ADDRESS, AND THE PROFILE BUTTON ───────────────────
+// Oliver, 28 Sep 2026: "I guess the AI will already have the mail of the
+// company ready, yes?" and "when you click 'open my profile' to fit
+// preferences, it just swipes to a non-existent page..."
+{
+  const html = `<a href="mailto:Info@WOWpark.dk?subject=hej">Skriv</a> <p>Presse: presse&#64;wowpark.dk.</p>
+    <img src="logo@2x.png"> <script>var s="x@sentry.io"</script> noreply@wowpark.dk someone@example.com
+    <a href="/pages/presse">Presse</a> <a href="https://wowpark.dk/kontakt">Kontakt os</a> <a href="https://facebook.com/contact">Contact</a> <a href="/shop">Shop</a>`;
+  is("addresses read off the page, links first, cleaned", M.emailsIn(html), ["info@wowpark.dk", "presse@wowpark.dk"]);
+  ok("image names, trackers, placeholders and no-reply are not addresses", !M.cleanEmail("logo@2x.png") && !M.cleanEmail("x@sentry.io") && !M.cleanEmail("a@example.com") && !M.cleanEmail("noreply@wowpark.dk"));
+  is("its own press and contact pages, press first, never another site's", M.contactPagesIn(html, "https://wowpark.dk/"), ["https://wowpark.dk/pages/presse", "https://wowpark.dk/kontakt"]);
+  is("the place's own press box before its general one, before anyone else's", M.rankEmails([{ email: "info@gmail.com" }, { email: "info@wowpark.dk" }, { email: "presse@wowpark.dk" }], "https://www.wowpark.dk").map(f => f.email), ["presse@wowpark.dk", "info@wowpark.dk", "info@gmail.com"]);
+  const pages = { "https://wowpark.dk/": `<a href="/pages/presse">Presse</a>`, "https://wowpark.dk/pages/presse": `Skriv til info@wowpark.dk` };
+  const got = await M.findContactEmails("https://wowpark.dk/", async (u) => pages[u] || "");
+  ok("it follows the front page to the press page and says where it found the address", got.emails.length === 1 && got.emails[0].email === "info@wowpark.dk" && got.emails[0].from === "https://wowpark.dk/pages/presse" && got.checked.length === 2);
+  const none = await M.findContactEmails("https://x.dk/", async () => { throw new Error("down"); });
+  ok("a site that will not answer finds nothing, without failing", none.emails.length === 0 && none.checked.length === 1);
+  const api = readFileSync(join(root, "api/find-email.js"), "utf8");
+  ok("the endpoint reads pages plainly, never through Firecrawl", !/firecrawl/i.test(stripComments(api)) && /findContactEmails\(url, fetchHtml\)/.test(api));
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the mail panel can find their address and keeps anything he typed", /studioFetch\(`\/api\/find-email\?url=\$\{encodeURIComponent\(p\.website\)\}`\)/.test(app) && /to: m\.to\.trim\(\) \? m\.to : \(found\[0\]\?\.email \|\| ""\)/.test(app) && /found on \{/.test(app));
+  // The profile button: "me" is not a tab any more, so goTab slid to nothing.
+  ok("Open my profile goes to the interests, not to a tab that no longer exists", /else \{ navigate\(`\$\{ABOUT_ME_PATH\}\/about`\); \}/.test(app) && !/goTab\("me"\)/.test(app));
+  const order = (app.match(/const TAB_ORDER(?:_ALL)? = \[([^\]]+)\]/) || [])[1] || "";
+  const tabs = [...order.matchAll(/"([a-z]+)"/g)].map(m => m[1]);
+  const targets = [...new Set([...app.matchAll(/goTab\("([a-zA-Z]+)"\)/g)].map(m => m[1]))];
+  is("every tab a button jumps to exists", targets.filter(t => !tabs.includes(t)), []);
+}
+
+// ── BATCH 148: FREE AND PAID ON ATTRACTIONS ──────────────────────────
+// Oliver, 28 Sep 2026: "put category on attractions called 'free' and 'paid'."
+{
+  is("free only where the row says free and names no amount", M.priceClass({ ticketsGlance: "Free entry" }), "free");
+  is("an amount is paid", M.priceClass({ ticketsGlance: "Adults 419 kr" }), "paid");
+  is("free grounds with a paid museum is paid, not free", M.priceClass({ ticketsGlance: "Grounds free, indoor museum 125 DKK" }), "paid");
+  is("a free-for-children line implies a price for everyone else", M.priceClass({ ticketsGlance: "Free for children under 12" }), "paid");
+  is("a row that says nothing is in neither", M.priceClass({ name: "Legoland", _kind: "free" }), "");
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const facets = app.slice(app.indexOf("const ATTRACTION_FACETS = ["), app.indexOf("const searched = combined.filter"));
+  ok("the attractions page has a Price dropdown with Free and Paid, read off each row", /\{ key: "price", label: "Price", primary: true,/.test(facets) && /\{ value: "free", label: "Free" \}/.test(facets) && /\{ value: "paid", label: "Paid" \}/.test(facets) && /test: \(i, v\) => priceClass\(i\) === v \}/.test(facets));
+}
+
+// ── BATCH 149: STOPPING A BUILD, ATTRACTION CATEGORIES, TOURS ────────
+// Oliver, 28 Sep 2026: "if people cancel the making of the guide, then it
+// doesn't count as their daily limit", "attractions need categories.. like
+// history, nature, family, and (perhaps) unique", and "on Amalienborg, an
+// affiliate link has been implemented as a 'website ticket' when the 'ticket'
+// is really just a guide."
+{
+  const mem = () => { const m = new Map(); return { getItem: k => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)) }; };
+  const now = new Date("2026-09-28T10:00:00Z");
+  const sign = M.buildPassSigner(M.buildPassSecret("service-key"));
+  const pass = M.makePass(sign, { day: "2026-09-28", visitor: "abcdefgh-1", nonce: "n0nce1234567" });
+  const site = { origin: "https://www.gemlyxtravel.com", "x-real-ip": "1.2.3.4" };
+  const env = { SUPABASE_SERVICE_ROLE_KEY: "service-key" };
+  const seen = [];
+  const db = (answer) => async (url, opts) => { seen.push({ url, body: opts?.body ? JSON.parse(opts.body) : null }); if (typeof answer === "number") return { ok: false, status: answer, json: async () => ({}) }; return { ok: true, status: 200, json: async () => answer }; };
+  const out = await M.buildPassDecide({ headers: site, body: { visitor: "abcdefgh-1", cancel: pass }, env, fetchImpl: db("ok"), now });
+  const call = seen.find(x => x.url.endsWith("/rpc/gemlyx_refund_guide"));
+  ok("a stopped build is handed back", out.status === 200 && out.json.refunded === true);
+  ok("off the visitor and the network, spent as a pass, and never off the day's total", call && call.body.p_keys.join() === `v:abcdefgh-1,ip:${M.buildPassHashIp(M.buildPassSecret("service-key"), "1.2.3.4")}` && call.body.p_spent_key === "r:n0nce1234567" && !call.body.p_keys.includes("site"));
+  ok("a browser can stop only so many a day", call.body.p_refund_key === "c:abcdefgh-1" && call.body.p_refund_limit === 2);
+  const forged = await M.buildPassDecide({ headers: site, body: { visitor: "abcdefgh-1", cancel: pass.slice(0, -2) + "zz" }, env, fetchImpl: db("ok"), now });
+  ok("a made up pass hands nothing back", forged.json.refunded === false);
+  const twice = await M.buildPassDecide({ headers: site, body: { visitor: "abcdefgh-1", cancel: pass }, env, fetchImpl: db("spent"), now });
+  ok("the same pass cannot be handed back twice", twice.json.refunded === false && twice.json.why === "already-handed-back");
+  const missing = await M.buildPassDecide({ headers: site, body: { visitor: "abcdefgh-1", cancel: pass }, env, fetchImpl: db(404), now });
+  ok("before its SQL is run, nothing is claimed", missing.json.refunded === false && missing.json.open === "not-set-up");
+  // The browser half: the day comes back only when the server says so.
+  const store = mem(); store.setItem(M.VISITOR_KEY, "abcdefgh-1"); store.setItem(M.TODAY_KEY, JSON.stringify({ day: "2026-09-28", pass, finished: false }));
+  const back = await M.cancelGuidePass({ fetchImpl: async () => ({ ok: true, status: 200, json: async () => ({ ok: true, refunded: true }) }), storage: store, now });
+  ok("handed back, the browser forgets the pass and today is free again", back.refunded && !M.todayRecord(store, "2026-09-28").pass && !M.guideUsedToday(M.todayRecord(store, "2026-09-28")));
+  const store2 = mem(); store2.setItem(M.TODAY_KEY, JSON.stringify({ day: "2026-09-28", pass, finished: false }));
+  const no = await M.cancelGuidePass({ fetchImpl: async () => ({ ok: true, status: 200, json: async () => ({ ok: true, refunded: false }) }), storage: store2, now });
+  ok("not handed back, the pass stays for its one retry", !no.refunded && M.todayRecord(store2, "2026-09-28").pass === pass);
+  const sql = readFileSync(join(root, "SETUP_GUIDE_CAP.md"), "utf8");
+  ok("the refund SQL spends the pass and keeps the day's total", /create or replace function public\.gemlyx_refund_guide/.test(sql) && /where day = p_day and key = any\(p_keys\);/.test(sql) && /revoke all on function public\.gemlyx_refund_guide/.test(sql));
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("every stage checks for a stop before it starts", /const buildStage = \(label, percent\) => \{\s*if \(guideStopRef\.current\) throw new Error\(GUIDE_STOPPED\);/.test(app));
+  ok("a stop is not a failure, and says whether the day came back", /if \(String\(err\?\.message \|\| ""\) === GUIDE_STOPPED\) \{/.test(app) && /back\.refunded\s*\? "Stopped\. It did not count as today's guide\."/.test(app));
+  ok("the wait has a Stop building button", /\{guideStopping \? "Stopping…" : "Stop building"\}/.test(app));
+
+  // Categories.
+  const is_ = (row) => M.ATTRACTION_CATEGORIES.filter(c => M.attractionIs(row, c.value)).map(c => c.value);
+  is("a castle is history", is_({ name: "Kronborg", type: "Castle", desc: "Renaissance castle." }), ["history"]);
+  is("a theme park is family and never nature", is_({ name: "Legoland", type: "Theme park", desc: "Rides and Lego models for children." }), ["family"]);
+  is("a national park is nature", is_({ name: "Mols Bjerge", type: "National park", desc: "Hills and heath." }), ["nature"]);
+  is("unique only when the row says it is one of a kind", [is_({ name: "Rundetaarn", desc: "Europe's oldest functioning observatory." }).includes("unique"), is_({ name: "Tower", desc: "A tall tower." }).includes("unique")], [true, false]);
+  ok("a tagged row is read by its tags, not its words", M.attractionIs({ themes: ["family"], desc: "A castle." }, "family") && !M.attractionIs({ themes: ["family"], desc: "A castle." }, "history"));
+  const facets = app.slice(app.indexOf("const ATTRACTION_FACETS = ["), app.indexOf("const searched = combined.filter"));
+  ok("attractions have a Category dropdown you can pick several in", /\{ key: "category", label: "Category", primary: true, multi: true,/.test(facets) && /test: \(i, v\) => attractionIs\(i, v\) \}/.test(facets));
+  const prompts = readFileSync(join(root, "src/utils/studioPrompts.js"), "utf8");
+  const content = readFileSync(join(root, "src/utils/studioContent.js"), "utf8");
+  ok("new attraction drafts are asked for themes and keep them", /What the attraction is FOR: history for a castle/.test(prompts) && /if \(type === "free"\)[\s\S]{0,2000}themes: Array\.isArray\(t\.themes\) \? t\.themes\.slice\(0, 3\) : \[\],/.test(content));
+
+  // A Tiqets tour is not a ticket, and a shop is not a website.
+  const tour = "https://www.tiqets.com/en/copenhagen-attractions-c75061/tickets-for-amalienborg-palace-guided-tour-p974001/";
+  const tourNoTicket = "https://www.tiqets.com/en/copenhagen-attractions-c75061/amalienborg-palace-guided-tour-p974001/";
+  const ticket = "https://www.tiqets.com/en/copenhagen-attractions-c75061/amalienborg-museum-entrance-ticket-p974002/";
+  ok("a Tiqets guided tour is not a ticket", M.tiqetsSaysTour(tourNoTicket) && !M.isBookableTicketUrl(tourNoTicket) && M.ticketAgentOf(tourNoTicket) === "");
+  ok("a Tiqets admission still is, even one with a tour in it", M.isBookableTicketUrl(ticket) && M.isBookableTicketUrl(tour));
+  ok("a reseller is not a website", M.isResellerUrl("https://www.tiqets.com/en/x-p1/") && M.isResellerUrl("https://www.getyourguide.com/copenhagen-l39/x-t1/") && !M.isResellerUrl("https://kongernessamling.dk/amalienborg/"));
+  const detail = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
+  ok("and the Website button skips one", /externalHref\(item\.website\) && !isResellerUrl\(externalHref\(item\.website\)\) && \(\(\) => \{/.test(detail));
+}
+
+
+// ── Batch 150: the navigation review, fixed ───────────────────────────
+// Oliver, 28 Sep 2026: "Just fix it all except the arrow on." and "It also
+// seems that attractions have no 'Length from you', unlike towns".
+{
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const bar = readFileSync(join(root, "src/components/FilterBar.jsx"), "utf8");
+
+  // A card label is the first clause, never the whole field.
+  is("a long food category becomes its first clause", M.shortLabel("Fine-dining restaurant, one Michelin Star, awarded 2023, retained 2024-2026"), "Fine-dining restaurant");
+  ok("and a clause that is still too long is cut at a word", (() => { const out = M.shortLabel("Traditional smørrebrød lunch restaurant in an old harbour warehouse"); return out.endsWith("…") && out.length <= M.LABEL_MAX + 1 && !/\s…$/.test(out); })());
+  is("an empty field stays empty", M.shortLabel(""), "");
+  ok("food cards use it for the category and the price", (app.match(/shortLabel\(spot\.category\)/g) || []).length >= 2 && /shortLabel\(spot\.price, 22\)/.test(app));
+
+  // Recommended first, by tier, then by name.
+  ok("a tiered place ranks before an untiered one", M.tierRank({ tier: M.TIERS[0].value }) === 0 && M.tierRank({ tier: M.TIERS[1].value }) === 1 && M.tierRank({}) === M.TIERS.length);
+  ok("towns, islands and attractions sort by Recommended", /const byRecommended = \(a, b\) => \(tierRank\(a\) - tierRank\(b\)\) \|\| byName\(a, b\);/.test(app) && (app.match(/\.sort\(byRecommended\)/g) || []).length >= 3 && /useState\("rec"\)/.test(app) && /\{ ?value: ?"rec", ?label: ?"Recommended" ?\}/.test(app));
+
+  // How far, on an attraction card.
+  const inCph = { lat: 55.68, lon: 12.57 };
+  ok("in Denmark, the distance is from you", /^~\d+ km from you$/.test(M.distanceLine(inCph, "Odense")) && Math.abs(parseInt(M.distanceLine(inCph, "Odense").slice(1)) - 136) < 15);
+  is("abroad, it is from Copenhagen", M.distanceLine(null, "Odense").endsWith("km from CPH"), true);
+  is("and a place in Copenhagen says nothing from CPH", M.distanceLine(null, "Copenhagen"), "");
+  is("an unknown town says nothing", M.distanceLine(inCph, "Nowhere"), "");
+  ok("attraction cards show it", /distanceLine\(userCoords, townKeyFor\(item\.city \|\| item\.location \|\| ""\)\)/.test(app));
+
+  // A wrong address lands on its list with a note, not on a blank page.
+  ok("an unknown entry or town goes to its list", /const missingEntry = \(tab\) => \{/.test(app) && /That page could not be found, so here is the list it belongs to\./.test(app) && /missingEntry\("visits"\)/.test(app) && /missingEntry\(\(\{ event: "events", free: "attractions", craft: "attractions"/.test(app));
+  ok("only once the library has loaded", /!found && liveLoaded && !libraryFailed/.test(app));
+
+  // Shopping is hidden while there is nothing in it.
+  ok("an empty Shopping tab leaves the nav and the pager", /const hideShopping = liveLoaded && !libraryFailed && !isStudio && shops\.length === 0 && shopPlaces\.length === 0;/.test(app) && /const TAB_ORDER = TAB_ORDER_ALL\.filter\(t => !\(t === "shopping" && hideShopping\)\);/.test(app) && /\.filter\(item => TAB_ORDER\.includes\(item\.id\)\)/.test(app));
+
+  // One search and one filter panel, on every list that has either.
+  ok("the filter bar takes a search box and one Filters button", /onSearch/.test(bar) && /searchPlaceholder/.test(bar) && /Filters/.test(bar) && /const Chip = /.test(bar));
+  ok("attractions, events and food all search through it", /search=\{attractionQuery\}\s+onSearch=\{setAttractionQuery\}/.test(app) && /search=\{eventQuery\}\s+onSearch=\{setEventQuery\}/.test(app) && /search=\{foodQuery\}\s+onSearch=\{setFoodQuery\}/.test(app));
+  ok("events and food search the fields a reader would type", /matchesQuery\(e, eventQuery, \["town", "type", "desc", "location"\]\)/.test(app) && /matchesQuery\(f, foodQuery, \["location", "category", "desc"\]\)/.test(app));
+
+  // The AI notice in the reader's language, everywhere it shows.
+  const nav = (language) => ({ language, languages: [language] });
+  is("a Danish browser reading in English gets the English notice", M.disclosureLanguage(nav("da-DK"), "en"), "en");
+  is("a Dutch browser on an English page still gets Dutch", M.disclosureLanguage(nav("nl-NL"), "en").startsWith("nl"), true);
+  is("a guide written in Dutch says it in Dutch to anyone", M.disclosureLanguage(nav("sv-SE"), "nl"), "nl");
+  is("no page language, the browser decides as before", M.disclosureLanguage(nav("de-DE"), "").startsWith("de"), true);
+  is("the notice itself follows", M.aiDisclosureFor(nav("da-DK"), "en"), M.AI_DISCLOSURE.en);
+  ok("the guide, the chat and the events note pass the page's language", /aiDisclosureFor\([^)]*navigator, guideLang\)/.test(readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8")) && /aiDisclosureFor\([^)]*navigator, currentUiLanguage\(\)\)/.test(readFileSync(join(root, "src/components/AskGemlyx.jsx"), "utf8")) && /aiDisclosureFor\([^)]*navigator, uiLang\)/.test(app) && /aiImageNoteFor\([^)]*navigator, uiLang\)/.test(app));
+
+  // Tips and Essentials point at each other.
+  ok("Tips and Essentials link to each other", /data-testid="ess-tips-pointer" onClick=\{\(\) => goTab\(onTips \? "essentials" : "tips"\)\}/.test(app));
+}
+
+
+// ── Batch 151: what a Tiqets page sells ───────────────────────────────
+// Oliver, 28 Sep 2026: "recommending Amalienborg through Getyourguide or zoo
+// through Tiqets, is bad in the sense that it is 10 kr pricier. However, some
+// of them do include packages that make it cheaper and have refunding."
+// The titles below are the ones read off the live Tiqets pages that day.
+{
+  const md = (titles) => titles.map(t => `![](x.jpg) Attraction Passes\n### [${t}](https://www.tiqets.com/x)\nFrom $20`).join("\n");
+  const plain = (titles) => "Tiqets Log in Copenhagen attractions Amalienborg Palace tickets " + titles.map(t => `${t} Duration: 1h 30mins From $113.86 4.5`).join(" ") + " Frequently asked questions What is it? A palace.";
+  const PAGES = {
+    amalienborg: ["Amalienborg Slot", "https://www.tiqets.com/en/amalienborg-palace-tickets-l259028", ["Amalienborg Palace: Guided Tour", "Copenhagen: Politically Incorrect Intro Tour"], "tour"],
+    kronborg: ["Kronborg Castle", "https://www.tiqets.com/en/kronborg-castle-tickets-l160792/", ["Copenhagen Card - DISCOVER: 80+ Attractions incl. Tivoli Gardens + Transport", "Kronborg Castle: Entry Ticket", "Helsingør, Lund & Malmö: Day Tour from Copenhagen + Ferry Ride", "Tivoli Gardens + Kronborg Castle"], "entry"],
+    experimentarium: ["Experimentarium", "https://www.tiqets.com/en/experimentarium-tickets-l213277", ["Copenhagen Card - DISCOVER: 80+ Attractions incl. Tivoli Gardens + Transport", "Copenhagen City Hall + Copenhagen Card - DISCOVER"], "card"],
+    louisiana: ["Louisiana Museum of Modern Art", "https://www.tiqets.com/en/louisiana-tickets-l213275", ["Copenhagen Card - DISCOVER: 80+ Attractions incl. Tivoli Gardens + Transport"], "card"],
+    zoo: ["Copenhagen ZOO", "https://www.tiqets.com/en/copenhagen-zoo-tickets-l147099/", ["Copenhagen ZOO: Skip The Line Ticket", "Copenhagen ZOO + Experimentarium: Entry Ticket"], "entry"],
+    legoland: ["Legoland", "https://www.tiqets.com/en/legoland-billund-resort-tickets-l181747", ["LEGOLAND® Billund Resort: 1-Day Ticket with All Rides Access", "Givskud Zoo + LEGOLAND® 1-Day Ticket"], "entry"],
+  };
+  for (const [key, [name, url, titles, want]] of Object.entries(PAGES)) {
+    is(`${key}: read off the markdown copy`, M.classifyTiqetsText(md(titles), { name, url })?.kind, want);
+    is(`${key}: and off the plain text copy`, M.classifyTiqetsText(plain(titles), { name, url })?.kind, want);
+  }
+  ok("a combo is noticed as a combo", M.classifyTiqetsText(md(PAGES.kronborg[2]), { name: "Kronborg Castle", url: PAGES.kronborg[1] }).combos === true);
+  ok("free cancellation only when the page says it", M.classifyTiqetsText(md(PAGES.zoo[2]), { name: "Copenhagen ZOO" }).cancel === false && M.classifyTiqetsText(md(PAGES.zoo[2]) + "\nFree cancellation up to 24 hours before", { name: "Copenhagen ZOO" }).cancel === true);
+  is("a page with nothing on it says nothing", M.classifyTiqetsText("", { name: "X" }), null);
+  ok("Amalienborg meets Amalienborg Palace on its own name", M.placeWords("Amalienborg Slot", PAGES.amalienborg[1]).includes("amalienborg") && !M.placeWords("Amalienborg Slot").includes("slot"));
+  is("a stored offer outside the four is dropped", [M.cleanTicketOffer({ kind: "ticket" }), M.cleanTicketOffer({ kind: "tour", cancel: 1 })], [null, { kind: "tour", cancel: true, combos: false }]);
+  ok("a tour or a card is never the door, and an unread page is not refused", !M.offerSellsTheDoor({ kind: "tour" }) && !M.offerSellsTheDoor({ kind: "card" }) && M.offerSellsTheDoor(null) && M.offerSellsTheDoor({ kind: "combo" }));
+  is("with a direct site, the cost and what it buys, together", M.ticketOfferLine({ kind: "entry", combos: true }, { direct: true }), "Also on Tiqets: usually a little dearer than buying direct, with combo deals on other sights");
+  is("and the refund only when there is one", M.ticketOfferLine({ kind: "entry", cancel: true, combos: true }, { direct: true }), "Also on Tiqets: usually a little dearer than buying direct, with free cancellation and combo deals on other sights");
+  is("a tour says tour", M.ticketOfferLine({ kind: "tour" }), "Guided tour on Tiqets");
+  is("a card says card", M.ticketOfferLine({ kind: "card" }, { lang: "da" }), "Med i Copenhagen Card, som sælges på Tiqets");
+  is("under a Tiqets button, only the perks", [M.ticketOfferPerks({ kind: "entry", combos: true }), M.ticketOfferPerks({ kind: "entry" }), M.ticketOfferPerks({ kind: "tour", combos: true })], ["Combo deals on other sights", "", ""]);
+  const dash = (s) => /[—–]| - /.test(s);
+  ok("no dashes in any line a reader sees", ["en", "da", "de"].every(l => ["entry", "tour", "card"].every(k => !dash(M.ticketOfferLine({ kind: k, cancel: true, combos: true }, { direct: true, lang: l })))));
+
+  const detail = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
+  ok("the entry page reads the offer only for Tiqets", /const ticketOffer = ticketAgent === "tiqets" \? cleanTicketOffer\(item\?\.__ticketOffer\) : null;/.test(detail));
+  ok("a tour or a card never becomes the Tickets row", /const bookRow = ticketHref && ticketSellsDoor/.test(detail));
+  ok("with a site of its own, Tiqets is the quieter line under it", /if \(ticketAgent === "tiqets" && \(!ticketSellsDoor \|\| hasDirectSite\)\)/.test(detail) && /data-testid="tiqets-second"/.test(detail));
+  const content = readFileSync(join(root, "src/utils/studioContent.js"), "utf8");
+  ok("the offer survives a redraft, beside its link only", /const offer = cleanTicketOffer\(t\?\.__ticketOffer\);\s*if \(offer && out\.ticketUrl\) out = \{ \.\.\.out, __ticketOffer: offer \};/.test(content));
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the sweep reads the page before he ticks it", /proposal\.verdict === AFF_FOUND && proposal\.agent === "tiqets"[\s\S]{0,200}readSourcePage\(proposal\.url\)[\s\S]{0,200}classifyTiqetsText\(page\?\.text/.test(app));
+  ok("and so does a draft", /if \(ticketAgentOf\(t\.ticketUrl\) === "tiqets"\) \{[\s\S]{0,300}classifyTiqetsText\(text, \{ name, url \}\)/.test(app));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

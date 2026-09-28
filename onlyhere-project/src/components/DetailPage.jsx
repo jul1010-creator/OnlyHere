@@ -22,7 +22,8 @@ import { ArticleFeedback } from "./ArticleFeedback";
 import { PhotoCredit } from "./PhotoCredit";
 import { PlaceMiniMap } from "./PlaceMiniMap";
 import { ticketmasterUrl, ticketDisclosure, tiqetsUrl, tiqetsDisclosure, affiliateHref, affiliateNote, isWegotripUrl, outboundLink } from "../utils/affiliates";
-import { isTiqetsProductUrl, ticketAgentOf, isBookableTicketUrl, isTourUrl, sameShop, priceSourceHost } from "../utils/ticketLink";
+import { isTiqetsProductUrl, ticketAgentOf, isBookableTicketUrl, isTourUrl, sameShop, priceSourceHost, isResellerUrl } from "../utils/ticketLink";
+import { cleanTicketOffer, offerSellsTheDoor, ticketOfferLine, ticketOfferPerks } from "../utils/ticketOffer";
 import { branchPoints, branchesOf, hasBranches, branchLine, branchLabel } from "../utils/branches";
 import { offerView, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE } from "../utils/offer";
 import { saveLabel, saveHint, planFromSavedLabel } from "../utils/savedTrip";
@@ -245,6 +246,22 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
   const ticketAgent = ticketAgentOf(ticketDest);
   const ticketHref = ticketAgent ? (affiliateHref(ticketDest) || ticketDest) : "";
   const ticketNote = ticketAgent ? affiliateNote(ticketDest, lang) : "";
+  // ── WHAT THE TIQETS PAGE SELLS, AND WHETHER THERE IS A DIRECT WAY ──
+  //
+  // Oliver, 28 Sep 2026: "recommending Amalienborg through Getyourguide or
+  // zoo through Tiqets, is bad in the sense that it is 10 kr pricier.
+  // However, some of them do include packages that make it cheaper and have
+  // refunding." Asked how the two should sit: "Up to you."
+  //
+  // So where the place has its own site, that button comes first and Tiqets is
+  // a quieter line under it that says the trade: a little dearer, and what the
+  // extra buys, which is only what the Tiqets page itself offers. Where there
+  // is no site of its own, Tiqets is the button, as before. And a page that
+  // sells a guided tour or only the Copenhagen Card is offered as exactly that,
+  // never under a Tickets label. See utils/ticketOffer.js.
+  const ticketOffer = ticketAgent === "tiqets" ? cleanTicketOffer(item?.__ticketOffer) : null;
+  const ticketSellsDoor = offerSellsTheDoor(ticketOffer);
+  const hasDirectSite = (kind === "free" || kind === "event") && !!externalHref(item?.website) && !isResellerUrl(externalHref(item?.website));
   // The row shape AtAGlanceCard takes, or null when there is nothing to link.
   // Null rather than an empty object, because that card already drops nulls and
   // a caller building this inline should not have to remember to.
@@ -317,7 +334,9 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
   // here it is also half of the answer, since the two hosts only read as
   // different if the reader is told both. bookLabel keeps the three phrases in
   // entryWords beside their translations rather than loose in this file.
-  const bookRow = ticketHref
+  // A tour or a card is not a ticket, so At a Glance's Tickets row does not
+  // link to one. The line under the buttons still offers it as what it is.
+  const bookRow = ticketHref && ticketSellsDoor
     ? { href: ticketHref, label: bookLabel(ticketAgent), note: ticketNote, source: bookSource }
     : null;
 
@@ -1485,7 +1504,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
           );
         })()}
 
-        {(kind === "free" || kind === "event") && externalHref(item.website) && (() => {
+        {(kind === "free" || kind === "event") && externalHref(item.website) && !isResellerUrl(externalHref(item.website)) && (() => {
           const dest = externalHref(item.website);
           // affiliateHref rather than ticketmasterUrl: one door, so the day a
           // programme is approved every entry ever published starts earning
@@ -1553,12 +1572,35 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
           if (!ticketAgent) return null;
           const href = ticketHref;
           const note = ticketNote;
+          // THE QUIET LINE: a Tiqets page that is a second choice under the
+          // place's own site, or one that sells a tour or a card rather than
+          // the door. Named and disclosed like the button, just smaller.
+          if (ticketAgent === "tiqets" && (!ticketSellsDoor || hasDirectSite)) {
+            const line = ticketOfferLine(ticketOffer, { direct: hasDirectSite && ticketSellsDoor, lang });
+            const icon = ticketOffer?.kind === "tour" ? "🧭" : "🎟️";
+            return (
+              <div data-testid="tiqets-second" style={{ marginTop: -4, marginBottom: 12, textAlign: "center" }}>
+                <a href={href} target="_blank" rel={note ? "noreferrer sponsored nofollow" : "noreferrer"}
+                  style={{ fontSize: 12, fontWeight: 600, color: C.gold, textDecoration: "none" }}>
+                  {icon} {line} ↗
+                </a>
+                {note && (
+                  <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 3 }}>{note}</div>
+                )}
+              </div>
+            );
+          }
+          const extra = ticketAgent === "tiqets" ? ticketOfferPerks(ticketOffer, { lang }) : "";
           return (
             <div style={{ marginBottom: 10 }}>
               <a href={href} target="_blank" rel={note ? "noreferrer sponsored nofollow" : "noreferrer"}
                 style={{ display: "block", textAlign: "center", background: C.surface, border: `1px solid ${C.gold}55`, color: C.gold, borderRadius: 12, padding: "13px", fontSize: 13, fontWeight: 700, textDecoration: "none" }}>
                 🎫 {uiT("entry.tickets", lang)}
               </a>
+              {/* What the extra buys, when the page offers any. */}
+              {extra && (
+                <div style={{ fontSize: 11, color: C.light, lineHeight: 1.5, marginTop: 5, textAlign: "center" }}>{extra}</div>
+              )}
               {note && (
                 <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 5, textAlign: "center" }}>{note}</div>
               )}

@@ -32,6 +32,10 @@ export const ALLOWANCE_DEFAULTS = Object.freeze({
   // One more try for a build that failed halfway. Each retry still takes a
   // slot from the network and from the day, because it spends the same money.
   retries: 1,
+  // Builds a visitor may stop and get back in one day. Stopping still spends
+  // what the build spent so far, so the day's total keeps it, and this caps
+  // how often one browser can start and stop on his money.
+  refunds: 2,
 });
 
 // The day a guide counts against is Denmark's, so the allowance comes back at
@@ -59,6 +63,7 @@ export const readLimits = (env = {}) => ({
   // 0 is allowed here and only here: it is the off switch.
   perDay: wholeOr(env.GEMLYX_GUIDES_PER_DAY, ALLOWANCE_DEFAULTS.perDay),
   retries: wholeOr(env.GEMLYX_GUIDE_RETRIES, ALLOWANCE_DEFAULTS.retries),
+  refunds: wholeOr(env.GEMLYX_GUIDE_REFUNDS, ALLOWANCE_DEFAULTS.refunds),
 });
 
 // Who builds without counting: Oliver, testing. An explicit list only, by
@@ -246,6 +251,34 @@ export const askForGuidePass = async ({ fetchImpl, storage, token = "", makeId, 
   if (data.uncapped) return { ok: true, uncapped: true };
   if (data.pass) writeToday(storage, { day, pass: data.pass, finished: false });
   return { ok: true, open: data.open || "" };
+};
+
+// ── STOPPED IS NOT SPENT ─────────────────────────────────────────────
+// Oliver, 28 Sep 2026: "make sure that if people cancel the making of the
+// guide, then it doesn't count as their daily limit." The pass is handed back
+// and the server takes the build off their browser, account and network. It
+// stays on the day's total, because what the build spent before it stopped
+// was spent. Only said to the traveller when the server confirms it.
+export const cancelGuidePass = async ({ fetchImpl, storage, token = "", now = new Date() } = {}) => {
+  const day = copenhagenDay(now);
+  const kept = todayRecord(storage, day);
+  if (!kept || !kept.pass || kept.finished) return { refunded: false };
+  const visitor = cleanVisitor(safeGet(storage, VISITOR_KEY));
+  try {
+    const res = await fetchImpl("/api/build-pass", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ visitor, cancel: kept.pass }),
+    });
+    const data = await res.json().catch(() => null);
+    if (res.ok && data && data.refunded === true) {
+      writeToday(storage, { day });
+      return { refunded: true };
+    }
+    return { refunded: false };
+  } catch {
+    return { refunded: false };
+  }
 };
 
 // Once the guide exists, today's is spent.

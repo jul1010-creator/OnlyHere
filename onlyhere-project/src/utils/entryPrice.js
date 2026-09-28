@@ -266,6 +266,19 @@ export const entryPrice = (row) => {
 // rather than what was guessed. Fårup's 78-character line still does not, and
 // still falls back — which is the point: the cap is now the real limit, so
 // "Paid" means "genuinely too long to show" instead of "slightly over".
+// ── FREE OR PAID, AS A FILTER ───────────────────────────────────────
+// Oliver, 28 Sep 2026: "put category on attractions called 'free' and 'paid'."
+// The same three answers as entryPrice and nothing looser: free only where the
+// row says free and names no amount, paid where it names an amount or a
+// concession that implies one ("free for children"). A row that says nothing
+// is in neither, so the Free filter can never hand somebody a theme park.
+export const priceClass = (row) => {
+  const { free, impliesPaid } = entryPrice(row);
+  if (free === true) return "free";
+  if (free === false || impliesPaid) return "paid";
+  return "";
+};
+
 export const CHIP_MAX = 40;
 
 // Not "Paid entry" or "Costs money": the shortest true thing, sitting where a

@@ -1782,3 +1782,29 @@ export const stripDashesDeep = (value) => {
   }
   return value;
 };
+
+// ── HOW FAR, ON AN ATTRACTION CARD ──────────────────────────────────
+// Oliver, 28 Sep 2026: "It also seems that attractions have no 'Length from
+// you', unlike towns." A town card says how far it is; an attraction card said
+// only its town. Same rule as a town's: from the reader when they are standing
+// in Denmark, and otherwise from Copenhagen, where most visitors start. An
+// attraction row carries no drive time, so it is a straight line and says so
+// with the tilde, and a place in Copenhagen itself says nothing from CPH.
+// `key` is the TOWN_COORDS key for the place's town, found by the caller.
+const straightKm = (a, b) => {
+  const dLat = (a[0] - b[0]) * 111.32;
+  const dLon = (a[1] - b[1]) * 62.06;
+  return Math.sqrt(dLat * dLat + dLon * dLon);
+};
+export const distanceLine = (userCoords, key) => {
+  const at = key ? TOWN_COORDS[key] : null;
+  if (!at) return "";
+  if (isInDenmark(userCoords)) {
+    const km = Math.round(straightKm(at, [userCoords.lat, userCoords.lon]));
+    return km < 2 ? "~2 km from you" : `~${km} km from you`;
+  }
+  const cph = TOWN_COORDS.Copenhagen;
+  if (!cph) return "";
+  const km = Math.round(straightKm(at, cph));
+  return km < 10 ? "" : `~${km} km from CPH`;
+};

@@ -279,6 +279,48 @@ const rowWords = (place) => {
   return fold(bits.join(" "));
 };
 
+// ── WHAT KIND OF ATTRACTION, FOR THE FILTER ──────────────────────────
+// Oliver, 28 Sep 2026: "attractions need categories.. like history, nature,
+// family, and (perhaps) unique."
+//
+// History, nature and family are three of the nine themes, so they are read
+// the way every other theme is: the row's own themes when it has them, its own
+// words when it does not. Attractions were never asked for themes until today,
+// so for now nearly all of them are read off their words.
+//
+// Nature has one trap in its words: "park". A theme park, an amusement park or
+// a water park is a day out for the family and not a walk in the woods, and
+// WOW PARK and Legoland would otherwise both be filed under Nature.
+//
+// Unique is not a theme and there is no field that says it. It is read off the
+// row's own words saying the place is one of a kind: the only one, the oldest
+// or the largest of its kind, found nowhere else. A row that does not say so
+// is not in it, which keeps the filter to places that claim it themselves.
+// Written folded (ø as o, æ as ae), because the row's words are folded first.
+const NOT_NATURE_PARK = /\b(?:theme|amusement|water|adventure|trampoline|fun|leisure|forlystelses|sommer|vand|oplevelses|legeland)[\s-]?park\b|\bforlystelsespark\b|\blegoland\b|\btivoli\b/i;
+const SAYS_UNIQUE = /\b(?:unique|one[\s-]of[\s-]a[\s-]kind|the only (?:one|place|museum|[a-z]+ in (?:denmark|scandinavia|europe|the world))|only one (?:in|of its kind)|nowhere else|found only|world'?s (?:only|first|oldest|largest|biggest|longest|smallest)|(?:denmark|scandinavia|europe)'?s (?:only|first|oldest|largest|biggest|longest|smallest)|(?:oldest|largest|biggest|longest|smallest) in (?:denmark|scandinavia|europe|the world)|unik\w*|eneste|verdens (?:forste|aeldste|storste|laengste|mindste)|danmarks (?:eneste|forste|aeldste|storste|laengste|mindste))\b/i;
+
+export const ATTRACTION_CATEGORIES = [
+  { value: "history", label: "History" },
+  { value: "nature", label: "Nature" },
+  { value: "family", label: "Family" },
+  { value: "unique", label: "Unique" },
+];
+
+export const attractionIs = (row, category) => {
+  if (category === "unique") return SAYS_UNIQUE.test(rowWords(row) + " " + fold(String(row?.special || "")));
+  if (!PLACE_THEMES.includes(category)) return false;
+  const own = themesOf(row);
+  if (own.length) return own.includes(category);
+  const hay = rowWords(row);
+  if (category === "nature" && NOT_NATURE_PARK.test(hay)) {
+    // Still nature when the row names something that is, beside the rides.
+    const rest = hay.replace(new RegExp(NOT_NATURE_PARK.source, "gi"), " ");
+    return rowThemeWords("nature").filter(w => w !== "park" && w !== "parks").some(w => saysWord(rest, w));
+  }
+  return rowThemeWords(category).some(w => saysWord(hay, w));
+};
+
 export const FIT_STRONG = "themes";
 export const FIT_WEAK = "words";
 export const FIT_OPEN = "nothing stated";

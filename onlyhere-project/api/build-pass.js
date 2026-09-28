@@ -70,6 +70,24 @@ const take = async ({ day, keys, serviceKey, fetchImpl }) => {
   }
 };
 
+// Hands a stopped build back: takes it off the visitor, account and network
+// counters, keeps it on the day's total, and marks the pass used up so it
+// cannot be retried or handed back twice. Answers "ok", "spent", or the
+// refund key that was full.
+const refund = async ({ day, keys, refundKey, refundLimit, spentKey, serviceKey, fetchImpl }) => {
+  try {
+    const r = await fetchImpl(`${SUPABASE_URL}/rest/v1/rpc/gemlyx_refund_guide`, {
+      method: "POST",
+      headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ p_day: day, p_keys: keys, p_refund_key: refundKey, p_refund_limit: refundLimit, p_spent_key: spentKey }),
+    });
+    if (!r.ok) return { open: r.status === 404 ? "not-set-up" : `supabase-${r.status}` };
+    return { answer: String((await r.json()) ?? "") };
+  } catch {
+    return { open: "unreachable" };
+  }
+};
+
 // Pure enough to test: every outside thing comes in through `deps`.
 export const decide = async ({ headers, body, env, fetchImpl, now = new Date(), nonce }) => {
   if (!requestIsFromSite(headers)) return { status: 403, json: { error: NOT_FROM_SITE } };
@@ -85,8 +103,27 @@ export const decide = async ({ headers, body, env, fetchImpl, now = new Date(), 
   const who = await whoIs(headers, serviceKey, fetchImpl);
   if (isUncapped(uncappedList(env), who)) return { status: 200, json: { ok: true, day, uncapped: true } };
 
-  // A retry of a build that failed: the pass it was given, shown again.
   const ipHash = hashIp(secret, clientIp(headers));
+
+  // A build the traveller stopped. Oliver, 28 Sep 2026: "if people cancel the
+  // making of the guide, then it doesn't count as their daily limit."
+  if (body?.cancel) {
+    const stopped = readPass(sign, body.cancel, { day, visitor });
+    if (!stopped) return { status: 200, json: { ok: true, day, refunded: false, why: "not-a-pass" } };
+    const keys = [];
+    if (visitor) keys.push(`v:${visitor}`);
+    if (who.userId) keys.push(`u:${String(who.userId).toLowerCase()}`);
+    if (ipHash) keys.push(`ip:${ipHash}`);
+    const got = await refund({
+      day, keys,
+      refundKey: `c:${visitor || ipHash || "anon"}`, refundLimit: limits.refunds,
+      spentKey: `r:${stopped.nonce}`, serviceKey, fetchImpl,
+    });
+    if (got.open) return { status: 200, json: { ok: true, day, refunded: false, open: got.open } };
+    return { status: 200, json: { ok: true, day, refunded: got.answer === "ok", ...(got.answer === "ok" ? {} : { why: got.answer === "spent" ? "already-handed-back" : "too-many-stops" }) } };
+  }
+
+  // A retry of a build that failed: the pass it was given, shown again.
   const retry = body?.retry ? readPass(sign, body.retry, { day, visitor }) : null;
   if (retry) {
     // A retry spends the same money as a guide, so it still takes a slot from

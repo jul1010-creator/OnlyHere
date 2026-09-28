@@ -81,8 +81,9 @@ import { SupportPage } from "./components/SupportPage";
 // to it too and App.jsx imports AboutMePage.
 import { AffiliatesPage } from "./components/AffiliatesPage";
 import { TripLibraryPage } from "./components/TripLibraryPage";
-import { askForGuidePass, markGuideBuilt, todayRecord, usedTodayReason, copenhagenDay } from "./utils/guideAllowance";
+import { askForGuidePass, markGuideBuilt, todayRecord, usedTodayReason, copenhagenDay, cancelGuidePass } from "./utils/guideAllowance";
 import { LIBRARY_PATH } from "./utils/tripLibrary";
+import { photoRequestMail, needsOwnLine, gmailComposeUrl, mailtoUrl, pressSearchUrl } from "./utils/photoRequestMail";
 import { TourLine } from "./components/TourLine";
 import { AFFILIATES_PATH } from "./utils/affiliateRoster";
 import { safetyClaimNote } from "./utils/safetyClaims";
@@ -115,7 +116,7 @@ import { SUPABASE_URL, SUPABASE_KEY, APP_VERSION, PAID_PLANS_LIVE, FOUNDER_IDS }
 import { isFounder } from "./utils/apiGuard";
 import {
   getSeason, getEventDate, isUpcoming, isCurrentlyLive, isOnOrUpcoming, soonestFirst, hasFinished, weatherIcon,
-  isInDenmark, travelLabel, dotJoin, isFullPlanText, isReadyToBuild, stripReadyMarker, stripMarkdown, readerView, seededShuffle, daysUntil, detectLegMode, haversineKm, scanForAITells, priceBand, PRICE_BANDS,
+  isInDenmark, travelLabel, distanceLine, dotJoin, isFullPlanText, isReadyToBuild, stripReadyMarker, stripMarkdown, readerView, seededShuffle, daysUntil, detectLegMode, haversineKm, scanForAITells, priceBand, PRICE_BANDS,
   getEnclosingJSONStringBounds, nextWeekdayTimestamp,
   getDistance, getDistanceRaw, tiltMove, tiltLeave, arrivalRow, hasArrivalField, departureParam, transitDepartureAnchor,
   daCompare, byName, seasonFit, isConfirmedUpcoming,
@@ -259,7 +260,7 @@ import { ChatPlaceCards } from "./components/ChatPlaceCards";
 // The sentence an entry already has about who it suits, rather than the first
 // hundred characters of it, which on a town is always the founding date. See
 // utils/cardLine.js.
-import { cardLine } from "./utils/cardLine";
+import { cardLine, shortLabel } from "./utils/cardLine";
 import { seasonBlock } from "./utils/seasonFit";
 import { activityAcross, activityBlock, DEFAULT_DAYS as ACTIVITY_DAYS } from "./utils/placeActivity";
 import { communityEvents } from "./data/events";
@@ -272,11 +273,12 @@ import { travelModeKey, tickedTravelMode, withoutNonModes, overnightMove, daySta
 import { buildChatReport, chatReportFilename } from "./utils/chatReport";
 import { openingThread, withTestBrief, withoutTestBrief, loadThread, saveThread, clearThread } from "./utils/chatThread";
 import { downloadReport } from "./utils/previewReport";
-import { briefThemes , essentialsForTrip, essentialsBlock, reservedEssential, nightlifeWanted, nightlifeNotAsked, fitsBrief, preferenceRowState, PREF_READY, PREF_NO_ACCOUNT, eventsForYou, EVENTS_FOR_YOU_DAYS } from "./utils/interestFit";
+import { briefThemes , essentialsForTrip, essentialsBlock, reservedEssential, nightlifeWanted, nightlifeNotAsked, fitsBrief, preferenceRowState, PREF_READY, PREF_NO_ACCOUNT, eventsForYou, EVENTS_FOR_YOU_DAYS, ATTRACTION_CATEGORIES, attractionIs } from "./utils/interestFit";
 // outboundLink, and no longer partnerDisclosure or linkLabel beside it: both
 // render sites on the Essentials card asked for those separately and one of
 // them forgot two of the four. See outboundLink in utils/affiliates.js.
 import { affiliateHref, outboundLink, partnerAdsGear } from "./utils/affiliates";
+import { classifyTiqetsText, offerSellsTheDoor } from "./utils/ticketOffer";
 import { sweepPlan, describeSweepPlan, ticketProposal, describeTicketFindings, affiliateWriteFor, agentLabel, FOUND as AFF_FOUND, RESWEEP_DAYS } from "./utils/affiliateSweep";
 import { wegotripProposals, describeWegotrip, wegotripWriteFor, AUDIO as WEGO_AUDIO } from "./utils/wegotripMatch";
 import { CHECKED_ON as WEGO_CHECKED_ON, WEGOTRIP_SOURCE } from "./data/wegotrip";
@@ -291,7 +293,7 @@ import { scopeOf, isNational, scopePatch, hasScopeChange, essentialsForPlace } f
 // out of the CATEGORY NAME: the attractions pool's Studio type is called
 // `free`, it used to mean it, and it holds Legoland now. See utils/entryPrice.js
 // for the whole argument; nothing in that file may read a type.
-import { entryPrice, entryBooking, priceChip, entryKindLabel, TYPES_WITH_A_DOOR } from "./utils/entryPrice";
+import { entryPrice, entryBooking, priceChip, entryKindLabel, TYPES_WITH_A_DOOR, priceClass } from "./utils/entryPrice";
 // ── "HIGH-END" AND "CASUAL" ─────────────────────────────────────────
 // Oliver, 27 Aug 2026, relaying his friend. The axis every nightlife row was
 // missing: the fields all say what FORMAT a place is, none says what REGISTER.
@@ -354,7 +356,7 @@ import { StudioAssistant } from "./components/StudioAssistant";
 import { partOfCountry, partsPresent, matchesSearch, islandOf, namedIslandOf, islandsPresent, ISLAND_LABEL } from "./utils/geography";
 import { tileCss } from "./utils/mapTiles";
 import { dayCrossings, tripWeatherWarning } from "./utils/weatherWarn";
-import { THEME_LABEL, THEME_EMOJI, themesOf, hasTheme, themesPresent, tierLabel, tierBadge, TIERS, tierOf, TIER_VALUES } from "./utils/placeThemes";
+import { THEME_LABEL, THEME_EMOJI, themesOf, hasTheme, themesPresent, tierLabel, tierBadge, TIERS, tierOf, TIER_VALUES, tierRank } from "./utils/placeThemes";
 // A bar street carries both: the vibe says which street tonight, the tier says
 // whether it is worth travelling for. See utils/streetVibe.js.
 import { STREET_VIBES, STREET_VIBE_VALUES, vibeOf } from "./utils/streetVibe";
@@ -1086,6 +1088,10 @@ function GemlyxApp() {
   // arrives before Supabase has answered, so the lookup has to run again each
   // time live content lands rather than once on mount.
   const [liveContentVersion, bumpLiveContent] = useState(0);
+  // True once the first load of published content has finished, worked or
+  // not. What lets a link to an entry that does not exist say so, instead of
+  // waiting on the front page forever for content that has already arrived.
+  const [liveLoaded, setLiveLoaded] = useState(false);
   const heroVideoRef = useRef(null);
   useEffect(() => {
     let cancelled = false;
@@ -1109,6 +1115,7 @@ function GemlyxApp() {
       // published yet" — a sentence about the database the app had no way of
       // standing behind. See liveContentFailure in utils/liveContent.js.
       setLibraryFailed(liveContentFailure());
+      setLiveLoaded(true);
       bumpLiveContent(v => v + 1);
     });
     // Studio-published Denmark facts, folded into the same denmarkFacts array
@@ -1160,7 +1167,9 @@ function GemlyxApp() {
   const NORTH_ZEALAND_TOWNS = ["Gilleleje", "Tisvildeleje", "Hundested", "Frederiksværk", "Liseleje"];
   // "az" | "near". "recommended" was the default and sorted by a rating nothing
   // on this tab has; see the sort itself for the whole story.
-  const [craftSort, setCraftSort] = useState("az");
+  // Recommended first on Attractions, as on Towns and Islands. See tierRank.
+  const [craftSort, setCraftSort] = useState("rec");
+  const byRecommended = (a, b) => (tierRank(a) - tierRank(b)) || byName(a, b);
   // ── ONE OBJECT, NOT FIVE BOOLEANS ─────────────────────────────────
   // The old page kept craftKind, attractionCity, priceFilter, hiddenGemOnly and
   // bookableOnly as five separate pieces of state, which is why "clear all" did
@@ -1183,6 +1192,11 @@ function GemlyxApp() {
   const [userLocation, setUserLocation] = useState(null);
   const [locationLoading, setLocationLoading] = useState(false);
   const [eventMonth, setEventMonth] = useState(null);
+  // Search on Events and Food, as on Attractions, Towns and Islands. Oliver,
+  // 28 Sep 2026, fixing the navigation review: two of the list pages had no way
+  // to find a place by name.
+  const [eventQuery, setEventQuery] = useState("");
+  const [foodQuery, setFoodQuery] = useState("");
   const [eventType, setEventType] = useState(null);
   const [eventTab, setEventTab] = useState("local");
   // null, or one of the TIERS ids: must | high | worth | nearby. Read off the
@@ -2765,6 +2779,9 @@ function GemlyxApp() {
   //   create policy "auth upload gemlyx-media" on storage.objects for insert to authenticated with check (bucket_id = 'gemlyx-media');
   //   create policy "public read gemlyx-media" on storage.objects for select using (bucket_id = 'gemlyx-media');
   const [mediaEditId, setMediaEditId] = useState(null);
+  // The photo request mail being drafted, for one row at a time. See
+  // utils/photoRequestMail.js.
+  const [photoMail, setPhotoMail] = useState(null);
   const [mediaBusy, setMediaBusy] = useState(false);
   const [mediaError, setMediaError] = useState(null);
   const [mediaReelInput, setMediaReelInput] = useState("");
@@ -8832,6 +8849,25 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
             noteToFounder(`No ticket link: the pages this run read had none, and asking Tiqets and Ticketmaster directly found none either. Plenty of Danish places sell only through their own site, and no ticket link is the right answer for those.`);
           }
         }
+        // ── WHAT THE TIQETS PAGE SELLS ───────────────────────────────
+        // 28 Sep 2026, and the reason is in utils/ticketOffer.js: the address
+        // of a Tiqets venue page says "tickets" whatever the page sells. Read
+        // off the copy this run already has when it has one, and fetched once
+        // when it does not.
+        if (ticketAgentOf(t.ticketUrl) === "tiqets") {
+          const url = String(t.ticketUrl).trim();
+          const text = pagesByUrl[url] || (await readSourcePage(url))?.text || "";
+          const offer = classifyTiqetsText(text, { name, url });
+          if (offer) t.__ticketOffer = { ...offer, at: dayKey(new Date()) };
+          note("What the Tiqets page sells", {
+            provider: "fetch",
+            detail: url.slice(0, 120),
+            outcome: offer ? "ok" : "empty",
+            used: !!offer,
+            got: offer ? `${offer.kind}${offer.cancel ? ", free cancellation" : ""}${offer.combos ? ", combo deals" : ""}` : "no product titles could be read off the page",
+            why: offer ? "" : "The entry page then offers the link as a second choice under the place's own site, with no claims about what it includes.",
+          });
+        }
 
         // ── AND THE THING TO DO, WHICH IS NOT THE TICKET ─────────────
         //
@@ -12848,7 +12884,23 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
         } catch { failed += 1; }
         await new Promise(r => setTimeout(r, 150));
       }
-      if (row) list.push(ticketProposal(row, results, { today: new Date(), failed }));
+      if (row) {
+        const proposal = ticketProposal(row, results, { today: new Date(), failed });
+        // ── AND WHAT THE PAGE SELLS, READ BEFORE HE TICKS IT ─────────
+        // 28 Sep 2026. A Tiqets venue page says "tickets" in its address
+        // whatever it sells, and Amalienborg's sold only a guided tour. One
+        // read of the page, only for a link that was found, and the answer
+        // rides on the write. See utils/ticketOffer.js.
+        if (proposal.verdict === AFF_FOUND && proposal.agent === "tiqets") {
+          const page = await readSourcePage(proposal.url);
+          const offer = classifyTiqetsText(page?.text, { name, url: proposal.url });
+          if (offer) {
+            proposal.set = { ...proposal.set, __ticketOffer: { ...offer, at: proposal.at } };
+            if (!offerSellsTheDoor(offer)) proposal.why += ` The page sells ${offer.kind === "tour" ? "a guided tour" : "only the Copenhagen Card"} and no ticket of its own, so the entry page shows it as that and never as Tickets.`;
+          }
+        }
+        list.push(proposal);
+      }
       setAffRunning({ done: i + 1, total: rows.length, name });
     }
     setAffRunning(null);
@@ -16696,15 +16748,29 @@ ${houseDistanceSays(houseBaseArea, dayPoints(day, stayResolve))}` : ""}`;
   // silently showing the front page, which is the failure this app keeps
   // producing and is especially bad here, where the visitor came from a search
   // result and has no idea what they were promised.
+  // ── A LINK TO SOMETHING THAT IS NOT THERE ──────────────────────────
+  // 28 Sep 2026. /denmark/attraction/amalienborg (the entry is
+  // amalienborg-slot) sat on the front door forever: every effect below waits
+  // for content that might still be loading, and nothing ever decided that it
+  // had loaded and the page was simply not in it. Once it has, the reader is
+  // taken to the list the link belonged to and told why, which is better than
+  // a front page that silently ignores where they wanted to go.
+  const missingEntry = (tab) => {
+    setEntered(true);
+    setActive(tab);
+    navigate(`/${hashForTab(tab)}`, { replace: true });
+    showToast("That page could not be found, so here is the list it belongs to.", 5000);
+  };
   const townRouteDone = useRef(false);
   useEffect(() => {
     if (!townSlug || townRouteDone.current) return;
     const found = findBySlug(towns, townSlug);
+    if (!found && liveLoaded && !libraryFailed) { townRouteDone.current = true; missingEntry("visits"); return; }
     if (!found) return;              // still loading, try again on the next version
     townRouteDone.current = true;
     setEntered(true);                // straight to the place, not the front door
     setTownDetail(found);
-  }, [townSlug, liveContentVersion]);
+  }, [townSlug, liveContentVersion, liveLoaded]);
 
   // ── AND ARRIVING ON EVERYTHING ELSE ─────────────────────────────────
   //
@@ -16742,11 +16808,16 @@ ${houseDistanceSays(houseBaseArea, dayPoints(day, stayResolve))}` : ""}`;
       island: islands,
     };
     const found = findBySlug(pools[kind] || [], entrySlug);
+    if (!found && liveLoaded && !libraryFailed) {
+      entryRouteDone.current = true;
+      missingEntry(({ event: "events", free: "attractions", craft: "attractions", food: "food", nightlife: "nightlife", island: "islands" })[kind] || "home");
+      return;
+    }
     if (!found) return;              // still loading, try again on the next version
     entryRouteDone.current = true;
     setEntered(true);
     ENTRY_SETTERS[kind]?.(found);
-  }, [entrySeg, entrySlug, liveContentVersion]);
+  }, [entrySeg, entrySlug, liveContentVersion, liveLoaded]);
 
   // Looks up a stop name against everything real Gemlyx already knows, so the guide
   // shows real price/hours/type instead of just repeating the AI's own prose.
@@ -16824,6 +16895,14 @@ ${houseDistanceSays(houseBaseArea, dayPoints(day, stayResolve))}` : ""}`;
   // screen say so in advance; the server decides.
   const guideStore = () => { try { return window.localStorage; } catch { return null; } };
   const guidePassPendingRef = useRef(false);
+  // ── STOP BUILDING ─────────────────────────────────────────────────
+  // Oliver, 28 Sep 2026: "make sure that if people cancel the making of the
+  // guide, then it doesn't count as their daily limit." The build is one long
+  // async function, so a stop is a flag read at every stage change, which ends
+  // it before the next round of model calls rather than mid call.
+  const GUIDE_STOPPED = "GUIDE_STOPPED_BY_TRAVELLER";
+  const guideStopRef = useRef(false);
+  const [guideStopping, setGuideStopping] = useState(false);
   const newVisitorId = () => {
     try { if (window.crypto?.randomUUID) return window.crypto.randomUUID(); } catch { /* older browser */ }
     return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
@@ -16948,7 +17027,10 @@ ${houseDistanceSays(houseBaseArea, dayPoints(day, stayResolve))}` : ""}`;
     // `if (!run) return`, so every rejection this build records, including the
     // geocode-fitting one added today, was being written to nothing.
     startLog("Guide build", "");
+    guideStopRef.current = false;
+    setGuideStopping(false);
     const buildStage = (label, percent) => {
+      if (guideStopRef.current) throw new Error(GUIDE_STOPPED);
       setGuideBuildStage({ label, percent });
       note(label, { percent });
     };
@@ -18957,6 +19039,21 @@ If the conversation only covers a single day or a few stops with no explicit day
       // and say THAT plainly instead of blaming the conversation. Everything
       // else still gets the original message, plus the real error now always
       // lands in the console so the next "can't build" report is diagnosable.
+      // Stopped on purpose is not a failure, and says whether the day was
+      // handed back, only once the server has confirmed it.
+      if (String(err?.message || "") === GUIDE_STOPPED) {
+        setGuideStopping(false);
+        const back = await cancelGuidePass({
+          fetchImpl: (...args) => fetch(...args),
+          storage: guideStore(),
+          token: studioSession?.access_token || userSession?.token || "",
+        });
+        setGuideError(back.refunded
+          ? "Stopped. It did not count as today's guide."
+          : "Stopped. You can start the guide again once today.");
+        setTimeout(() => setGuideError(null), 8000);
+        return;
+      }
       console.warn("Guide build failed:", err);
       const msg = String(err?.message || err || "");
       const isBilling = looksLikeBilling(msg);
@@ -20959,7 +21056,15 @@ If the conversation only covers a single day or a few stops with no explicit day
   // pages and a reader looking for one is often looking for the other. The
   // order here is also the swipe order, so a wrong position is felt as a wrong
   // gesture rather than seen as a wrong list.
-  const TAB_ORDER = ["home", "essentials", "tips", "gems", "attractions", "events", "food", "nightlife", "shopping", "visits", "islands", "ai"];
+  const TAB_ORDER_ALL = ["home", "essentials", "tips", "gems", "attractions", "events", "food", "nightlife", "shopping", "visits", "islands", "ai"];
+  // ── A PAGE WITH NOTHING ON IT IS NOT IN THE MENU ──────────────────
+  // Oliver, 28 Sep 2026, fixing the navigation review: Shopping was a top
+  // level page reading "Nothing published yet". It comes back by itself the
+  // moment one shop or shopping street is published. Studio still sees it, so
+  // there is somewhere to check a page before the first entry goes live. Only
+  // decided once the content has loaded, so a slow load never hides it.
+  const hideShopping = liveLoaded && !libraryFailed && !isStudio && shops.length === 0 && shopPlaces.length === 0;
+  const TAB_ORDER = TAB_ORDER_ALL.filter(t => !(t === "shopping" && hideShopping));
   // Single source of truth for nav labels — same order as TAB_ORDER, so swipe and nav can never drift apart again.
   // Redesign pass: emoji removed from nav — `ico` names map to the drawn icon
   // set in components/Icon.jsx, rendered next to the plain-text label.
@@ -20996,8 +21101,12 @@ If the conversation only covers a single day or a few stops with no explicit day
     { id: "visits", label: uiT("nav.visits", uiLang), ico: "town" },
     { id: "islands", label: uiT("nav.islands", uiLang), ico: "island" },
     { id: "ai", label: uiT("nav.ai", uiLang), ico: null },
-  ];
+  ].filter(item => TAB_ORDER.includes(item.id));
   const [slideDir, setSlideDir] = useState(null);
+  // A link straight to the hidden Shopping page lands on Explore instead.
+  useEffect(() => {
+    if (hideShopping && active === "shopping") setActive("home");
+  }, [hideShopping, active]);
   const pageAnim = "";
   const goTab = (id) => {
     const a = TAB_ORDER.indexOf(active), b = TAB_ORDER.indexOf(id);
@@ -22771,7 +22880,8 @@ ${languageBlock()}`;
   // its `test` once, applyFacets runs it for the list, and facetCounts runs the
   // same function for the counts, so a count and the filter it applies cannot
   // disagree by construction rather than by an assertion watching two copies.
-  const filteredEvents = applyFacets(upcomingInTab, eventFacets, eventFacetState)
+  const eventsSearched = upcomingInTab.filter(e => matchesQuery(e, eventQuery, ["town", "type", "desc", "location"]));
+  const filteredEvents = applyFacets(eventsSearched, eventFacets, eventFacetState)
     // Soonest first stays the default, because for an event the date IS the
     // point. A to Z is there for when you know the name and want to find it.
     //
@@ -22822,7 +22932,8 @@ ${languageBlock()}`;
     setFoodStyleSel(next.style || null);
     setFoodTab(next.price || "All");
   };
-  const filteredFood = applyFacets(foodNav, foodFacets, foodFacetState)
+  const foodSearched = foodNav.filter(f => matchesQuery(f, foodQuery, ["location", "category", "desc"]));
+  const filteredFood = applyFacets(foodSearched, foodFacets, foodFacetState)
     .sort(foodSort === "price" ? (a, b) => byFoodPrice(a, b) || byName(a, b) : byName);
 
   const aiHelperBlock = () => (
@@ -22840,7 +22951,7 @@ ${languageBlock()}`;
                     this does not lean on the "unless this is obvious" carve-out
                     and why the generated guides are not labelled under 50(4). */}
                 <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.5, marginBottom: 10 }}>
-                  {aiDisclosureFor(typeof navigator === "undefined" ? null : navigator)}
+                  {aiDisclosureFor(typeof navigator === "undefined" ? null : navigator, uiLang)}
                 </div>
 
                 {/* ── THE PICTURE BESIDE THE SENTENCE, NOT UNDER IT ──────
@@ -25195,9 +25306,109 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                       style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "8px 14px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                                       🔎 Find on Wikimedia
                                     </button>
+                                    {/* ── ASK THE PLACE ITSELF ─────────────────────────
+                                        Oliver, 28 Sep 2026: "next to Wiki and upload
+                                        picture, you have 'draft a mail to..'" A template,
+                                        not a model call. See utils/photoRequestMail.js. */}
+                                    <button onClick={() => setPhotoMail(m => (m?.rowId === row.id ? null : { rowId: row.id, lang: "da", to: "", ...photoRequestMail({ name: p.name, type: row.type, lang: "da" }) }))}
+                                      style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "8px 14px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginLeft: 8 }}>
+                                      ✉ Draft a mail to {p.name || "them"}
+                                    </button>
                                     <div style={{ fontSize: 10.5, color: C.muted, marginTop: 6, lineHeight: 1.5 }}>
                                       A picture uploaded through the AI button is labelled as generated wherever it appears. Required since 2 August 2026 for images of real places.
                                     </div>
+                                    {photoMail?.rowId === row.id && (() => {
+                                      const setMail = (patch) => setPhotoMail(m => ({ ...m, ...patch }));
+                                      const switchLang = (lang) => setPhotoMail(m => ({ ...m, lang, ...photoRequestMail({ name: p.name, type: row.type, lang }) }));
+                                      const press = pressSearchUrl(p.website);
+                                      const unfinished = needsOwnLine(photoMail.body);
+                                      const draft = { to: photoMail.to.trim(), subject: photoMail.subject, body: photoMail.body };
+                                      const fieldStyle = { width: "100%", boxSizing: "border-box", background: C.surface, border: `1px solid ${C.border}`, color: C.text, borderRadius: 8, padding: "7px 10px", fontSize: 12, fontFamily: "'Inter', sans-serif" };
+                                      const pill = (on) => ({ background: on ? `${C.gold}22` : "none", border: `1px solid ${on ? C.gold : C.border}`, color: on ? C.gold : C.muted, borderRadius: 100, padding: "4px 11px", fontSize: 10.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" });
+                                      return (
+                                        <div style={{ marginTop: 10, background: C.bg, border: `1px solid ${C.gold}44`, borderRadius: 12, padding: "12px 14px" }}>
+                                          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+                                            <button onClick={() => switchLang("da")} style={pill(photoMail.lang === "da")}>Dansk</button>
+                                            <button onClick={() => switchLang("en")} style={pill(photoMail.lang === "en")}>English</button>
+                                            <div style={{ flex: 1 }} />
+                                            {p.website && (
+                                              <a href={p.website} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: C.light, textDecoration: "underline" }}>Their site ↗</a>
+                                            )}
+                                            {press && (
+                                              <a href={press} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: C.light, textDecoration: "underline", marginLeft: 10 }}>Press photos? ↗</a>
+                                            )}
+                                          </div>
+                                          <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+                                            <input value={photoMail.to} onChange={e => setMail({ to: e.target.value })} placeholder="Their email" style={{ ...fieldStyle, flex: 1 }} />
+                                            {p.website && (
+                                              <button disabled={!!photoMail.finding}
+                                                onClick={async () => {
+                                                  setMail({ finding: true, findNote: "" });
+                                                  try {
+                                                    const r = await studioFetch(`/api/find-email?url=${encodeURIComponent(p.website)}`);
+                                                    const j = await r.json().catch(() => null);
+                                                    const found = r.ok && Array.isArray(j?.emails) ? j.emails : [];
+                                                    setPhotoMail(m => (m?.rowId !== row.id ? m : {
+                                                      ...m, finding: false, found,
+                                                      to: m.to.trim() ? m.to : (found[0]?.email || ""),
+                                                      findNote: !r.ok ? String(j?.error || `Could not search (${r.status})`)
+                                                        : found.length ? "" : `No address written on their site. Checked ${(j?.checked || []).length} page${(j?.checked || []).length === 1 ? "" : "s"}.`,
+                                                    }));
+                                                  } catch {
+                                                    setMail({ finding: false, findNote: "Could not reach the search just now." });
+                                                  }
+                                                }}
+                                                style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "6px 12px", fontSize: 11, fontWeight: 700, cursor: photoMail.finding ? "default" : "pointer", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap" }}>
+                                                {photoMail.finding ? "Looking…" : "Find their email"}
+                                              </button>
+                                            )}
+                                          </div>
+                                          {Array.isArray(photoMail.found) && photoMail.found.length > 0 && (
+                                            <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 8 }}>
+                                              {photoMail.found.map(f => (
+                                                <div key={f.email} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11 }}>
+                                                  <button onClick={() => setMail({ to: f.email })}
+                                                    style={{ background: photoMail.to.trim() === f.email ? `${C.gold}22` : "none", border: `1px solid ${photoMail.to.trim() === f.email ? C.gold : C.border}`, color: photoMail.to.trim() === f.email ? C.gold : C.light, borderRadius: 100, padding: "3px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                                    {f.email}
+                                                  </button>
+                                                  <a href={f.from} target="_blank" rel="noreferrer" style={{ color: C.muted, textDecoration: "underline", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                                    found on {(() => { try { const u = new URL(f.from); return `${u.hostname.replace(/^www\./, "")}${u.pathname === "/" ? "" : u.pathname}`; } catch { return f.from; } })()}
+                                                  </a>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          )}
+                                          {photoMail.findNote && (
+                                            <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>{photoMail.findNote}</div>
+                                          )}
+                                          <input value={photoMail.subject} onChange={e => setMail({ subject: e.target.value })} style={{ ...fieldStyle, marginBottom: 6 }} />
+                                          <textarea value={photoMail.body} onChange={e => setMail({ body: e.target.value })} rows={14}
+                                            style={{ ...fieldStyle, lineHeight: 1.6, resize: "vertical" }} />
+                                          {unfinished && (
+                                            <div style={{ fontSize: 11, color: "#FFB347", marginTop: 6 }}>Replace the line in brackets with your own first.</div>
+                                          )}
+                                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+                                            <a href={unfinished ? undefined : gmailComposeUrl(draft)} target="_blank" rel="noreferrer"
+                                              aria-disabled={unfinished}
+                                              onClick={e => { if (unfinished) e.preventDefault(); }}
+                                              style={{ background: unfinished ? C.surface : C.gold, color: unfinished ? C.muted : C.onGold, borderRadius: 100, padding: "8px 14px", fontSize: 11.5, fontWeight: 700, textDecoration: "none", cursor: unfinished ? "default" : "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                              Open in Gmail
+                                            </a>
+                                            <a href={unfinished ? undefined : mailtoUrl(draft)}
+                                              aria-disabled={unfinished}
+                                              onClick={e => { if (unfinished) e.preventDefault(); }}
+                                              style={{ background: "none", border: `1px solid ${C.border}`, color: unfinished ? C.muted : C.light, borderRadius: 100, padding: "8px 14px", fontSize: 11.5, fontWeight: 700, textDecoration: "none", cursor: unfinished ? "default" : "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                              Open in mail app
+                                            </a>
+                                            <button disabled={unfinished}
+                                              onClick={() => { try { navigator.clipboard.writeText(`${draft.subject}\n\n${draft.body}`); setMail({ copied: true }); } catch { /* no clipboard */ } }}
+                                              style={{ background: "none", border: `1px solid ${C.border}`, color: unfinished ? C.muted : C.light, borderRadius: 100, padding: "8px 14px", fontSize: 11.5, fontWeight: 700, cursor: unfinished ? "default" : "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                              {photoMail.copied ? "Copied" : "Copy"}
+                                            </button>
+                                          </div>
+                                        </div>
+                                      );
+                                    })()}
 
                                     {/* WIKIMEDIA PHOTO FINDER. Everything listed here is already
                                         licence-checked server-side, and the credit shown is the one
@@ -28698,7 +28909,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                   follows the rule rather than forcing Create. See
                                   authMode's declaration. The profile one DOES name
                                   one, because there is only one thing to do. */}
-                              <button onClick={() => { if (needsAccount) { setAuthReason(null); setAuthMode("in"); setAuthOpen(true); } else { goTab("me"); } }}
+                              <button onClick={() => { if (needsAccount) { setAuthReason(null); setAuthMode("in"); setAuthOpen(true); } else { navigate(`${ABOUT_ME_PATH}/about`); } }}
                                 style={{ background: C.gold, border: "none", color: C.onGold, borderRadius: 100, padding: "8px 16px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                                 {uiT(`row.${k}.action`, uiLang)}
                               </button>
@@ -29091,6 +29302,17 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 test: (i, v) => v === "free" || v === "craft"
                   ? i._kind === v
                   : (i.what || []).some(w => (kindKeys[v] || []).some(k => w.toLowerCase().includes(k))) },
+              // ── CATEGORY ─────────────────────────────────────────
+              // Oliver, 28 Sep 2026: "attractions need categories.. like
+              // history, nature, family, and (perhaps) unique." Pick several,
+              // OR within it like Type. See attractionIs in utils/interestFit.js
+              // for how each is read and why a theme park is never Nature.
+              { key: "category", label: "Category", primary: true, multi: true,
+                options: [
+                  { value: "All", label: "All" },
+                  ...ATTRACTION_CATEGORIES,
+                ],
+                test: (i, v) => attractionIs(i, v) },
               // ── SECTION 3: ISLAND ────────────────────────────────
               // See islandOf in utils/geography.js for why this is not simply
               // partOfCountry: that function answers "nearest of the five
@@ -29108,6 +29330,19 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     .map(v => ({ value: v, label: ISLAND_LABEL[v] || v })),
                 ],
                 test: (i, v) => i._island === v },
+              // ── FREE OR PAID ─────────────────────────────────────
+              // Oliver, 28 Sep 2026: "put category on attractions called
+              // 'free' and 'paid'." Read off each row's own price words by
+              // priceClass, never off the category name, which is the mistake
+              // entryPrice.js was written to end. A row that does not say is in
+              // neither, and shows under All.
+              { key: "price", label: "Price", primary: true,
+                options: [
+                  { value: "All", label: "All" },
+                  { value: "free", label: "Free" },
+                  { value: "paid", label: "Paid" },
+                ],
+                test: (i, v) => priceClass(i) === v },
               // ── AND NOTHING ELSE, WHICH IS THE POINT ─────────────
               // City, Popularity and Booking were here, off the row and reachable
               // through the Filter sheet. The sheet is gone at his request and he
@@ -29132,7 +29367,9 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             // filtered number would hide the controls the moment they worked,
             // leaving a short list nobody can widen again.
             const useAttractionFilters = showFilters(combined.length);
-            const filtered = applyFacets(searched, ATTRACTION_FACETS, attractionFacets).sort((a, b) => craftSort === "az"
+            const filtered = applyFacets(searched, ATTRACTION_FACETS, attractionFacets).sort((a, b) => craftSort === "rec"
+              ? byRecommended(a, b)
+              : craftSort === "az"
               ? byName(a, b)
               : (craftSort === "near" && isInDenmark(userCoords))
               ? (townKmFromUser(a._kind === "craft" ? a.location : a.city) ?? 9999) - (townKmFromUser(b._kind === "craft" ? b.location : b.city) ?? 9999)
@@ -29152,13 +29389,13 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               // gone rather than repaired, and the comment that used to sit here
               // already said what should replace it: "A to Z is the honest
               // default for anyone actually looking for a specific place."
-              : byName(a, b));
+              : byRecommended(a, b));
 
             return (
             <div className={pageAnim} style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
               <div style={{ marginBottom: 18, paddingTop: 8 }}>
                 <h2 style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, margin: "0 0 10px" }}>Attractions</h2>
-                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Everything worth doing that isn't a town, a bar, or a meal: free places and things worth booking ahead, side by side so you can compare them.</div>
+                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Everything worth doing that isn't a town, a bar or a meal. Pick what you're into, what it costs and where it is.</div>
               </div>
 
               {/* ── SEARCH AND SORT, ALWAYS. FILTERS, ONLY WHEN THE
@@ -29170,13 +29407,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   for nine places. A filter can only REMOVE things, so on a list
                   you can read in one screen every control is pure cost. */}
               <div style={{ marginBottom: 14 }}>
-                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                  <input value={attractionQuery} onChange={e => setAttractionQuery(e.target.value)}
-                    placeholder={uiT("search.attractions", uiLang)}
-                    style={{ flex: "1 1 200px", minWidth: 0, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 100, padding: "11px 16px", fontSize: 14, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif" }} />
-                </div>
-
-                  <div style={{ marginTop: 10 }}>
+                  <div>
                     {/* ── ONE FILTER, THE SAME ONE EVENTS USES ─────────────
                         Oliver, 19 Aug 2026: "Fix filters on the blogs please...
                         the events is somewhat good. But the others need to be
@@ -29213,9 +29444,13 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       onChange={next => setAttractionFacets(next)}
                       sort={craftSort}
                       sortOptions={[
+                        { value: "rec", label: "Recommended" },
                         { value: "az", label: "Alphabetical" },
                         { value: "near", label: "📍 Closest" },
                       ]}
+                      search={attractionQuery}
+                      onSearch={setAttractionQuery}
+                      searchPlaceholder={uiT("search.attractions", uiLang)}
                       // The location prompt rides with the sort that needs it,
                       // exactly as the old select did. Asking for a permission
                       // nobody's action requires is how a page gets a browser
@@ -29291,8 +29526,9 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
 
                         <div style={{ fontSize: 21, fontWeight: 600, color: C.text, fontFamily: "'Fraunces', serif", marginTop: 12, lineHeight: 1.1 }}><EntryLink type={item._kind === "free" ? "free" : "booking"} name={item.name}>{item.name}</EntryLink></div>
                         <div style={{ fontSize: 9, color: C.muted, textTransform: "uppercase", letterSpacing: 1.2, marginTop: 4 }}>
-                          {dotJoin(item._kind === "craft" ? item.location : item.city, item._kind === "craft" ? travelLabel(userCoords, item.location, item.travelTime, item.__journey?.from || "") : "", item.priceNote)}
-                          {craftSort === "near" && isInDenmark(userCoords) ? (() => { const km = townKmFromUser(item._kind === "craft" ? item.location : item.city); return km != null ? ` · 📍 ${km < 10 ? km.toFixed(1) : Math.round(km)} km away` : ""; })() : ""}
+                          {/* How far, on every attraction as on every town. See distanceLine. */}
+                          {dotJoin(item._kind === "craft" ? item.location : item.city, item._kind === "craft" ? travelLabel(userCoords, item.location, item.travelTime, item.__journey?.from || "") : distanceLine(userCoords, townKeyFor(item.city || item.location || "")), item.priceNote)}
+                          {item._kind === "craft" && craftSort === "near" && isInDenmark(userCoords) ? (() => { const km = townKmFromUser(item.location); return km != null ? ` · 📍 ${km < 10 ? km.toFixed(1) : Math.round(km)} km away` : ""; })() : ""}
                         </div>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 7 }}>
                           {/* A price slot filled in from the category name.
@@ -29349,7 +29585,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             <div className={pageAnim} style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
               <div style={{ marginBottom: 18, paddingTop: 8 }}>
                 <h2 style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, margin: "0 0 10px" }}>Events</h2>
-                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Summer means festival season across Denmark. From legendary stages to harbour markets nobody talks about. We guide you to what's worth traveling for, and exactly how far it is from Copenhagen.</div>
+                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Festivals, markets and local happenings across Denmark, all year round. From legendary stages to harbour markets nobody talks about. We guide you to what's worth traveling for, and exactly how far it is from Copenhagen.</div>
               </div>
 
               <div style={{ display: "flex", gap: 0, marginBottom: 16, borderBottom: `1px solid ${C.border}` }}>
@@ -29361,7 +29597,10 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 ))}
               </div>
               <FilterBar
-                items={upcomingInTab}
+                items={eventsSearched}
+                search={eventQuery}
+                onSearch={setEventQuery}
+                searchPlaceholder={uiT("search.events", uiLang)}
                 shown={filteredEvents.length}
                 noun="events"
                 facets={eventFacets}
@@ -29389,7 +29628,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               {filteredEvents.some(e => isAiImage(e?.__photoCredit)) && (
                 <div style={{ display: "flex", alignItems: "flex-start", gap: 9, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 13px", marginBottom: 16 }}>
                   <span style={{ fontSize: 13, lineHeight: 1.5, flexShrink: 0 }}>✦</span>
-                  <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.6 }}>{aiImageNoteFor(typeof navigator === "undefined" ? null : navigator)}</div>
+                  <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.6 }}>{aiImageNoteFor(typeof navigator === "undefined" ? null : navigator, uiLang)}</div>
                 </div>
               )}
               {filteredEvents.length === 0 ? (
@@ -29469,7 +29708,10 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   below. Declared once each in foodFacets now, and rendered by
                   the component Events and Attractions already use. */}
               <FilterBar
-                items={foodNav}
+                items={foodSearched}
+                search={foodQuery}
+                onSearch={setFoodQuery}
+                searchPlaceholder={uiT("search.food", uiLang)}
                 shown={filteredFood.length}
                 noun="places"
                 facets={foodFacets}
@@ -29507,10 +29749,10 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
                       )}
                       <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(10,15,30,0.5), transparent 45%)" }} />
-                      <div style={{ position: "absolute", bottom: 10, right: 12, fontSize: 12, fontWeight: 700, color: "#fff", background: "rgba(10,15,30,0.78)", backdropFilter: "blur(6px)", padding: "4px 11px", borderRadius: 100, border: `1px solid ${C.border}` }}>{spot.price}</div>
+                      <div style={{ position: "absolute", bottom: 10, right: 12, fontSize: 12, fontWeight: 700, color: "#fff", background: "rgba(10,15,30,0.78)", backdropFilter: "blur(6px)", padding: "4px 11px", borderRadius: 100, border: `1px solid ${C.border}` }}>{shortLabel(spot.price, 22)}</div>
                     </div>
                     <div style={{ padding: "13px 15px 15px" }}>
-                      <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 4 }}>{spot.category} · {spot.location}</div>
+                      <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 4 }}>{[shortLabel(spot.category), spot.location].filter(Boolean).join(" · ")}</div>
                       <div style={{ fontSize: 18, fontWeight: 600, color: C.text, fontFamily: "'Fraunces', serif", lineHeight: 1.15, marginBottom: 6 }}><EntryLink type={spot.isFoodStreet ? "foodStreet" : "food"} name={spot.name}>{spot.name}</EntryLink></div>
                       <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6 }}>{(spot.desc || "").slice(0, 110)}{(spot.desc || "").length > 110 ? "…" : ""}</div>
                     </div>
@@ -29570,7 +29812,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
                   <div>
                     <div style={{ fontSize: 19, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif", lineHeight: 1.15 }}><EntryLink type={spot.isStreet ? "nightStreet" : "night"} name={spot.name}>{spot.name}</EntryLink></div>
-                    <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: 0.8, marginTop: 2 }}>{spot.category} · {spot.location}</div>
+                    <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: 0.8, marginTop: 2 }}>{[shortLabel(spot.category), spot.location].filter(Boolean).join(" · ")}</div>
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
@@ -29975,7 +30217,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 <div style={{ marginBottom: 28 }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 10 }}>Major Cities</div>
                   <div className="towns-grid">
-                    {towns.filter(t => t.isMajorCity && !isArea(t) && townMatches(t)).sort(byName).map(town => (
+                    {towns.filter(t => t.isMajorCity && !isArea(t) && townMatches(t)).sort(byRecommended).map(town => (
                       <div key={town.id} onClick={() => setTownDetail(town)} style={{ cursor: "pointer" }}>
                         <div style={{ position: "relative", height: 210, borderRadius: 6, overflow: "hidden", background: "linear-gradient(135deg, #16233F 0%, #0A0F1E 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                           <PhotoPlate photo={town.photo} name={town.name} color={C.gold} />
@@ -30124,7 +30366,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 </div>
               )}
               <div className="towns-grid">
-                {towns.filter(t => !t.isMajorCity && !isArea(t) && townMatches(t)).sort(byName).map(town => (
+                {towns.filter(t => !t.isMajorCity && !isArea(t) && townMatches(t)).sort(byRecommended).map(town => (
                   <div key={town.id} onClick={() => setTownDetail(town)} style={{ cursor: "pointer" }}>
                     <div style={{ position: "relative", height: 210, borderRadius: 6, overflow: "hidden", background: "linear-gradient(135deg, #16233F 0%, #0A0F1E 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                       <PhotoPlate photo={town.photo} name={town.name} color={C.gold} />
@@ -30386,7 +30628,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     if (!q) return true;
                     return [i.name, i.region, i.tag, i.ferryFrom, i.ferryTo, i.ferryOperator]
                       .some(v => String(v || "").toLowerCase().includes(q));
-                  }).sort(byName);
+                  }).sort(byRecommended);
                   if (!shown.length) return (
                     <div style={{ textAlign: "center", padding: "36px 16px" }}>
                       <div style={{ fontSize: 15, color: C.light, fontFamily: "'Fraunces', serif", marginBottom: 8 }}>Nothing published matches that.</div>
@@ -31218,6 +31460,14 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>{onTips ? "Worth knowing. None of it will strand you, all of it makes the trip better." : "The short list. Sort these before you go, or they cost you money on the day."}</div>
               </div>
               <PageHero src="/checklist.jpg" emoji={onTips ? "✦" : "✓"} color={onTips ? "#B8860B" : "#2E7D32"} />
+              {/* ── THE TWO PAGES POINT AT EACH OTHER ─────────────────
+                  Navigation review, 28 Sep 2026: tickets and the transit fine
+                  live on Essentials, the Copenhagen Card and bikes on Tips, and
+                  a reader on one had no way of knowing the other half existed. */}
+              <button data-testid="ess-tips-pointer" onClick={() => goTab(onTips ? "essentials" : "tips")}
+                style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 12, padding: "10px 14px", marginBottom: 16, cursor: "pointer", fontFamily: "'Inter', sans-serif", fontSize: 12, fontWeight: 600, color: C.gold }}>
+                {onTips ? "Tickets, money and the transit fine are on Essentials →" : "The Copenhagen Card, bikes and other extras are on Tips →"}
+              </button>
 
               {/* Fine warning — always first, and only on the tab it belongs to */}
               {(onTips ? [] : essentials.filter(e => e.id === 7)).map(item => (
@@ -33479,6 +33729,15 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               something else" has to say that, or nobody presses it. */}
           <button onClick={e => { e.stopPropagation(); setGuideMinimized(true); }} aria-label="Keep browsing while this builds"
             style={{ position: "fixed", top: 20, right: 20, background: "rgba(255,255,255,0.09)", border: `1px solid ${C.gold}55`, color: C.gold, height: 40, borderRadius: 20, padding: "0 16px", fontSize: 12, fontWeight: 700, cursor: "pointer", zIndex: 951, fontFamily: "'Inter', sans-serif" }}>Keep browsing ↓</button>
+          {/* ── AND A REAL STOP, BESIDE IT ────────────────────────
+              Oliver, 28 Sep 2026: "if people cancel the making of the guide,
+              then it doesn't count as their daily limit." It ends the build at
+              the next stage and hands the day back. See guideStopRef. */}
+          <button onClick={e => { e.stopPropagation(); guideStopRef.current = true; setGuideStopping(true); }} disabled={guideStopping}
+            aria-label="Stop building this guide"
+            style={{ position: "fixed", top: 20, left: 20, background: "rgba(255,255,255,0.06)", border: `1px solid ${C.border}`, color: C.light, height: 40, borderRadius: 20, padding: "0 16px", fontSize: 12, fontWeight: 700, cursor: guideStopping ? "default" : "pointer", zIndex: 951, fontFamily: "'Inter', sans-serif" }}>
+            {guideStopping ? "Stopping…" : "Stop building"}
+          </button>
           {/* PASS 27 EXTRACTION: moved into components/EventMatchCard.jsx as
               part of the App.jsx file-split — see that file's header comment
               for the full "worth knowing" backstory. Same matching rules,

@@ -3362,7 +3362,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                 somebody who arrived from a shared link and has seen none of the
                 rest of the site. See utils/aiDisclosure.js. */}
             <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5 }}>
-              {aiDisclosureFor(typeof navigator === "undefined" ? null : navigator)}
+              {aiDisclosureFor(typeof navigator === "undefined" ? null : navigator, guideLang)}
             </div>
             {chatMessages.map((m, i) => {
               const isLatestAssistant = m.role === "assistant" && i === chatMessages.length - 1;

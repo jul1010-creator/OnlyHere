@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { C } from "../utils/theme";
 import { stripDashes, stripMarkdown } from "../utils/helpers";
 import { aiDisclosureFor } from "../utils/aiDisclosure";
+import { currentUiLanguage } from "../utils/uiLanguage";
 import { readerLanguage } from "../utils/readerLanguage";
 
 // ── THE TRAVELER'S ASSISTANT ─────────────────────────────────────────
@@ -206,7 +207,7 @@ export const AskGemlyx = ({ session, item, kind, onSignIn, founder = false, near
             In the reader's language, because a clear sentence in a language
             somebody does not read is not clear. See utils/aiDisclosure.js. */}
         <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, paddingBottom: 2 }}>
-          {aiDisclosureFor(typeof navigator === "undefined" ? null : navigator)}
+          {aiDisclosureFor(typeof navigator === "undefined" ? null : navigator, currentUiLanguage())}
         </div>
         {log.length === 0 && (
           <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.65 }}>

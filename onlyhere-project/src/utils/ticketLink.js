@@ -180,18 +180,44 @@ export const isWegotripTicketUrl = (url) => {
   return WEGOTRIP_PRODUCT.test(seg) && SAYS_TICKET.test(seg);
 };
 
+// ── AND A TIQETS TOUR IS NOT A TIQETS TICKET ────────────────────────
+//
+// Oliver, 28 Sep 2026: "on Amalienborg, an affiliate link has been implemented
+// as a 'website ticket' when the 'ticket' is really just a guide."
+//
+// Tiqets sells guided tours and audio guides under the same -p<id> product
+// shape as its admissions, so the product test alone let a guided tour of the
+// palace square become the Tickets button. The same rule as WeGoTrip's, from
+// the other side: a slug that says tour, guide or walk and says nothing about
+// a ticket, admission or entry is a tour, and a tour is not a ticket.
+const TOUR_WORDS = /(?:^|-)(?:tour|tours|guided|guide|guides|walk|walks|walking|audio|audioguide|audio-guide|cruise|sightseeing|excursion|rundvisning|omvisning)(?:-|$)/i;
+const ADMISSION_WORDS = /(?:^|-)(?:ticket|tickets|admission|entry|entrance|entrance-ticket|billet|billetter|skip-the-line|pass|adgang)(?:-|$)/i;
+export const tiqetsSaysTour = (url) => {
+  if (!isTiqetsProductUrl(url)) return false;
+  const seg = lastSegment(url);
+  return TOUR_WORDS.test(seg) && !ADMISSION_WORDS.test(seg);
+};
+
+// ── AND A RESELLER IS NOT A WEBSITE ─────────────────────────────────
+// The same report, the other door. The Website button wrapped whatever
+// `website` held in the affiliate template, so a website field that held a
+// Tiqets or GetYourGuide product rendered as the place's own site while
+// selling somebody's tour. A shop's page is never the place's website.
+export const isResellerUrl = (url) =>
+  isTiqetsUrl(url) || isTicketmasterUrl(url) || isWegotripUrl(url) || /(?:^|\.)(?:getyourguide|viator|klook|musement|headout|civitatis)\.[a-z.]+$/i.test((() => { try { return new URL(String(url || "").trim()).hostname; } catch { return ""; } })());
+
 // ── ONE QUESTION, ASKED IN ONE PLACE ────────────────────────────────
 // Everything downstream asks "may this be stored and shown as a ticket link",
 // never "is this Tiqets". Adding a third agent was a line here rather than an
 // edit in the publish gate, the render and the picker, which is what this
 // comment promised on 15 August and what it cost on 6 September.
 export const isBookableTicketUrl = (url) =>
-  isTiqetsProductUrl(url) || isTicketmasterEventUrl(url) || isTicketmasterHubUrl(url)
+  (isTiqetsProductUrl(url) && !tiqetsSaysTour(url)) || isTicketmasterEventUrl(url) || isTicketmasterHubUrl(url)
   || isWegotripTicketUrl(url);
 
 // Which agent it is, for the render, which has to reach for the right template.
 export const ticketAgentOf = (url) =>
-  isTiqetsProductUrl(url) ? "tiqets"
+  isTiqetsProductUrl(url) && !tiqetsSaysTour(url) ? "tiqets"
   : isTicketmasterEventUrl(url) || isTicketmasterHubUrl(url) ? "ticketmaster"
   : isWegotripTicketUrl(url) ? "wegotrip"
   : "";

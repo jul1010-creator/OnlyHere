@@ -194,6 +194,17 @@ MOST PLACES ARE NOT AT THE TOP. A country has a handful of "Can't Miss Out" plac
 
 Judge the place as it is, not as its own marketing describes it. A town's website calls it unmissable; that is not evidence. What matters is whether a stranger who went there on your word would feel the journey was repaid.`;
 
+// ── BEST FIRST ──────────────────────────────────────────────────────
+// Oliver, 28 Sep 2026, fixing the navigation review: Towns opened on Asaa
+// ("If you're nearby") and Islands on Agersø ("Worth a look"), because every
+// list was A to Z and the first thing a visitor saw was often the weakest
+// entry. The order is the tier, highest first, with no tier last; the caller
+// breaks ties by name.
+export const tierRank = (entry) => {
+  const t = tierOf(entry);
+  return t ? TIERS.indexOf(t) : TIERS.length;
+};
+
 export const tierOf = (entry) => {
   const t = String(entry?.tier ?? "").trim();
   if (!t) return null;

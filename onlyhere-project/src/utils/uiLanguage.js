@@ -666,6 +666,8 @@ export const UI_STRINGS = {
   // The two search boxes that are not the header's. header.search covers that
   // one already, and these say what they search rather than repeating "Søg".
   "search.attractions": { en: "Search attractions", da: "Søg i attraktioner", de: "Attraktionen suchen" },
+  "search.events":      { en: "Search events", da: "Søg i begivenheder", de: "Veranstaltungen suchen" },
+  "search.food":        { en: "Search food", da: "Søg i mad", de: "Essen suchen" },
   "search.towns":       { en: "Search a town, a region, anything…", da: "Søg efter en by, en landsdel, hvad som helst…", de: "Suche eine Stadt, eine Region, irgendetwas…" },
 };
 

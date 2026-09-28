@@ -17,6 +17,7 @@ import { cleanKind, cleanCategory } from "./essentialKind";
 import { cleanIsland, cleanRelation } from "./placeEdit";
 import { isBookableTicketUrl, ticketUrlSaysElsewhere, ticketUrlIsASubEvent, isTourUrl, cleanTourUrl } from "./ticketLink";
 import { cleanBranches } from "./branches";
+import { cleanTicketOffer } from "./ticketOffer";
 import { isWegotripUrl } from "./affiliates";
 import { cleanOffer, offerProblems } from "./offer";
 import { placeCoords } from "./guideEnrichment";
@@ -294,6 +295,10 @@ const shapeForLiveFields = (type, t) => {
   // the pair is more useful than either alone.
   if (type === "free") return { name: t.name, popularityTag: t.popularityTag || "", tier: t.tier || "", city: t.city || "", type: t.type || "", emoji: t.emoji || "✨", desc: t.desc, website: t.website || "", color: t.color || "#2E7D32",
     ticketsGlance: t.ticketsGlance || "", extraCosts: t.extraCosts || "", accessibility: t.accessibility || "", nearestStation: t.nearestStation || "", gemlyxFind: t.gemlyxFind || "",
+    // What the attraction is for, from the same closed list towns use, so the
+    // Category filter reads a tag rather than guessing from the words.
+    // Oliver, 28 Sep 2026: "attractions need categories". See attractionIs.
+    themes: Array.isArray(t.themes) ? t.themes.slice(0, 3) : [],
     // ── WHETHER THE DOOR IS OPEN ──────────────────────────────────
     // The field the "Walk in, no booking" chip never had. It was a hardcoded
     // string on every attraction card with nothing behind it; entryBooking
@@ -874,6 +879,15 @@ export const shapeForLive = (type, t) => {
   }
   if (t?.__ticketSweep?.at) {
     out = { ...out, __ticketSweep: { at: String(t.__ticketSweep.at), found: !!t.__ticketSweep.found, ...(t.__ticketSweep.url ? { url: String(t.__ticketSweep.url) } : {}) } };
+  }
+  // ── AND WHAT THAT TICKET PAGE SELLS ──────────────────────────────
+  // 28 Sep 2026. Kept only beside a ticket link it describes, and only in the
+  // four shapes the render knows, for the reason the stamp above is kept: a
+  // field a sweep writes and this file does not name is gone on the next
+  // redraft. See utils/ticketOffer.js.
+  {
+    const offer = cleanTicketOffer(t?.__ticketOffer);
+    if (offer && out.ticketUrl) out = { ...out, __ticketOffer: offer };
   }
   // ── AND THE PLACE'S OWN SOCIAL ACCOUNTS, WHICH WOULD HAVE BEEN
   //    THE NINTH ────────────────────────────────────────────────────
