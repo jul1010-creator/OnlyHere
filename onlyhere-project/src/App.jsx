@@ -123,7 +123,7 @@ import {
   getEnclosingJSONStringBounds, nextWeekdayTimestamp,
   getDistance, getDistanceRaw, tiltMove, tiltLeave, arrivalRow, hasArrivalField, departureParam, transitDepartureAnchor,
   daCompare, byName, seasonFit, isConfirmedUpcoming,
-  hostMatchesName, officialSiteFromCandidates, stripDashes, stripDashesDeep, storeKindOf, trimFillerForChat } from "./utils/helpers";
+  hostMatchesName, officialSiteFromCandidates, stripDashes, stripDashesDeep, storeKindOf, trimFillerForChat, TRAVEL_ORIGIN } from "./utils/helpers";
 import { checkNightTransport, geocodePlace, geocodeIsASettlement, findRealNearestStation, geocodePostcode } from "./utils/geo";
 import { runOnce } from "./utils/inFlight";
 import { Pill } from "./components/Pill";
@@ -159,6 +159,8 @@ import { DateTimePicker } from "./components/DateTimePicker";
 import { PlanAbroadForm } from "./components/PlanAbroadForm";
 import { PromotionsPage } from "./components/PromotionsPage";
 import { livePromotions } from "./utils/promotions";
+import { groupNav, childActive, groupActive } from "./utils/navGroups";
+import { NavGroupButtons } from "./components/NavGroups";
 import { abroadBriefParts, inventoryBlock, landAsk } from "./utils/guideAbroad";
 import * as AI from "./utils/aiClient";
 import { GuidePage } from "./pages/GuidePage";
@@ -1242,6 +1244,8 @@ function GemlyxApp() {
   // full calendar adds what was imported from a town's own calendar. A country
   // with no imported calendar yet has picks only, and no tabs.
   const [eventTab, setEventTab] = useState("picks");
+  // Which menu group is open in the burger. null: the one holding the page.
+  const [menuGroupOpen, setMenuGroupOpen] = useState(null);
   // What's on for you: a day and, if the kids are coming, the family events.
   const [eventWhen, setEventWhen] = useState(null);
   const [eventKids, setEventKids] = useState(false);
@@ -16281,6 +16285,8 @@ ${houseDistanceSays(houseBaseArea, dayPoints(day, stayResolve))}` : ""}`;
     const list = savedPlaces.map(p => p.town ? `${p.name} (${p.town})` : p.name).join(", ");
     if (!list) return;
     closeEntry();
+    // No chat abroad: the planner form, with the saved places ticked.
+    if (PAGE_ABROAD) { setIntakeIncludeSaved(true); setDetourTab("sightseeing"); goTab("ai"); window.scrollTo(0, 0); return; }
     sendAI(`Plan me a trip that includes these places I've saved: ${list}. Suggest a sensible order, roughly how long I need, and one or two things worth seeing along the way.`);
     setTimeout(() => document.getElementById("ai-helper-anchor")?.scrollIntoView({ behavior: "smooth", block: "end" }), 260);
   };
@@ -19324,6 +19330,10 @@ If the conversation only covers a single day or a few stops with no explicit day
   // turn in the thread, marked as the trip form so readBrief reads it as the
   // Danish form's turn is read, and the preview opens on it. The preview's
   // confirm leads to generateGuide exactly as it does in Denmark.
+  // Saved places are kept per browser, not per country, so somebody who saved
+  // in Denmark would otherwise hand Danish places to a Klaipėda plan. The
+  // library on this page holds only this country's rows, which is the test.
+  const savedHere = PAGE_ABROAD ? savedPlaces.filter(p => lookupRealPlace(p?.name)) : savedPlaces;
   const buildAbroad = () => {
     if (guideModal === "loading") return;
     const who = intakeTravelers.trim();
@@ -19335,7 +19345,7 @@ If the conversation only covers a single day or a few stops with no explicit day
       travelers: who, counted: counted?.heads || null, kids: intakeFamilyMode,
       interests: intakeInterest, transport: intakeTransport,
       freeOnly: intakeFreeOnly, events: intakeIncludeEvents,
-      saved: intakeIncludeSaved ? savedPlaces : [],
+      saved: intakeIncludeSaved ? savedHere : [],
     });
     if (!parts.length) return;
     setGuideError(null);
@@ -23091,6 +23101,16 @@ ${languageBlock()}`;
   // could put on the page and the source list that reached no search. Viking is
   // a kind of event, so it is a type, and the type row already exists.
   const hasFullCalendar = calendarEvents.some(e => isCurrentlyLive(e.date, e.dateEnd) || isUpcoming(e.date));
+  // ── THE MENU, GROUPED ─────────────────────────────────────────────
+  // Oliver, 30 Sep 2026: dropdowns, "Advice", "Activities", "Gems" "and so
+  // on". The pages and their order stay NAV_ITEMS; utils/navGroups.js only
+  // decides how the bar and the burger group them. Here rather than beside
+  // NAV_ITEMS because Activities needs to know whether a full calendar exists.
+  const navGroups = groupNav(NAV_ITEMS.filter(item => item.id !== "ai"), { calendar: hasFullCalendar, t: (k) => uiT(k, uiLang) });
+  const pickNav = (child) => {
+    if (child.tab === "events") setEventTab(child.sub === "calendar" ? "calendar" : "picks");
+    goTab(child.tab);
+  };
   const eventTabSource = eventTab === "calendar" && hasFullCalendar ? [...events, ...majorEvents, ...calendarEvents] : [...events, ...majorEvents];
   // isCurrentlyLive OR isUpcoming, not isUpcoming alone. isUpcoming only ever
   // reads the START, so a festival that opened yesterday and runs all week
@@ -29839,7 +29859,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       onSort={v => { setCraftSort(v); if (v === "near" && !isInDenmark(userCoords)) requestLocation(); }}
                     />
                     {craftSort === "near" && !isInDenmark(userCoords) && (
-                      <div style={{ fontSize: 11, color: C.muted, marginTop: -6, marginBottom: 12 }}>Works once you are in Denmark with location on. Showing recommended order for now.</div>
+                      <div style={{ fontSize: 11, color: C.muted, marginTop: -6, marginBottom: 12 }}>Works once you are in {PAGE_LAND.name} with location on. Showing recommended order for now.</div>
                     )}
                   </div>
               </div>
@@ -31005,7 +31025,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             <div className={pageAnim} style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
               <div style={{ marginBottom: 18, paddingTop: 8 }}>
                 <h2 style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, margin: "0 0 10px" }}>Islands</h2>
-                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Denmark is about four hundred islands and you can land on far fewer than that. These are the ones worth the crossing, with the operator, both ports and the sailing time checked against the company that runs the boat.</div>
+                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>{PAGE_ABROAD ? "" : "Denmark is about four hundred islands and you can land on far fewer than that. "}These are the ones worth the crossing, with the operator, both ports and the sailing time checked against the company that runs the boat.</div>
               </div>
 
               {islands.length === 0 ? (
@@ -31065,7 +31085,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px 15px", marginBottom: 14 }}>
                         {regions.length > 1 && (
                           <Row title="Where">
-                            {[{ id: null, label: "All of Denmark" }, ...regions.map(r => ({ id: r, label: r, n: nRegion(r) }))].map(k => (
+                            {[{ id: null, label: `All of ${PAGE_LAND.name}` }, ...regions.map(r => ({ id: r, label: r, n: nRegion(r) }))].map(k => (
                               <Pill key={k.label} label={k.id ? `${k.label} (${k.n})` : k.label} active={islandRegion === k.id} onClick={() => setIslandRegion(islandRegion === k.id ? null : k.id)} />
                             ))}
                           </Row>
@@ -31323,7 +31343,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   transport={intakeTransport} setTransport={setIntakeTransport}
                   freeOnly={intakeFreeOnly} setFreeOnly={setIntakeFreeOnly}
                   events={intakeIncludeEvents} setEvents={setIntakeIncludeEvents}
-                  savedCount={savedPlaces.length} includeSaved={intakeIncludeSaved} setIncludeSaved={setIntakeIncludeSaved}
+                  savedCount={savedHere.length} includeSaved={intakeIncludeSaved} setIncludeSaved={setIntakeIncludeSaved}
                   busy={guideModal === "loading"} error={guideError || ""} onBuild={buildAbroad} />
               )}
               <div style={{ marginBottom: 20, display: !PAGE_ABROAD && detourTab === "sightseeing" ? "block" : "none" }}>
@@ -33262,18 +33282,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               outside the strip is what makes always-visible true by
               construction rather than by guessing a breakpoint. */}
           <NavStrip C={C}>
-            {NAV_ITEMS.filter(item => item.id !== "ai").map(item => (
-              /* The page you are on is marked with a rule under it rather than a
-                 filled pill: a pill in the header reads as a button you have not
-                 pressed yet, which is the opposite of what it means. Kept at a
-                 constant 2px, transparent when inactive, so nothing shifts by a
-                 pixel as you move between pages. */
-              <button key={item.id} onClick={() => goTab(item.id)}
-                style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "none", border: "none", borderBottom: `2px solid ${active === item.id ? C.gold : "transparent"}`, color: active === item.id ? C.text : C.light, padding: "8px 10px 6px", fontSize: 13, fontWeight: active === item.id ? 700 : 500, cursor: "pointer", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>
-                {item.ico && <Ico name={item.ico} size={14} color={active === item.id ? C.gold : C.muted} />}
-                {item.label}
-              </button>
-            ))}
+            <NavGroupButtons groups={navGroups} active={active} eventTab={eventTab} onPick={pickNav} C={C} />
           </NavStrip>
           {/* Outside the strip and flexShrink: 0, so nothing can take a pixel
               off it however long the eight labels beside it get. */}
@@ -33500,15 +33509,44 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 one thing. Everything BELOW this block stays at every width. */}
             <div className="gx-nav-in-menu">
             <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", padding: "8px 16px 6px" }}>{uiT("menu.navigate", uiLang)}</div>
-            {NAV_ITEMS.map((item, i) => item.id === "ai" ? (
+            {/* The same groups as the bar along the top (utils/navGroups.js),
+                as an accordion: a group opens under itself, and the one holding
+                the page you are on starts open. */}
+            {navGroups.map((g, i) => {
+              const rowStyle = (on, indent) => ({ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: on ? `${C.accent}22` : "transparent", color: on ? C.text : C.light, border: "none", borderRadius: 10, padding: indent ? "10px 16px 10px 42px" : "12px 16px", fontSize: indent ? 13.5 : 14, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 2, animation: `fadeSlideIn 0.2s ease ${i * 0.04}s both` });
+              if (g.single) {
+                const c = g.children[0];
+                const on = childActive(c, active, eventTab);
+                return (
+                  <button key={g.id} onClick={() => { setShowMenu(false); pickNav(c); }} style={rowStyle(on, false)}>
+                    {c.ico && <Ico name={c.ico} size={15} color={on ? C.text : C.muted} />}
+                    {c.label}
+                  </button>
+                );
+              }
+              const holds = groupActive(g, active, eventTab);
+              const open = menuGroupOpen === g.id || (menuGroupOpen === null && holds);
+              return (
+                <div key={g.id}>
+                  <button data-testid={`menu-group-${g.id}`} aria-expanded={open} onClick={() => setMenuGroupOpen(open ? "" : g.id)} style={rowStyle(holds && !open, false)}>
+                    {g.ico && <Ico name={g.ico} size={15} color={holds ? C.text : C.muted} />}
+                    <span style={{ flex: 1 }}>{g.label}</span>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={C.muted} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform .15s ease" }} aria-hidden="true"><polyline points="6 9 12 15 18 9" /></svg>
+                  </button>
+                  {open && g.children.map(c => {
+                    const on = childActive(c, active, eventTab);
+                    return (
+                      <button key={c.key} onClick={() => { setShowMenu(false); pickNav(c); }} style={rowStyle(on, true)}>
+                        {c.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })}
+            {NAV_ITEMS.filter(item => item.id === "ai").map(item => (
               <button key={item.id} onClick={() => { setShowMenu(false); goTab("ai"); }}
-                style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: `linear-gradient(135deg, ${C.gold}, ${C.accent})`, color: "#fff", border: "none", borderRadius: 10, padding: "12px 16px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginTop: 6, marginBottom: 2, boxShadow: `0 2px 10px ${C.gold}33`, animation: `fadeSlideIn 0.2s ease ${i * 0.04}s both` }}>
-                {item.label}
-              </button>
-            ) : (
-              <button key={item.id} onClick={() => { setShowMenu(false); goTab(item.id); }}
-                style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: active === item.id ? `${C.accent}22` : "transparent", color: active === item.id ? C.text : C.light, border: "none", borderRadius: 10, padding: "12px 16px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 2, animation: `fadeSlideIn 0.2s ease ${i * 0.04}s both` }}>
-                {item.ico && <Ico name={item.ico} size={15} color={active === item.id ? C.text : C.muted} />}
+                style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: `linear-gradient(135deg, ${C.gold}, ${C.accent})`, color: "#fff", border: "none", borderRadius: 10, padding: "12px 16px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginTop: 6, marginBottom: 2, boxShadow: `0 2px 10px ${C.gold}33`, animation: `fadeSlideIn 0.2s ease ${navGroups.length * 0.04}s both` }}>
                 {item.label}
               </button>
             ))}
@@ -33906,7 +33944,8 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           // One guide a day. No question in Studio, where he tests.
           askBeforeBuild={!isStudio}
           usedToday={isStudio ? "" : usedTodayReason(todayRecord(guideStore(), copenhagenDay()))}
-          onReadyMade={() => { setGuideModal(null); navigate(LIBRARY_PATH); }}
+          // The trip library is Danish trips only, so not on another country's page.
+          onReadyMade={PAGE_ABROAD ? null : () => { setGuideModal(null); navigate(LIBRARY_PATH); }}
           intakeArrival={intakeArrival}
           intakeDeparture={intakeDeparture}
           intakeInterest={intakeInterest}
@@ -34747,7 +34786,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     which are the fields that hold one. */}
                 <div style={{ fontSize: 13, color: C.text, lineHeight: 1.6 }}>
                   {craftDetail.nearestStation
-                    ? `Nearest public transport: ${craftDetail.nearestStation}.${craftDetail.travelTime ? ` ${craftDetail.travelTime} from Copenhagen.` : ""}`
+                    ? `Nearest public transport: ${craftDetail.nearestStation}.${craftDetail.travelTime ? ` ${craftDetail.travelTime} from ${craftDetail.__journey?.from || TRAVEL_ORIGIN}.` : ""}`
                     : "This one is awkward to reach without your own transport. Check the route before you commit to the day."}
                 </div>
               </div>
