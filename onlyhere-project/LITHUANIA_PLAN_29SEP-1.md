@@ -139,3 +139,13 @@ page stays in the menu while signed into Studio). The old workshops
 Ribe, Viking Ship Museum) are gone in both countries: they came from the
 legacy craft_items table, which the app no longer reads. The table itself is
 untouched in Supabase and can be dropped whenever you like.
+
+**Batch 163, 29 Sep 2026.** Klaipėda's open bus timetable (the GTFS you
+uploaded, mdb-1042, from stops.lt) is in. Every Klaipėda entry with a point
+now shows "Nearest Bus Stop" in At a Glance: the stop, an estimated walk,
+which buses call there, and a "Live departures" link to that stop on stops.lt.
+Events, attractions, workshops, food and nightlife all get it. Danish entries
+are unchanged. The extract is data/klaipedaStops.js (511 stops); refresh it
+with `node tools/klaipedaStops.mjs <unzipped feed>` when routes change. Still
+to confirm with the operator or the tourism centre: the feed's licence terms,
+since the Mobility Database lists none.

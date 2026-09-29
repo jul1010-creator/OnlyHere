@@ -278,6 +278,8 @@ writeFileSync(entry, `
   export { journeyUrl, journeyLabel, rpDate, rpTime, RP_BASE } from ${JSON.stringify(join(root, "src/utils/rejseplanen.js"))};
   export { FERRY_ROUTES, crossings, crossingsTo, timetableFerryUrl, RP_CREDIT, GTFS_READ_ON } from ${JSON.stringify(join(root, "src/data/ferryRoutes.js"))};
   export { ferryUrlOf } from ${JSON.stringify(join(root, "src/utils/ferryDoor.js"))};
+  export { nearestBusStop, busStopRow, linesPhrase, arrivalOrBusRow, BUS_STOP_MAX_M } from ${JSON.stringify(join(root, "src/utils/busStop.js"))};
+  export { KLAIPEDA_STOPS, KLAIPEDA_STOPS_READ_ON } from ${JSON.stringify(join(root, "src/data/klaipedaStops.js"))};
   export { FROZEN_TRANSPORT, frozenFrom, frozenIn, factsLost, frozenBlock, lostNote } from ${JSON.stringify(join(root, "src/utils/frozenFacts.js"))};
   export { PARTNER_OPENER, PARTNER_INTRO, partnerSections, partnerCount } from ${JSON.stringify(join(root, "src/utils/partnerSheet.js"))};
   export { baseKey, staysIn as stayRunsIn, doorsFor, doorOn, sameBaseLine, nightsLabel } from ${JSON.stringify(join(root, "src/utils/stayDoors.js"))};
@@ -5000,7 +5002,8 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // arrivalGlanceRow reads the walk the route measured at the far end, prints
   // it, and returns null when there is none or it is too long to be how you get
   // there. See the note above ARRIVAL_WALK_LIMIT in utils/journey.js.
-  ok("while attractions still draw one", /arrivalGlanceRow\(item, kind\)/.test(detail));
+  // Batch 163: through arrivalOrBusRow, which falls back to arrivalGlanceRow.
+  ok("while attractions still draw one", /arrivalOrBusRow\(item, kind, here\)/.test(detail));
   ok("and nothing asks for the bare field any more", !/arrivalRow\(item\.nearestStation\)/.test(detail));
 }
 
@@ -9443,7 +9446,8 @@ is("missing licence does not require credit", creditIsRequired({}), false);
 // Terminal" and called it a station.
 {
   const app4 = readFileSync(join(root, "src/App.jsx"), "utf8");
-  ok("the event card asks what the stop IS", /const row = arrivalGlanceRow\(event, "event"\);/.test(app4));
+  // Batch 163: arrivalOrBusRow asks the Klaipėda bus first, then arrivalGlanceRow.
+  ok("the event card asks what the stop IS", /const row = arrivalOrBusRow\(event, "event"\);/.test(app4));
   // The guard moved from the field to the row: a stop nobody measured a route
   // to, or one an hour's walk away, draws nothing rather than drawing a name.
   ok("and draws nothing when the row was not earned", /if \(!row\) return null;/.test(app4));
@@ -80483,6 +80487,22 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("what's on for you filters by day and by kids", /\.filter\(e => !whenDays \|\| eventOnDays\(e, whenDays\)\)/.test(app) && /\.filter\(e => !eventKids \|\| hasEventType\(e, "family"\)\)/.test(app) && /What's on for you/.test(app));
   ok("a calendar row opens the calendar it came from", /if \(!listed\) \{ setEventDetail\(event\); return; \}/.test(app));
   ok("Studio can add rows to the full calendar, in a country", /const \[calTarget, setCalTarget\] = useState\("community"\);/.test(app) && /type: calTarget === "calendar" \? typeWordFor\(`\$\{r\.name\} \$\{r\.desc \|\| ""\}`\) : "Community",/.test(app) && /\.\.\.\(studioCountry !== DEFAULT_COUNTRY \? \{ country: studioCountry \} : \{\}\),/.test(app));
+}
+
+// ── Batch 163: the nearest bus, from Klaipėda's own timetable ──────
+{
+  ok("the stops are an extract, dated", M.KLAIPEDA_STOPS.length > 400 && /^\d{4}-\d{2}-\d{2}$/.test(M.KLAIPEDA_STOPS_READ_ON));
+  ok("every stop has a name, lines and a point with a stops.lt page", M.KLAIPEDA_STOPS.every(([n, l, pts]) => n && l && pts.length && pts.every(p => Number.isFinite(p[0]) && Number.isFinite(p[1]) && p[2])));
+  const castle = M.busStopRow({ lat: 55.7063, lon: 21.1286 });
+  ok("the castle gets a stop, a walk and a live departures link", castle && castle.label === "Nearest Bus Stop" && /about \d+ min walk/.test(castle.value) && /^https:\/\/www\.stops\.lt\/klaipeda\/index\.html#stop\//.test(castle.link.href));
+  is("Copenhagen gets nothing", M.busStopRow({ lat: 55.6761, lon: 12.5683 }), null);
+  is("and a place with no point gets nothing", M.busStopRow(null), null);
+  ok("nothing past the limit", (() => { const s = M.nearestBusStop({ lat: 55.7063, lon: 21.1286 }); return s && s.metres <= M.BUS_STOP_MAX_M; })());
+  is("lines read as words", [M.linesPhrase(["9"]), M.linesPhrase(["1", "8", "15"]), M.linesPhrase(["1", "2", "3", "4", "5", "6", "7"])], ["bus 9", "buses 1, 8 and 15", "buses 1, 2, 3, 4, 5 and 2 more"]);
+  ok("no dash in anything the row says", !/[\u2013\u2014]/.test(castle.value));
+  is("a Danish entry keeps its measured row", M.arrivalOrBusRow({ lat: 55.6761, lon: 12.5683 }, "attraction"), null);
+  const detail = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
+  ok("detail pages ask for the bus first", (detail.match(/arrivalOrBusRow\(item, kind, here\)/g) || []).length === 2 && (detail.match(/busStopRow\(here\),/g) || []).length === 2);
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

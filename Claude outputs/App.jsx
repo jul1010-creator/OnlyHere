@@ -165,7 +165,8 @@ import { ensureLiveContentLoaded, refreshLiveContent, applyEditedRow, removeLive
 import { isRecording, startRecording, stopRecording, record, recordedEvents, recordingText, recordingFileName, safeUrl } from "./utils/studioRecorder";
 import { ensureLiveFactsLoaded, refreshLiveFacts } from "./utils/liveFacts";
 import { founderSources, ensureSourcesLoaded, refreshSources } from "./utils/liveSources";
-import { journeyParts, journeyFigure, WAIT_INSIDE_TOTAL, NO_TRANSIT_NOTE, journeyBlock, transitProblems, absenceClaims, contradictedAbsence, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, islandLegProblems, closedButPlanned, arrivalStop, arrivalGlanceRow, vehicleMismatches, journeyCensus, censusNote } from "./utils/journey";
+import { arrivalOrBusRow } from "./utils/busStop";
+import { journeyParts, journeyFigure, WAIT_INSIDE_TOTAL, NO_TRANSIT_NOTE, journeyBlock, transitProblems, absenceClaims, contradictedAbsence, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, islandLegProblems, closedButPlanned, arrivalStop, vehicleMismatches, journeyCensus, censusNote } from "./utils/journey";
 import { correctEntry, keepMeasured, keepProse, MEASURED_FIELDS, pendingRemeasure, urlsIn, dropAppliedClaims } from "./utils/correction";
 import { branchesOf, branchCandidates, branchFromCandidate, mergeBranches, branchLabel, branchLine, coordForTown, MAX_BRANCHES } from "./utils/branches";
 import { GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, glanceFieldsFor, describeGlance, staleUncertainties, describeStale } from "./utils/glanceExtract";
@@ -22959,7 +22960,7 @@ ${languageBlock()}`;
                   stored stop was never measured, or is an hour's walk away,
                   draws nothing here. See ARRIVAL_WALK_LIMIT in journey.js. */}
               {(() => {
-                const row = arrivalGlanceRow(event, "event");
+                const row = arrivalOrBusRow(event, "event");
                 if (!row) return null;
                 return (
                   <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 11.5, color: C.light }}>
@@ -34571,7 +34572,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
 
             <AtAGlanceCard rows={[
                 { icon: "♿", label: "Accessibility", value: craftDetail.accessibility },
-              arrivalGlanceRow(craftDetail, "craft"),
+              arrivalOrBusRow(craftDetail, "craft"),
             ]} />
             {craftDetail.gemlyxFind && <GemlyxFindCard text={craftDetail.gemlyxFind} />}
 
