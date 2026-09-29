@@ -81,6 +81,7 @@ import { SupportPage } from "./components/SupportPage";
 // to it too and App.jsx imports AboutMePage.
 import { AffiliatesPage } from "./components/AffiliatesPage";
 import { KlaipedaDemo } from "./pages/KlaipedaDemo";
+import { COUNTRY_PROFILES, DEFAULT_COUNTRY, countryProfile, setWorkingCountry, countryParam, rowCountry, activeCountry, homePath } from "./utils/countries";
 import { KLAIPEDA_DEMO_PATH } from "./data/klaipedaDemo";
 import { TripLibraryPage } from "./components/TripLibraryPage";
 import { askForGuidePass, markGuideBuilt, todayRecord, usedTodayReason, copenhagenDay, cancelGuidePass } from "./utils/guideAllowance";
@@ -118,7 +119,7 @@ import { SUPABASE_URL, SUPABASE_KEY, APP_VERSION, PAID_PLANS_LIVE, FOUNDER_IDS }
 import { isFounder } from "./utils/apiGuard";
 import {
   getSeason, getEventDate, isUpcoming, isCurrentlyLive, isOnOrUpcoming, soonestFirst, hasFinished, weatherIcon,
-  isInDenmark, travelLabel, distanceLine, dotJoin, isFullPlanText, isReadyToBuild, stripReadyMarker, stripMarkdown, readerView, seededShuffle, daysUntil, detectLegMode, haversineKm, scanForAITells, priceBand, PRICE_BANDS,
+  isInDenmark, travelLabel, distanceLine, attractionWhere, dotJoin, isFullPlanText, isReadyToBuild, stripReadyMarker, stripMarkdown, readerView, seededShuffle, daysUntil, detectLegMode, haversineKm, scanForAITells, priceBand, PRICE_BANDS,
   getEnclosingJSONStringBounds, nextWeekdayTimestamp,
   getDistance, getDistanceRaw, tiltMove, tiltLeave, arrivalRow, hasArrivalField, departureParam, transitDepartureAnchor,
   daCompare, byName, seasonFit, isConfirmedUpcoming,
@@ -378,6 +379,20 @@ import { placeKindOf, kindLabel, isArea, PLACE_KINDS, KIND_LABEL } from "./utils
 import { DRAFT_STORE_KEY, readStore, writeStore, packStore, restoreNote, problemNote, doneKeysFrom } from "./utils/studioDraftStore";
 
 import "leaflet/dist/leaflet.css";
+
+// ── WHICH COUNTRY THIS PAGE IS ──────────────────────────────────────
+// Phase 2 of LITHUANIA_PLAN_29SEP.md. Read once from the address when the app
+// loads: "/" and "/denmark/..." are Denmark exactly as before, "/lithuania..."
+// is Lithuania. Moving between the two is a full page load (a link, not a tab),
+// so the lists liveContent loaded always match the page.
+const PAGE_COUNTRY = activeCountry();
+const PAGE_LAND = countryProfile(PAGE_COUNTRY);
+const PAGE_ABROAD = PAGE_COUNTRY !== DEFAULT_COUNTRY;
+const HOME_PATH = homePath(PAGE_COUNTRY);
+// What is not built for another country yet stays off its pages rather than
+// answering in Danish: the trip planner and chat (Phase 3), and the Tips page,
+// which is written advice about Denmark.
+const NOT_YET_ABROAD = ["ai", "tips"];
 
 // ── THE SAVED DRAFTS, READ ONCE ────────────────────────────────────
 // Oliver, 19 Aug 2026: "I'd actually like if we could make it possible for my
@@ -3044,7 +3059,7 @@ function GemlyxApp() {
   const findCommonsPhotos = async (row, query) => {
     setPhotoFinder({ rowId: row.id, query, results: null, loading: true, error: null });
     try {
-      const res = await studioFetch(`/api/commons-photo?q=${encodeURIComponent(query)}&limit=8`);
+      const res = await studioFetch(`/api/commons-photo?q=${encodeURIComponent(query)}&limit=8${countryParam(rowCountry(row?.payload))}`);
       const data = await res.json();
       if (data.error) setPhotoFinder(f => ({ ...f, loading: false, error: data.error }));
       // sources/subject/resolved come back so the panel can say WHICH lookup
@@ -3318,6 +3333,11 @@ function GemlyxApp() {
   };
   const [studioTown, setStudioTown] = useState("");
   const [studioType, setStudioType] = useState("town");
+  // ── WHICH COUNTRY A DRAFT IS FOR ─────────────────────────────────
+  // Oliver, 29 Sep 2026: "the template that we have on Denmark, and put it onto
+  // Klaipeda". Phase 1 of LITHUANIA_PLAN_29SEP.md. Denmark unless he picks
+  // otherwise, and a queued draft keeps the country it was queued with.
+  const [studioCountry, setStudioCountry] = useState(DEFAULT_COUNTRY);
   const [studioLoading, setStudioLoading] = useState(false);
   // Ref mirror of studioLoading — the draft-queue runner is a long-lived async
   // loop whose closure would otherwise read a stale false and double-start.
@@ -3550,7 +3570,7 @@ function GemlyxApp() {
     if (!term) { setDraftPhotoFinder({ query: "", results: [], loading: false, error: "Type what to search Wikimedia for." }); return; }
     setDraftPhotoFinder({ query: term, results: null, loading: true, error: null });
     try {
-      const res = await studioFetch(`/api/commons-photo?q=${encodeURIComponent(term)}&limit=8`);
+      const res = await studioFetch(`/api/commons-photo?q=${encodeURIComponent(term)}&limit=8${countryParam(rowCountry(studioDraft))}`);
       const data = await res.json();
       if (data.error) setDraftPhotoFinder(f => ({ ...f, loading: false, error: data.error }));
       // sources/subject come back so the panel can say WHICH lookup found these,
@@ -3940,6 +3960,14 @@ Say which answer came from which source, so a fact from a vouched page and a fac
     const name = (overrideTown ?? studioTown).trim();
     const sType = overrideType ?? studioType;
     if (!name || studioLoading || studioLoadingRef.current) return { ok: false, error: "busy" };
+    // ── THE COUNTRY THIS DRAFT IS FOR ───────────────────────────────
+    // Phase 1 of LITHUANIA_PLAN_29SEP.md. Every search, lookup and prompt
+    // below names draftLand instead of Denmark, and the helpers it calls read
+    // the same country through setWorkingCountry until the draft ends. For a
+    // Danish draft draftLand IS Denmark and every string comes out as before.
+    const draftLand = countryProfile(opts?.country || studioCountry);
+    const draftInDenmark = draftLand.code === DEFAULT_COUNTRY;
+    setWorkingCountry(draftLand.code);
     // ── A BACKGROUND QUEUE RUN MUST NOT TOUCH THE EDITOR ───────────
     // Oliver, 7 Aug 2026: "whenever it is the next in queue, it can't publish
     // because the other is published."
@@ -4130,7 +4158,7 @@ Say which answer came from which source, so a fact from a vouched page and a fac
       // produced the wrong point, so asking the name again first would spend the
       // call to get the same answer. See remeasureFor.
       if (!coords && askedAgain) {
-        const hit = await geocodePlace(`${askedAgain.from}, Denmark`);
+        const hit = await geocodePlace(draftInDenmark ? `${askedAgain.from}, Denmark` : askedAgain.from);
         if (hit && !settlementRefused(hit, askedAgain.from)) {
           coords = hit;
           via = `Nominatim, on the place named in the correction, "${askedAgain.from}"${hit.found ? `, which found "${String(hit.found).slice(0, 70)}"` : ""}`;
@@ -4154,7 +4182,7 @@ Say which answer came from which source, so a fact from a vouched page and a fac
       // only time it is worth anything.
       if (!coords) {
         try {
-          const pr = await studioFetch(`/api/places-locate?name=${encodeURIComponent(draftTown ? `${name}, ${draftTown}` : name)}`);
+          const pr = await studioFetch(`/api/places-locate?name=${encodeURIComponent(draftTown ? `${name}, ${draftTown}` : name)}${countryParam(draftLand.code)}`);
           const pd = await pr.json();
           // ── RUNGSTED IS NOT RINGSTED ────────────────────────────
           //
@@ -4365,7 +4393,7 @@ Say which answer came from which source, so a fact from a vouched page and a fac
       let plannedQueries = [];
       const planResult = await withRetry(
         () => askOpenAI(
-          `Planning research for a Danish travel guide entry: "${subject}"${subject !== name ? ` (the street "${name}" in ${draftTown} — a street name alone is ambiguous in Denmark, so every query you write must keep the town in it)` : ""} (type: ${sType}). List 2-3 SPECIFIC search queries that would find the most important facts for THIS particular place — not generic categories, actual search strings a researcher would type. Include at least one query aimed at finding a real downside or limitation, not just highlights. Respond with ONLY a JSON array of strings, nothing else.`,
+          `Planning research for a ${draftLand.adjective} travel guide entry: "${subject}"${subject !== name ? ` (the street "${name}" in ${draftTown} — a street name alone is ambiguous in ${draftLand.name}, so every query you write must keep the town in it)` : ""} (type: ${sType}). List 2-3 SPECIFIC search queries that would find the most important facts for THIS particular place — not generic categories, actual search strings a researcher would type. Include at least one query aimed at finding a real downside or limitation, not just highlights. Respond with ONLY a JSON array of strings, nothing else.`,
           // BUG FIX: 300 was almost certainly the actual cause of the "Empty
           // response from OpenAI" errors on town/event drafts and Discover runs —
           // gpt-5.6-sol is a reasoning model, and 300 tokens is tight enough that
@@ -4386,30 +4414,30 @@ Say which answer came from which source, so a fact from a vouched page and a fac
       }
 
       const cfg = {
-        town: { queries: [`${name} Denmark travel guide history attractions what makes it special`, `${name} Denmark getting there by train best time to visit where to stay what travelers say`, `${name} reddit r/Denmark r/travel what locals visitors really think`, `${name} quora google reviews honest opinion worth it`] },
+        town: { queries: [`${name} ${draftLand.name} travel guide history attractions what makes it special`, `${name} ${draftLand.name} getting there by train best time to visit where to stay what travelers say`, `${name} reddit r/${draftLand.name} r/travel what locals visitors really think`, `${name} quora google reviews honest opinion worth it`] },
         // THE OPERATOR IS THE FIRST QUERY, not the tourist board, because the
         // tourist board has contradicted the operator before and lost. The
         // second asks what the winter timetable does, which is the fact most
         // island pages leave out and the one that ruins a February day trip.
-        island: { queries: [`${name} ø Denmark færge overfart sejlplan operatør havn priser`, `${name} island Denmark ferry from which port crossing time car booking`, `${name} Denmark island what to do cycling harbours how long to stay`, `${name} ø vinter færge afgange reddit r/Denmark worth it`] },
-        festival: { queries: [`${name} festival Denmark 2026 dates tickets prices lineup official website`, `${name} festival Denmark atmosphere who goes accommodation nearest station`, `${name} reddit r/Denmark experience worth it crowds queue`, `${name} quora google reviews honest opinion worth it`] },
-        free: { queries: [`${name} free entry what makes it special history opening hours`, `${name} Denmark visitor tips things to know best time to visit`, `${name} Denmark getting there how to reach`, `${name} reddit r/Denmark hidden gem overrated worth it`, `${name} quora google reviews honest opinion overrated`] },
-        food: { queries: [`${name} Denmark what to order menu prices history`, `${name} Denmark best time to visit busy hours local tips address`, `${name} reddit r/Denmark r/food worth it locals think`, `${name} quora google reviews honest opinion`] },
-        foodStreet: { queries: [`${subject} Denmark food street market vendors stalls what's there`, `${subject} Denmark food market opening hours best time to visit how to get there`, `${subject} reddit r/Denmark r/food worth it locals think`, `${subject} Denmark quora google reviews honest opinion`] },
-        night: { queries: [`${name} Denmark bar club atmosphere crowd prices reviews`, `${name} Denmark opening hours when busy entry local tips address`, `${name} reddit r/Denmark vibe crowd locals tourists`, `${name} quora google reviews honest opinion`] },
+        island: { queries: [`${name} ø ${draftLand.name} færge overfart sejlplan operatør havn priser`, `${name} island ${draftLand.name} ferry from which port crossing time car booking`, `${name} ${draftLand.name} island what to do cycling harbours how long to stay`, `${name} ø vinter færge afgange reddit r/${draftLand.name} worth it`] },
+        festival: { queries: [`${name} festival ${draftLand.name} 2026 dates tickets prices lineup official website`, `${name} festival ${draftLand.name} atmosphere who goes accommodation nearest station`, `${name} reddit r/${draftLand.name} experience worth it crowds queue`, `${name} quora google reviews honest opinion worth it`] },
+        free: { queries: [`${name} free entry what makes it special history opening hours`, `${name} ${draftLand.name} visitor tips things to know best time to visit`, `${name} ${draftLand.name} getting there how to reach`, `${name} reddit r/${draftLand.name} hidden gem overrated worth it`, `${name} quora google reviews honest opinion overrated`] },
+        food: { queries: [`${name} ${draftLand.name} what to order menu prices history`, `${name} ${draftLand.name} best time to visit busy hours local tips address`, `${name} reddit r/${draftLand.name} r/food worth it locals think`, `${name} quora google reviews honest opinion`] },
+        foodStreet: { queries: [`${subject} ${draftLand.name} food street market vendors stalls what's there`, `${subject} ${draftLand.name} food market opening hours best time to visit how to get there`, `${subject} reddit r/${draftLand.name} r/food worth it locals think`, `${subject} ${draftLand.name} quora google reviews honest opinion`] },
+        night: { queries: [`${name} ${draftLand.name} bar club atmosphere crowd prices reviews`, `${name} ${draftLand.name} opening hours when busy entry local tips address`, `${name} reddit r/${draftLand.name} vibe crowd locals tourists`, `${name} quora google reviews honest opinion`] },
         // A STREET'S QUESTIONS ARE NOT A BAR'S. Which nights it is alive,
         // what a night along it costs, and what it is like when it empties out,
         // which is the half most pages leave out.
-        nightStreet: { queries: [`${subject} Denmark bar street bars clubs guide`, `${subject} Denmark best night to go busy quiet which end`, `${subject} Denmark reddit honest opinion tourist trap or worth it`, `${subject} Denmark nightlife safety closing time reputation`] },
-        nightTown: { queries: [`${name} Denmark nightlife scene bars clubs overview`, `${name} nightlife student population crowd reddit r/Denmark`, `${name} nightlife when does it get busy best areas`, `${name} nightlife quora google reviews honest opinion`] },
+        nightStreet: { queries: [`${subject} ${draftLand.name} bar street bars clubs guide`, `${subject} ${draftLand.name} best night to go busy quiet which end`, `${subject} ${draftLand.name} reddit honest opinion tourist trap or worth it`, `${subject} ${draftLand.name} nightlife safety closing time reputation`] },
+        nightTown: { queries: [`${name} ${draftLand.name} nightlife scene bars clubs overview`, `${name} nightlife student population crowd reddit r/${draftLand.name}`, `${name} nightlife when does it get busy best areas`, `${name} nightlife quora google reviews honest opinion`] },
         // A SHOP'S QUESTIONS ARE WHAT IS ON THE SHELVES AND WHO OWNS IT.
         // The second query is the only-here test asked out loud: a chain with
         // stores in twelve countries answers it in its own About page, and
         // that is the fact that decides whether the entry should exist.
-        shop: { queries: [`${name} Denmark shop what they sell prices opening hours address`, `${name} Denmark butik brand where else stores countries chain or one shop`, `${name} Denmark reddit r/Denmark worth it locals shop there`, `${name} quora google reviews honest opinion overpriced`] },
-        shopPlace: { queries: [`${subject} Denmark shopping street stores what kind of shops`, `${subject} Denmark butikker gågade hvilke butikker åbningstider`, `${subject} Denmark reddit honest opinion chains or independent tourist trap`, `${subject} Denmark shopping best time busy Sunday closed`] },
-        essential: { queries: [`${name} Denmark 2026 how it works price official`, `${name} Danmark priser regler gældende 2026 turist`, `${name} Denmark discontinued replaced changed 2026 what to use instead`, `${name} Denmark reddit r/Denmark tourist visitor does it work without CPR`] },
-        booking: { queries: [`${name} Denmark craft workshop what to expect prices booking`, `${name} Denmark reviews how to book opening hours`, `${name} reddit r/Denmark experience worth the money`, `${name} quora google reviews honest opinion`] },
+        shop: { queries: [`${name} ${draftLand.name} shop what they sell prices opening hours address`, `${name} ${draftLand.name} butik brand where else stores countries chain or one shop`, `${name} ${draftLand.name} reddit r/${draftLand.name} worth it locals shop there`, `${name} quora google reviews honest opinion overpriced`] },
+        shopPlace: { queries: [`${subject} ${draftLand.name} shopping street stores what kind of shops`, `${subject} ${draftLand.name} butikker gågade hvilke butikker åbningstider`, `${subject} ${draftLand.name} reddit honest opinion chains or independent tourist trap`, `${subject} ${draftLand.name} shopping best time busy Sunday closed`] },
+        essential: { queries: [`${name} ${draftLand.name} 2026 how it works price official`, `${name} Danmark priser regler gældende 2026 turist`, `${name} ${draftLand.name} discontinued replaced changed 2026 what to use instead`, `${name} ${draftLand.name} reddit r/${draftLand.name} tourist visitor does it work without CPR`] },
+        booking: { queries: [`${name} ${draftLand.name} craft workshop what to expect prices booking`, `${name} ${draftLand.name} reviews how to book opening hours`, `${name} reddit r/${draftLand.name} experience worth the money`, `${name} quora google reviews honest opinion`] },
       }[sType];
       // ── ONE QUERY IN DANISH, WHERE THE NAME DIFFERS ─────────────
       // Every query above is English and templated on the name as typed. When
@@ -4650,8 +4678,8 @@ Say which answer came from which source, so a fact from a vouched page and a fac
           // which services serve the place, which is what the answer is for.
           const fromCph = journeyOriginFor(sType) === "origin";
           const tq = fromCph
-            ? `how to get to ${name} Denmark from Copenhagen by public transport train bus ferry which line rejseplanen`
-            : `how to get to ${name}${draftTown ? ` ${draftTown}` : ""} Denmark by public transport which bus train line stop rejseplanen`;
+            ? `how to get to ${name} ${draftLand.name} from ${draftLand.hub} by public transport train bus ferry which line${draftInDenmark ? " rejseplanen" : ""}`
+            : `how to get to ${name}${draftTown ? ` ${draftTown}` : ""} ${draftLand.name} by public transport which bus train line stop${draftInDenmark ? " rejseplanen" : ""}`;
           const tRes = await fetch(`/api/search?q=${encodeURIComponent(tq)}`);
           const tData = await tRes.json();
           if (tRes.ok && !tData.error) {
@@ -4697,14 +4725,14 @@ Say which answer came from which source, so a fact from a vouched page and a fac
             // It is the sites of the things IN it: the castle, the church, the
             // ferry, the bus operator. Those are what decide a getting-there or
             // opening-hours claim, and those are what kept getting missed.
-            ? `"${name}" Denmark official website attraction castle museum church opening hours tickets`
+            ? `"${name}" ${draftLand.name} official website attraction castle museum church opening hours tickets`
             : (sType === "foodStreet" || sType === "nightStreet")
             // Same logic as the town, one scale down. A street's authority is
             // the venues ON it plus the city's own page about it, and those are
             // what settle an opening hour or a closing time. Asking a street for
             // "tickets programme practical info" would have found nothing.
-            ? `"${name}" Denmark street which bars restaurants venues are on it official websites opening hours`
-            : `"${name}" Denmark official website tickets programme practical info`;
+            ? `"${name}" ${draftLand.name} street which bars restaurants venues are on it official websites opening hours`
+            : `"${name}" ${draftLand.name} official website tickets programme practical info`;
           const oRes = await fetch(`/api/search?q=${encodeURIComponent(oq)}`);
           const oData = await oRes.json();
           if (oRes.ok && !oData.error) {
@@ -4845,7 +4873,10 @@ Say which answer came from which source, so a fact from a vouched page and a fac
       }
       if (!placed) {
         try {
-          const found = danishAddressIn(context);
+          // Danish postcodes only. Outside Denmark a four digit number in the
+          // research is a year or a phone fragment, never a town, so this
+          // second attempt does not run and Google's answer above stands alone.
+          const found = draftInDenmark ? danishAddressIn(context) : null;
           // ── AND ONE STRAY POSTCODE IS NOT A LOCATION ──────────────
           //
           // Fable, 2 Sep 2026, reading six bar-street runs. Two were pinned to
@@ -5213,26 +5244,26 @@ Say which answer came from which source, so a fact from a vouched page and a fac
         // Other content types still get the general fact-check version until this
         // approach is validated on these two.
         const precheckPrompt = ((sType === "food" || sType === "foodStreet")
-          ? `Using real, current web search, find accurate facts about "${subject}" in Denmark, and organize them into exactly three labeled groups — do not write prose, just sort real facts you find into these buckets:
+          ? `Using real, current web search, find accurate facts about "${subject}" in ${draftLand.name}, and organize them into exactly three labeled groups — do not write prose, just sort real facts you find into these buckets:
 VIBE/LOCATION FACTS: its exact address or a real nearby landmark, why locals go there.
 FOOD MECHANICS FACTS: ${sType === "foodStreet" ? "what vendors/stalls are there, the range of cuisines/dishes on offer, how it's organized (indoor hall, outdoor stalls, etc.)" : "how the food is made — cooking method (stone-baked, flame-grilled, slow-cooked, hand-rolled), specific real dishes people order"}.
 REALITY CHECK FACTS: real current prices, typical wait times, seating situation, anything else logistically true.
 If you can't find something for a bucket, leave it out rather than guessing. Short facts only, no essay, no flowing sentences — ChatGPT handles the actual writing.`
           : sType === "island"
-          ? `Using real, current web search, find accurate facts about the Danish island "${name}", and organize them into exactly three labeled groups — do not write prose, just sort real facts you find into these buckets:
+          ? `Using real, current web search, find accurate facts about the ${draftLand.adjective} island "${name}", and organize them into exactly three labeled groups — do not write prose, just sort real facts you find into these buckets:
 CHARACTER/FIT FACTS: where it lies, roughly how big it is, how many people live there, what it is known for, who it suits and who it does not.
 WHAT TO DO FACTS: real named harbours, villages, roads and things a visitor does there. Whether it is realistically covered by bike, by car or on foot, and how long it takes to cross.
 CROSSING FACTS, THE MOST IMPORTANT BUCKET: first, whether there is a BRIDGE, causeway or tunnel you can drive or cycle over, and between which two places. If there is no fixed link, then the ferry: which company runs it, WHICH MAINLAND PORT it leaves from and WHICH PORT ON THE ISLAND it arrives at, how long the crossing takes, what a car costs, how far ahead a car has to be booked in summer, and what the winter timetable does to the last sailing. Take these from the OPERATOR'S own page. If a tourist board page and the operator disagree, report the operator and say the two disagree.
 If you can't find something for a bucket, leave it out rather than guessing. An unanswered crossing is a real and useful answer; a guessed port is not. Short facts only, no essay, no flowing sentences — ChatGPT handles the actual writing.`
           : sType === "town"
-          ? `Using real, current web search, find accurate facts about the town "${name}" in Denmark, and organize them into exactly three labeled groups — do not write prose, just sort real facts you find into these buckets:
+          ? `Using real, current web search, find accurate facts about the town "${name}" in ${draftLand.name}, and organize them into exactly three labeled groups — do not write prose, just sort real facts you find into these buckets:
 CHARACTER/FIT FACTS: founding date or defining historical fact, its region, what kind of place it is, who it suits. IMPORTANT: if the town has more than one relevant historical date (e.g. an older institution, monastery, or building founded there vs. the town itself later being granted official status such as market-town/købstad rights), list each as its own separate fact with its own date — do not merge them into a single date or imply one caused the other unless your source explicitly says so.
 WHAT TO DO FACTS: specific real streets, buildings, museums, or activities — named and concrete, not generic. For any named attraction that has real access rules (opening hours, whether the grounds are open to the public even if a building itself is closed, seasonal restrictions), state exactly what you find rather than just naming the place. Also find the town's real signature or best-known named annual event, if it has one — its actual specific real name (e.g. a real festival or regatta name), not a generic placeholder description like "harbour festival" or "summer fest".
-GETTING THERE/REALITY FACTS: real transit routes and times from Copenhagen. If the town is not well served by train/bus, or driving is faster or more practical, also give the real driving time and route (e.g. via a named motorway/highway) — don't leave travel time blank just because transit is impractical. How long a visit takes, any real logistical downside (limited dining, seasonal closures, etc).
+GETTING THERE/REALITY FACTS: real transit routes and times from ${draftLand.hub}. If the town is not well served by train/bus, or driving is faster or more practical, also give the real driving time and route (e.g. via a named motorway/highway) — don't leave travel time blank just because transit is impractical. How long a visit takes, any real logistical downside (limited dining, seasonal closures, etc).
 IDENTITY CHECK, IMPORTANT: a town's real signature event has been mistaken for a generic placeholder name before (a made-up description standing in for the event's actual real name). If you're not fully confident of the event's exact real name, or you find more than one similarly-named or same-season event connected to this town, start your entire response with a single line: "IDENTITY WARNING: [explain exactly what's uncertain, e.g. no confirmed real name found for this town's signature event, or a possible mix-up between two events]" — then continue with the facts as normal. If you're confident there's no such issue, don't include that line at all.
 If you can't find something for a bucket, leave it out rather than guessing. Short facts only, no essay, no flowing sentences — ChatGPT handles the actual writing.`
           : sType === "festival"
-          ? `Using real, current web search, find the accurate dates, prices (in local currency), and any specific named venues/stages for "${name}" in Denmark. Be concise — short facts only, no essay. IDENTITY CHECK, IMPORTANT: this exact event has been confused with a different, similarly-named or co-occurring event before (a small event mistaken for a much bigger one sharing part of its name or season) — actively check whether "${name}" might be getting confused with a different real event in your search results. If there's real risk of that, start your entire response with a single line: "IDENTITY WARNING: [explain exactly what might be getting mixed up, e.g. a different, larger festival with a similar name in the same town]" — then continue with the facts as normal. If you're confident there's no confusion, don't include that line at all.`
+          ? `Using real, current web search, find the accurate dates, prices (in local currency), and any specific named venues/stages for "${name}" in ${draftLand.name}. Be concise — short facts only, no essay. IDENTITY CHECK, IMPORTANT: this exact event has been confused with a different, similarly-named or co-occurring event before (a small event mistaken for a much bigger one sharing part of its name or season) — actively check whether "${name}" might be getting confused with a different real event in your search results. If there's real risk of that, start your entire response with a single line: "IDENTITY WARNING: [explain exactly what might be getting mixed up, e.g. a different, larger festival with a similar name in the same town]" — then continue with the facts as normal. If you're confident there's no confusion, don't include that line at all.`
           // ── A BAR STREET WAS BEING ASKED FOR ITS LINEUP ──────────
           //
           // Everything that was not a town, a restaurant or a festival fell
@@ -5247,15 +5278,15 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
           // at NAME_IS_NOT_A_PLACE above: there is a Vestergade in a dozen
           // Danish towns and "Vestergade in Denmark" names none of them.
           : sType === "nightStreet"
-          ? `Using real, current web search, find accurate current facts about the bar street "${subject}" in Denmark, and sort them into exactly three labeled groups — do not write prose, just real facts:
+          ? `Using real, current web search, find accurate current facts about the bar street "${subject}" in ${draftLand.name}, and sort them into exactly three labeled groups — do not write prose, just real facts:
 WHO IT'S FOR FACTS: who drinks there (students, stag parties, locals, tourists), the real named bars and clubs ON this street, how many venues it has, what a beer costs.
 BEST NIGHTS FACTS: which nights of the week are busy and which are dead, when it fills up and when it empties, seasonal differences, closing times.
 WALKING IT FACTS: how long the street is, which end is which and how they differ, where it starts and finishes, what is at each end, real safety or reputation issues people report.
 This is a STREET, not a venue and not an event: it has no opening hours of its own, no tickets, no lineup and no stages. If you find yourself reporting a date or a stage, you are describing something else. If you can't find something for a bucket, leave it out rather than guessing.
 IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is a Vestergade, a Nørregade and an Algade in many of them. Everything you report must be about this street in ${draftTown || "the town named above"}. If your results are about a street of the same name in a different town, or you cannot tell which town a result means, start your entire response with a single line: "IDENTITY WARNING: [what is uncertain]" — then continue with whatever you can confirm.`
           : sType === "nightTown"
-          ? `Using real, current web search, find accurate current facts about the nightlife of "${name}" in Denmark. Short facts only, no essay: where people go out (real named streets, quarters and venues), who the crowd is and why (student population, garrison, tourism), which nights are busy, roughly what a night out costs, and any real logistical downside (last transport, distances between areas, closing times). This is a TOWN, not a venue: it has no opening hours, no tickets and no lineup. If you can't find something, leave it out rather than guessing.`
-          : `Using real, current web search, find accurate, current, checkable facts about "${subject}" in Denmark. Short facts only, no essay: exactly where it is, what it costs to get in or take part and what that price covers, when it is open or when it is busy, how a visitor gets there, and any real logistical downside. If it is a dated event, give the dates; if it is not, do not invent a season for it. If you can't find something, leave it out rather than guessing.`) + `\n${researchRules(sType, researchWhere())}`;
+          ? `Using real, current web search, find accurate current facts about the nightlife of "${name}" in ${draftLand.name}. Short facts only, no essay: where people go out (real named streets, quarters and venues), who the crowd is and why (student population, garrison, tourism), which nights are busy, roughly what a night out costs, and any real logistical downside (last transport, distances between areas, closing times). This is a TOWN, not a venue: it has no opening hours, no tickets and no lineup. If you can't find something, leave it out rather than guessing.`
+          : `Using real, current web search, find accurate, current, checkable facts about "${subject}" in ${draftLand.name}. Short facts only, no essay: exactly where it is, what it costs to get in or take part and what that price covers, when it is open or when it is busy, how a visitor gets there, and any real logistical downside. If it is a dated event, give the dates; if it is not, do not invent a season for it. If you can't find something, leave it out rather than guessing.`) + `\n${researchRules(sType, researchWhere())}`;
         setStudioStage({ label: "Fact-checking the research (Perplexity)", percent: 50 });
         const preCheck = await withRetry(
           () => askPerplexity(precheckPrompt),
@@ -5369,8 +5400,8 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
             const [originRes, destRes] = await Promise.all([
               held
                 ? Promise.resolve([{ lat: held.lat, lon: held.lon }])
-                : nominatimJson(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(name + ", Denmark")}&format=json&limit=1&countrycodes=dk`),
-              nominatimJson(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(detectedCity + " Station, Denmark")}&format=json&limit=1&countrycodes=dk`),
+                : nominatimJson(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(`${name}, ${draftLand.name}`)}&format=json&limit=1&countrycodes=${draftLand.code.toLowerCase()}`),
+              nominatimJson(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(`${detectedCity} Station, ${draftLand.name}`)}&format=json&limit=1&countrycodes=${draftLand.code.toLowerCase()}`),
             ]);
             if (originRes?.[0] && destRes?.[0]) {
               const transport = await checkNightTransport(
@@ -5685,7 +5716,7 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
           // road", REQUEST_DENIED means "learned nothing", and collapsing both
           // to null would turn a broken API key into a claim about geography.
           const askRaw = async (mode, extra = "") => {
-            const r = await fetch(`/api/directions?origin=${originPoint}&destination=${dest}&mode=${mode}${departureParam(mode)}${extra}`);
+            const r = await fetch(`/api/directions?origin=${originPoint}&destination=${dest}&mode=${mode}${departureParam(mode)}${extra}${countryParam(draftLand.code)}`);
             return r.json();
           };
           const ask = async (mode) => {
@@ -5909,7 +5940,7 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
       // asking for, so that is what the list says.
       if (PLACES_WITH_A_LISTING.includes(sType)) {
         try {
-          const hoursRes = await studioFetch(`/api/places-hours?name=${encodeURIComponent(name)}${frozenGeo ? `&lat=${frozenGeo.lat}&lon=${frozenGeo.lon}` : ""}`);
+          const hoursRes = await studioFetch(`/api/places-hours?name=${encodeURIComponent(name)}${frozenGeo ? `&lat=${frozenGeo.lat}&lon=${frozenGeo.lon}` : ""}${countryParam(draftLand.code)}`);
           const hoursData = await hoursRes.json();
           // ── AN ERROR BODY IS NOT AN ANSWER ──────────────────────────
           // Overnight audit, 12 Aug. Neither hoursRes.ok nor hoursData.error was
@@ -6974,7 +7005,10 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
       // status. See writtenStatusRule in utils/tickets.js.
       let ticketLookupFailed = false;
       let ticketLookupWhy = "";
-      if (sType === "festival") {
+      // Ticketmaster sells nothing in Lithuania (checked 29 Sep 2026: tickets
+      // there go through Bilietai.lt, Kakava.lt and the venues), and asking it
+      // about a Klaipėda event can only find a Danish one with the same name.
+      if (sType === "festival" && draftInDenmark) {
         try {
           const tr = await studioFetch(`/api/tickets?name=${encodeURIComponent(name)}`);
           const td = await tr.json();
@@ -6982,7 +7016,7 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
             ticketLookupFailed = true;
             ticketLookupWhy = `${td.error}: ${td.detail || ""}`;
             note("Ticket status from Ticketmaster", {
-              provider: "ticketmaster", detail: `listings for "${name}" in Denmark`,
+              provider: "ticketmaster", detail: `listings for "${name}" in ${draftLand.name}`,
               outcome: "failed", used: false, got: "",
               // The three failures are kept apart on purpose. "Rate limited" and
               // "this festival is not listed" are completely different facts and
@@ -7008,7 +7042,7 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
             // being run, so the one step that proves the lookup happened was
             // the one he could not find.
             note("Ticketmaster, searched by name", {
-              provider: "ticketmaster", detail: `listings for "${name}" in Denmark`,
+              provider: "ticketmaster", detail: `listings for "${name}" in ${draftLand.name}`,
               outcome: ticketCandidates.length ? "ok" : "empty",
               used: !!ticketText,
               got: ticketCandidates.length
@@ -7048,7 +7082,7 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
           ticketLookupFailed = true;
           ticketLookupWhy = String(err);
           note("Ticket status from Ticketmaster", {
-            provider: "ticketmaster", detail: `listings for "${name}" in Denmark`,
+            provider: "ticketmaster", detail: `listings for "${name}" in ${draftLand.name}`,
             outcome: "failed", used: false, why: String(err),
           });
         }
@@ -7059,7 +7093,7 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
       // only interpolations across all 37 KB of them were ${name}, ${J(name)}
       // and ${STUDIO_VOICE}. tests/run.mjs compares the built strings against
       // the pre-split originals on every run, so a silent drift here fails.
-      const prompts = studioPrompts(name);
+      const prompts = studioPrompts(name, draftLand);
 
       // ── THE ORDER, IN HIS WORDS, IN FRONT OF THE RESEARCH ───────
       // Oliver, 12 Aug 2026: "It goes Website > Wiki/Encyclopedia/other history
@@ -7154,7 +7188,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
       setStudioStage({ label: "Organizing the research notes", percent: 62 });
       const structureResult = await withRetry(
         () => askOpenAI(
-          `You're organizing raw research into notes for a writer — NOT writing final prose yourself, just sorting real facts under clear headings so the writer's job narrows to pure wording. This is for a "${sType}" entry about "${name}" in a Danish travel guide. Read the raw research below and organize it into plain point-form notes under headings matching what needs to be written (use your judgment on what headings fit this content type — e.g. for a town: character/atmosphere facts, things-to-do facts, getting-there-and-downsides facts; for a restaurant: vibe facts, how-it's-made facts, price/wait/reality facts). Include ONLY facts present in the research — never invent to fill a heading, leave it sparse instead. Keep every specific number, name, date, and price exactly as found. Be concise — notes, not paragraphs.${isLodgingType(sType) ? LODGING_NOTES_RULE : ""}\n\nRaw research:\n${rawResearch}`,
+          `You're organizing raw research into notes for a writer — NOT writing final prose yourself, just sorting real facts under clear headings so the writer's job narrows to pure wording. This is for a "${sType}" entry about "${name}" in a ${draftLand.adjective} travel guide. Read the raw research below and organize it into plain point-form notes under headings matching what needs to be written (use your judgment on what headings fit this content type — e.g. for a town: character/atmosphere facts, things-to-do facts, getting-there-and-downsides facts; for a restaurant: vibe facts, how-it's-made facts, price/wait/reality facts). Include ONLY facts present in the research — never invent to fill a heading, leave it sparse instead. Keep every specific number, name, date, and price exactly as found. Be concise — notes, not paragraphs.${isLodgingType(sType) ? LODGING_NOTES_RULE : ""}\n\nRaw research:\n${rawResearch}`,
           // 1200 → 3000 (Oliver's console: "OpenAI returned no text" 3/3 on this
           // exact stage): gpt-5.6-sol is a reasoning model whose internal
           // reasoning shares this same budget, and organizing a large research
@@ -7206,6 +7240,9 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
       );
       if (draftResult.error) throw new Error(draftResult.error);
       let t = await parseClaudeJSON(draftResult.text, 8192);
+      // A draft for another country says so, and shapeForLive keeps it on
+      // publish. A Danish draft carries no country, as every row before did.
+      if (t && typeof t === "object" && !draftInDenmark) t.country = draftLand.code;
       const noContentField = (sType === "food" || sType === "foodStreet") ? !t.vibeLocation : (sType === "town" || sType === "island") ? !t.characterAndFit : sType === "essential" ? (!t.desc || !t.howTo) : !t.desc;
       if (!t.name || noContentField) throw new Error("empty");
       // Verify the route to the AI's own highlighted attraction specifically —
@@ -8413,7 +8450,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
                 detail: unreadTicketUrls[0].slice(0, 120),
                 outcome: "empty",
                 used: false,
-                got: `${unreadTicketUrls.length} bookable address${unreadTicketUrls.length === 1 ? "" : "es"} were named by pages this run could not open, and none of them is in Denmark.`,
+                got: `${unreadTicketUrls.length} bookable address${unreadTicketUrls.length === 1 ? "" : "es"} were named by pages this run could not open, and none of them is in ${draftLand.name}.`,
                 why: "A page that will not open cannot be read, so its address is the only evidence there is, and an address that says another country is evidence against it.",
               });
             } else {
@@ -8864,7 +8901,10 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         // island draft as well as keeping the wrong link out.
         if (!String(t.ticketUrl || "").trim() && typeHasAdmission(sType)) {
           let searched = 0;
-          for (const q of ticketQueries(name, draftTown)) {
+          // Tiqets and Ticketmaster only, and neither sells in Klaipėda (checked
+          // 29 Sep 2026), so outside Denmark these searches could only ever
+          // return a product for somewhere else. GetYourGuide, below, still asks.
+          for (const q of (draftInDenmark ? ticketQueries(name, draftTown) : [])) {
             if (String(t.ticketUrl || "").trim()) break;
             searched += 1;
             try {
@@ -9234,7 +9274,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
             // just not a decision, because nothing was decided.
             if (modelSaid === t.travelTime) {
               note("travelTime matched the measurement", {
-                provider: "google", detail: `Directions, transit, from ${realTransport.from || "Copenhagen"}`,
+                provider: "google", detail: `Directions, transit, from ${realTransport.from || draftLand.hub}`,
                 outcome: "ok", used: true,
                 got: `the written ${t.travelTime} is what Google measured, so nothing was overruled`,
               });
@@ -9323,7 +9363,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
             });
           }
           note("travelTime measured by road", {
-            provider: "google", detail: `Directions, driving mode, from ${realTransport.from || "Copenhagen"}`,
+            provider: "google", detail: `Directions, driving mode, from ${realTransport.from || draftLand.hub}`,
             outcome: "ok", used: true,
             got: `${t.travelTime}${modelSaid ? `, replacing the model's "${modelSaid}"` : ""}`,
             why: (needsABoat ? "The crossing is required, so the figure is Google's and the marker is the boat: its driving duration includes the ferry and there is no road to this one. " : "")
@@ -9357,7 +9397,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         const NO_TRANSPORT = /no (?:confirmed |direct |reliable |real |proper |obvious )*(?:public transport|public transit|train[- ]and[- ]bus|bus[- ]and[- ]train|train and bus)[^.]{0,60}?(?:route|itinerary|connection|link)|(?:public transport|public transit)[^.]{0,40}?(?:does not exist|isn't available|is not available|unavailable)|driving is (?:genuinely |really )?the only/i;
         if (realTransport.transit && NO_TRANSPORT.test(JSON.stringify(t))) {
           t.uncertainties = [
-            `PIPELINE CONTRADICTION, FIX BEFORE PUBLISHING: this draft says there is no public transport route, but a live Directions query found one from ${realTransport.from || "Copenhagen"} (${realTransport.transit}). Rewrite the getting-there text and any Things to Know bullet repeating the claim.`,
+            `PIPELINE CONTRADICTION, FIX BEFORE PUBLISHING: this draft says there is no public transport route, but a live Directions query found one from ${realTransport.from || draftLand.hub} (${realTransport.transit}). Rewrite the getting-there text and any Things to Know bullet repeating the claim.`,
             ...(t.uncertainties || []),
           ];
         }
@@ -9409,6 +9449,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         });
       }
 
+      if (t && typeof t === "object" && !draftInDenmark) t.country = draftLand.code;
       ui(setStudioDraft, t);
       ui(setStudioDraftText, JSON.stringify(t, null, 2));
       ui(setDraftEditError, null);
@@ -9606,7 +9647,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
           setStudioStage({ label: "Re-researching flagged claims", percent: 97 });
           try {
             const reResearch = await askPerplexity(
-              `Using real, current web search, find the correct, current real facts for ONLY the specific flagged claims below about "${name}" in Denmark. For each claim: state the real verified fact if you can find it, or say plainly that you couldn't verify it. Short facts only, no essay.\n${FACT_CHECK_SCOPE_RULES}\n${researchRules(sType, researchWhere())}\n\nFlagged claims:\n${flaggedText}`
+              `Using real, current web search, find the correct, current real facts for ONLY the specific flagged claims below about "${name}" in ${draftLand.name}. For each claim: state the real verified fact if you can find it, or say plainly that you couldn't verify it. Short facts only, no essay.\n${FACT_CHECK_SCOPE_RULES}\n${researchRules(sType, researchWhere())}\n\nFlagged claims:\n${flaggedText}`
             );
             if (!reResearch.error && reResearch.text) {
               const fixResult = await askClaude(
@@ -9834,6 +9875,9 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
       ui(setStudioError, `Couldn't draft that. Try again, or check the name.${detail ? ` (${detail})` : ""}`);
       draftOutcome = { ok: false, error: detail || "Couldn't draft that" };
     }
+    // Back to the page's own country, so nothing after a Lithuanian draft
+    // geocodes the Danish site in Lithuania.
+    setWorkingCountry(null);
     setStudioStage(null);
     endRun();
     endLog();
@@ -9851,7 +9895,7 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
   const addToDraftQueue = () => {
     const name = studioTown.trim();
     if (!name) return;
-    draftQueueRef.current = [...draftQueueRef.current, { name, type: studioType }];
+    draftQueueRef.current = [...draftQueueRef.current, { name, type: studioType, country: studioCountry }];
     setDraftQueue([...draftQueueRef.current]);
     setStudioTown("");
     // DELIBERATELY DOES NOT START DRAFTING (Oliver, Aug 5: "when towns are put
@@ -9893,7 +9937,7 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
         setQueueDrafting(item.name);
         // queued: true is what keeps this run out of the editor. See the long
         // comment at the top of generateArea for the three bugs it fixes.
-        const res = await generateArea(item.name, item.type, { queued: true });
+        const res = await generateArea(item.name, item.type, { queued: true, country: item.country });
         setQueueDrafting(null);
         setQueueResults(prev => [...prev, {
           name: item.name, type: item.type, ok: !!res?.ok,
@@ -11439,9 +11483,9 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
 
         // The town is real disambiguation: "Bones" alone finds a skeleton.
         const where = p.town || p.city || p.location || p.region || "";
-        const query = `${p.name}${where && !p.name.includes(where) ? ` ${where}` : ""} Denmark`;
+        const query = `${p.name}${where && !p.name.includes(where) ? ` ${where}` : ""} ${countryProfile(rowCountry(p)).name}`;
         try {
-          const r = await studioFetch(`/api/commons-photo?q=${encodeURIComponent(query)}&article=${encodeURIComponent(p.name)}&category=${encodeURIComponent(p.name)}&limit=1`);
+          const r = await studioFetch(`/api/commons-photo?q=${encodeURIComponent(query)}&article=${encodeURIComponent(p.name)}&category=${encodeURIComponent(p.name)}&limit=1${countryParam(rowCountry(p))}`);
           const d = await r.json();
           const hit = (d.results || [])[0];
           if (!hit || !hit.url) { notFound.push(p.name); }
@@ -16816,7 +16860,7 @@ ${houseDistanceSays(houseBaseArea, dayPoints(day, stayResolve))}` : ""}`;
     if (typeof window !== "undefined" && window.history.state?.gxEntry) { window.history.back(); return; }
     if (typeof window !== "undefined" && window.location.pathname.startsWith(`/${COUNTRY}/`)) {
       closeAllEntries();
-      navigate("/");
+      navigate(HOME_PATH);
       return;
     }
     closeAllEntries();
@@ -16878,7 +16922,7 @@ ${houseDistanceSays(houseBaseArea, dayPoints(day, stayResolve))}` : ""}`;
   const missingEntry = (tab) => {
     setEntered(true);
     setActive(tab);
-    navigate(`/${hashForTab(tab)}`, { replace: true });
+    navigate(`${HOME_PATH}${hashForTab(tab)}`, { replace: true });
     showToast("That page could not be found, so here is the list it belongs to.", 5000);
   };
   const townRouteDone = useRef(false);
@@ -21184,7 +21228,19 @@ If the conversation only covers a single day or a few stops with no explicit day
   // there is somewhere to check a page before the first entry goes live. Only
   // decided once the content has loaded, so a slow load never hides it.
   const hideShopping = liveLoaded && !libraryFailed && !isStudio && shops.length === 0 && shopPlaces.length === 0;
-  const TAB_ORDER = TAB_ORDER_ALL.filter(t => !(t === "shopping" && hideShopping));
+  // ── AND ON ANOTHER COUNTRY'S PAGE, ONLY WHAT IT HAS ──────────────
+  // Phase 2 of LITHUANIA_PLAN_29SEP.md, the same rule as Shopping above: a
+  // page with nothing on it is not in the menu. Klaipėda has no islands and,
+  // until entries are drafted, no nightlife or cheap gems, so those come back
+  // by themselves as the first one publishes. NOT_YET_ABROAD is never shown.
+  const emptyHere = {
+    islands: islands.length === 0,
+    gems: gems.length === 0,
+    essentials: essentials.length === 0,
+    nightlife: nightlifeSpots.length + nightlifeStreets.length + nightlifeTowns.length === 0,
+  };
+  const hideAbroad = (t) => PAGE_ABROAD && (NOT_YET_ABROAD.includes(t) || (liveLoaded && !libraryFailed && !isStudio && emptyHere[t]));
+  const TAB_ORDER = TAB_ORDER_ALL.filter(t => !(t === "shopping" && hideShopping) && !hideAbroad(t));
   // Single source of truth for nav labels — same order as TAB_ORDER, so swipe and nav can never drift apart again.
   // Redesign pass: emoji removed from nav — `ico` names map to the drawn icon
   // set in components/Icon.jsx, rendered next to the plain-text label.
@@ -21247,7 +21303,9 @@ If the conversation only covers a single day or a few stops with no explicit day
   useEffect(() => {
     if (typeof window === "undefined" || tabLinkDone.current) return;
     tabLinkDone.current = true;
-    if (tabForHash(window.location.hash)) setEntered(true);
+    // Another country's page has no front door yet: the country picker on it
+    // is Denmark's, so a reader arriving at /lithuania goes straight in.
+    if (tabForHash(window.location.hash) || PAGE_ABROAD) setEntered(true);
   }, []);
 
   // ── AND THE ADDRESS FOLLOWS THE PAGE ──────────────────────────────
@@ -25828,6 +25886,20 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       );
                     })()}
 
+                    {/* ── WHICH COUNTRY THE DRAFT IS FOR ──────────────────
+                        Phase 1 of LITHUANIA_PLAN_29SEP.md. A label and two
+                        chips, nothing under them: Denmark unless he picks
+                        Lithuania, and the choice rides with a queued name. */}
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: C.muted, marginRight: 2 }}>Country</span>
+                      {Object.values(COUNTRY_PROFILES).map(c => (
+                        <button key={c.code} onClick={() => setStudioCountry(c.code)} disabled={studioLoading}
+                          aria-pressed={studioCountry === c.code}
+                          style={{ background: studioCountry === c.code ? `${C.gold}22` : "none", border: `1px solid ${studioCountry === c.code ? C.gold : C.border}`, borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 700, color: studioCountry === c.code ? C.gold : C.light, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                          {c.name}
+                        </button>
+                      ))}
+                    </div>
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
                       {[["town", "🏘 Town"], ["island", "⛴ Island"], ["festival", "🎪 Events"], ["free", "🎟 Attractions"], ["food", "🍽 Food"], ["foodStreet", "🍜 Food Street"], ["night", "🍺 Nightlife"], ["nightStreet", "🍻 Bar street"], ["nightTown", "🌃 Nightlife (Town)"], ["shop", "🛍 Shop"], ["shopPlace", "🏬 Shopping street"], ["booking", "🔨 Workshop"], ["essential", "🧭 Essential"]].map(([k, label]) => (
                         <button key={k} onClick={() => { setStudioType(k); setStudioResult(null); setStudioError(null); }}
@@ -26054,7 +26126,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         </div>
                         {draftQueue.map((it, i) => (
                           <div key={`q${i}`} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: C.muted, marginBottom: 4 }}>
-                            <span style={{ flex: 1, minWidth: 0 }}>◌ {it.name} <span style={{ fontSize: 10.5 }}>({it.type})</span></span>
+                            <span style={{ flex: 1, minWidth: 0 }}>◌ {it.name} <span style={{ fontSize: 10.5 }}>({it.type}{it.country && it.country !== DEFAULT_COUNTRY ? `, ${countryProfile(it.country).name}` : ""})</span></span>
                             <button onClick={() => cancelQueued(i)} title={`Remove ${it.name} from the queue`}
                               style={{ background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 100, width: 20, height: 20, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, cursor: "pointer", fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>
                               ✕
@@ -28697,8 +28769,10 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
 
 
               {/* Hero */}
-              <div className="hero-h" style={{ position: "relative", overflow: "hidden", background: `url('/picture3.png') center/cover no-repeat` }}>
-                {!videoError && (
+              <div className="hero-h" style={{ position: "relative", overflow: "hidden", background: PAGE_ABROAD ? "linear-gradient(160deg, #1A2A48 0%, #0A0F1E 100%)" : `url('/picture3.png') center/cover no-repeat` }}>
+                {/* Danish footage, so another country's page keeps the dark
+                    gradient under it rather than showing Denmark. */}
+                {!videoError && !PAGE_ABROAD && (
                   <video ref={heroVideoRef} src="/video1.mp4" autoPlay muted defaultMuted loop playsInline webkit-playsinline="true" preload="auto"
                     onCanPlay={(e) => { e.target.muted = true; setVideoReady(true); e.target.play().catch(() => {}); }}
                     onError={() => setVideoError(true)}
@@ -28711,8 +28785,8 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     (the old absolute-positioned one collided on short viewports). */}
                 <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "0 24px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, filter: "drop-shadow(0 1px 8px rgba(0,0,0,0.5))" }}>
-                    <FlagDK height={13} />
-                    <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: 2.5, textTransform: "uppercase", color: "rgba(255,255,255,0.85)" }}>Denmark</span>
+                    {!PAGE_ABROAD && <FlagDK height={13} />}
+                    <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: 2.5, textTransform: "uppercase", color: "rgba(255,255,255,0.85)" }}>{PAGE_LAND.name}</span>
                   </div>
                   {/* ── THE PAGE HAD NO HEADING AT ALL ────────────────
                       14 Sep 2026, checked on the live site before a beta:
@@ -28749,23 +28823,25 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       people tend to miss it: a red button promising a plan is
                       an advert, and two date fields are a thing you are already
                       halfway through. Filling them in IS starting the plan. */}
-                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center", alignItems: "flex-end", marginBottom: 18, width: "100%", maxWidth: 420 }}>
+                  {/* The dates start the planner, which is not built for another
+                      country yet (Phase 3), so they wait with it. */}
+                  {!PAGE_ABROAD && <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center", alignItems: "flex-end", marginBottom: 18, width: "100%", maxWidth: 420 }}>
                     {[
                       { key: "arrival", label: "Arrival", value: heroDayOf(intakeArrival), min: heroDayNow(), onPick: heroSetArrival },
                       { key: "departure", label: "Departure", value: heroDayOf(intakeDeparture), min: heroDayOf(intakeArrival) || heroDayNow(), onPick: heroSetDeparture },
                     ].map(f => (
                       <HeroDateField key={f.key} label={f.label} value={f.value} min={f.min} onPick={f.onPick} />
                     ))}
-                  </div>
+                  </div>}
 
                   {/* setDetourTab BEFORE goTab, and it is not decoration: the
                       intake lives on the sightseeing row only, so a reader who
                       last looked at Road Trips would otherwise arrive at Detour
                       with their dates filled in on a row that is not showing. */}
-                  <button onClick={() => { setDetourTab("sightseeing"); goTab("ai"); window.scrollTo(0, 0); }}
+                  {!PAGE_ABROAD && <button onClick={() => { setDetourTab("sightseeing"); goTab("ai"); window.scrollTo(0, 0); }}
                     style={{ background: `linear-gradient(135deg, ${C.accent}, #C22A3C)`, border: "none", color: "#fff", borderRadius: 100, padding: "13px 26px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", boxShadow: "0 6px 24px rgba(226,59,78,0.4)" }}>
                     ✦ Plan my trip
-                  </button>
+                  </button>}
                   <div style={{ marginTop: 26, color: "rgba(255,255,255,0.6)", fontSize: 12, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
                     <span>Scroll to explore</span>
                     <span style={{ fontSize: 15, animation: "bounceInline 2s infinite", display: "inline-block" }}>↓</span>
@@ -28784,7 +28860,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   Events, Food and Attractions grids instead of sitting in a narrow
                   column of their own under a full-bleed hero. */}
               <div style={{ padding: "20px 16px 8px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 2, textTransform: "uppercase", marginBottom: 12, textAlign: "center" }}>Today in Denmark <span style={{ color: C.muted }}>·</span> <DenmarkClock style={{ color: C.text, letterSpacing: 1 }} /></div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 2, textTransform: "uppercase", marginBottom: 12, textAlign: "center" }}>Today in {PAGE_LAND.name} <span style={{ color: C.muted }}>·</span> <DenmarkClock style={{ color: C.text, letterSpacing: 1 }} /></div>
 
                 <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
                   <WeatherHeaderStrip weather={weather} weatherLoading={weatherLoading} checkWeather={checkWeather} />
@@ -28795,7 +28871,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     <Ico name="pin" size={15} color={userCoords === "denied" ? "#FFB347" : C.gold} />
                     <span style={{ flex: 1 }}>
                       <span style={{ display: "block", fontSize: 12, color: userCoords === "denied" ? "#FFB347" : C.gold, fontWeight: 600 }}>
-                        {userCoords === "denied" ? "Location blocked — tap to try again, or check your browser's site settings" : "Already in Denmark? Tap to see travel times from where you are"}
+                        {userCoords === "denied" ? "Location blocked — tap to try again, or check your browser's site settings" : `Already in ${PAGE_LAND.name}? Tap to see travel times from where you are`}
                       </span>
                       <span onClick={(e) => { e.stopPropagation(); setShowPrivacy(true); }}
                         style={{ display: "block", fontSize: 10, color: C.muted, marginTop: 2 }}>
@@ -29118,7 +29194,9 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               {/* ── WHAT INSPIRED US ──────────────────────────────
                   Oliver's structure: hero, then Denmark, then the reason this
                   app exists — told as a story, not a callout box. */}
-              <div style={{ padding: "56px 24px", background: C.surface, borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, textAlign: "center" }}>
+              {/* Aarhus, Copenhagen and a road trip: an argument about Denmark,
+                  so it is Denmark's page that makes it. */}
+              {!PAGE_ABROAD && <div style={{ padding: "56px 24px", background: C.surface, borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, textAlign: "center" }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 2, textTransform: "uppercase", marginBottom: 10 }}>Why Gemlyx exists</div>
                 {/* ── THIS BLOCK USED TO STATE SOMETHING FALSE ──────────────
                     It read "Most tourists see Denmark for 3-4 days. All of it in
@@ -29165,7 +29243,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     </a>
                   </div>
                 )}
-              </div>
+              </div>}
 
               {/* ── THE ACCOUNT OFFER, WHERE THE LOSS IS VISIBLE ────
                   Not a modal, not over anything, and not at the moment of
@@ -29324,7 +29402,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     sources, the corrections it needed and the questions still
                     open. Specific and checkable, rather than a promise in a
                     footer. So the line goes and nothing replaces it. */}
-                <div style={{ fontSize: 11, color: C.muted, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>Denmark <FlagDK height={10} /></div>
+                <div style={{ fontSize: 11, color: C.muted, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>{PAGE_LAND.name} {!PAGE_ABROAD && <FlagDK height={10} />}</div>
                 <div style={{ fontSize: 11, color: C.muted, marginTop: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 10, flexWrap: "wrap" }}>
                   <span onClick={() => setShowPrivacy(true)} style={{ textDecoration: "underline", cursor: "pointer" }}>Privacy & Data</span>
                   <span style={{ opacity: 0.5 }}>·</span>
@@ -29625,11 +29703,16 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 <div style={{ textAlign: "center", padding: "48px 20px", color: C.muted, background: C.surface, borderRadius: 16, border: `1px dashed ${C.border}` }}>
                   <div style={{ fontSize: 26, marginBottom: 8 }}>🔍</div>
                   <div style={{ fontSize: 14, color: C.light, fontWeight: 600, marginBottom: 4 }}>{uiT("empty.filtersTitle", uiLang)}</div>
-                  <div style={{ fontSize: 12 }}>{uiT("empty.filtersDetail", uiLang)}</div>
+                  <div style={{ fontSize: 12 }}>{(PAGE_ABROAD ? uiT("empty.filtersDetailAnywhere", uiLang) : uiT("empty.filtersDetail", uiLang))}</div>
                 </div>
               ) : (
                 <div>
-                  <div style={{ fontSize: 11, color: C.muted, marginBottom: 12, paddingLeft: 2 }}>{filtered.length} place{filtered.length !== 1 ? "s" : ""}{craftSort === "near" && isInDenmark(userCoords) ? " · nearest first" : ""}</div>
+                  {/* The count is already on the filter bar above, so this line
+                      said "3 places" a second time. It stays only for the one
+                      thing the bar does not say. */}
+                  {craftSort === "near" && isInDenmark(userCoords) && (
+                    <div style={{ fontSize: 11, color: C.muted, marginBottom: 12, paddingLeft: 2 }}>Nearest first</div>
+                  )}
                   {/* Same photo-forward card structure as the Towns tab — a real
                       photo up top instead of a small icon buried in a text row,
                       so a place looks like something worth seeing. */}
@@ -29644,30 +29727,62 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                               components/PhotoPlate.jsx for the full story. */}
                           <PhotoPlate photo={item.photo} name={item.name} color={item.color} />
 
-                          <div style={{ position: "absolute", top: 8, left: 8, display: "flex", gap: 6, alignItems: "center" }}>
-                            {/* The chip names the CATEGORY and the green was
-                                the price claim wearing a colour. Both came off
-                                _kind, which is the bucket's internal name and
-                                not a fact about what anything costs. Green is
-                                now earned by the row's own words or not at
-                                all. See utils/entryPrice.js. */}
-                            <span style={{ background: "rgba(10,15,30,0.8)", color: entryPrice(item).free === true ? "#4CAF50" : C.gold, fontSize: 9, fontWeight: 700, padding: "3px 9px", borderRadius: 100, textTransform: "uppercase", letterSpacing: 0.5 }}>
-                              {entryKindLabel(item._kind, item.type)}
-                            </span>
-                            {item.popularityTag === "Hidden Gem" && <span style={{ background: "rgba(10,15,30,0.8)", color: C.gold, fontSize: 9, fontWeight: 700, padding: "3px 9px", borderRadius: 100 }}>◆ Hidden Gem</span>}
-                            {item.transportWarning && <span title="Limited public transport" style={{ background: "rgba(61,42,10,0.9)", color: "#FFB347", fontSize: 11, padding: "3px 7px", borderRadius: 100 }}>🚲</span>}
-                          </div>
+                          {/* ── THE VERDICT AND THE MAP, AS ON A TOWN ─────────
+                              Oliver, 29 Sep 2026, holding the Towns grid up
+                              against this one: "We need this map at attractions
+                              as well.. why is located and tier completely
+                              ignored?" A town card carries its tier on the
+                              picture and a small map of Denmark with its dot;
+                              an attraction card carried neither, though the tier
+                              sweep has been filling attraction tiers since
+                              September. Same badge, same map, same corners, so
+                              the two grids read the same way. The kind of place
+                              moved down to the line under the name, where the
+                              town is, and the legacy "Hidden Gem" chip went the
+                              way it went on towns: one rank on a card, not two. */}
+                          {(() => {
+                            const b = item._kind === "free" ? tierBadge(item) : null;
+                            if (!b && !item.transportWarning) return null;
+                            return (
+                              <div style={{ position: "absolute", top: 8, left: 8, maxWidth: "60%", display: "flex", gap: 6, alignItems: "center" }}>
+                                {b && (
+                                  <span style={{ background: b.bg, color: b.fg, fontSize: 9.5, fontWeight: 800, padding: "4px 10px", borderRadius: 100, letterSpacing: 0.4, textTransform: "uppercase", boxShadow: "0 2px 10px rgba(0,0,0,0.45)", border: b.caution ? "1px solid rgba(255,255,255,0.22)" : "none" }}>
+                                    {b.label}
+                                  </span>
+                                )}
+                                {item.transportWarning && <span title="Limited public transport" style={{ background: "rgba(61,42,10,0.9)", color: "#FFB347", fontSize: 11, padding: "3px 7px", borderRadius: 100 }}>🚲</span>}
+                              </div>
+                            );
+                          })()}
+                          {(() => {
+                            const pt = placeCoords(item);
+                            const key = townKeyFor(item._kind === "craft" ? item.location : item.city);
+                            if (!pt && !key) return null;
+                            return (
+                              <div style={{ position: "absolute", top: 8, right: 8, width: 68, height: 68, borderRadius: 10, overflow: "hidden", border: "1px solid rgba(255,255,255,0.4)", pointerEvents: "none" }}>
+                                <DKLocator town={key || item.name} point={pt ? [pt.lat, pt.lon] : null} color={C.gold} />
+                              </div>
+                            );
+                          })()}
 
                           <button onClick={(e) => { e.stopPropagation(); toggleSavePlace(item._kind, item, item._kind === "craft" ? item.location : item.city); }}
-                            style={{ position: "absolute", top: 8, right: 8, background: "rgba(10,15,30,0.75)", backdropFilter: "blur(4px)", border: "none", borderRadius: 100, width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 13, color: isPlaceSaved(item._kind, item.id) ? "#E91E63" : "#ffffffaa" }}>
+                            aria-label={isPlaceSaved(item._kind, item.id) ? "Saved" : "Save"}
+                            style={{ position: "absolute", bottom: 8, right: 8, background: "rgba(10,15,30,0.75)", backdropFilter: "blur(4px)", border: "none", borderRadius: 100, width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 13, color: isPlaceSaved(item._kind, item.id) ? "#E91E63" : "#ffffffaa" }}>
                             {isPlaceSaved(item._kind, item.id) ? "♥" : "♡"}
                           </button>
                         </div>
 
                         <div style={{ fontSize: 21, fontWeight: 600, color: C.text, fontFamily: "'Fraunces', serif", marginTop: 12, lineHeight: 1.1 }}><EntryLink type={item._kind === "free" ? "free" : "booking"} name={item.name}>{item.name}</EntryLink></div>
                         <div style={{ fontSize: 9, color: C.muted, textTransform: "uppercase", letterSpacing: 1.2, marginTop: 4 }}>
-                          {/* How far, on every attraction as on every town. See distanceLine. */}
-                          {dotJoin(item._kind === "craft" ? item.location : item.city, item._kind === "craft" ? travelLabel(userCoords, item.location, item.travelTime, item.__journey?.from || "") : distanceLine(userCoords, townKeyFor(item.city || item.location || "")), item.priceNote)}
+                          {/* What kind of place, which town it is in or near, and
+                              how far from the reader when they are in Denmark.
+                              Never how far from Copenhagen: see distanceLine and
+                              attractionWhere. */}
+                          {(() => {
+                            const town = item._kind === "craft" ? item.location : item.city;
+                            const key = townKeyFor(town || "");
+                            return dotJoin(entryKindLabel(item._kind, item.type), attractionWhere(town, key, placeCoords(item)), distanceLine(userCoords, key), item.priceNote);
+                          })()}
                           {item._kind === "craft" && craftSort === "near" && isInDenmark(userCoords) ? (() => { const km = townKmFromUser(item.location); return km != null ? ` · 📍 ${km < 10 ? km.toFixed(1) : Math.round(km)} km away` : ""; })() : ""}
                         </div>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 7 }}>
@@ -29744,7 +29859,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             <div className={pageAnim} style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
               <div style={{ marginBottom: 18, paddingTop: 8 }}>
                 <h2 style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, margin: "0 0 10px" }}>Events</h2>
-                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Festivals, markets and local happenings across Denmark, all year round. From legendary stages to harbour markets nobody talks about. We guide you to what's worth traveling for, and exactly how far it is from Copenhagen.</div>
+                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Festivals, markets and local happenings across {PAGE_LAND.name}, all year round. From legendary stages to harbour markets nobody talks about. {PAGE_ABROAD ? "We guide you to what is worth going out for." : "We guide you to what's worth traveling for, and exactly how far it is from Copenhagen."}</div>
               </div>
 
               <div style={{ display: "flex", gap: 0, marginBottom: 16, borderBottom: `1px solid ${C.border}` }}>
@@ -29857,7 +29972,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             <div className={pageAnim} style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
               <div style={{ marginBottom: 18, paddingTop: 8 }}>
                 <h2 style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, margin: "0 0 10px" }}>Food</h2>
-                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>From a 1965 hot dog cart to Copenhagen's biggest food market: the everyday spots locals eat at, and the bigger names worth the crowd.</div>
+                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>{PAGE_ABROAD ? "The everyday spots locals eat at, and the bigger names worth the crowd." : "From a 1965 hot dog cart to Copenhagen's biggest food market: the everyday spots locals eat at, and the bigger names worth the crowd."}</div>
               </div>
 
               {/* ── ONE ROW OF DROPDOWNS, LIKE EVERY OTHER LIST ──
@@ -29894,7 +30009,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 <div style={{ textAlign: "center", padding: "48px 20px", color: C.muted, background: C.surface, borderRadius: 16, border: `1px dashed ${C.border}` }}>
                   <div style={{ fontSize: 26, marginBottom: 8 }}>🔍</div>
                   <div style={{ fontSize: 14, color: C.light, fontWeight: 600, marginBottom: 4 }}>{uiT("empty.filtersTitle", uiLang)}</div>
-                  <div style={{ fontSize: 12 }}>{uiT("empty.filtersDetail", uiLang)}</div>
+                  <div style={{ fontSize: 12 }}>{(PAGE_ABROAD ? uiT("empty.filtersDetailAnywhere", uiLang) : uiT("empty.filtersDetail", uiLang))}</div>
                 </div>
               ) : (
               <div className="cards-grid">
@@ -30011,7 +30126,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 <>
                   <div style={{ marginBottom: 18, paddingTop: 8 }}>
                     <h2 style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, margin: "0 0 10px" }}>Nightlife</h2>
-                    <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Danes are famously reserved with strangers, and pub culture is where that changes. Below is the honest split: where you'll mostly meet other travelers, and where you'll meet Danes.</div>
+                    <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>{PAGE_ABROAD ? "Below is the honest split: where you will mostly meet other travelers, and where you will meet locals." : "Danes are famously reserved with strangers, and pub culture is where that changes. Below is the honest split: where you'll mostly meet other travelers, and where you'll meet Danes."}</div>
                   </div>
                   <PageHero src="/tuborg.jpg" emoji="🍺" color="#E23B4E" />
 
@@ -30359,7 +30474,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     FILTER, applied to the entries that earn it, rather than a
                     label stamped across the whole page. */}
                 <h2 style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, margin: "0 0 10px" }}>Towns</h2>
-                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>From the cities everyone lands in to the places the guidebooks skip. Cobblestones, smokehouses and family workshops, every one hand-researched and checked against multiple sources.</div>
+                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>{PAGE_ABROAD ? "Every town here is researched by hand and checked against more than one source." : "From the cities everyone lands in to the places the guidebooks skip. Cobblestones, smokehouses and family workshops, every one hand-researched and checked against multiple sources."}</div>
               </div>
               {/* ROUND 5 (Oliver: "Copenhagen is technically a major city..
                   I suppose we can make it its own... Major City / Town /
@@ -30465,7 +30580,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px 15px", marginBottom: 14 }}>
                     {parts.length > 1 && (
                       <Row title="Where">
-                        {[{ id: null, label: "All of Denmark" }, ...parts.map(x => ({ id: x, label: x, n: nWithPart(x) }))].map(k => (
+                        {[{ id: null, label: `All of ${PAGE_LAND.name}` }, ...parts.map(x => ({ id: x, label: x, n: nWithPart(x) }))].map(k => (
                           <Pill key={k.label} label={k.id ? `${k.label} (${k.n})` : k.label} active={townPart === k.id} onClick={() => setTownPart(townPart === k.id ? null : k.id)} />
                         ))}
                       </Row>
@@ -30627,7 +30742,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                             founder still gets the warning, gated on being signed
                             in. Same words, one audience. */}
                         <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 10 }}>
-                          {parent ? `Inside ${parent}` : "Elsewhere in Denmark"}
+                          {parent ? `Inside ${parent}` : `Elsewhere in ${PAGE_LAND.name}`}
                         </div>
                         {!parent && studioSession && (
                           <div style={{ fontSize: 11, color: "#FFB347", lineHeight: 1.55, marginTop: -4, marginBottom: 10, textTransform: "none", letterSpacing: 0 }}>
@@ -32945,14 +33060,14 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           </NavStrip>
           {/* Outside the strip and flexShrink: 0, so nothing can take a pixel
               off it however long the eight labels beside it get. */}
-          <button className="gx-topnav-ai" onClick={() => goTab("ai")}
+          {!PAGE_ABROAD && <button className="gx-topnav-ai" onClick={() => goTab("ai")}
             /* NO `display` HERE. The .gx-topnav-ai class owns it, and an inline
                one silently beat the class for as long as this button has
                existed. Detour is not lost on a phone: it is the gradient row at
                the top of the menu's Navigate list. */
             style={{ gap: 6, background: `linear-gradient(135deg, ${C.gold}, ${C.accent})`, color: "#fff", border: "none", borderRadius: 100, padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginLeft: 8, marginRight: 4, whiteSpace: "nowrap", flexShrink: 0, boxShadow: `0 2px 10px ${C.gold}33` }}>
             {NAV_ITEMS.find(item => item.id === "ai")?.label}
-          </button>
+          </button>}
 
           {/* Right: the small persistent search pill (always visible, not a
               toggle) + menu. The language flags were here for a day and cost the
@@ -33445,6 +33560,9 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
         // for a question asked from a hotel room and irrelevant in February.
         const travellerBlock = [profileForPrompt(userProfile), observedForPrompt(userProfile, userProfile?.learned), travellingNow()]
           .filter(Boolean).join("\n");
+        // The chat answers from Danish rules and Danish facts until Phase 3
+        // of LITHUANIA_PLAN_29SEP.md, so another country's page has no chat.
+        if (PAGE_ABROAD) return null;
         return <AskGemlyx session={readerSession} item={reading} kind={readingKind}
                           nearby={readingNear}
                           traveller={travellerBlock}
@@ -33660,7 +33778,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           launcher in the right corner, a guide has one on its own page, and a
           third button appearing under a thumb depending on what is open is
           worse than no button. See components/AskGemlyxLauncher.jsx. */}
-      {active !== "ai" && !guideModal && !showMenu && !eventDetail && !townDetail && !nightlifeDetail && !shopDetail && !freeDetail && !foodDetail && !craftDetail && (
+      {!PAGE_ABROAD && active !== "ai" && !guideModal && !showMenu && !eventDetail && !townDetail && !nightlifeDetail && !shopDetail && !freeDetail && !foodDetail && !craftDetail && (
         <AskGemlyxLauncher C={C} label={uiT("nav.askLauncher", uiLang)} onOpen={() => goTab("ai")} />
       )}
       {/* PREVIEW CHAT — floating Ask Gemlyx corner launcher + panel ON TOP of
@@ -34077,7 +34195,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
         onConfirm={(answer) => {
           setDeleteAsk(false);
           sendDeleteReason(answer);
-          navigate("/");
+          navigate(HOME_PATH);
           handleDeleteAccount();
         }} />
 
@@ -34128,7 +34246,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
         // and the screen cannot disagree about which section you are on.
         section={meSection ? meSectionFor(meSection) : null}
         onSection={(id) => navigate(id ? `${ABOUT_ME_PATH}/${id}` : ABOUT_ME_PATH)}
-        onClose={() => navigate("/")}
+        onClose={() => navigate(HOME_PATH)}
         onProfileSaved={(next) => setUserProfile(next)}
         onNeedsSetup={(sql) => setProfileSetupSql(sql)}
         // Saved trips moved onto this page on 15 Sep. Both halves of what that
@@ -34155,7 +34273,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
         // Navigates only if the sign out actually happened. See the note on
         // handleSignOut's return value: this line used to move somebody home
         // and then ask them whether they wanted to leave.
-        onSignOut={async () => { if (await handleSignOut()) navigate("/"); }}
+        onSignOut={async () => { if (await handleSignOut()) navigate(HOME_PATH); }}
         // Same asker as sign out, and the sentence finally comes from the
         // catalogue: it was typed into this file in English, on a screen whose
         // every other word is translated. danger paints the yes red rather than

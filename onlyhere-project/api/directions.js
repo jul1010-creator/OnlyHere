@@ -51,6 +51,7 @@ const decodePolyline = (encoded) => {
 };
 
 import { requestIsFromSite, NOT_FROM_SITE } from "../src/utils/apiGuard.js";
+import { COUNTRY_PROFILES, DEFAULT_COUNTRY } from "../src/utils/countries.js";
 
 export default async function handler(req, res) {
   // ── SECURITY, 17 AUG 2026 ─────────────────────────────────────────
@@ -87,10 +88,14 @@ export default async function handler(req, res) {
   // Denmark". This file's own comment two lines up describes what a mangled
   // param does to Google's geocoder, and utils/geo.js:50 records the case that
   // proves it: "4230, Denmark, Denmark" resolved to Holbæk instead of Skælskør.
+  // ── AND THE COUNTRY IS THE ONE ASKED FOR ──────────────────────────
+  // Phase 1 of LITHUANIA_PLAN_29SEP.md. A known `country` swaps the name
+  // appended to place text; anything else, or nothing, means Denmark as before.
+  const land = COUNTRY_PROFILES[String(req.query.country || "").toUpperCase()] || COUNTRY_PROFILES[DEFAULT_COUNTRY];
   const withCountry = (v) => {
     const t = String(v || "").trim();
     if (isCoordPair(t)) return t;
-    return /,\s*denmark\s*$/i.test(t) ? t : `${t}, Denmark`;
+    return new RegExp(`,\\s*${land.name}\\s*$`, "i").test(t) ? t : `${t}, ${land.name}`;
   };
   const originParam = withCountry(origin);
   const destinationParam = withCountry(destination);

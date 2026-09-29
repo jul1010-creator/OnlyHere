@@ -1520,7 +1520,7 @@ export const tripcomStayUrl = (town, { alliance = TRIPCOM_ALLIANCE_ID, sid = TRI
   // Currency and locale, because his own guide rule is that every price a
   // Danish trip quotes is in kroner, and an international reader lands on a
   // dollar figure otherwise.
-  q.set("curr", "DKK");
+  q.set("curr", city.currency || "DKK");
   q.set("locale", "en-XX");
   if (alliance) q.set("trip_sub1", String(town || "").trim());
   return `https://www.trip.com/hotels/${city.slug}-hotels-list-${city.id}/?${q.toString()}`;

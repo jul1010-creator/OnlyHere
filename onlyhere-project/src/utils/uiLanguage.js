@@ -245,6 +245,8 @@ export const UI_STRINGS = {
   // because they are built with a template literal.
   "empty.filtersTitle":  { en: "Nothing matches those filters", da: "Ingen resultater med de filtre", de: "Nichts passt zu diesen Filtern" },
   "empty.filtersDetail": { en: "Try clearing one. Denmark still has plenty to offer.", da: "Prøv at fjerne et af dem. Danmark har stadig masser at byde på.", de: "Nimm einen davon weg. Dänemark hat noch viel zu bieten." },
+  // The same line on another country's page, which cannot say Denmark.
+  "empty.filtersDetailAnywhere": { en: "Try clearing one. There is plenty more to find.", da: "Prøv at fjerne et af dem. Der er masser mere at finde.", de: "Nimm einen davon weg. Es gibt noch viel mehr zu entdecken." },
   "empty.events":        { en: "No upcoming events. Try a different filter.", da: "Ingen kommende begivenheder. Prøv et andet filter.", de: "Keine anstehenden Veranstaltungen. Probier einen anderen Filter." },
   "empty.towns":         { en: "Nothing published matches these filters yet.", da: "Der er endnu ikke udgivet noget, der passer til de filtre.", de: "Noch nichts veröffentlicht, das zu diesen Filtern passt." },
 

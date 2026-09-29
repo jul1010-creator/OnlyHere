@@ -22,6 +22,7 @@
 //
 // Danish letters fold the same way both do, and the same way danishNames.js
 // does: æ to ae, ø to o, å to aa. Ærø is aero everywhere in this codebase.
+import { countryProfile, activeCountry } from "./countries";
 export const placeSlug = (name) =>
   String(name ?? "")
     .toLowerCase()
@@ -35,7 +36,12 @@ export const placeSlug = (name) =>
 // The country segment is a constant rather than a literal sprinkled through the
 // routes, the middleware and the sitemap, because those three disagreeing is
 // how a link works in the app and 404s when somebody pastes it back.
-export const COUNTRY = "denmark";
+// ── AND IT IS THE PAGE'S COUNTRY ────────────────────────────────────
+// Phase 2 of LITHUANIA_PLAN_29SEP.md. Read once, when the page loads, from the
+// address: "denmark" everywhere it always was, "lithuania" on a Lithuanian
+// page, so a Klaipėda entry opens at /lithuania/attraction/... and the routes
+// App.jsx builds from this constant are the ones for the page it is on.
+export const COUNTRY = countryProfile(activeCountry()).slug;
 export const townPath = (name) => `/${COUNTRY}/${placeSlug(name)}`;
 
 // Lookup is by comparing slugs, never by trying to turn a slug back into a

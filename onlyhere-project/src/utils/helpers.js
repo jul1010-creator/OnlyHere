@@ -1,4 +1,5 @@
 import { TOWN_COORDS } from "../data/towns";
+import { isInCountry } from "./countries";
 // Its own file, not inlined here and not imported from eventDates.js, which
 // already imports daCompare from this one. See utils/calendarDay.js.
 import { dayStart, dayWithin, eventLastDay } from "./calendarDay";
@@ -344,8 +345,10 @@ export const weatherIcon = (code, night = false) => {
 
 
 
-export const isInDenmark = (coords) => coords && typeof coords === "object" &&
-  coords.lat >= 54.4 && coords.lat <= 57.9 && coords.lon >= 7.9 && coords.lon <= 15.3;
+// The box now lives with the country profiles (utils/countries.js), so a
+// second country is a second box rather than a second copy of this line. Same
+// numbers as before, so every existing caller answers exactly as it did.
+export const isInDenmark = (coords) => isInCountry(coords, "DK");
 
 // ── "THE AVERAGE TRAVELLER DOESN'T KNOW WHAT MID-BUDGET IS IN
 //     DENMARK" ─────────────────────────────────────────────────────
@@ -384,6 +387,19 @@ export const PRICE_BANDS = [
   { id: "100-250", label: "100 to 250 kr" },
   { id: "over-250", label: "Over 250 kr" },
 ];
+
+// ── THE SAME THREE BANDS WHERE PRICES ARE IN EUROS ──────────────────
+// Phase 1 of LITHUANIA_PLAN_29SEP.md. The ids stay the ones every filter and
+// saved state already uses; only the cuts and the words are the country's.
+// €12 and €30 are a first guess at cheap, ordinary and dear for a meal in
+// Klaipėda, and are his to move.
+export const EURO_BAND_CUTS = [12, 30];
+export const EURO_PRICE_BANDS = [
+  { id: "under-100", label: `Under €${EURO_BAND_CUTS[0]}` },
+  { id: "100-250", label: `€${EURO_BAND_CUTS[0]} to €${EURO_BAND_CUTS[1]}` },
+  { id: "over-250", label: `Over €${EURO_BAND_CUTS[1]}` },
+];
+export const priceBandsFor = (currency = "DKK") => (currency === "EUR" ? EURO_PRICE_BANDS : PRICE_BANDS);
 
 // The same three cuts the old function made, spelled out rather than derived
 // from the table, so the boundary at exactly 250 stays where it was: 250 is
@@ -426,12 +442,29 @@ const kroner = (raw) => Number(String(raw).replace(/[.,](?=\d{3}\b)/g, "").repla
 // The average figure a price sentence states, in kroner, or null when it
 // states none. The number priceBand bands, exposed so a question the three
 // bands cannot answer (is this a tasting menu?) reads the same figure.
+// ── AND EUROS, FOR A ROW OUTSIDE DENMARK ────────────────────────────
+// Phase 1 of LITHUANIA_PLAN_29SEP.md. A Klaipėda price reads "€6" or "4 EUR",
+// and a euro has cents, so "€2.50" is two and a half, never two hundred and
+// fifty. Read only when the text states no kroner at all, so a Danish row bands
+// exactly as it did.
+const EURO_MONEY = /€\s*(\d+(?:[.,]\d{1,2})?)(?:\s*(?:[–—-]|to)\s*€?\s*(\d+(?:[.,]\d{1,2})?))?|(\d+(?:[.,]\d{1,2})?)\s*(?:(?:[–—-]|to)\s*(\d+(?:[.,]\d{1,2})?)\s*)?(?:€|eur\b|euros?\b)/gi;
+const euros = (raw) => Number(String(raw).replace(",", "."));
+const euroAmounts = (text) => [...String(text || "").matchAll(EURO_MONEY)]
+  .flatMap(m => [m[1], m[2], m[3], m[4]])
+  .map(euros)
+  .filter(n => Number.isFinite(n));
+// The krone is held to the euro at this central rate (ERM II), so a euro figure
+// can be read in kroner for the questions that are asked in kroner.
+export const DKK_PER_EUR = 7.46038;
+
 export const priceAverageKr = (priceStr) => {
   const text = String(priceStr || "");
   const withCurrency = [...text.matchAll(MONEY)]
     .flatMap(m => [m[1], m[2]])
     .map(kroner)
     .filter(n => Number.isFinite(n));
+  const eur = withCurrency.length ? [] : euroAmounts(text);
+  if (eur.length) return (eur.reduce((a, b) => a + b, 0) / eur.length) * DKK_PER_EUR;
   const nums = withCurrency.length ? withCurrency : (text.match(/\d+/g) || []).map(Number);
   if (!nums.length) return null;
   return nums.reduce((a, b) => a + b, 0) / nums.length;
@@ -447,6 +480,16 @@ export const priceBand = (priceStr) => {
     .flatMap(m => [m[1], m[2]])
     .map(kroner)
     .filter(n => Number.isFinite(n));
+  // A euro price is banded on euro cuts, which are the country's own and not a
+  // conversion: a €10 lunch in Klaipėda is an ordinary lunch there, and calling
+  // it cheap because it is under 100 kroner would be Denmark talking.
+  const eur = withCurrency.length ? [] : euroAmounts(text);
+  if (eur.length) {
+    const avgEur = eur.reduce((a, b) => a + b, 0) / eur.length;
+    if (avgEur < EURO_BAND_CUTS[0]) return "under-100";
+    if (avgEur <= EURO_BAND_CUTS[1]) return "100-250";
+    return "over-250";
+  }
   const nums = withCurrency.length
     ? withCurrency
     : (text.match(/\d+/g) || []).map(Number);
@@ -1803,8 +1846,28 @@ export const distanceLine = (userCoords, key) => {
     const km = Math.round(straightKm(at, [userCoords.lat, userCoords.lon]));
     return km < 2 ? "~2 km from you" : `~${km} km from you`;
   }
-  const cph = TOWN_COORDS.Copenhagen;
-  if (!cph) return "";
-  const km = Math.round(straightKm(at, cph));
-  return km < 10 ? "" : `~${km} km from CPH`;
+  // ── AND NOTHING FROM COPENHAGEN ─────────────────────────────────
+  // Oliver, 29 Sep 2026: "attractions' distance from Copenhagen is probably
+  // irrelevant tbh. It should rather just say what town it is located in or
+  // close to." Nobody picks a museum by how far it is from a city they may
+  // never pass through. The distance from the reader stays, because that is
+  // the 28 Sep request and it answers a real question; the place itself is
+  // said by attractionWhere below.
+  return "";
+};
+
+// ── WHICH TOWN IT IS IN, OR NEAR ────────────────────────────────────
+// The card names the town the row states. When the row also carries its own
+// coordinate and that sits more than TOWN_NEAR_KM from the town's centre, it says
+// "Near" instead: Ribe VikingeCenter is three kilometres out of Ribe, and a
+// family who walks from the cathedral expecting it round the corner has been
+// told something that is not true. No coordinate, no "Near": the stated town
+// is the only fact on hand, and it is said as stated.
+export const TOWN_NEAR_KM = 3;
+export const attractionWhere = (town, key, point) => {
+  const name = String(town || "").trim();
+  if (!name) return "";
+  const at = key ? TOWN_COORDS[key] : null;
+  if (!at || !point) return name;
+  return straightKm(at, [point.lat, point.lon]) > TOWN_NEAR_KM ? `Near ${name}` : name;
 };

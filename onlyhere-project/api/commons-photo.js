@@ -1,5 +1,6 @@
 import { fold } from "../src/utils/danishNames.js";
 import { readableAuthor } from "../src/utils/photoAuthor.js";
+import { COUNTRY_PROFILES, DEFAULT_COUNTRY } from "../src/utils/countries.js";
 // /api/commons-photo.js
 // ── Find a freely licensed photo on Wikimedia Commons, WITH its credit ──
 //
@@ -357,6 +358,12 @@ export default async function handler(req, res) {
     }
   }
   const { q, limit, article, category } = req.query;
+  // ── THE LOCAL WIKIPEDIA IS THE COUNTRY'S OWN ──────────────────────
+  // Phase 1 of LITHUANIA_PLAN_29SEP.md. A Klaipėda place has its best article
+  // on lt.wikipedia, the way a Danish one has it on da.wikipedia. No country,
+  // or an unknown one, is Denmark as before.
+  const land = COUNTRY_PROFILES[String(req.query.country || "").toUpperCase()] || COUNTRY_PROFILES[DEFAULT_COUNTRY];
+  const localWiki = `${land.wikiLanguage}.wikipedia.org`;
   if (!q || !String(q).trim()) return res.status(400).json({ error: "q required" });
 
   const term = String(q).trim();
@@ -372,7 +379,7 @@ export default async function handler(req, res) {
     // Danish first: a Danish place is likelier to have the better article there,
     // and its title is the better category guess.
     const [daTitle, enDirect] = await Promise.all([
-      resolveTitle("da.wikipedia.org", articleHint),
+      resolveTitle(localWiki, articleHint),
       resolveTitle("en.wikipedia.org", articleHint),
     ]);
     // ── A DANISH NAME IS OFTEN NOT AN ENGLISH TITLE AT ALL ──────────
@@ -403,7 +410,7 @@ export default async function handler(req, res) {
     // actually seen and judged worth putting on the page. The full-text search
     // is last because it is the only one with no idea what it is looking at.
     const queries = [
-      daTitle && { source: "Danish Wikipedia article", url: `https://da.wikipedia.org/w/api.php?format=json&formatversion=2&action=query&redirects=1&generator=images&titles=${encodeURIComponent(daTitle)}&gimlimit=${pool}&${IMAGEINFO}` },
+      daTitle && { source: `${land.adjective} Wikipedia article`, url: `https://${localWiki}/w/api.php?format=json&formatversion=2&action=query&redirects=1&generator=images&titles=${encodeURIComponent(daTitle)}&gimlimit=${pool}&${IMAGEINFO}` },
       enTitle && { source: "English Wikipedia article", url: `https://en.wikipedia.org/w/api.php?format=json&formatversion=2&action=query&redirects=1&generator=images&titles=${encodeURIComponent(enTitle)}&gimlimit=${pool}&${IMAGEINFO}` },
       ...catCandidates.map(c => ({ source: `Commons category "${c}"`, url: `https://commons.wikimedia.org/w/api.php?format=json&formatversion=2&action=query&generator=categorymembers&gcmtitle=${encodeURIComponent("Category:" + c)}&gcmtype=file&gcmlimit=${pool}&${IMAGEINFO}` })),
       { source: "Commons search", url: `https://commons.wikimedia.org/w/api.php?format=json&formatversion=2&action=query&generator=search&gsrnamespace=6&gsrlimit=${pool}&gsrsearch=${encodeURIComponent(term)}&${IMAGEINFO}`, isSearch: true },

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { activeCountry, DEFAULT_COUNTRY } from "../utils/countries";
 import { C } from "../utils/theme";
 import { getEventDate, travelLabel, isUpcoming, isCurrentlyLive, arrivalRow, externalHref, hasFinished, TRAVEL_ORIGIN } from "../utils/helpers";
 import { byEventDate } from "../utils/eventDates";
@@ -518,7 +519,9 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
             The second button only exists once something is saved, because an
             offer to plan a trip around nothing is the empty-checklist tone
             Oliver objected to. */}
-        {onToggleSave && (
+        {/* Not on another country's page yet: the trip it adds to is built by
+            the planner, which is Phase 3 of LITHUANIA_PLAN_29SEP.md. */}
+        {onToggleSave && activeCountry() === DEFAULT_COUNTRY && (
           <div style={{ marginBottom: 16 }}>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
               <button onClick={onToggleSave}

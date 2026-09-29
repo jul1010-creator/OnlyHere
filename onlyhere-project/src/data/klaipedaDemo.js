@@ -19,7 +19,10 @@
 // Sunday. Walking times are estimates and are the first thing the local
 // check should correct.
 
-export const KLAIPEDA_DEMO_PATH = "/lithuania/klaipeda";
+// Moved on 29 Sep 2026 from /lithuania/klaipeda, which is now Klaipėda's real
+// town page (Phase 2 of LITHUANIA_PLAN_29SEP.md). A literal path, so it wins
+// over the /lithuania/:townSlug route.
+export const KLAIPEDA_DEMO_PATH = "/lithuania/trips";
 export const CHECKED_ON = "2026-09-29";
 
 // ── OPENING HOURS AS RULES, SO THE PAGE CAN ANSWER FOR A DAY ─────────

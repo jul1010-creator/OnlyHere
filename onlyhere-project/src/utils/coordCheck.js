@@ -38,7 +38,8 @@
 // payload: no model, no API, no cost, same answer every run. Same discipline as
 // entryAudit, which is where these findings surface.
 
-import { isInDenmark, haversineKm } from "./helpers";
+import { haversineKm } from "./helpers";
+import { countryProfile, rowCountry, isInCountry } from "./countries";
 import { TOWN_COORDS } from "../data/towns";
 import { townKeyFor, MAX_TOWN_KM, ODD_TOWN_KM } from "./guideEnrichment";
 
@@ -131,8 +132,15 @@ export const coordProblems = (payload, type = "") => {
   // The check that never existed. isInDenmark has been in helpers since the
   // beginning and was applied only to the browser's own location, never once to
   // a coordinate that reaches a reader.
-  if (!isInDenmark(c)) {
-    out.push({ severity: "critical", kind: "outside-denmark", detail: `Stored at ${c.lat.toFixed(3)}, ${c.lon.toFixed(3)}, which is outside Denmark. A model that does not know a place tends to answer with a plausible-looking number rather than nothing.` });
+  //
+  // ── AGAINST THE ROW'S OWN COUNTRY ────────────────────────────────
+  // Phase 1 of LITHUANIA_PLAN_29SEP.md. A Klaipėda museum is outside Denmark
+  // by being right, so the box is the one for the country the row names. A row
+  // with no country is Danish and is checked exactly as before, with the same
+  // kind and the same sentence.
+  const land = countryProfile(rowCountry(payload));
+  if (!isInCountry(c, land.code)) {
+    out.push({ severity: "critical", kind: "outside-denmark", detail: `Stored at ${c.lat.toFixed(3)}, ${c.lon.toFixed(3)}, which is outside ${land.name}. A model that does not know a place tends to answer with a plausible-looking number rather than nothing.` });
     return out;
   }
 

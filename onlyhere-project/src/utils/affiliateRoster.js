@@ -117,7 +117,7 @@ const ROSTER = [
     sells: "Places to stay",
     // The number is read rather than written, so a city added to the catalogue
     // changes this sentence without anybody editing it.
-    why: `A second price to compare on stays. It reaches ${TRIPCOM_CITIES.length} Danish cities and no more: a town they have no listing for shows no Trip.com link at all, rather than sending you to the nearest big city.`,
+    why: `A second price to compare on stays. It reaches ${TRIPCOM_CITIES.filter(c => !c.country).length} Danish cities and Klaipėda and no more: a town they have no listing for shows no Trip.com link at all, rather than sending you to the nearest big city.`,
     live: tripcomActive,
   },
   {

@@ -62,4 +62,11 @@ export const TRIPCOM_CITIES = [
   // airport's.
   { name: "Kastrup",        slug: "kastrup",        id: 38038 },
   { name: "Aarhus C",       slug: "aarhus-c",       id: 112234 },
+  // ── AND KLAIPĖDA, THE FIRST TOWN OUTSIDE DENMARK ──────────────────
+  // 29 Sep 2026, Phase 2 of LITHUANIA_PLAN_29SEP.md. Trip.com's own list for
+  // the city is trip.com/hotels/klaipeda-hotels-list-38977. Written twice so a
+  // reader who types it without the ė still matches. Quoted in euros, which is
+  // what every price on a Lithuanian page is in.
+  { name: "Klaipėda",       slug: "klaipeda",       id: 38977, country: "LT", currency: "EUR" },
+  { name: "Klaipeda",       slug: "klaipeda",       id: 38977, country: "LT", currency: "EUR" },
 ];

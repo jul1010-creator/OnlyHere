@@ -85,7 +85,7 @@ writeFileSync(entry, `
   export { PLACE_THEMES, THEME_LABEL, THEME_EMOJI, cleanThemes, themesOf, hasTheme, themesPresent, tierOf, tierLabel, MAX_THEMES, distinctThemes } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { tierBadge, TIER_TONE } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { withoutNonModes, travelModeKey as travelModeKeyForTest } from ${JSON.stringify(join(root, "src/utils/routeOrder.js"))};
-  export { travelLabel, isAtTravelOrigin, ORIGIN_TAIL, TRAVEL_ORIGIN as TRAVEL_ORIGIN_NAME, dotJoin, isFullPlanText, isReadyToBuild, stripReadyMarker, READY_MARKER, stripMarkdown, getEventDate, hasFinished, externalHref, isUpcoming, isCurrentlyLive, isConfirmedUpcoming, hasConfirmedDate, isOnOrUpcoming, soonestFirst, daysUntil, priceBand, priceBandLabel, PRICE_BANDS, storeKindOf } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
+  export { travelLabel, isAtTravelOrigin, ORIGIN_TAIL, TRAVEL_ORIGIN as TRAVEL_ORIGIN_NAME, dotJoin, isFullPlanText, isReadyToBuild, stripReadyMarker, READY_MARKER, stripMarkdown, getEventDate, hasFinished, externalHref, isUpcoming, isCurrentlyLive, isConfirmedUpcoming, hasConfirmedDate, isOnOrUpcoming, soonestFirst, daysUntil, priceBand, priceBandLabel, PRICE_BANDS, priceBandsFor, EURO_PRICE_BANDS, EURO_BAND_CUTS, DKK_PER_EUR, storeKindOf } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { fillerWordCounts, FILLER_WORDS, FILLER_WORDS_OTHER, FILLER_TRIMMED, FILLER_ADJECTIVES, FILLER_COUNTED, FILLER_REPEAT, AI_TELL_PHRASES } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { arrivalRow, transitDepartureAnchor, departureParam, HOUR_OF, scanForAITells, seededShuffle } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { auditEntry, auditAll, priceLabel } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
@@ -136,6 +136,8 @@ writeFileSync(entry, `
   export { withoutCorrectionLead, directAnswers, askedBeforeTurns, lastAskedOnScreen, isRefusal, looksLikePlaceAnswer, daysAnswer, transportAnswer, stayAnswer, partyAnswer, partyLine, widestMode, isKnownPlace } from ${JSON.stringify(join(root, "src/utils/directAnswer.js"))};
   export { readableOn, contrastRatio, overlay, parseHex, luminance, READABLE_MIN, MAX_INK_SATURATION, PILL_ALPHA } from ${JSON.stringify(join(root, "src/utils/readableColor.js"))};
   export { journeyOriginFor, showsJourney, journeyOriginForKind, showsJourneyForKind, showsTicketForKind, KINDS_WITH_A_DOOR, KIND_OF_DOORED_TYPE, TYPES_WITH_A_JOURNEY, TYPES_WITHOUT_A_JOURNEY, TYPES_MEASURED_FROM_THE_ORIGIN, TYPES_MEASURED_FROM_THEIR_TOWN, journeyOriginPoint, IS_THE_CENTRE_KM, TRAVEL_ORIGIN } from ${JSON.stringify(join(root, "src/utils/journeyScope.js"))};
+  export { WEATHER_CITIES as MAP_WEATHER_CITIES, COUNTRY_MAPS, LT_SHAPES, ltProject } from ${JSON.stringify(join(root, "src/data/mapShapes.js"))};
+  export { tripcomStayUrl, tripcomCity } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
   export { studioPrompts } from ${JSON.stringify(join(root, "src/utils/studioPrompts.js"))};
   export { looksLikeTransit, kindFromName, findRealNearestStop, hasTransitType, geocodePostcode, geocodeIsASettlement, LONG_WALK_MINUTES } from ${JSON.stringify(join(root, "src/utils/geo.js"))};
   export { licenseIsUsable, distinctiveToken, mentionsSubject, looksHistorical, pickDescription, bestCaption } from ${JSON.stringify(join(root, "api/commons-photo.js"))};
@@ -372,6 +374,7 @@ writeFileSync(entry, `
   export { denmarkClock, sunElevation, isNightThere, SUNSET_ELEVATION } from ${JSON.stringify(join(root, "src/utils/denmarkTime.js"))};
   export { weatherIcon } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { readTheDay, skyFor } from ${JSON.stringify(join(root, "src/components/WeatherHeaderStrip.jsx"))};
+  export { COUNTRY_PROFILES, DEFAULT_COUNTRY, countryProfile, rowCountry, countryFromPath, activeCountry, isInCountry, setWorkingCountry, workingCountry, workingProfile, countryParam, homePath } from ${JSON.stringify(join(root, "src/utils/countries.js"))};
   export { shapeForLive, madeHeading, isPublisherNote, PUBLISHER_NOTE, cleanCredit } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
   export { longestEcho, echoWords, isNameEcho, echoInDraft, describeEcho, ECHO_RUN } from ${JSON.stringify(join(root, "src/utils/echoCheck.js"))};
   export { CHOICE_LIMIT, cleanCandidates, sameSubject, sameCandidate, needsChoosing, choicesFor, describeChoosing, applyChoice, choiceNote, subjectCore, listingMatchesSubject, streetListingMatches, describeListingRefusal } from ${JSON.stringify(join(root, "src/utils/placeChoice.js"))};
@@ -387,7 +390,7 @@ writeFileSync(entry, `
   export { classifyTiqetsText, productTitles, placeWords, titleKind, cleanTicketOffer, offerSellsTheDoor, ticketOfferLine, TICKET_OFFER_KINDS, refundAndWords, entryProductUrl, withProductRefund, tiqetsReason, partnerReason, partnerPitchFits, officialSiteLabel, classifyGetYourGuideText, readTicketCheck, mergeTicketCheck, ticketCheckPrompt, offerIsTheDoor, sameLink } from ${JSON.stringify(join(root, "src/utils/ticketOffer.js"))};
   export { shortLabel, LABEL_MAX } from ${JSON.stringify(join(root, "src/utils/cardLine.js"))};
   export { tierRank } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
-  export { distanceLine } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
+  export { distanceLine, attractionWhere, isInDenmark } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { preferenceRowState, PREF_NO_ACCOUNT, PREF_NO_INTERESTS, PREF_READY, eventsForYou, EVENTS_FOR_YOU_MAX, attractionIs, ATTRACTION_CATEGORIES } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
   export { savableThread, restorableThread, saveThread, loadThread, clearThread, CHAT_KEY, MAX_SAVED_MESSAGES } from ${JSON.stringify(join(root, "src/utils/chatThread.js"))};
   export { affiliateRoster, payingCount, AFFILIATES_PATH, partnerAdsPendingRow } from ${JSON.stringify(join(root, "src/utils/affiliateRoster.js"))};
@@ -6130,7 +6133,10 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // nothing calls.
   ok("the endpoint attaches a caption to every candidate", /caption: bestCaption\(m\.ObjectName\?\.value, m\.ImageDescription\?\.value, title\),/.test(api));
   const artQueries = api.match(/wikipedia\.org\/w\/api\.php[^`]*generator=images/g) || [];
-  is("both article lookups exist", artQueries.length, 2);
+  // Batch 159: the local Wikipedia is the country's own (lt for Lithuania), so
+  // the address is built from localWiki rather than written as da.wikipedia.
+  const localArt = api.match(/https:\/\/\$\{localWiki\}\/w\/api\.php[^`]*generator=images/g) || [];
+  is("both article lookups exist", artQueries.length + localArt.length, 2);
   ok("and BOTH follow redirects, which is why 'Amalienborg Slot' found nothing",
      artQueries.every(u => /redirects=1/.test(u)));
   // The resolved article title becomes the category guess. One mechanism, both
@@ -6296,8 +6302,11 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // this bug, so the sites that are NOT towns have to say so out loud.
   ok("the event card passes the measured origin",
      /travelLabel\(userCoords, event\.town, event\.travelTime, event\.__journey\?\.from \|\| ""\)/.test(app));
-  ok("the craft row passes it too",
-     /travelLabel\(userCoords, item\.location, item\.travelTime, item\.__journey\?\.from \|\| ""\)/.test(app));
+  // Batch 157: the craft card no longer prints a travel time at all. Oliver,
+  // 29 Sep 2026: an attraction card says which town it is in, and how far from
+  // the reader when they are in Denmark, never a figure from somewhere else.
+  ok("the craft row names its town rather than a travel time",
+     !/travelLabel\(userCoords, item\.location/.test(app) && /const town = item\._kind === "craft" \? item\.location : item\.city;/.test(app));
   ok("and the detail page reads it off journeyScope rather than assuming",
      /journeyOriginForKind\(kind\) === "origin"[\s\S]{0,120}__journey\?\.from/.test(detail));
 }
@@ -7879,7 +7888,8 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // starts from the same name reproduces the same wrong stop.
   ok("the row's own coordinate is not reused", /const knownCoord = askedAgain \? null : placeCoords\(knownRow \|\| \{\}\);/.test(app));
   ok("the place he named is geocoded first",
-     /if \(!coords && askedAgain\) \{/.test(app) && /geocodePlace\(`\$\{askedAgain\.from\}, Denmark`\)/.test(app));
+     // Batch 159: a Danish draft keeps the exact string; a Lithuanian one sends the name.
+     /if \(!coords && askedAgain\) \{/.test(app) && /geocodePlace\(draftInDenmark \? `\$\{askedAgain\.from\}, Denmark` : askedAgain\.from\)/.test(app));
   ok("and the log says a re-measure was asked for", /note\("A re-measure was asked for"/.test(app));
 
   // ── THE PANEL SAYS WHAT IT DID ───────────────────────────────────
@@ -13866,7 +13876,8 @@ is("missing licence does not require credit", creditIsRequired({}), false);
       is(`every ${t} query is about a street in a named town`,
          perType[t].filter(q => !q.includes("${subject}")), []);
       is(`and every ${t} query says which country`,
-         perType[t].filter(q => !/Denmark|Danmark/.test(q)), []);
+         // Batch 159: the draft's country, which is Denmark for a Danish draft.
+         perType[t].filter(q => !/Denmark|Danmark|\$\{draftLand\.name\}/.test(q)), []);
     });
     // And the subject is only substituted where the name genuinely is not an
     // identity: appending a town to "Ribe" would search for "Ribe Ribe".
@@ -13877,9 +13888,10 @@ is("missing licence does not require credit", creditIsRequired({}), false);
        /const subject = NAME_IS_NOT_A_PLACE\.includes\(sType\) && draftTown\s*\?\s*`\$\{name\} \$\{draftTown\}`\s*:\s*name;/.test(app));
     // The planner writes queries too, and it was told the bare name.
     ok("the query planner is told the town as well",
-       /Planning research for a Danish travel guide entry: "\$\{subject\}"/.test(app));
+       // Batch 159: the draft's country adjective, "Danish" for a Danish draft.
+       /Planning research for a \$\{draftLand\.adjective\} travel guide entry: "\$\{subject\}"/.test(app));
     ok("and told plainly why, so it keeps the town in what it writes",
-       /a street name alone is ambiguous in Denmark, so every query you write must keep the town in it/.test(app));
+       /a street name alone is ambiguous in \$\{draftLand\.name\}, so every query you write must keep the town in it/.test(app));
   }
 
   // ── AND THE PRE-CHECK ASKS EACH TYPE ITS OWN QUESTION ─────────────
@@ -13903,7 +13915,8 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     // The fallthrough is what everything else lands on, and it must not invent
     // a season for a place that has none.
     ok("the fallthrough asks for facts, not for a lineup",
-       /find accurate, current, checkable facts about "\$\{subject\}" in Denmark/.test(pre));
+       // Batch 159: in the draft's country.
+       /find accurate, current, checkable facts about "\$\{subject\}" in \$\{draftLand\.name\}/.test(pre));
     ok("and says plainly not to invent a season",
        /if it is not, do not invent a season for it/.test(pre));
     // A street gets its own question, in its own town.
@@ -15800,7 +15813,8 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // Denmark is not given a second one.
   ok("a coordinate pair still gets no country hint", /if \(isCoordPair\(t\)\) return t;/.test(dir));
   ok("and text already ending in Denmark is not given it twice",
-     /return \/,\\s\*denmark\\s\*\$\/i\.test\(t\) \? t : `\$\{t\}, Denmark`;/.test(dir));
+     // Batch 159: the country is the one asked for, Denmark by default.
+     /return new RegExp\(`,\\\\s\*\$\{land\.name\}\\\\s\*\$`, "i"\)\.test\(t\) \? t : `\$\{t\}, \$\{land\.name\}`;/.test(dir) && /COUNTRY_PROFILES\[DEFAULT_COUNTRY\];/.test(dir));
   ok("both ends go through the one helper",
      /const originParam = withCountry\(origin\);/.test(dir) && /const destinationParam = withCountry\(destination\);/.test(dir));
 }
@@ -17226,7 +17240,8 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // alone survives the whole block being switched off, which has caught this
   // suite five times now.
   ok("festivals, and only festivals, are looked up",
-     /if \(sType === "festival"\) \{[\s\S]{0,400}await studioFetch\(`\/api\/tickets\?name=/.test(app6));
+     // Batch 159: and only in Denmark, since Ticketmaster sells nothing in Lithuania.
+     /if \(sType === "festival" && draftInDenmark\) \{[\s\S]{0,400}await studioFetch\(`\/api\/tickets\?name=/.test(app6));
   // ── PINNED TO THE DATE, NOT TO THE ARGUMENT LIST ─────────────────
   // The rule is that the late match uses the date the DRAFT produced rather
   // than the one the search started with. Adding the city beside it on 31 Aug
@@ -22028,7 +22043,8 @@ rmSync(dir, { recursive: true, force: true });
   const appR = readFileSync(join(root, "src/App.jsx"), "utf8");
   const iPlaced = appR.indexOf("let placed = null;");
   const iSources = appR.indexOf("const searches = directSourceSearches(");
-  const iResearch = appR.indexOf("Planning research for a Danish travel guide entry");
+  // Batch 159: the planner names the draft's country.
+  const iResearch = appR.indexOf("Planning research for a ${draftLand.adjective} travel guide entry");
   ok("the location lookup exists", iPlaced > 0);
   ok("and runs before the founder sources are chosen", iPlaced < iSources);
   ok("and before the research is even planned", iPlaced < iResearch);
@@ -22257,7 +22273,8 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // sources are chosen, because otherwise the region it finds scopes nothing.
   // Placing it after the draft would have been easier and fixed nothing.
   ok("and runs before the founder sources are chosen", iSecond < iChosen);
-  ok("only when the first attempt failed", /if \(!placed\) \{\s*\n\s*try \{\s*\n\s*const found = danishAddressIn\(context\);/.test(appO));
+  // Batch 159: and only in Denmark, since the postcodes it reads are Danish.
+  ok("only when the first attempt failed", /if \(!placed\) \{\s*\n\s*try \{[\s\S]{0,400}const found = draftInDenmark \? danishAddressIn\(context\) : null;/.test(appO));
   ok("a town-centre answer from a postcode is not called precise",
      /fromVenue = false;/.test(appO));
   ok("the run log names the address and how often it appeared",
@@ -36124,7 +36141,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // here, Cancel left somebody moved off the screen they said they wanted to
     // stay on.
     ok("cancelling does not still move them off the page",
-       /onSignOut=\{async \(\) => \{ if \(await handleSignOut\(\)\) navigate\("\/"\); \}\}/.test(appO));
+       // Batch 160: home is HOME_PATH, "/" on every Danish page.
+       /onSignOut=\{async \(\) => \{ if \(await handleSignOut\(\)\) navigate\(HOME_PATH\); \}\}/.test(appO));
     ok("and the function says whether it went ahead", /\n    return true;\n  \};/.test(out + "\n"));
   }
 
@@ -54616,7 +54634,10 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       /entryPrice\(item\)\.free === true/.test(ab));
     ok("and it never tests the bucket itself", !/_kind|_src/.test(ab));
     const av = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
-    ok("and the card chip asks it too", /entryPrice\(item\)\.free === true \? "#4CAF50"/.test(av));
+    // Batch 157: the kind chip left the picture for the tier badge, as on a
+    // town card, so nothing colours a category any more; Free is said by the
+    // price slot below, off the row's words.
+    ok("and the card no longer colours the category at all", !/entryKindLabel\(item\._kind, item\.type\)\}\s*<\/span>/.test(av));
     ok("and the card price slot reads the row's words", /item\._kind === "free" \? priceChip\(item\)/.test(av));
   }
 
@@ -61913,7 +61934,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 
   ok("no traveller is told an entry was not told which place",
      !/Marked as an area, but not told which place/.test(appA));
-  ok("they get a heading about places instead", /: "Elsewhere in Denmark"/.test(appA));
+  // Batch 160: the page's country, Denmark on every Danish page.
+  ok("they get a heading about places instead", /: `Elsewhere in \$\{PAGE_LAND\.name\}`/.test(appA));
   ok("and the card says what kind of thing it is, not which field is empty",
      !/\$\{kindLabel\(town\)\} · no parent set/.test(appA)
      && /parent \? `\$\{kindLabel\(town\)\} in \$\{parent\}` : kindLabel\(town\)/.test(appA));
@@ -63926,9 +63948,10 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // for Tivoli on Tiqets or Ticketmaster", which reads like a search and was
   // not one: every ticket step vets pages the run happened to READ. ticketQueries
   // had been written and tested since 15 August and called from nowhere.
-  ok("the agent search is wired at last", /for \(const q of ticketQueries\(name, draftTown\)\)/.test(appT));
+  // Batch 159: Tiqets and Ticketmaster are asked only for a Danish draft.
+  ok("the agent search is wired at last", /for \(const q of \(draftInDenmark \? ticketQueries\(name, draftTown\) : \[\]\)\)/.test(appT));
   ok("and it runs outside the gate, which is synchronous and runs twice",
-     appT.indexOf('const dc = gateDraft("first");') < appT.indexOf("for (const q of ticketQueries("));
+     appT.indexOf('const dc = gateDraft("first");') < appT.indexOf("for (const q of (draftInDenmark ? ticketQueries("));
   // ONLY WHEN THE PAGES IN HAND CAME UP EMPTY, which is what makes the cost
   // defensible: a draft that already has a link pays nothing.
   ok("it only runs when nothing else found a link",
@@ -69292,7 +69315,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     // lands on Google's point for the building where that one lands on the
     // middle of a postal district.
     ok("and runs before the postcode tier",
-       appS.indexOf("Where this place is, the venue") < appS.indexOf("const found = danishAddressIn(context);"));
+       appS.indexOf("Where this place is, the venue") < appS.indexOf("const found = draftInDenmark ? danishAddressIn(context) : null;"));
     // Pass one keeps the listing now, not only a sentence about it.
     ok("pass one keeps the listing it refused", /refusedListing = \{ name: String\(pd\.name\)\.trim\(\)/.test(appS));
     ok("and keeps the name, never the address", !/refusedListing = \{ name: String\(pd\.name \|\| pd\.address\)/.test(appS));
@@ -69398,7 +69421,8 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     ok("and says nothing while the front door is up", /!entered \|\| openEntryNow/.test(writer));
     // A shared #events link has to open Events, not the front door with Events
     // waiting behind it. Same call the deep-link effect makes for an entry.
-    ok("a shared page link goes to the page", /if \(tabForHash\(window\.location\.hash\)\) setEntered\(true\);/.test(writer));
+    // Batch 160: and another country's page, which has no front door yet.
+    ok("a shared page link goes to the page", /if \(tabForHash\(window\.location\.hash\) \|\| PAGE_ABROAD\) setEntered\(true\);/.test(writer));
     ok("once, on arrival, not every time Explore is pressed", /tabLinkDone\.current/.test(writer));
     // DECLARED BELOW `entered`. A dependency array is evaluated where it is
     // written, and reading that const from higher up took the whole front page
@@ -71927,7 +71951,8 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   // ── SENT BEFORE THE ACCOUNT GOES, OR IT IS NEVER SENT ───────────
   // A moment later the rows are gone, the login is gone and the person is on
   // the home screen.
-  ok("the reason goes first", appD.indexOf("sendDeleteReason(answer);") < appD.indexOf("navigate(\"/\");\n          handleDeleteAccount();"));
+  // Batch 160: home is HOME_PATH.
+  ok("the reason goes first", appD.indexOf("sendDeleteReason(answer);") < appD.indexOf("navigate(HOME_PATH);\n          handleDeleteAccount();"));
   ok("and the sheet is shut before either", appD.indexOf("setDeleteAsk(false);\n          sendDeleteReason") >= 0);
 
   // ── THE SHEET ITSELF ────────────────────────────────────────────
@@ -79495,7 +79520,8 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const oneWet = { a: { condition: "rain", temperature_c: 12 }, b: { condition: "cloudy", temperature_c: 13 }, c: { condition: "cloudy", temperature_c: 13 } };
   ok("rain after dark is tonight's", /Rain around A tonight\./.test(M.readTheDay(oneWet, three, { night: true }).line) && /Rain around A today\./.test(M.readTheDay(oneWet, three).line));
   const app = readFileSync(join(root, "src/App.jsx"), "utf8");
-  ok("the front page shows the time in Denmark", /Today in Denmark <span style=\{\{ color: C\.muted \}\}>·<\/span> <DenmarkClock/.test(app));
+  // Batch 160: in the page's country, Denmark on every Danish page.
+  ok("the front page shows the time in Denmark", /Today in \{PAGE_LAND\.name\} <span style=\{\{ color: C\.muted \}\}>·<\/span> <DenmarkClock/.test(app));
   const strip = readFileSync(join(root, "src/components/WeatherHeaderStrip.jsx"), "utf8");
   ok("every card reads the sun", /const night = isNightThere\(\{ condition: ready \? d\.condition : "", lat: c\.lat, lon: c\.lon, date: now \}\);/.test(strip)
      && /weatherIcon\(d\.condition, night\)/.test(strip) && /const sky = skyFor\(ready \? d\.condition : null, night\);/.test(strip));
@@ -79556,8 +79582,9 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const page = app.slice(start, app.indexOf('<div className="towns-grid">', app.indexOf("setTownFiltersOpen(o => !o)", start)));
   const panelAt = page.indexOf("{townFiltersOpen && (() => {");
   const searchAt = page.indexOf("placeholder={uiT(\"search.towns\", uiLang)}");
-  ok("the location pills are inside the panel", /<Row title="Where">[\s\S]{0,400}label: "All of Denmark"[\s\S]{0,300}setTownPart\(/.test(page.slice(panelAt)));
-  ok("and nowhere outside it", page.slice(0, panelAt).indexOf("All of Denmark") === -1);
+  // Batch 160: "All of" the page's country.
+  ok("the location pills are inside the panel", /<Row title="Where">[\s\S]{0,400}label: `All of \$\{PAGE_LAND\.name\}`[\s\S]{0,300}setTownPart\(/.test(page.slice(panelAt)));
+  ok("and nowhere outside it", page.slice(0, panelAt).indexOf("All of ${PAGE_LAND.name}") === -1);
   ok("the panel comes straight after the search bar", searchAt > 0 && panelAt > searchAt && !/<Pill/.test(page.slice(searchAt, panelAt)));
   ok("Where is the panel's first row", page.indexOf('<Row title="Where">', panelAt) < page.indexOf('<Row title="What it is for">', panelAt));
   ok("and counted with every other filter but itself", /const nWithPart = \(p\) => towns\.filter\(t => townSearchOk\(t\) && townKindOk\(t\) && townSizeOk\(t\) && townThemeOk\(t\) && townIslandOk\(t\) && \(!p \|\| partOfCountry\(t\) === p\)\)\.length;/.test(page));
@@ -79965,17 +79992,20 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   // How far, on an attraction card.
   const inCph = { lat: 55.68, lon: 12.57 };
   ok("in Denmark, the distance is from you", /^~\d+ km from you$/.test(M.distanceLine(inCph, "Odense")) && Math.abs(parseInt(M.distanceLine(inCph, "Odense").slice(1)) - 136) < 15);
-  is("abroad, it is from Copenhagen", M.distanceLine(null, "Odense").endsWith("km from CPH"), true);
-  is("and a place in Copenhagen says nothing from CPH", M.distanceLine(null, "Copenhagen"), "");
+  // Batch 157: "attractions' distance from Copenhagen is probably irrelevant".
+  // Abroad, the card says which town instead, so the line is empty.
+  is("abroad, it says nothing rather than a distance from Copenhagen", M.distanceLine(null, "Odense"), "");
+  is("and a place in Copenhagen says nothing either", M.distanceLine(null, "Copenhagen"), "");
   is("an unknown town says nothing", M.distanceLine(inCph, "Nowhere"), "");
-  ok("attraction cards show it", /distanceLine\(userCoords, townKeyFor\(item\.city \|\| item\.location \|\| ""\)\)/.test(app));
+  // Batch 157: the town key is found once and shared with the town line.
+  ok("attraction cards show it", /distanceLine\(userCoords, key\)/.test(app) && /const key = townKeyFor\(town \|\| ""\);/.test(app));
 
   // A wrong address lands on its list with a note, not on a blank page.
   ok("an unknown entry or town goes to its list", /const missingEntry = \(tab\) => \{/.test(app) && /That page could not be found, so here is the list it belongs to\./.test(app) && /missingEntry\("visits"\)/.test(app) && /missingEntry\(\(\{ event: "events", free: "attractions", craft: "attractions"/.test(app));
   ok("only once the library has loaded", /!found && liveLoaded && !libraryFailed/.test(app));
 
   // Shopping is hidden while there is nothing in it.
-  ok("an empty Shopping tab leaves the nav and the pager", /const hideShopping = liveLoaded && !libraryFailed && !isStudio && shops\.length === 0 && shopPlaces\.length === 0;/.test(app) && /const TAB_ORDER = TAB_ORDER_ALL\.filter\(t => !\(t === "shopping" && hideShopping\)\);/.test(app) && /\.filter\(item => TAB_ORDER\.includes\(item\.id\)\)/.test(app));
+  ok("an empty Shopping tab leaves the nav and the pager", /const hideShopping = liveLoaded && !libraryFailed && !isStudio && shops\.length === 0 && shopPlaces\.length === 0;/.test(app) && /const TAB_ORDER = TAB_ORDER_ALL\.filter\(t => !\(t === "shopping" && hideShopping\) && !hideAbroad\(t\)\);/.test(app) && /\.filter\(item => TAB_ORDER\.includes\(item\.id\)\)/.test(app));
 
   // One search and one filter panel, on every list that has either.
   ok("the filter bar takes a search box and one Filters button", /onSearch/.test(bar) && /searchPlaceholder/.test(bar) && /Filters/.test(bar) && /const Chip = /.test(bar));
@@ -80267,8 +80297,151 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("no dash and none of his banned words anywhere on it", !/[—–]/.test(words) && !/\b(actually|genuine|genuinely|truly|simply)\b/i.test(words));
   ok("prices are euros, never kroner", !/DKK|\bkr\b/.test(JSON.stringify(M.KLP_PLACES)));
   const app = readFileSync(join(root, "src/App.jsx"), "utf8");
-  ok("it has an address, and nothing links to it", M.KLAIPEDA_DEMO_PATH === "/lithuania/klaipeda" && /<Route path=\{KLAIPEDA_DEMO_PATH\} element=\{<KlaipedaDemo \/>\} \/>/.test(app) && (app.match(/KLAIPEDA_DEMO_PATH/g) || []).length === 2);
+  ok("it has an address, and nothing links to it", M.KLAIPEDA_DEMO_PATH === "/lithuania/trips" && /<Route path=\{KLAIPEDA_DEMO_PATH\} element=\{<KlaipedaDemo \/>\} \/>/.test(app) && (app.match(/KLAIPEDA_DEMO_PATH/g) || []).length === 2);
   ok("and it asks search engines to stay away", /noindex/.test(readFileSync(join(root, "src/pages/KlaipedaDemo.jsx"), "utf8")));
+}
+
+
+// ── Batch 157: an attraction card reads like a town card ──────────────
+// Oliver, 29 Sep 2026: "We need this map at attractions as well.. why is
+// located and tier completely ignored? And also, attractions' distance from
+// Copenhagen is probably irrelevant tbh. It should rather just say what town
+// it is located in or close to."
+{
+  const ribe = M.TOWN_COORDS.Ribe;
+  is("in the town when the coordinate sits in it", M.attractionWhere("Ribe", "Ribe", { lat: ribe[0] + 0.005, lon: ribe[1] }), "Ribe");
+  is("near the town when it sits further out than TOWN_NEAR_KM", M.attractionWhere("Ribe", "Ribe", { lat: ribe[0] - 0.05, lon: ribe[1] }), "Near Ribe");
+  is("no coordinate, the stated town as stated", M.attractionWhere("Ribe", "Ribe", null), "Ribe");
+  is("a town the table does not know is still named", M.attractionWhere("Møn", null, { lat: 55, lon: 12 }), "Møn");
+  is("and no town says nothing", M.attractionWhere("", "Ribe", null), "");
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const card = app.slice(app.indexOf("THE VERDICT AND THE MAP, AS ON A TOWN"), app.indexOf("THE VERDICT AND THE MAP, AS ON A TOWN") + 6000);
+  ok("the attraction card carries the tier badge on the picture", /tierBadge\(item\)/.test(card) && /b\.label/.test(card));
+  ok("and the map of Denmark in the top right corner, from its own point when it has one", /<DKLocator town=\{key \|\| item\.name\} point=\{pt \? \[pt\.lat, pt\.lon\] : null\}/.test(card) && /top: 8, right: 8, width: 68, height: 68/.test(card));
+  ok("the heart moved to the bottom corner to make room", /bottom: 8, right: 8, background: "rgba\(10,15,30,0\.75\)"/.test(card));
+  ok("the line under the name is kind, town, and distance from the reader", /dotJoin\(entryKindLabel\(item\._kind, item\.type\), attractionWhere\(town, key, placeCoords\(item\)\), distanceLine\(userCoords, key\), item\.priceNote\)/.test(card));
+  ok("and nothing on it measures from Copenhagen", !/from CPH|travelLabel\(/.test(card.slice(0, card.indexOf("Good for families"))));
+}
+
+
+// ── Batch 158: Phase 0 of LITHUANIA_PLAN_29SEP.md ────────────────────
+// Oliver, 29 Sep 2026: "the template that we have on Denmark, and put it onto
+// Klaipeda", then "Yes, we just need something I can present to my old
+// supervisor." The country becomes something the app knows, and Denmark does
+// not move an inch. Every older assertion in this file still passing is the
+// half of this block that matters most.
+{
+  ok("two countries, each with everything a later phase reads", ["DK", "LT"].every(c => { const p = M.COUNTRY_PROFILES[c]; return p && p.slug && p.name && p.currency && p.zone && p.bounds && p.googleLanguage && p.googleRegion && p.wikiLanguage; }));
+  is("Denmark is the default", [M.DEFAULT_COUNTRY, M.countryProfile("XX").code], ["DK", "DK"]);
+  is("a row with no country is Danish, as every row before today was", [M.rowCountry({}), M.rowCountry(null), M.rowCountry({ country: "" }), M.rowCountry({ country: "se" }), M.rowCountry({ country: "lt" })], ["DK", "DK", "DK", "DK", "LT"]);
+  is("only a Lithuanian address leaves Denmark", ["/", "/denmark/ribe", "/guide/abc", "/support", "/lithuania", "/lithuania/klaipeda", "/Lithuania/x", "/lithuanian"].map(M.countryFromPath), ["DK", "DK", "DK", "DK", "LT", "LT", "LT", "DK"]);
+  is("outside a browser it is Denmark", M.activeCountry(), "DK");
+  const klaipeda = { lat: 55.7033, lon: 21.1443 }, nida = { lat: 55.3033, lon: 20.9950 }, aalborg = { lat: 57.048, lon: 9.919 }, bornholm = { lat: 55.1, lon: 14.9 };
+  is("each point in its own country and not the other", [M.isInCountry(klaipeda, "LT"), M.isInCountry(nida, "LT"), M.isInCountry(klaipeda, "DK"), M.isInCountry(aalborg, "DK"), M.isInCountry(bornholm, "DK"), M.isInCountry(aalborg, "LT")], [true, true, false, true, true, false]);
+  is("and isInDenmark answers exactly as it did", [M.isInDenmark(aalborg), M.isInDenmark(klaipeda), !!M.isInDenmark(null), !!M.isInDenmark({ lat: 54.4, lon: 7.9 }), !!M.isInDenmark({ lat: 57.91, lon: 10 })], [true, false, false, true, false]);
+  is("a Klaipėda town is a reference point in Lithuania, and refused as a Danish one", [!!M.townFrame({ name: "Klaipėda", country: "LT", __lat: klaipeda.lat, __lon: klaipeda.lon }), !!M.townFrame({ name: "Klaipėda", __lat: klaipeda.lat, __lon: klaipeda.lon })], [true, false]);
+  const lt = M.shapeForLive("free", { name: "Castle Museum", city: "Klaipėda", desc: "x", country: "lt" });
+  const dk = M.shapeForLive("free", { name: "Aalborg Zoo", city: "Aalborg", desc: "x" });
+  const dkSaid = M.shapeForLive("free", { name: "Aalborg Zoo", city: "Aalborg", desc: "x", country: "DK" });
+  is("publishing keeps a Lithuanian row's country and adds none to a Danish row", [lt.country, "country" in dk, "country" in dkSaid], ["LT", false, false]);
+  const live = readFileSync(join(root, "src/utils/liveContent.js"), "utf8");
+  ok("the loader keeps only the page's own country", /const showing = activeCountry\(\);/.test(live) && /if \(rowCountry\(row\.payload\) !== showing\) \{[\s\S]{0,700}return;\s*\}/.test(live));
+  ok("and the country file imports nothing from the app", !/^import /m.test(readFileSync(join(root, "src/utils/countries.js"), "utf8")));
+}
+
+
+// ── Batch 159: Phase 1 of LITHUANIA_PLAN_29SEP.md, Studio drafts abroad ──
+// Oliver, 29 Sep 2026: "Aight... let's go, build!" A draft can be for
+// Lithuania, and everything it searches, looks up and asks names that country.
+// A Danish draft sends exactly what it sent before.
+{
+  is("no country parameter for Denmark, so every Danish URL is unchanged", [M.countryParam("DK"), M.countryParam("LT"), M.countryParam("XX"), M.countryParam()], ["", "&country=LT", "", ""]);
+  M.setWorkingCountry("LT");
+  const during = [M.workingCountry(), M.workingProfile().name, M.countryParam()];
+  M.setWorkingCountry(null);
+  is("a draft's country holds while it runs and clears after", [during, M.workingCountry()], [["LT", "Lithuania", "&country=LT"], "DK"]);
+  M.setWorkingCountry("ZZ");
+  is("and an unknown one is refused", M.workingCountry(), "DK");
+  M.setWorkingCountry(null);
+  is("each country has the place a visitor arrives", [M.COUNTRY_PROFILES.DK.hub, M.COUNTRY_PROFILES.LT.hub], ["Copenhagen", "Vilnius"]);
+
+  const dk1 = M.studioPrompts("Ribe"), dk2 = M.studioPrompts("Ribe", M.COUNTRY_PROFILES.DK), lt = M.studioPrompts("Castle Museum", M.COUNTRY_PROFILES.LT);
+  ok("a Danish draft's prompts are the same whether or not the country is passed", JSON.stringify(dk1) === JSON.stringify(dk2));
+  ok("and still say Denmark", /Ribe, Denmark/.test(dk1.town) && !/NOT DENMARK/.test(dk1.free));
+  ok("a Lithuanian draft says Lithuania, is told Danish facts stay Danish, and prices in euros",
+     Object.values(lt).every(v => v.startsWith("THIS ENTRY IS ABOUT A PLACE IN LITHUANIA, NOT DENMARK.")) && /Castle Museum, Lithuania/.test(lt.town) && /€6/.test(lt.free) && /which Lithuanian city/.test(lt.free));
+  ok("and the preamble carries no dash", !/[—–]/.test(lt.free.slice(0, 700)));
+
+  const kl = { lat: 55.707, lon: 21.127 };
+  const kinds = (p) => M.coordProblems(p, "free").map(x => x.kind);
+  is("a Klaipėda coordinate is right for a Lithuanian row and wrong for a Danish one",
+     [kinds({ name: "Castle Museum", city: "Klaipėda", country: "LT", __lat: kl.lat, __lon: kl.lon }).includes("outside-denmark"), kinds({ name: "Castle Museum", city: "Klaipėda", __lat: kl.lat, __lon: kl.lon }).includes("outside-denmark")],
+     [false, true]);
+  ok("and the Danish sentence is the one it always was", M.coordProblems({ name: "X", __lat: kl.lat, __lon: kl.lon }, "free")[0].detail.includes("which is outside Denmark."));
+  ok("and a Danish point on a Lithuanian row is caught the same way", M.coordProblems({ name: "X", country: "LT", __lat: 57.05, __lon: 9.92 }, "free")[0].detail.includes("outside Lithuania"));
+
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("a draft takes its country from the picker or the queue item", /const draftLand = countryProfile\(opts\?\.country \|\| studioCountry\);/.test(app) && /\{ queued: true, country: item\.country \}/.test(app) && /\{ name, type: studioType, country: studioCountry \}/.test(app));
+  ok("sets the working country at the start and clears it at the end", /setWorkingCountry\(draftLand\.code\);/.test(app) && /setWorkingCountry\(null\);\s*\n\s*setStudioStage\(null\);/.test(app));
+  ok("and writes the country onto a non-Danish draft", (app.match(/if \(t && typeof t === "object" && !draftInDenmark\) t\.country = draftLand\.code;/g) || []).length === 2);
+  ok("the writer is given the draft's country", /studioPrompts\(name, draftLand\)/.test(app));
+  ok("the Google lookups carry it", /\/api\/places-locate\?name=.*\$\{countryParam\(draftLand\.code\)\}`\);/.test(app) && /\/api\/places-hours\?name=.*\$\{countryParam\(draftLand\.code\)\}`\);/.test(app));
+  const S = app.indexOf("const generateArea = async"), E = app.indexOf("const addToDraftQueue = () =>");
+  const pipe = app.slice(S, E);
+  ok("no research query or prompt in the draft names Denmark outright any more",
+     !/`[^`]*\$\{(name|subject)\} Denmark/.test(pipe) && !/in Denmark[,.]/.test(pipe.replace(/\/\/.*$/gm, "")) && !/r\/Denmark/.test(pipe));
+  ok("Studio shows a country picker", /Object\.values\(COUNTRY_PROFILES\)\.map\(c => \(/.test(app) && />Country</.test(app));
+
+  const loc = readFileSync(join(root, "api/places-locate.js"), "utf8"), hrs = readFileSync(join(root, "api/places-hours.js"), "utf8"), dir = readFileSync(join(root, "api/directions.js"), "utf8"), pho = readFileSync(join(root, "api/commons-photo.js"), "utf8");
+  ok("every Google route reads a known country or falls back to Denmark", [loc, hrs, dir].every(f => /COUNTRY_PROFILES\[String\(req\.query\.country \|\| ""\)\.toUpperCase\(\)\] \|\| COUNTRY_PROFILES\[DEFAULT_COUNTRY\]/.test(f)));
+  ok("places-locate asks Google in the country's language and region", /languageCode: land\.googleLanguage, regionCode: land\.googleRegion/.test(loc));
+  ok("and reads a Lithuanian postcode as well as a Danish one", /\/\^\(\?:\[A-Z\]\{2\}-\)\?\\d\{4,5\}\\s\+\(\.\+\)\$\//.test(loc));
+  ok("photos come from the country's own Wikipedia", /const localWiki = `\$\{land\.wikiLanguage\}\.wikipedia\.org`;/.test(pho));
+  ok("the geocoder asks in the working country", /const land = workingProfile\(\);/.test(readFileSync(join(root, "src/utils/geo.js"), "utf8")));
+}
+
+
+// ── Batch 159, part two: euros and the clock ───────────────────────────
+{
+  is("a euro line reads in euros, cents and all", [M.familyChip("Adults €6, children €3, under 7 free"), M.familyChip("Adults €6 · students, pupils and seniors €3"), M.familyChip("Adults 8 EUR, children 4 EUR")], ["Adults €6 · kids €3 · under 7 free", "Adults €6", "Adults €8 · kids €4"]);
+  is("and a Danish line reads exactly as before", [M.familyChip("Adults (18+): 190 DKK. Children 3 to 11: 95 DKK. Under 3 free."), M.familyChip("Voksne 125 kr, børn 60 kr, studerende 80 kr, pensionister 100 kr.")], ["Adults 190 · kids 95 kr · under 3 free", "Adults 125 · kids 60 kr"]);
+  is("euro prices band on euro cuts", [M.priceBand("Mains €8 to €14"), M.priceBand("€12 to €30"), M.priceBand("€25 to €40"), M.priceBand("Mains 10 EUR")], ["under-100", "100-250", "over-250", "under-100"]);
+  is("kroner still band on kroner", [M.priceBand("795 DKK"), M.priceBand("50 to 450 DKK"), M.priceBand("85 kr")], ["over-250", "100-250", "under-100"]);
+  is("and the Lithuanian bands say euros under the same ids", M.priceBandsFor("EUR").map(b => `${b.id}:${b.label}`), ["under-100:Under €12", "100-250:€12 to €30", "over-250:Over €30"]);
+  ok("while Danish ones are untouched", M.priceBandsFor("DKK") === M.PRICE_BANDS && M.PRICE_BANDS[0].label === "Under 100 kr");
+  const noon = new Date("2026-09-29T10:00:00Z");
+  is("the clock is Copenhagen's by default and Vilnius's when asked", [M.denmarkClock(noon), M.denmarkClock(noon, "Europe/Vilnius")], ["12:00", "13:00"]);
+}
+
+
+// ── Batch 160: Phase 2 of LITHUANIA_PLAN_29SEP.md, the Lithuania pages ──
+// The same app at /lithuania, showing only Lithuanian rows, with Denmark's
+// pages exactly as they were.
+{
+  is("home is / for Denmark and the slug for Lithuania", [M.homePath("DK"), M.homePath("LT"), M.homePath("XX"), M.homePath()], ["/", "/lithuania", "/", "/"]);
+  is("outside a browser the page country is Denmark, so the address segment is too", M.COUNTRY, "denmark");
+  ok("and the segment is read from the page's country", /export const COUNTRY = countryProfile\(activeCountry\(\)\)\.slug;/.test(readFileSync(join(root, "src/utils/placeUrl.js"), "utf8")));
+  is("Denmark keeps its four weather cities", M.MAP_WEATHER_CITIES.map(c => c.key), ["copenhagen", "aarhus", "aalborg", "odense"]);
+  ok("both countries have a card map", ["DK", "LT"].every(c => M.COUNTRY_MAPS[c]?.paths?.length && typeof M.COUNTRY_MAPS[c].project === "function" && M.COUNTRY_MAPS[c].viewBox));
+  const [x, y] = M.ltProject(55.7033, 21.1443);
+  const [, , vw, vh] = M.COUNTRY_MAPS.LT.viewBox.split(" ").map(Number);
+  ok("and Klaipėda lands inside Lithuania's box", x > 0 && y > 0 && x < vw && y < vh);
+  ok("the Curonian Spit is its own shape", M.LT_SHAPES.length === 2 && M.LT_SHAPES[1].every(([la, lo]) => lo < 21.2));
+  const dkl = readFileSync(join(root, "src/components/DKLocator.jsx"), "utf8");
+  ok("the card map draws the page's country", /const map = COUNTRY_MAPS\[code\];/.test(dkl) && /aria-label=\{town \? `Location of \$\{town\} in \$\{land\.name\}`/.test(dkl));
+  const k = M.tripcomStayUrl("Klaipėda"), kn = M.tripcomStayUrl("Klaipeda"), cph = M.tripcomStayUrl("Copenhagen");
+  ok("Trip.com reaches Klaipėda in euros, with or without the ė", /klaipeda-hotels-list-38977/.test(k) && /curr=EUR/.test(k) && /klaipeda-hotels-list-38977/.test(kn));
+  ok("and Copenhagen is still in kroner", /copenhagen-hotels-list-260/.test(cph) && /curr=DKK/.test(cph));
+  const live = readFileSync(join(root, "src/utils/liveContent.js"), "utf8");
+  ok("Danish essentials are taken off another country's page at load", /if \(activeCountry\(\) !== DEFAULT_COUNTRY\) \{\s*\n\s*const keep = essentials\.filter\(e => rowCountry\(e\) === activeCountry\(\)\);/.test(live));
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the page's country is read once, at load", /const PAGE_COUNTRY = activeCountry\(\);/.test(app) && /const HOME_PATH = homePath\(PAGE_COUNTRY\);/.test(app));
+  ok("the planner, the chat and the Danish tips stay off a Lithuanian page", /const NOT_YET_ABROAD = \["ai", "tips"\];/.test(app) && /if \(PAGE_ABROAD\) return null;\s*\n\s*return <AskGemlyx/.test(app) && /\{!PAGE_ABROAD && <button className="gx-topnav-ai"/.test(app));
+  ok("an empty page leaves a Lithuanian menu by itself", /const hideAbroad = \(t\) => PAGE_ABROAD && \(NOT_YET_ABROAD\.includes\(t\) \|\| \(liveLoaded && !libraryFailed && !isStudio && emptyHere\[t\]\)\);/.test(app));
+  ok("the Danish video and photo stay on Danish pages", /\{!videoError && !PAGE_ABROAD && \(/.test(app) && /background: PAGE_ABROAD \? "linear-gradient/.test(app));
+  ok("the Klaipėda demo moved off the town's own address", M.KLAIPEDA_DEMO_PATH === "/lithuania/trips");
+  const dp = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
+  ok("add to trip waits for the planner abroad", /\{onToggleSave && activeCountry\(\) === DEFAULT_COUNTRY && \(/.test(dp));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

@@ -163,7 +163,8 @@ export const showStyleFacet = (entries, min = STYLE_COVERAGE_MIN) =>
 // pieces of state under names other code reads.
 
 import { cityFromLocation } from "./guideEnrichment";
-import { daCompare, PRICE_BANDS, priceBand } from "./helpers";
+import { daCompare, PRICE_BANDS, priceBand, priceBandsFor } from "./helpers";
+import { countryProfile, activeCountry } from "./countries";
 
 export const foodCitiesIn = (entries) =>
   [...new Set((Array.isArray(entries) ? entries : [])
@@ -213,7 +214,9 @@ export const buildFoodFacets = (entries) => {
     // unpriced row bands to null, shows under All and is claimed by nothing.
     {
       key: "price", label: "Budget", primary: true,
-      options: [{ value: "All", label: "All" }, ...PRICE_BANDS.map(b => ({ value: b.id, label: b.label }))],
+      // The page's own currency: kroner on a Danish page, euros on a
+      // Lithuanian one. Same ids, so a filter state means the same band.
+      options: [{ value: "All", label: "All" }, ...priceBandsFor(countryProfile(activeCountry()).currency).map(b => ({ value: b.id, label: b.label }))],
       test: (f, v) => priceBand(f.price) === v,
     },
   ];

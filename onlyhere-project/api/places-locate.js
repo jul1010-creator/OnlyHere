@@ -31,13 +31,16 @@
 const townFromAddress = (address) => {
   const parts = String(address || "").split(",").map(s => s.trim()).filter(Boolean);
   for (let i = parts.length - 1; i >= 0; i--) {
-    const m = parts[i].match(/^\d{4}\s+(.+)$/);
+    // Danish postcodes are four digits; Lithuanian ones five, sometimes written
+    // "LT-92114". A Danish address reads exactly as it did.
+    const m = parts[i].match(/^(?:[A-Z]{2}-)?\d{4,5}\s+(.+)$/);
     if (m) return m[1].trim();
   }
   return "";
 };
 
 import { requestIsFromSite, NOT_FROM_SITE, resolveUser, isFounder } from "../src/utils/apiGuard.js";
+import { COUNTRY_PROFILES, DEFAULT_COUNTRY } from "../src/utils/countries.js";
 
 export default async function handler(req, res) {
   // ── SECURITY, 17 AUG 2026 ─────────────────────────────────────────
@@ -70,7 +73,13 @@ export default async function handler(req, res) {
   if (!key) return res.status(500).json({ error: "GOOGLE_MAPS_KEY not set on the server" });
 
   try {
-    const textQuery = String(name).includes("Denmark") ? String(name) : `${name}, Denmark`;
+    // ── WHICH COUNTRY TO ASK GOOGLE ABOUT ─────────────────────────
+    // Phase 1 of LITHUANIA_PLAN_29SEP.md. Studio passes `country` when it is
+    // drafting outside Denmark; without it, this asks exactly what it always
+    // asked. Only a known profile is accepted, so the parameter cannot be used
+    // to point the key at anything else.
+    const land = COUNTRY_PROFILES[String(req.query.country || "").toUpperCase()] || COUNTRY_PROFILES[DEFAULT_COUNTRY];
+    const textQuery = String(name).includes(land.name) ? String(name) : `${name}, ${land.name}`;
     const r = await fetch("https://places.googleapis.com/v1/places:searchText", {
       method: "POST",
       headers: {
@@ -94,7 +103,7 @@ export default async function handler(req, res) {
       // assumption that the first hit is the right one, and his Heidi's draft is
       // what that assumption costs when it is wrong: a full research pass, 167
       // seconds, on a bar whose name the searches could not match.
-      body: JSON.stringify({ textQuery, languageCode: "da", regionCode: "DK", maxResultCount: want }),
+      body: JSON.stringify({ textQuery, languageCode: land.googleLanguage, regionCode: land.googleRegion, maxResultCount: want }),
     });
     const data = await r.json();
     if (!r.ok) return res.status(r.status).json({ error: data?.error?.message || "Places text search failed" });

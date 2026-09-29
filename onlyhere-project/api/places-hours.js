@@ -12,6 +12,7 @@
 // Cloud project — no new account or key needed).
 
 import { requestIsFromSite, NOT_FROM_SITE, resolveUser, isFounder } from "../src/utils/apiGuard.js";
+import { COUNTRY_PROFILES, DEFAULT_COUNTRY } from "../src/utils/countries.js";
 
 export default async function handler(req, res) {
   // ── SECURITY, 17 AUG 2026 ─────────────────────────────────────────
@@ -41,7 +42,9 @@ export default async function handler(req, res) {
   }
 
   try {
-    const body = { textQuery: name.includes("Denmark") ? name : `${name}, Denmark` };
+    // Same country rule as places-locate.js: Denmark unless Studio says otherwise.
+    const land = COUNTRY_PROFILES[String(req.query.country || "").toUpperCase()] || COUNTRY_PROFILES[DEFAULT_COUNTRY];
+    const body = { textQuery: name.includes(land.name) ? name : `${name}, ${land.name}` };
     // Location bias narrows the search toward the right place when a name is
     // shared across towns (e.g. a chain) — optional, only added when we already
     // have real coordinates for this entry from the geocoding step.

@@ -635,3 +635,96 @@ For the local check before it is shown: walking times are estimates; confirm
 the Black Ghost's spot in the castle harbour, whether Meridianas serves food
 today (its restaurant site says yes, klaipedatravel.lt says it no longer does),
 the talking sculpture count, and the Old Ferry timetable.
+
+## Batch 157: an attraction card reads like a town card
+
+Oliver, 29 Sep 2026: "We need this map at attractions as well.. why is located
+and tier completely ignored? And also, attractions' distance from Copenhagen is
+probably irrelevant tbh. It should rather just say what town it is located in or
+close to."
+
+- The tier badge is on the picture, top left, the same badge a town card has
+  (tierBadge). The legacy "Hidden Gem" chip went, as it did on towns.
+- The small map of Denmark is top right, from the attraction's own coordinate
+  when it has one and its town's otherwise. No coordinate and an unknown town,
+  no map. The heart moved to the bottom right corner to make room.
+- The line under the name is now kind, town and distance from the reader:
+  "MUSEUM · RIBE". attractionWhere says "Near Ribe" when the row's own
+  coordinate is more than TOWN_NEAR_KM (3 km) from the town centre.
+- distanceLine no longer falls back to "~N km from CPH". In Denmark it still
+  says "~N km from you" (the 28 Sep request). The craft card's travel time from
+  its town centre went too.
+- The grid's own "N places" line is gone; the filter bar above already counts.
+
+## Batch 158: Phase 0 of the Lithuania plan
+
+Oliver, 29 Sep 2026, of LITHUANIA_PLAN_29SEP.md: "Yes, we just need something I
+can present to my old supervisor." Phase 0 makes the country something the app
+knows, with Denmark unchanged.
+
+- New `src/utils/countries.js`: profiles for DK and LT (slug, name, currency,
+  time zone, bounds, Google and Wikipedia language codes), `rowCountry` (no
+  country means Danish), `countryFromPath` (only `/lithuania...` leaves
+  Denmark), `activeCountry`, `isInCountry`.
+- `liveContent.js` keeps only rows for the active country; `townFrame` checks a
+  town against its own country.
+- `helpers.js`: `isInDenmark` reads the same box from the profile.
+- `studioContent.js`: `shapeForLive` keeps `country` when it is not Denmark.
+- Named COUNTRY_PROFILES because `profile.js` already exports COUNTRIES (the
+  home country list for sign up).
+- Nothing on the Danish site changes: the whole suite passed untouched.
+
+## Batch 159: Phase 1 of the Lithuania plan, Studio drafts abroad
+
+Oliver, 29 Sep 2026: "Aight... let's go, build! Any APIs I need?" No new keys.
+
+- Studio has a Country picker (Denmark, Lithuania) above the type chips. A
+  queued name keeps the country it was queued with.
+- `generateArea` builds `draftLand` from the picker or the queue item, calls
+  `setWorkingCountry` for the length of the draft and clears it at the end.
+  Every research query, the planner, the Perplexity prompts, the organiser,
+  the fact-check prompt, Nominatim and the Google lookups name `draftLand`
+  instead of Denmark. A Danish draft sends byte-identical strings.
+- `studioPrompts(name, land)`: a Lithuanian draft gets the same prompts with a
+  preamble saying the country, that Danish facts stay Danish, and to write
+  prices as "€6". A Danish draft's prompts are unchanged.
+- Tiqets and Ticketmaster are only asked for a Danish draft (neither sells in
+  Klaipėda). GetYourGuide is still asked.
+- The Danish postcode tier does not run abroad.
+- `api/places-locate`, `places-hours`, `directions`, `commons-photo` take
+  `country` (DK default). places-locate reads five-digit and "LT-" postcodes.
+  Photos come from lt.wikipedia for a Lithuanian row.
+- `coordCheck` checks a row against its own country, so a Klaipėda coordinate
+  is not "outside Denmark". Danish sentence unchanged.
+- `liveContent` still records another country's town point in TOWN_COORDS, so
+  a Klaipėda museum drafted in Studio can measure itself against Klaipėda.
+- Euros: `familyChip` reads "Adults €6, children €3" as "Adults €6 · kids €3";
+  students and pupils are not read as kids. `priceBand` bands euro prices on
+  €12 and €30 (his to move) with `priceBandsFor("EUR")` labels; the Food budget
+  filter uses the page's currency.
+- `denmarkClock` reads the page's country's time zone.
+
+Not done yet, noted: the Danish-only text checks (literalDanish, danishNames)
+still run on Lithuanian rows, which should be harmless; Manage Published on the
+Danish Studio lists Lithuanian rows with a few Denmark-flavoured audit notes.
+
+## Batch 160: Phase 2 of the Lithuania plan, part one, the pages
+
+- gemlyxtravel.com/lithuania is the same app, reading only Lithuanian rows. The
+  page's country is read once at load (`PAGE_COUNTRY` in App.jsx), and
+  `placeUrl.COUNTRY` is the page's slug, so a Klaipėda entry opens at
+  /lithuania/attraction/... and Klaipėda's town page is /lithuania/klaipeda.
+- The Klaipėda demo moved to /lithuania/trips.
+- On a Lithuanian page: no front door (straight in), no Danish video or photo in
+  the hero (plain gradient until there is a Klaipėda photo), the country's name
+  wherever the copy said Denmark, Klaipėda's weather, a Lithuania outline on the
+  card maps, no planner, chat, Tips or add-to-trip (Phase 3), and a page with
+  nothing on it (Islands, Nightlife, Cheap gems, Essentials) leaves the menu
+  until something is published there.
+- Danish essentials in data/essentials.js are dropped on a Lithuanian page.
+- Trip.com reaches Klaipėda (id 38977) in euros.
+- Home is HOME_PATH ("/" in Denmark) everywhere the app navigated to "/".
+
+Not yet: a hero photo of Klaipėda (Wikimedia is blocked from the build machine,
+so it needs picking by hand), the Events page redesign and calendar import
+(part two), and the share cards in middleware.js for Lithuanian links.

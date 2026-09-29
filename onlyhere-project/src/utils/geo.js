@@ -1,4 +1,5 @@
 import { nextWeekdayTimestamp, arrivalRow } from "./helpers";
+import { workingProfile } from "./countries";
 import { nominatimJson } from "./nominatim";
 
 // Empirically checks real late-night transit — not the AI's guess — for both a
@@ -60,7 +61,9 @@ export const checkNightTransport = async (originLat, originLon, destLat, destLon
 // against the question" — and this is that function's other half.
 export const geocodePlace = async (query) => {
   try {
-    const data = await nominatimJson(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query + ", Denmark")}&format=json&limit=1&countrycodes=dk&addressdetails=1&namedetails=1`);
+    // The country a Studio draft is working in, Denmark everywhere else.
+    const land = workingProfile();
+    const data = await nominatimJson(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(`${query}, ${land.name}`)}&format=json&limit=1&countrycodes=${land.code.toLowerCase()}&addressdetails=1&namedetails=1`);
     if (!data?.[0]) return null;
     const hit = data[0];
     const lat = parseFloat(hit.lat), lon = parseFloat(hit.lon);

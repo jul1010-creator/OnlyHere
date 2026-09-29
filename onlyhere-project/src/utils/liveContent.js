@@ -63,7 +63,8 @@ import { foodSpots } from "../data/food";
 import { SUPABASE_URL, SUPABASE_KEY } from "../config";
 import { essentials } from "../data/essentials";
 import { craftItemsFallback } from "../data/craft";
-import { stripDashesDeep, isInDenmark } from "./helpers";
+import { stripDashesDeep } from "./helpers";
+import { activeCountry, rowCountry, isInCountry, DEFAULT_COUNTRY } from "./countries";
 import { placeCoords } from "./guideEnrichment";
 import { cleanReaderProse } from "./researchVoice";
 import { WAITING_TYPE } from "./undatedEvents";
@@ -95,10 +96,23 @@ import { WAITING_TYPE } from "./undatedEvents";
 // below: a row quietly dropped is a row nobody fixes.
 // Exported for the suite: this is the gate on the reference frame, so it is
 // tested directly rather than inferred from the two call sites.
+// A Lithuanian town is checked against Lithuania, a row with no country against
+// Denmark, which is every row that existed before utils/countries.js.
 export const townFrame = (item) => {
   const c = placeCoords(item);
-  return c && isInDenmark(c) ? c : null;
+  return c && isInCountry(c, rowCountry(item)) ? c : null;
 };
+
+// ── DANISH ADVICE STAYS ON DANISH PAGES ─────────────────────────────
+// Phase 2 of LITHUANIA_PLAN_29SEP.md. The essentials written into
+// data/essentials.js are Danish (Tiqets for Tivoli, Strøget, Rejsekort) and
+// carry no country field, so on another country's page they are taken out once,
+// when the page loads, before anything can list them. Even if the fetch below
+// fails, a Lithuanian page never shows Denmark's essentials.
+if (activeCountry() !== DEFAULT_COUNTRY) {
+  const keep = essentials.filter(e => rowCountry(e) === activeCountry());
+  essentials.splice(0, essentials.length, ...keep);
+}
 
 const mergedIds = new Set();      // Supabase row ids already folded in
 const mergedKeys = new Set();     // type + normalised name, second net (see below)
@@ -137,8 +151,26 @@ const doLoad = async () => {
     // coordinate" — that is a known backlog with its own Studio button, and
     // warning about it every load would bury the ones that are actually wrong.
     const badFrames = [];
+    // ── ONE COUNTRY PER PAGE ─────────────────────────────────────
+    // 29 Sep 2026, Phase 0 of LITHUANIA_PLAN_29SEP.md. A page shows the country
+    // its address names, and only that country's rows reach its lists: a
+    // Klaipėda museum must never turn up among Danish attractions, nor the
+    // other way round. Every row with no country is Danish, so on the Danish
+    // site this keeps every row it kept before. See utils/countries.js.
+    const showing = activeCountry();
     rows.forEach(row => {
       if (mergedIds.has(row.id)) return; // already merged this exact row
+      if (rowCountry(row.payload) !== showing) {
+        // Kept off every list, but a town's point is still recorded. Studio
+        // runs on the Danish site, and a Klaipėda museum drafted there needs
+        // Klaipėda's centre to measure itself against. TOWN_COORDS is keyed by
+        // town name and no page lists it, so this reaches no Danish reader.
+        if (row.type === "town" && row.payload?.name) {
+          const f = townFrame(row.payload);
+          if (f && !TOWN_COORDS[row.payload.name]) TOWN_COORDS[row.payload.name] = [f.lat, f.lon];
+        }
+        return;
+      }
       // ── THE DASH BAN FINALLY REACHES PUBLISHED CONTENT ────────────
       // 55 en and em dashes were live on 12 Aug, in gemlyxFind, ticketInfo,
       // budgetLevel and prose, on entries drafted before stripDashes existed:

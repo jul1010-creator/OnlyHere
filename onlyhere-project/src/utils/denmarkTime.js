@@ -7,12 +7,17 @@
 //
 // The time is Denmark's, whatever the reader's own clock says: somebody
 // planning from Sydney wants to know it is evening there, not here.
+import { countryProfile, activeCountry } from "./countries";
+
 export const DK_ZONE = "Europe/Copenhagen";
 
-export const denmarkClock = (date = new Date()) => {
+// ── THE PAGE'S OWN COUNTRY'S CLOCK ──────────────────────────────────
+// Phase 1 of LITHUANIA_PLAN_29SEP.md. On a Lithuanian page "there" is Vilnius
+// time, an hour ahead of Denmark. Every Danish page still reads Copenhagen.
+export const denmarkClock = (date = new Date(), zone = countryProfile(activeCountry()).zone) => {
   const d = date instanceof Date ? date : new Date(date);
   if (!Number.isFinite(d.getTime())) return "";
-  return new Intl.DateTimeFormat("en-GB", { timeZone: DK_ZONE, hour: "2-digit", minute: "2-digit", hour12: false }).format(d);
+  return new Intl.DateTimeFormat("en-GB", { timeZone: zone || DK_ZONE, hour: "2-digit", minute: "2-digit", hour12: false }).format(d);
 };
 
 // ── DARK, FROM THE SUN AND NOT FROM A GUESS AT THE HOUR ─────────────

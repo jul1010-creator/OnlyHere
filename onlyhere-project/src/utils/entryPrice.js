@@ -306,21 +306,39 @@ const KIDS_FREE = /\b(?:children|kids|børn)\b[^.;0-9]{0,20}?\b(?:free|gratis)\b
 // Not across a comma or a semicolon: "children under 18 free, students 95 DKK"
 // is not a child price of 95.
 const KIDS_PAY = new RegExp(`\\b(?:children|child|kids|børn|barn)\\b[^.;,]{0,25}?(\\d{1,4})\\s*${KR}`, "i");
+// ── AND THE SAME CHIP IN EUROS ──────────────────────────────────────
+// Phase 1 of LITHUANIA_PLAN_29SEP.md. A line that states no kroner and does
+// state euros ("Adults €6, students, pupils and seniors €3") is read with the
+// euro sign in front of the figure and cents allowed after it, and printed the
+// way it was written: "Adults €6 · kids €3". Students and pupils are not
+// read as kids, for the reason KIDS_PAY gives. A Danish line never takes this
+// path, so it reads exactly as before.
+const EUR = "(?:€|eur\\b|euros?\\b)";
+const EUR_AMT = "(\\d{1,4}(?:[.,]\\d{1,2})?)";
+const EURO_LINE = /€|\beur\b|\beuros?\b/i;
+const EURO_ADULT_BEFORE = new RegExp(`\\b(?:adults?|suaugusieji|suaugusiems)\\b(?:\\s*\\(\\s*\\d{1,2}\\s*\\+?\\s*\\)|\\s*\\d{1,2}\\s*\\+)?\\s*[:=]?\\s*(?:€\\s*)?${EUR_AMT}(?:\\s*${EUR})?`, "i");
+const EURO_KIDS_PAY = new RegExp(`\\b(?:children|child|kids|vaikams|vaikai)\\b[^.;,]{0,25}?(?:€\\s*)?${EUR_AMT}(?:\\s*${EUR})?`, "i");
+const kronerLine = (t) => new RegExp(KR, "i").test(t);
+
 export const familyChip = (says) => {
   const t = String(says || "");
-  const adult = (ADULT_BEFORE.exec(t) || ADULT_AFTER.exec(t) || [])[1] || "";
+  const euro = !kronerLine(t) && EURO_LINE.test(t);
+  const adult = euro
+    ? (EURO_ADULT_BEFORE.exec(t) || [])[1] || ""
+    : (ADULT_BEFORE.exec(t) || ADULT_AFTER.exec(t) || [])[1] || "";
   const under = UNDER_FREE.exec(t);
   const range = RANGE_FREE.exec(t);
   const free = under ? `under ${under[1] || under[2]} free` : range ? `under ${Number(range[1]) + 1} free` : KIDS_FREE.test(t) ? "kids free" : "";
-  const pay = (KIDS_PAY.exec(t) || [])[1] || "";
+  const pay = ((euro ? EURO_KIDS_PAY : KIDS_PAY).exec(t) || [])[1] || "";
   const kidsPay = pay && free !== "kids free" ? pay : "";
   // "Adults 190 · kids 95 kr · under 3 free" is the whole of what a family
   // needs to know before tapping; the currency is said once when two prices
-  // share it.
-  const head = adult ? (kidsPay ? `Adults ${adult}` : `Adults ${adult} kr`) : PAID_LABEL;
-  const full = [head, kidsPay ? `kids ${kidsPay} kr` : "", free].filter(Boolean).join(" · ");
+  // share it. In euros the sign goes on each figure, as it is written there.
+  const money = (n) => (euro ? `€${n}` : `${n} kr`);
+  const head = adult ? (euro ? `Adults ${money(adult)}` : kidsPay ? `Adults ${adult}` : `Adults ${adult} kr`) : PAID_LABEL;
+  const full = [head, kidsPay ? `kids ${money(kidsPay)}` : "", free].filter(Boolean).join(" · ");
   if (full.length <= CHIP_MAX) return full;
-  return [head, kidsPay ? `kids ${kidsPay} kr` : free].filter(Boolean).join(" · ");
+  return [head, kidsPay ? `kids ${money(kidsPay)}` : free].filter(Boolean).join(" · ");
 };
 export const priceChip = (row) => {
   const { free, says, impliesPaid } = entryPrice(row);

@@ -5,6 +5,7 @@
 // slugify/J/bb/bbBullets/bbData/bulletsBlock are its small string-building
 // helpers; shapeForLive turns a raw AI draft into the exact object shape each
 // hardcoded data array (towns/events/freeEntrance/foodSpots/etc.) expects.
+import { COUNTRY_PROFILES, DEFAULT_COUNTRY } from "./countries";
 import { normaliseTicketStatus } from "./tickets";
 // A bar street says which street tonight and whether it is worth it. The vibe
 // is a closed list and an unknown value is dropped rather than stored. See
@@ -1039,6 +1040,14 @@ export const shapeForLive = (type, t) => {
   if (heroUrl) out = { ...out, photo: heroUrl };
   if (heroCredit) out = { ...out, __photoCredit: heroCredit };
   if (offer) out = { ...out, __offer: offer };
+  // ── AND WHICH COUNTRY IT IS IN ─────────────────────────────────
+  // 29 Sep 2026, Phase 0 of LITHUANIA_PLAN_29SEP.md. This allow-list has eaten
+  // a new field more than once, so the country is added here in the same edit
+  // that created it. Only a country other than Denmark is written at all: a
+  // Danish row stays exactly the shape it always was, and a row with no
+  // country reads as Danish everywhere. See utils/countries.js.
+  const country = String(t?.country || "").trim().toUpperCase();
+  if (COUNTRY_PROFILES[country] && country !== DEFAULT_COUNTRY) out = { ...out, country };
   // Appended AFTER the prose, which is where layoutBody in DetailPage.jsx wants
   // them: it looks for the trailing run of images and deals them back in beside
   // the paragraphs, so a picture ends up floated next to writing instead of
