@@ -280,6 +280,7 @@ writeFileSync(entry, `
   export { ferryUrlOf } from ${JSON.stringify(join(root, "src/utils/ferryDoor.js"))};
   export { nearestBusStop, busStopRow, linesPhrase, arrivalOrBusRow, BUS_STOP_MAX_M } from ${JSON.stringify(join(root, "src/utils/busStop.js"))};
   export { KLAIPEDA_STOPS, KLAIPEDA_STOPS_READ_ON } from ${JSON.stringify(join(root, "src/data/klaipedaStops.js"))};
+  export { groupNav, childActive, groupActive, NAV_GROUPS } from ${JSON.stringify(join(root, "src/utils/navGroups.js"))};
   export { livePromotions, promoCard, untilLabel, PROMO_KINDS } from ${JSON.stringify(join(root, "src/utils/promotions.js"))};
   export { abroadBriefParts, inventoryBlock, inventoryLine, forLand, landAsk, landRules, sameDayHours, startsFor, INVENTORY_CAP } from ${JSON.stringify(join(root, "src/utils/guideAbroad.js"))};
   export { FROZEN_TRANSPORT, frozenFrom, frozenIn, factsLost, frozenBlock, lostNote } from ${JSON.stringify(join(root, "src/utils/frozenFacts.js"))};
@@ -14789,9 +14790,10 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // them. Asserted as the shared reader rather than as a pattern, because the
   // vocabulary lives in utils/placeUrl.js and a list of literals here would be
   // the copy that drifts from it.
-  ok("the middleware reads any entry address through the shared reader", /const entryRoute = parseEntryUrl\(url\.pathname\);/.test(mw));
-  ok("a town still goes through the town lookup", /entryRoute\.kind === "town"\s*\n?\s*\? await findTown\(entryRoute\.slug\)/.test(mw));
-  ok("and every other kind through the typed one", /: await findEntry\(entryRoute\.seg, entryRoute\.slug\);/.test(mw));
+  // Batch 167: the reader gets the address as a Danish path, and each lookup the country.
+  ok("the middleware reads any entry address through the shared reader", /const entryRoute = parseEntryUrl\(asDanishPath\(url\.pathname, pathCountry\)\);/.test(mw));
+  ok("a town still goes through the town lookup", /entryRoute\.kind === "town"\s*\n?\s*\? await findTown\(entryRoute\.slug, pathCountry\)/.test(mw));
+  ok("and every other kind through the typed one", /: await findEntry\(entryRoute\.seg, entryRoute\.slug, pathCountry\);/.test(mw));
   ok("built from the entry's own words", /words\.desc \|\| words\.highlight/.test(mw));
   ok("with an absolute image, since a crawler fetches it", /\$\{SITE_ORIGIN\}\$\{town\.photo \|\| "\/og-default\.jpg"\}/.test(mw));
   ok("a town it cannot find falls through to the site card", /if \(!town\) return next\(\);/.test(mw));
@@ -32782,7 +32784,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // all, on a site whose own rule is that a reader never sees one.
   ok("the crawler payload has its dashes taken out", /const words = stripDashesDeep\(town\);/.test(mw));
   ok("and its research voice", /const desc = stripResearchVoice\(/.test(mw));
-  ok("the title comes off the cleaned payload too", /\$\{words\.name\}, Denmark/.test(mw));
+  // Batch 167: the country's own name.
+  ok("the title comes off the cleaned payload too", /\$\{words\.name\}, \$\{land\.name\}/.test(mw));
   // THE URL DOES NOT. A slug that moved with the punctuation rules would move
   // every indexed page the first time one of them was touched.
   ok("but the url still comes off the raw name",
@@ -36701,9 +36704,10 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // of the literal ".map(" dropped to one while the RULE this line protects,
   // that the bar and the menu come from ONE array and cannot drift apart, is
   // unchanged. Asked as that rule instead of as a number.
-  is("the menu renders the list", (appN.match(/NAV_ITEMS\.map\(/g) || []).length, 1);
+  // Batch 167: the menu and the bar render the same GROUPS of NAV_ITEMS (utils/navGroups.js).
+  is("the menu renders the list", (appN.match(/\{navGroups\.map\(\(g, i\) => \{/g) || []).length, 1);
   is("and the bar renders the same list minus the Detour button",
-     (appN.match(/NAV_ITEMS\.filter\(item => item\.id !== "ai"\)\.map\(/g) || []).length, 1);
+     (appN.match(/const navGroups = groupNav\(NAV_ITEMS\.filter\(item => item\.id !== "ai"\)/g) || []).length, 1);
   ok("which is still the only source of the pages", !/const NAV_ITEMS_2|const TOP_NAV_ITEMS/.test(appN));
   ok("the bar is hidden until there is room for it", /\.gx-topnav \{ display: none;/.test(appN));
   // ── AND THE MEASUREMENT RETIRED, 5 SEP 2026 ─────────────────────
@@ -36724,7 +36728,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("the menu's copy of the pages steps aside when the bar appears", /\.gx-nav-in-menu \{ display: none !important; \}/.test(appN));
   ok("and that block is the one wrapping the pages", /<div className="gx-nav-in-menu">/.test(appN));
   // The page you are on is marked, or a nav bar is eight buttons and no answer.
-  ok("the current page is marked in the bar", /borderBottom: `2px solid \$\{active === item\.id \? C\.gold : "transparent"\}`/.test(appN));
+  // Batch 167: the bar is NavGroupButtons now.
+  ok("the current page is marked in the bar", /borderBottom: `2px solid \$\{on \? C\.gold : "transparent"\}`/.test(readFileSync(join(root, "src/components/NavGroups.jsx"), "utf8")));
 }
 
 
@@ -65211,8 +65216,9 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       ok("and the button is not inside the strip",
          app.slice(app.indexOf("<NavStrip"), close).indexOf('className="gx-topnav-ai"') === -1);
     }
+    // Batch 167: the strip carries the groups, built from every page but Detour.
     ok("the strip carries the eight pages and not the ninth",
-       /NAV_ITEMS\.filter\(item => item\.id !== "ai"\)\.map/.test(app));
+       /NAV_ITEMS\.filter\(item => item\.id !== "ai"\)/.test(app) && /<NavStrip C=\{C\}>\s*\n\s*<NavGroupButtons groups=\{navGroups\}/.test(app));
     // Sliced rather than matched with [^>]*: the onClick contains an arrow
     // function, so the first ">" in that attribute list is inside "=>".
     {
@@ -65871,7 +65877,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // A count with no words beside it is a red dot. The button says what it is
     // counting, which is the one line alertCountLine has always been for.
     ok("and the button says what the count is about", /alertCountLine\(unreadTripChanges\)/.test(appW));
-    ok("and the navigation is still in the same menu", /NAV_ITEMS\.map/.test(appW));
+    // Batch 167: grouped, but the same menu.
+    ok("and the navigation is still in the same menu", /\{navGroups\.map\(/.test(appW));
     // Dismissing is still the heavier state and is still written down.
     ok("dismissing writes it down", /markAlertSeen\(a\.id\)/.test(appW));
     ok("and the seen list is consulted before anything is shown", /unseenAlerts\(alerts, seenAlerts\(\)\)/.test(appW));
@@ -80471,7 +80478,8 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("the Danish video and photo stay on Danish pages", /\{!videoError && !PAGE_ABROAD && \(/.test(app) && /background: PAGE_ABROAD \? "linear-gradient/.test(app));
   ok("the Klaipėda demo moved off the town's own address", M.KLAIPEDA_DEMO_PATH === "/lithuania/trips");
   const dp = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
-  ok("add to trip waits for the planner abroad", /\{onToggleSave && activeCountry\(\) === DEFAULT_COUNTRY && \(/.test(dp));
+  // Batch 167: the planner is built abroad, so saving is too.
+  ok("add to trip is on every country's page", /\{onToggleSave && \(/.test(dp) && !/onToggleSave && activeCountry\(\) === DEFAULT_COUNTRY/.test(dp));
 }
 
 
@@ -80611,6 +80619,38 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("open abroad, locked like the entry page in Denmark", /tab === "promotions" && <PromotionsPage promos=\{promotions\}[^\n]*\n\s*paid=\{OPEN_ABROAD \|\| hasPaidPlan\(userProfile\)\} onOpen=\{\(p\) => openStopDetail\(p\)\}/.test(app));
   const page = readFileSync(join(root, "src/components/PromotionsPage.jsx"), "utf8");
   ok("no dash in the page's copy", !/[\u2013\u2014]/.test(page.replace(/\/\/.*$/gm, "")));
+}
+
+// ── Batch 167: the menu as dropdowns, and the Lithuanian leftovers ──
+{
+  const items = ["home", "essentials", "tips", "gems", "attractions", "events", "food", "nightlife", "visits"].map(id => ({ id, label: id, ico: null }));
+  const g = M.groupNav(items, { calendar: true, t: (k) => k });
+  is("groups in order, empty ones gone", g.map(x => x.id), ["home", "advice", "activities", "gems", "places", "eatdrink"]);
+  is("a group with one page left is that page", [g.find(x => x.id === "gems").single, g.find(x => x.id === "gems").label], [true, "gems"]);
+  is("Advice holds Essentials and Tips", g.find(x => x.id === "advice").children.map(c => c.tab), ["essentials", "tips"]);
+  is("Activities holds Events and the full calendar", g.find(x => x.id === "activities").children.map(c => c.key), ["events:picks", "events:calendar"]);
+  is("no calendar, no second Activities item", M.groupNav(items, { calendar: false }).find(x => x.id === "activities").single, true);
+  const acts = g.find(x => x.id === "activities");
+  ok("the calendar item is active only on the calendar view", M.childActive(acts.children[1], "events", "calendar") && !M.childActive(acts.children[1], "events", "picks"));
+  ok("and the group is active on either", M.groupActive(acts, "events", "picks") && M.groupActive(acts, "events", "calendar"));
+
+  const shape = { longest: { minutes: 50, text: "50 min" } };
+  is("Denmark is still small in Denmark", M.tripScaleLine(shape), "Denmark is small. The longest single journey in this trip is 50 min.");
+  is("and nowhere else", M.tripScaleLine(shape, "Lithuania"), "The longest single journey in this trip is 50 min.");
+  is("a Lithuanian guide is shared as one", M.shareTitle({ _country: "LT" }), "A Lithuania guide");
+  is("a Danish one as before", M.shareTitle({}), "A Denmark guide");
+  ok("and describes itself without Copenhagen", !/Copenhagen/.test(M.metaDescription({ _country: "LT", days: [] })));
+  const card = M.buildPreviewHtml({ title: "Nyhavn, Copenhagen", description: "The old harbour.", url: "https://x.test/a", image: "https://x.test/i.jpg" });
+  ok("an entry card keeps its own title and words", /Nyhavn, Copenhagen/.test(card) && /The old harbour\./.test(card) && !/A Denmark guide/.test(card));
+
+  const mw = readFileSync(join(root, "middleware.js"), "utf8");
+  ok("the middleware answers for /lithuania too", /"\/lithuania", "\/lithuania\/:path\*"/.test(mw));
+  ok("and never serves a row under another country", /\.filter\(p => rowCountry\(p\) === country\)/.test(mw));
+  ok("and files a Klaipėda row in the sitemap under /lithuania", /inCountryPath\(entryUrlPath\(e\.type, e\.name\), code\)/.test(mw));
+  const helpers = readFileSync(join(root, "src/utils/helpers.js"), "utf8");
+  ok("near you means the page's country", /export const isInDenmark = \(coords\) => isInCountry\(coords, activeCountry\(\)\);/.test(helpers));
+  ok("and the journey origin is its hub", /export const TRAVEL_ORIGIN = countryProfile\(activeCountry\(\)\)\.hub;/.test(helpers));
+  is("which outside a browser is still Copenhagen", M.TRAVEL_ORIGIN_NAME, "Copenhagen");
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
