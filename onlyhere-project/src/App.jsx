@@ -80,6 +80,8 @@ import { SupportPage } from "./components/SupportPage";
 // utils/affiliateRoster.js with the roster, not here, because AboutMePage links
 // to it too and App.jsx imports AboutMePage.
 import { AffiliatesPage } from "./components/AffiliatesPage";
+import { KlaipedaDemo } from "./pages/KlaipedaDemo";
+import { KLAIPEDA_DEMO_PATH } from "./data/klaipedaDemo";
 import { TripLibraryPage } from "./components/TripLibraryPage";
 import { askForGuidePass, markGuideBuilt, todayRecord, usedTodayReason, copenhagenDay, cancelGuidePass } from "./utils/guideAllowance";
 import { LIBRARY_PATH } from "./utils/tripLibrary";
@@ -13337,12 +13339,16 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
           // `labelled` rides along to the guard, because it is what separates a
           // festival announcing a genuine move from a number scraped out of a
           // programme grid. See the different-month rule in datePropositionProblem.
-          const problem = datePropositionProblem(isoDay(found.start), ev.date, checkFrom, { labelled: read.labelled });
+          const problem = datePropositionProblem(isoDay(found.start), ev.date, checkFrom, { labelled: read.labelled, onFileEnd: ev.dateEnd, proposedEnd: found.end ? isoDay(found.end) : "" });
           // A festival page carries its own history, so the edition named on it
           // still has to be one that has not already happened and is not earlier
           // than what we hold. Refusals are NAMED rather than dropped: "the page
           // said 3 June 2026 and that is in the past" is the sentence that would
           // have explained Distortion the first time he asked.
+          // A page naming one of the days the event already runs on CONFIRMS
+          // the dates on file rather than moving them, so it answers the
+          // question with the file's own run and nothing more is spent.
+          if (problem === "inside-the-dates-already-on-file") return { found: { start: parseEventDate(ev.date), end: parseEventDate(ev.dateEnd) || parseEventDate(ev.date) }, why: "", labelled: read.labelled };
           if (problem) return { found: null, why: `refused-${problem}`, refused: isoDay(found.start) };
           // AND ON A VENUE'S PROGRAMME, THE DATE NEEDS THE EVENT'S NAME BESIDE
           // IT. The fix above stops a page with two parsed dates. tobakken.dk
@@ -13391,6 +13397,9 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
           return { found: e.found, refused: e.refused, why: e.why, data: d, banners, ok: true };
         };
         let fromSite = null;
+        // The event's own pages as read on this run, so a ticket status from
+        // the search below can be checked against them. See statusOnOwnPage.
+        const ownTexts = [];
         // Collected as we go so the poster tier can look at the front page's
         // pictures AND the ticket page's, without either read having to know
         // that a later step exists.
@@ -13403,6 +13412,7 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
         if (ev.website) {
           try {
             const first = await readForEdition(ev.website);
+            if (first.ok && first.data?.text) ownTexts.push(first.data.text);
             collect(first.banners, domainOf(ev.website));
             trace.push({ step: "site", host: domainOf(ev.website), ok: first.ok, why: first.why, refused: first.refused, status: first.status, detail: first.detail, via: first.data?.via || "", chars: (first.data?.text || "").length, images: (first.banners || []).length, found: first.found ? isoDay(first.found.start) : "" });
             if (first.found) {
@@ -13429,6 +13439,7 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
               const ticket = (first.data.tickets || [])[0];
               if (ticket?.href) {
                 const second = await readForEdition(ticket.href);
+                if (second.ok && second.data?.text) ownTexts.push(second.data.text);
                 collect(second.banners, domainOf(ticket.href));
                 trace.push({ step: "ticket", host: domainOf(ticket.href), ok: second.ok, why: second.why, refused: second.refused, status: second.status, detail: second.detail, via: second.data?.via || "", chars: (second.data?.text || "").length, images: (second.banners || []).length, found: second.found ? isoDay(second.found.start) : "" });
                 if (second.found) {
@@ -13481,7 +13492,14 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
           trace.push({ step: "poster", why: "image-cap-reached" });
         }
         // Answered by the operator, so nothing is spent and nothing is guessed.
-        if (fromSite && fromSite.start !== ev.date) {
+        // The same day in any spelling is the same day, and the same run is
+        // the same run: "2026-10-18" against "18 Oct 2026" is not a change.
+        const sameDate = (a, b) => { const pa = parseEventDate(a), pb = parseEventDate(b); return !!pa && !!pb && pa.getTime() === pb.getTime(); };
+        if (fromSite && sameDate(fromSite.start, ev.date) && (!fromSite.end || fromSite.end === fromSite.start || !ev.dateEnd || sameDate(fromSite.end, ev.dateEnd))) {
+          traces.push({ name: ev.name, town: ev.town, date: ev.date, steps: trace, resolved: fromSite.start });
+          continue;
+        }
+        if (fromSite && !(sameDate(fromSite.start, ev.date) && sameDate(fromSite.end, ev.dateEnd))) {
           const span = `${fromSite.start}${fromSite.end && fromSite.end !== fromSite.start ? ` to ${fromSite.end}` : ""}`;
           changed.push({
             name: ev.name, town: ev.town, currentDate: ev.date,
@@ -13597,7 +13615,7 @@ ${researchRules("festival", ev)}`
           // Without dateEnd the gate cannot tell a day of the event from a new
           // date. See datePropositionProblem in utils/eventDates.js.
           const badProposal = parsed.dateChanged
-            ? datePropositionProblem(parsed.dateChanged, ev.date, new Date(), { onFileEnd: ev.dateEnd })
+            ? datePropositionProblem(parsed.dateChanged, ev.date, new Date(), { onFileEnd: ev.dateEnd, proposedEnd: parsed.dateEndChanged || "" })
             : "";
           // labelChecked: false, because this branch holds a model's JSON reply
           // rather than a page, so nothing here read the source to see whether
@@ -13631,6 +13649,9 @@ ${researchRules("festival", ev)}`
           const statusRefusal = statusRefusalFor({
             status: parsed.ticketStatusChanged, dateProblem: badProposal,
             onFile: ev.date, accepted: parsed.dateChanged, today: new Date(),
+            // "may be on sale" that turned out not to be, 29 Sep 2026: the
+            // status has to be on the event's own page, read on this run.
+            ownText: ownTexts.join("\n\n"),
           });
           if (statusRefusal) {
             parsed.ignoredStatus = parsed.ticketStatusChanged;
@@ -29676,12 +29697,31 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                here was a hardcoded string on every card, with no
                                field behind it — see entryBooking for the whole
                                story. It now says nothing unless the row does. */
+                            // ── AND "WALK IN" IS GONE ───────────────────────
+                            // Oliver, 29 Sep 2026: "get rid of this 'walk in no
+                            // booking' bs." The price beside it already says
+                            // Free, and a park or a church needs no chip to say
+                            // you may enter it. "Book ahead" stays: being turned
+                            // away at a door is the costly mistake it prevents.
+                            // ── RECOMMENDED FOR FAMILIES, WHEN THE ENTRY SAYS SO ─
+                            // Oliver, 29 Sep 2026, on the price chip and kids:
+                            // "this is another part on the 'recommended',
+                            // 'recommended for families'". From the stored
+                            // themes only (the attraction themes sweep), never
+                            // from a guess at the prose: a family that drives an
+                            // hour on the chip's word is who this must not
+                            // mislead.
                             (() => {
                               const book = entryBooking(item).walkIn;
-                              if (book === null) return null;
-                              const free = entryPrice(item).free === true;
-                              const tone = book ? "#4CAF50" : "#FFB347";
-                              return <span style={{ fontSize: 9, fontWeight: 700, color: tone, background: `${tone}18`, border: `1px solid ${tone}44`, padding: "2px 8px", borderRadius: 100 }}>{book ? (free ? "🆓 Walk in" : "Walk in, no booking") : "Book ahead"}</span>;
+                              const tone = "#FFB347";
+                              const family = item._kind === "free" && themesOf(item).includes("family");
+                              if (book !== false && !family) return null;
+                              return (
+                                <>
+                                  {family && <span style={{ fontSize: 9, fontWeight: 700, color: "#64B5F6", background: "#64B5F618", border: "1px solid #64B5F644", padding: "2px 8px", borderRadius: 100 }}>Good for families</span>}
+                                  {book === false && <span style={{ fontSize: 9, fontWeight: 700, color: tone, background: `${tone}18`, border: `1px solid ${tone}44`, padding: "2px 8px", borderRadius: 100 }}>Book ahead</span>}
+                                </>
+                              );
                             })()
                           )}
                         </div>
@@ -34662,6 +34702,12 @@ export default function Gemlyx() {
           already reads its own search params for the same reason. */}
       <Route path={SUPPORT_PATH} element={<SupportPage />} />
       <Route path={AFFILIATES_PATH} element={<AffiliatesPage />} />
+      {/* ── KLAIPĖDA, A DEMO FOR THE TOURISM CENTRE ──────────────
+          Oliver, 29 Sep 2026. Two hand-written trips, linked from nowhere and
+          marked noindex, so he can show Klaipėda's tourism centre what Gemlyx
+          would add to their site before the app is made to work outside
+          Denmark. See data/klaipedaDemo.js. */}
+      <Route path={KLAIPEDA_DEMO_PATH} element={<KlaipedaDemo />} />
       {/* ── TRIPS OTHER PEOPLE KEPT ────────────────────────────
           One component for both, because the list and a trip from it are the
           same page at two depths, and the trip renders through GuidePage the

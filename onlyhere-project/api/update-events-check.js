@@ -34,7 +34,7 @@
 // makes no paid call at all. Run that first.
 import { readPage } from "../src/utils/readPage.js";
 import { domainOf } from "../src/utils/pageScan.js";
-import { parseEventDate, isPastDate } from "../src/utils/eventDates.js";
+import { parseEventDate, isPastDate, datePropositionProblem, statusRefusalFor } from "../src/utils/eventDates.js";
 // The judgement half of the community feeds, imported rather than reimplemented.
 // A second copy of the date reading is how the button and the weekly run would
 // come to disagree about what a post says, which is the duplication this
@@ -164,7 +164,9 @@ ${siteText.slice(0, 6000)}
 
 A PRICE OR A TICKET STATUS IS ONLY WORTH REPORTING IF YOU CAN SAY WHERE IT CAME FROM. Danish festival tickets are tiered, dated and age banded, so several different real prices exist at once and a sold out early tier is not the price. Anything priced or timed from before 2025 is stale, not current.
 
-Respond with ONLY strict JSON: {"stillHappening": true, "dateChanged": "", "ticketStatusChanged": "", "source": "", "notes": ""}. dateChanged is the new real date ONLY if it genuinely changed from what is on file, else an empty string. ticketStatusChanged is the new real status ONLY if genuinely different, else an empty string. source names where a reported change came from, either "official site" or the domain you read it on, and is empty if nothing changed. notes is one short sentence explaining what changed, ONLY if something else in this response is non-default, else an empty string.`;
+A MULTI-DAY EVENT HAS TWO DATES AND THIS ANSWER HAS A FIELD FOR EACH: a page saying the event runs 18 to 19 October is dateChanged 2026-10-18 AND dateEndChanged 2026-10-19, never one end of the run on its own.
+
+Respond with ONLY strict JSON: {"stillHappening": true, "dateChanged": "", "dateEndChanged": "", "ticketStatusChanged": "", "source": "", "notes": ""}. dateChanged is the new real start date as YYYY-MM-DD ONLY if it genuinely changed from what is on file, else an empty string. dateEndChanged is its last day, or empty for a one-day event. ticketStatusChanged is the new real status ONLY if genuinely different, else an empty string. source names where a reported change came from, either "official site" or the domain you read it on, and is empty if nothing changed. notes is one short sentence explaining what changed, ONLY if something else in this response is non-default, else an empty string.`;
 
     try {
       const r = await fetch("https://api.perplexity.ai/chat/completions", {
@@ -181,6 +183,11 @@ Respond with ONLY strict JSON: {"stillHappening": true, "dateChanged": "", "tick
       const cleaned = text.replace(/^```json\s*|\s*```$/g, "").trim();
       let parsed;
       try { parsed = JSON.parse(cleaned); } catch { failed.push({ name: p.name, error: "Couldn't parse Perplexity's response" }); continue; }
+      // The same two gates the Studio run applies (29 Sep 2026): a day the
+      // event already runs on is not a move, and a ticket status has to be on
+      // the event's own page. See utils/eventDates.js.
+      if (parsed.dateChanged && datePropositionProblem(parsed.dateChanged, p.date, today, { onFileEnd: p.dateEnd, proposedEnd: parsed.dateEndChanged || "" })) { parsed.dateChanged = ""; parsed.dateEndChanged = ""; }
+      if (parsed.ticketStatusChanged && statusRefusalFor({ status: parsed.ticketStatusChanged, onFile: p.date, accepted: parsed.dateChanged, today, ownText: siteText })) parsed.ticketStatusChanged = "";
       const hasChange = parsed.stillHappening === false || parsed.dateChanged || parsed.ticketStatusChanged;
       if (hasChange) {
         changed.push({

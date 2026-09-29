@@ -53,7 +53,7 @@ writeFileSync(entry, `
   export { supabaseFailure, studioErrorMessage, refreshIsDead, missingColumn, EXPIRED, REFUSED, MISSING, OUTDATED, OTHER } from ${JSON.stringify(join(root, "src/utils/studioErrors.js"))};
   export { cleanPlaceKind, cleanRelation, cleanIsland, placeIssues, placePatch, hasPlaceChange, duplicateNames } from ${JSON.stringify(join(root, "src/utils/placeEdit.js"))};
   export { dateProbeQueries, danishDay, englishDay, numericDay, parseEventDate, isPastDate, nextEditionYear, eventDateIssues, staleEvents, lastDateInText, looksFinished, splitFinishedCandidates, monthsInText } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
-  export { byEventDate, eventTime, eventMonthShort, eventMonths, eventMonthsShort, MAX_EVENT_MONTHS, isUndated, UNDATED, datePropositionProblem, DATE_PROPOSITION_WHY, datePropositionWhy, nextEdition, dateRangesInText, isoDay, anchoredEdition, venueRatherThanEvent, PROGRAMME_DATES, dateMentions, labelledAt, otherLabelAt, CALENDAR_DATES, DATE_LABEL_WINDOW, looksLikeOffice, eventLocation, OFFICE_WORDS, EVENT_LOCATION_ORDER, OFFICE_CONTEXT_WINDOW, stepWords, STEP_LABELS, unresolvedTraces, CHECK_STEP_WORDS, WRONG_EDITION, readAnotherEdition, statusIsAboutAFinishedEdition, statusRefusalFor, STATUS_REFUSAL_WHY } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
+  export { byEventDate, eventTime, eventMonthShort, eventMonths, eventMonthsShort, MAX_EVENT_MONTHS, isUndated, UNDATED, datePropositionProblem, DATE_PROPOSITION_WHY, datePropositionWhy, nextEdition, dateRangesInText, isoDay, anchoredEdition, venueRatherThanEvent, PROGRAMME_DATES, dateMentions, labelledAt, otherLabelAt, CALENDAR_DATES, DATE_LABEL_WINDOW, looksLikeOffice, eventLocation, OFFICE_WORDS, EVENT_LOCATION_ORDER, OFFICE_CONTEXT_WINDOW, stepWords, STEP_LABELS, unresolvedTraces, CHECK_STEP_WORDS, WRONG_EDITION, readAnotherEdition, statusIsAboutAFinishedEdition, statusRefusalFor, STATUS_REFUSAL_WHY, statusOnOwnPage } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
   export { faqLink, faqWorthReading, FAQ_FIELDS, FAQ_RULE, unpuny, stripToText, pageReadVerdict, worthDeepRead, firecrawlBody, firecrawlText, domainOf, describeRead, CHALLENGE_MARKERS, MIN_USEFUL_CHARS, CHALLENGE_MAX_CHARS, MARKER_WINDOW, TEXT_CAP, FIRECRAWL_URL, FIRECRAWL_CACHE_MS, NOT_WORTH_RETRYING, scrapeTier, isApiCoveredHost, API_COVERED_HOSTS, isListingHost, rankSource, rankSources, sourceOrderBlock, isReferenceHost, SOURCE_CLASS, REFERENCE_DOMAINS, factAge, newestDateIn, validityWindow, VALIDITY_GRACE_MONTHS, MAX_FACT_AGE_MONTHS, LISTING_DOMAINS, newestYearIn, pageEra, STALE_BEFORE_YEAR, PERISHABLE, perishableSentence, EXISTENCE_RULE, linksIn, ticketLinks, MAX_TICKET_PAGES, bannerImages, bannerImagesFromMarkdown, MAX_BANNERS, IMAGE_JUNK, MENU_WORDS, textHasPrice, menuImagesToRead, MAX_MENU_READS, linksInMarkdown, ticketLinksFromMarkdown, scoreTicketLinks } from ${JSON.stringify(join(root, "src/utils/pageScan.js"))};
   export { readPage, readPlain, readFirecrawl } from ${JSON.stringify(join(root, "src/utils/readPage.js"))};
   export { runOnce } from ${JSON.stringify(join(root, "src/utils/inFlight.js"))};
@@ -100,7 +100,8 @@ writeFileSync(entry, `
   export { whoWrote, modelProvenanceNote, DRAFT_STAGES, readerFacingStages, WRITER, EXTRACTOR, MEASURED } from ${JSON.stringify(join(root, "src/utils/modelProvenance.js"))};
   export { venueStyleOf, venueStyleLabel, VENUE_STYLES, VENUE_STYLE_LABEL, unstyledVenues, venueStyleCoverage, stylesPresent, showVenueStyleFacet, buildNightlifeStyleFacet, VENUE_STYLE_COVERAGE_MIN } from ${JSON.stringify(join(root, "src/utils/venueStyle.js"))};
   export { looksLikeLodging, stayDrift, stayDriftNote, publicAccessAnswered, STAY_TERMS, LODGING_RULE, LODGING_NOTES_RULE, LODGING_WORDS, isLodgingType, LODGING_TYPES } from ${JSON.stringify(join(root, "src/utils/venueSubject.js"))};
-  export { priceClass, entryPrice, priceChip, entryKindLabel, ENTRY_KIND_LABEL, CHIP_MAX, PAID_LABEL, SAYS_FREE, AMOUNT, isUnqualifiedFree, CONCESSION_SCOPE, entryBooking, bookingChip, BOOKING_FIELDS, NEEDS_BOOKING, WALK_IN } from ${JSON.stringify(join(root, "src/utils/entryPrice.js"))};
+  export { PLACES as KLP_PLACES, TRIPS as KLP_TRIPS, LOCAL_TIPS as KLP_TIPS, openOn as klpOpenOn, nextWeekday as klpNextWeekday, todayInKlaipeda, stopTime as klpStopTime, mapsRouteUrl as klpRouteUrl, KLAIPEDA_DEMO_PATH } from ${JSON.stringify(join(root, "src/data/klaipedaDemo.js"))};
+  export { familyChip, priceClass, entryPrice, priceChip, entryKindLabel, ENTRY_KIND_LABEL, CHIP_MAX, PAID_LABEL, SAYS_FREE, AMOUNT, isUnqualifiedFree, CONCESSION_SCOPE, entryBooking, bookingChip, BOOKING_FIELDS, NEEDS_BOOKING, WALK_IN } from ${JSON.stringify(join(root, "src/utils/entryPrice.js"))};
   export { literalRenderings, literalNote, looksLikeAName, FALSE_FRIENDS, FALSE_FRIEND_RULE, NAME_RULE } from ${JSON.stringify(join(root, "src/utils/literalDanish.js"))};
   export { licenseUrl, creditIsRequired } from ${JSON.stringify(join(root, "src/utils/imageCredits.js"))};
   export { STUDIO_VOICE } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
@@ -33221,7 +33222,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("and returns them all", /candidates,/.test(loc));
   ok("with the top hit still where every existing caller reads it",
      /found: true,\s*\n\s*name: p\.displayName\?\.text/.test(loc));
-  ok("a candidate with no location never leaves the endpoint", /\.filter\(x => x\?\.location\)/.test(loc));
+  // Batch 155: and no permanently closed one either.
+  ok("a candidate with no location never leaves the endpoint", /\.filter\(x => x\?\.location( && [^)]*)?\)/.test(loc));
   // Still the cheap field mask. Adding an hours field here would move every call
   // in the file onto the enterprise tier, which is why the route is separate.
   ok("and it is still the cheap field mask", !/openingHours/.test(loc));
@@ -43936,7 +43938,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // And the checker uses it, and says when it ignored something.
   const appD = readFileSync(join(root, "src/App.jsx"), "utf8");
   ok("the event check refuses a backwards proposal",
-     /datePropositionProblem\(parsed\.dateChanged, ev\.date, new Date\(\), \{ onFileEnd: ev\.dateEnd \}\)/.test(appD));
+     /datePropositionProblem\(parsed\.dateChanged, ev\.date, new Date\(\), \{ onFileEnd: ev\.dateEnd(, proposedEnd: [^}]*)? \}\)/.test(appD));
   ok("and says so rather than dropping it in silence", /Ignored a suggested date of/.test(appD));
   // The wiring, both halves. Either one left out runs the gate over a value
   // nothing ever reads.
@@ -44325,11 +44327,12 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     const paid = appN.indexOf("const result = await askPerplexity(prompt);", from);
     return from !== -1 && exit !== -1 && paid !== -1 && exit < paid;
   })());
-  ok("and an answer from the site skips it too", /if \(fromSite && fromSite\.start !== ev\.date\)/.test(appN));
+  // Batch 155: compared as days, and as a run, rather than as strings.
+  ok("and an answer from the site skips it too", /if \(fromSite && !\(sameDate\(fromSite\.start, ev\.date\) && sameDate\(fromSite\.end, ev\.dateEnd\)\)\)/.test(appN));
   // Still guarded. A page's own history could otherwise walk a date backwards,
   // which is the Rock under broen failure arriving by a different route.
   ok("a date read off a page goes through the same backwards guard",
-     /datePropositionProblem\(isoDay\(found\.start\), ev\.date, checkFrom, \{ labelled: read\.labelled \}\)/.test(appN));
+     /datePropositionProblem\(isoDay\(found\.start\), ev\.date, checkFrom, \{ labelled: read\.labelled(, onFileEnd: ev\.dateEnd, proposedEnd: [^}]*)? \}\)/.test(appN));
   // The broken rows first, so a cap can never again spend itself on rows that
   // were already right.
   ok("undated rows are checked before correct ones", /const brokenFirst = \[\.\.\.allUpcoming\]\.sort/.test(appN));
@@ -45254,7 +45257,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("the search tier asks for the honest sentence",
        /parsed\.ignoredWhy = datePropositionWhy\(badProposal, \{ labelChecked: false \}\)/.test(appD));
     ok("and the site tier still answers the question off the page",
-       /datePropositionProblem\(isoDay\(found\.start\), ev\.date, checkFrom, \{ labelled: read\.labelled \}\)/.test(appD));
+       /datePropositionProblem\(isoDay\(found\.start\), ev\.date, checkFrom, \{ labelled: read\.labelled(, onFileEnd: ev\.dateEnd, proposedEnd: [^}]*)? \}\)/.test(appD));
   }
 
   // Unless the page says in words that it moved. A genuine change is announced.
@@ -54419,8 +54422,9 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("nor does a free claim scoped to a DAY rather than a person",
     !entryPrice({ ticketsGlance: "Free entry on Wednesdays" }).impliesPaid);
   // The chips those four produce, which is the half Oliver can see.
-  is("so Legoland's card says Paid", priceChip({ ticketsGlance: "Children under 2: free entry" }), PAID_LABEL);
-  is("and AROS's card says Paid", priceChip({ ticketsGlance: "Free entry for everyone under 18" }), PAID_LABEL);
+  // Batch 155: "Paid also need to change somehow". The chip names who pays what, or "Entry fee".
+  is("so Legoland's card says Paid", priceChip({ ticketsGlance: "Children under 2: free entry" }), `${PAID_LABEL} · under 2 free`);
+  is("and AROS's card says Paid", priceChip({ ticketsGlance: "Free entry for everyone under 18" }), `${PAID_LABEL} · under 18 free`);
   is("and the fortress still says nothing", priceChip({ ticketsGlance: "Free entry year-round to the fortress ramparts" }), "");
   is("and so does the palace garden", priceChip({ ticketsGlance: "Free (garden only, palace interiors cost extra)" }), "");
   // ── AND THE REPAIR QUEUE STILL SEES THE ROW ─────────────────────
@@ -54494,7 +54498,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // rule in a chip: a figure is only true against the thing it measures.
   is("a price too long for a chip is not squeezed into a number",
      priceChip({ ticketsGlance: "1-day ticket 229 to 399 DKK per person aged 3 to 64; children aged 0 to 2 free" }),
-     PAID_LABEL);
+     `${PAID_LABEL} · under 3 free`);
   ok("and no invented floor is printed anywhere",
      !/from/i.test(priceChip({ ticketsGlance: "1-day ticket 229 to 399 DKK per person aged 3 to 64; children aged 0 to 2 free" })));
   // THE WORSE BRANCH, WHICH NOBODY HAD NOTICED: the fallback plucked the FIRST
@@ -54502,7 +54506,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // said "150 DKK" when entry is 80.
   is("and a number is never plucked out of a sentence",
      priceChip({ ticketsGlance: "Guided tour 150 DKK, entry 80 DKK, under 12 free with an adult" }),
-     PAID_LABEL);
+     `${PAID_LABEL} · under 12 free`);
   // A PRICE THAT FITS IS STILL SHOWN, which is what keeps this honest rather
   // than merely safe: the chip says the real thing whenever the real thing fits.
   is("a short figure is shown as it was written", priceChip({ ticketsGlance: "120 DKK" }), "120 DKK");
@@ -61327,7 +61331,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // chip reads impliesPaid instead: a line that prices a concession has told us
   // somebody pays.
   is("and the card says Paid, because a concession is evidence of a gate",
-    priceChip({ price: "Free for children under 18" }), "Paid");
+    priceChip({ price: "Free for children under 18" }), "Entry fee · under 18 free");
   is("while a plain free door still says Free", priceChip({ price: "Free entry" }), "Free");
 
   // ── THE BOOKING HALF: THREE ANSWERS, AND SILENCE IS ONE ──────────
@@ -61337,7 +61341,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   is("AROS with nothing on file no longer claims you can walk in",
      bookingChip({ name: "ARoS Aarhus Art Museum", ticketsGlance: "150 DKK" }), "");
   is("and when it does say, the card says it", bookingChip({ bookingNote: "Timed entry, book ahead" }), "Book ahead");
-  is("the other direction too", bookingChip({ bookingNote: "No booking required" }), "Walk in, no booking");
+  // Batch 155: "get rid of this 'walk in no booking' bs". The reading stays, the words go.
+  is("the other direction too", [entryBooking({ bookingNote: "No booking required" }).walkIn, bookingChip({ bookingNote: "No booking required" })], [true, ""]);
   is("in Danish", bookingChip({ bookingNote: "Tidsbestilling påkrævet" }), "Book ahead");
 
   // ── THE NEGATION TRAP, WHICH THE FIRST VERSION WALKED INTO ───────
@@ -61365,7 +61370,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   is("a free walk-in gets the free wording",
      [entryPrice({ ticketsGlance: "Free", bookingNote: "No booking required" }).free,
       bookingChip({ ticketsGlance: "Free", bookingNote: "No booking required" })],
-     [true, "Walk in, no booking"]);
+     [true, ""]);
 
   // ── AND IT READS A FIELD, WHICH IS THE WHOLE POINT ──────────────
   // The old chip read nothing at all. If BOOKING_FIELDS ever empties, every
@@ -61382,7 +61387,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // ── THE CARD ITSELF, WHICH IS WHERE THE STRING LIVED ────────────
   const appB = readFileSync(join(root, "src/App.jsx"), "utf8");
   ok("the card asks entryBooking rather than asserting", /const book = entryBooking\(item\)\.walkIn;/.test(appB));
-  ok("and renders nothing when nobody has answered", /if \(book === null\) return null;/.test(appB));
+  ok("and renders nothing when nobody has answered", /if \(book !== false && !family\) return null;/.test(appB));
   // The dead assumption in the data layer: every attraction was stamped
   // _price: "Free" on its way into the grid. Nothing read it, which is the only
   // reason it was not a third place saying Free.
@@ -62178,7 +62183,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("and desc is not a field this reads at all", !BOOKING_FIELDS.includes("desc"));
   ok("while the field the writer fills still answers",
      bookingChip({ bookingNote: "Timed entry, book ahead" }) === "Book ahead"
-     && bookingChip({ bookingNote: "No booking required" }) === "Walk in, no booking");
+     && bookingChip({ bookingNote: "No booking required" }) === "");
 
   // ── 6. researchVoice WAS DELETING TRUE HISTORY ──────────────────
   //
@@ -80156,6 +80161,114 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const detail = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
   ok("under a reason, only the commission", /\{reason \? commissionOnly : note\}/.test(detail) && /\{extra \? commissionOnly : note\}/.test(detail) && /const commissionOnly = ticketNote \? uiT\("affiliate\.commission", lang\) : "";/.test(detail));
   ok("no dashes in the new sentences", ["affiliate.disclosure", "affiliate.commission"].every(k => ["en", "da", "de"].every(c => !/[—–]| - /.test(M.UI_STRINGS[k][c]))));
+}
+
+
+// ── Batch 155: event updates and closed places ────────────────────────
+// Oliver, 29 Sep 2026: "events that are like, let's say, happening from the
+// 18th till the 19th, will attempt on being updated till happening from the
+// 19th", "events where something 'may be on sale', turns out to clearly not
+// to be on sale", and "so it doesn't apply places that are permanently closed
+// down? It found Hornslet bar, but apparently it is closed".
+{
+  const today = new Date(2026, 8, 29);
+  is("a page naming the second day of an 18 to 19 run is not a move", M.datePropositionProblem("2026-10-19", "2026-10-18", today, { onFileEnd: "2026-10-19", labelled: true }), "inside-the-dates-already-on-file");
+  is("nor with its own one-day end", M.datePropositionProblem("2026-10-19", "2026-10-18", today, { onFileEnd: "2026-10-19", proposedEnd: "2026-10-19", labelled: true }), "inside-the-dates-already-on-file");
+  is("but a run that now ends later is a real shift", M.datePropositionProblem("2026-10-19", "2026-10-18", today, { onFileEnd: "2026-10-19", proposedEnd: "2026-10-20", labelled: true }), "");
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the event's own page path passes the run's end too", /datePropositionProblem\(isoDay\(found\.start\), ev\.date, checkFrom, \{ labelled: read\.labelled, onFileEnd: ev\.dateEnd, proposedEnd:/.test(app));
+  ok("and a day of the run confirms the file instead of costing a search", /if \(problem === "inside-the-dates-already-on-file"\) return \{ found: \{ start: parseEventDate\(ev\.date\)/.test(app));
+  ok("the same day in another spelling is not a change", /const sameDate = \(a, b\) =>/.test(app) && !/fromSite && fromSite\.start !== ev\.date/.test(app));
+  ok("the search path passes its own end", /onFileEnd: ev\.dateEnd, proposedEnd: parsed\.dateEndChanged \|\| ""/.test(app));
+
+  // A status has to be on the event's own page.
+  is("on sale needs a way to buy, and no coming soon", [
+    M.statusOnOwnPage("on_sale", "Køb billetter her til Aarhus Festuge"),
+    M.statusOnOwnPage("on sale", "Billetsalget starter 1. november. Køb billetter her snart"),
+    M.statusOnOwnPage("on_sale", "Programmet kommer snart"),
+    M.statusOnOwnPage("on_sale", ""),
+  ], [true, false, false, false]);
+  is("sold out needs sold out", [M.statusOnOwnPage("sold_out", "Lørdag er UDSOLGT"), M.statusOnOwnPage("sold_out", "Køb billetter")], [true, false]);
+  is("a search status the event's own page does not back is refused", [
+    M.statusRefusalFor({ status: "on sale", onFile: "2026-11-07", ownText: "Tickets coming soon" }),
+    M.statusRefusalFor({ status: "on sale", onFile: "2026-11-07", ownText: "" }),
+    M.statusRefusalFor({ status: "on sale", onFile: "2026-11-07", ownText: "Buy tickets now" }),
+  ], ["not-on-its-own-page", "own-page-not-read", ""]);
+  ok("and every refusal has its sentence", ["not-on-its-own-page", "own-page-not-read"].every(k => !!M.STATUS_REFUSAL_WHY[k] && !/[—–]/.test(M.STATUS_REFUSAL_WHY[k])));
+  ok("the Studio run hands it the pages it read", /ownText: ownTexts\.join\("\\n\\n"\)/.test(app) && /if \(first\.ok && first\.data\?\.text\) ownTexts\.push\(first\.data\.text\);/.test(app));
+  const cron = readFileSync(join(root, "api/update-events-check.js"), "utf8");
+  ok("and so does the scheduled check, which also asks for the end date", /dateEndChanged/.test(cron) && /statusRefusalFor\(\{ status: parsed\.ticketStatusChanged, onFile: p\.date, accepted: parsed\.dateChanged, today, ownText: siteText \}\)/.test(cron) && /onFileEnd: p\.dateEnd/.test(cron));
+
+  // Closed places.
+  const cands = [
+    { name: "Bones Hornslet", town: "Hornslet", address: "Torvet 1, 8543 Hornslet", status: "CLOSED_PERMANENTLY" },
+    { name: "Bones Aarhus", town: "Aarhus", address: "Ågade 1, 8000 Aarhus", status: "OPERATIONAL" },
+    { name: "Bones Odense", town: "Odense", address: "Vestergade 1, 5000 Odense", status: "CLOSED_TEMPORARILY" },
+  ];
+  is("a permanently closed branch is never offered, a temporarily closed one is", M.branchCandidates("Bones", cands).map(c => c.town), ["Aarhus", "Odense"]);
+  const locate = readFileSync(join(root, "api/places-locate.js"), "utf8");
+  ok("Google is asked for the status, and the route drops closed places too", /places\.businessStatus/.test(locate) && /x\.businessStatus !== "CLOSED_PERMANENTLY"/.test(locate));
+}
+
+
+// ── Batch 155, part two: families on the card ─────────────────────────
+// Oliver, 29 Sep 2026: "Paid also need to change somehow", "kids make this
+// complicated. Families might be misguided", "recommended for families",
+// "We need to make this convinient", and "get rid of this 'walk in no
+// booking' bs". The lines below are the shapes real rows carry.
+{
+  is("who pays what, when the row says it", [
+    M.priceChip({ ticketsGlance: "Adults (18+): 190 DKK. Children 3 to 11: 95 DKK. Under 3 free." }),
+    M.priceChip({ ticketsGlance: "Adults 145 DKK, children under 18 free, students 95 DKK (valid ID required)" }),
+    M.priceChip({ ticketsGlance: "Voksne 125 kr, børn 60 kr, studerende 80 kr, pensionister 100 kr." }),
+    M.priceChip({ ticketsGlance: "1-day ticket 229 to 399 DKK per person aged 3 to 64; children aged 0 to 2 free" }),
+    M.priceChip({ ticketsGlance: "Children under 2: free entry" }),
+  ], ["Adults 190 · kids 95 kr · under 3 free", "Adults 145 kr · under 18 free", "Adults 125 · kids 60 kr", "Entry fee · under 3 free", "Entry fee · under 2 free"]);
+  ok("a student price is never read as a child price", !/kids 95/.test(M.priceChip({ ticketsGlance: "Adults 145 DKK, children under 18 free, students 95 DKK (valid ID required)" })));
+  ok("and the first amount in a mixed sentence is never taken as the adult price", !/Adults/.test(M.familyChip("Guided tour 150 DKK, entry 80 DKK, under 12 free with an adult")));
+  is("the word for a price nobody named is Entry fee, not Paid", M.PAID_LABEL, "Entry fee");
+  ok("every chip fits and carries no dash", ["Adults (18+): 190 DKK. Children 3 to 11: 95 DKK. Under 3 free.", "Voksne 125 kr, børn 60 kr"].every(t => { const c = M.priceChip({ ticketsGlance: t }); return c.length <= M.CHIP_MAX && !/[—–]| - /.test(c); }));
+
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("no card says Walk in any more", !/Walk in, no booking|🆓 Walk in/.test(stripComments(app)) && /if \(book !== false && !family\) return null;/.test(app));
+  ok("and Good for families comes from stored themes only", /const family = item\._kind === "free" && themesOf\(item\)\.includes\("family"\);/.test(app) && />Good for families</.test(app));
+  const sweep = M.SWEEPS.find(sw => sw.id === "attractionThemes");
+  ok("an attraction themes sweep exists, writes only themes, and never researches", !!sweep && sweep.types.join() === "free" && sweep.fields.join() === "themes" && sweep.noResearch === true && sweep.revisable === true);
+  ok("and it asks for family only when children have their own reason to go", /ONLY when the entry gives children their own reason to go/.test(sweep.question));
+}
+
+
+// ── Batch 156: Klaipėda, a demo for the tourism centre ────────────────
+// Oliver, 29 Sep 2026: two hand-written trips at a hidden address, so he can
+// show Klaipėda's tourism centre what Gemlyx adds before the app is made to
+// work outside Denmark.
+{
+  const d = (y, m, day) => new Date(y, m - 1, day);
+  const castle = M.KLP_PLACES.castleMuseum.hours, clock = M.KLP_PLACES.clockMuseum.hours;
+  is("the castle museum keeps summer and winter days apart", [
+    M.klpOpenOn(castle, d(2026, 7, 6)).open,   // Monday in summer
+    M.klpOpenOn(castle, d(2026, 7, 5)).open,   // Sunday in summer
+    M.klpOpenOn(castle, d(2026, 10, 4)).open,  // Sunday in winter
+    M.klpOpenOn(castle, d(2026, 10, 5)).open,  // Monday in winter
+    M.klpOpenOn(castle, d(2026, 9, 16)).open,  // last summer day, a Wednesday
+    M.klpOpenOn(castle, d(2026, 9, 19)).open,  // first winter Saturday
+  ], [false, true, false, true, true, false]);
+  is("and says why in words", M.klpOpenOn(castle, d(2026, 10, 4)).text, "Closed on Sundays at this time of year");
+  is("the clock museum's Thursday is late and its Monday is shut", [M.klpOpenOn(clock, d(2026, 10, 1)).text, M.klpOpenOn(clock, d(2026, 10, 5)).text], ["Open 12:00 to 20:00", "Closed on Mondays"]);
+  is("a lane of restaurants is never called open or closed", M.klpOpenOn(M.KLP_PLACES.friedrich.hours, d(2026, 10, 5)).open, null);
+  is("picking a weekday means the next one, today included", [M.klpNextWeekday(d(2026, 9, 29), 2).getDate(), M.klpNextWeekday(d(2026, 9, 29), 1).getDate()], [29, 5]);
+  is("today is Klaipėda's today, an hour ahead of Denmark", M.todayInKlaipeda(new Date("2026-09-29T21:30:00Z")).getDate(), 30);
+  is("the cruise trip counts from the gangway", [M.klpStopTime(M.KLP_TRIPS[0], 0), M.klpStopTime(M.KLP_TRIPS[0], 65), M.klpStopTime(M.KLP_TRIPS[0], 210)], ["+0:00", "+1:05", "+3:30"]);
+  ok("and gets back inside four hours with a margin", Math.max(...M.KLP_TRIPS[0].stops.filter(s => s.place).map(s => s.at)) <= 210);
+  ok("every stop is a known place with a source", M.KLP_TRIPS.every(t => t.stops.every(s => s.walk || (M.KLP_PLACES[s.place] && /^https:\/\//.test(M.KLP_PLACES[s.place].source)))));
+  ok("the day trip's clock only moves forward", (() => { const ts = M.KLP_TRIPS[1].stops.filter(s => s.place).map(s => s.at); return ts.every((t, i) => i === 0 || t > ts[i - 1]); })());
+  ok("the whole walk fits in one Google Maps link", M.KLP_TRIPS.every(t => { const u = new URL(M.klpRouteUrl(t)); const w = u.searchParams.get("waypoints"); return u.searchParams.get("travelmode") === "walking" && (!w || w.split("|").length <= 9); }));
+  const words = JSON.stringify([M.KLP_PLACES, M.KLP_TRIPS, M.KLP_TIPS]) + readFileSync(join(root, "src/pages/KlaipedaDemo.jsx"), "utf8");
+  ok("no dash and none of his banned words anywhere on it", !/[—–]/.test(words) && !/\b(actually|genuine|genuinely|truly|simply)\b/i.test(words));
+  ok("prices are euros, never kroner", !/DKK|\bkr\b/.test(JSON.stringify(M.KLP_PLACES)));
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("it has an address, and nothing links to it", M.KLAIPEDA_DEMO_PATH === "/lithuania/klaipeda" && /<Route path=\{KLAIPEDA_DEMO_PATH\} element=\{<KlaipedaDemo \/>\} \/>/.test(app) && (app.match(/KLAIPEDA_DEMO_PATH/g) || []).length === 2);
+  ok("and it asks search engines to stay away", /noindex/.test(readFileSync(join(root, "src/pages/KlaipedaDemo.jsx"), "utf8")));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

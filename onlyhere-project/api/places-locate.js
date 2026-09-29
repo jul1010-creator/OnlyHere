@@ -79,7 +79,10 @@ export default async function handler(req, res) {
         // Basic fields only. Adding an opening-hours field here would silently
         // move every call in this file onto the enterprise tier, which is the
         // whole reason the route is separate.
-        "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.location",
+        // businessStatus is on the same Pro tier as the three above, so it
+        // costs nothing more. 29 Sep 2026: a branch lookup offered a bar in
+        // Hornslet that Google lists as permanently closed.
+        "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.location,places.businessStatus",
       },
       // ── FIVE INSTEAD OF ONE, AND IT COSTS THE SAME ────────────────
       // Oliver, 17 Aug 2026: "you can also make it ask me, if it's not sure, 'do
@@ -106,14 +109,17 @@ export default async function handler(req, res) {
     // level, so those keep meaning what they meant. `candidates` is additive: a
     // caller that does not know about it behaves as it did before, and the one
     // that does can ask which place was meant.
+    // A permanently closed listing is never a candidate. A temporarily closed
+    // one is kept and says so, because it reopens.
     const candidates = (data.places || [])
-      .filter(x => x?.location)
+      .filter(x => x?.location && x.businessStatus !== "CLOSED_PERMANENTLY")
       .map(x => ({
         name: x.displayName?.text || "",
         address: x.formattedAddress || "",
         town: townFromAddress(x.formattedAddress),
         lat: x.location.latitude,
         lon: x.location.longitude,
+        ...(x.businessStatus ? { status: x.businessStatus } : {}),
       }))
       .filter(x => x.name);
     return res.status(200).json({
@@ -123,6 +129,7 @@ export default async function handler(req, res) {
       town: townFromAddress(p.formattedAddress),
       lat: p.location.latitude,
       lon: p.location.longitude,
+      ...(p.businessStatus ? { status: p.businessStatus } : {}),
       candidates,
     });
   } catch (e) {

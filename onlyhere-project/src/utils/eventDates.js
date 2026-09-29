@@ -219,7 +219,7 @@ export const eventMonths = (e) => eventMonthsShort(e?.date ?? e?.dateStart, e?.d
 // something instead of quietly dropping it. A silent refusal here would be the
 // same fault as the silent slice on the review screen: he would have no way to
 // tell a checked event from an unchecked one.
-export const datePropositionProblem = (proposed, onFile, today, { labelled = false, onFileEnd = "" } = {}) => {
+export const datePropositionProblem = (proposed, onFile, today, { labelled = false, onFileEnd = "", proposedEnd = "" } = {}) => {
   const next = parseEventDate(proposed);
   if (!next) return "unreadable";
   const now = parseEventDate(today) || (today instanceof Date ? today : null);
@@ -243,8 +243,17 @@ export const datePropositionProblem = (proposed, onFile, today, { labelled = fal
   // The same rule as the sameDay check in the caller, widened from a day to a
   // run, and it exists because Oliver said a list where several rows are not
   // changes is a list nobody finishes.
+  // ── AND THE SITE PATH ASKS IT TOO ────────────────────────────────
+  // Oliver, 29 Sep 2026: "events that are like, let's say, happening from the
+  // 18th till the 19th, will attempt on being updated till happening from the
+  // 19th." The search path passed the end date here since 10 Sep; the path
+  // that reads the event's OWN page never did, so a page naming the second
+  // day ("Lørdag 19. oktober") read as the event moving to the 19th. Both
+  // callers pass it now. A proposal whose own end runs past the file's end is
+  // a real shift and is not refused by this rule.
   const end = parseEventDate(onFileEnd);
-  if (have && end && next.getTime() >= have.getTime() && next.getTime() <= end.getTime()) {
+  const pend = parseEventDate(proposedEnd);
+  if (have && end && next.getTime() >= have.getTime() && next.getTime() <= end.getTime() && (!pend || pend.getTime() <= end.getTime())) {
     return "inside-the-dates-already-on-file";
   }
   // ── AN ANNUAL FESTIVAL KEEPS ITS SLOT IN THE YEAR ─────────────────
@@ -354,6 +363,8 @@ export const statusIsAboutAFinishedEdition = (onFile, accepted, today) => {
 export const STATUS_REFUSAL_WHY = {
   "another-edition": "the date in the same answer was refused for belonging to a different edition, and a ticket status read off that page is about that edition too",
   "a-finished-edition": "the date on file has already gone by and the check found no new one, so there is no edition left for a ticket status to be about",
+  "not-on-its-own-page": "the event's own site does not say it, and a ticket status from a web search alone is not confirmed",
+  "own-page-not-read": "the event's own site was not available on this run, so the ticket status from the web search could not be confirmed",
 };
 
 // ── AND THE WHOLE DECISION IN ONE PLACE ─────────────────────────────
@@ -368,10 +379,42 @@ export const STATUS_REFUSAL_WHY = {
 // Returns the key, or "" when the status is allowed through, which is the
 // common case and the one worth protecting: the point of this gate is to stop
 // last year's banner, not to stop the check reporting anything.
-export const statusRefusalFor = ({ status = "", dateProblem = "", onFile = "", accepted = "", today = null } = {}) => {
+// ── AND A STATUS HAS TO BE ON THE EVENT'S OWN PAGE ──────────────────
+// Oliver, 29 Sep 2026: "events where something 'may be on sale', turns out to
+// clearly not to be on sale." The status came from a web search answer, with
+// nothing checking it against the event's own site. So a status is let
+// through only when the event's own pages, already read on the same run, say
+// it in their own words; with no own page read, it is not confirmed and is
+// not offered. Sold out needs "sold out"; on sale needs a way to buy and no
+// "coming soon" or "not yet on sale" beside it.
+const SAYS_SOLD_OUT = /\b(?:sold\s*out|udsolgt|ausverkauft)\b/i;
+const SAYS_NOT_YET = /\b(?:coming\s+soon|not\s+(?:yet\s+)?on\s+sale|on\s+sale\s+soon|tickets?\s+(?:release|go\s+on\s+sale)\s+(?:on|in|soon)|billetsalget?\s+(?:starter|åbner)|kommer\s+snart|snart\s+i\s+salg|ikke\s+i\s+salg|presale\s+(?:opens|starts))\b/i;
+const SAYS_BUY = /\b(?:buy\s+tickets?|get\s+tickets?|book\s+(?:now|tickets?)|tickets?\s+(?:on\s+sale|available)|køb\s+billet(?:ter)?|bestil\s+billet(?:ter)?|billetter\s+(?:er\s+)?i\s+salg|tickets?\s+kaufen)\b/i;
+const SAYS_FEW = /\b(?:few\s+(?:tickets\s+)?left|selling\s+fast|limited\s+(?:tickets|availability)|få\s+billetter\s+tilbage|næsten\s+udsolgt)\b/i;
+export const statusOnOwnPage = (status, ownText) => {
+  const t = String(ownText || "");
+  if (!t.trim()) return false;
+  const s = normaliseStatusWord(status);
+  if (s === "sold_out") return SAYS_SOLD_OUT.test(t);
+  if (s === "limited") return SAYS_FEW.test(t) && !SAYS_SOLD_OUT.test(t);
+  if (s === "on_sale") return SAYS_BUY.test(t) && !SAYS_NOT_YET.test(t) && !SAYS_SOLD_OUT.test(t);
+  if (s === "off_sale") return SAYS_NOT_YET.test(t) || !SAYS_BUY.test(t);
+  if (s === "cancelled") return /\b(?:cancell?ed|aflyst|abgesagt)\b/i.test(t);
+  return false;
+};
+const normaliseStatusWord = (s) => {
+  const k = String(s || "").toLowerCase().trim().replace(/[\s-]+/g, "_");
+  return ({ available: "on_sale", on_sale: "on_sale", onsale: "on_sale", selling_fast: "limited", limited: "limited", few_left: "limited", sold_out: "sold_out", soldout: "sold_out", off_sale: "off_sale", offsale: "off_sale", cancelled: "cancelled", canceled: "cancelled" })[k] || k;
+};
+
+// `ownText`: the event's own pages as read on this run. Pass null only from
+// a caller that has no way to read them; "" means they were not readable,
+// and then no status is confirmed.
+export const statusRefusalFor = ({ status = "", dateProblem = "", onFile = "", accepted = "", today = null, ownText = null } = {}) => {
   if (!String(status || "").trim()) return "";
   if (readAnotherEdition(dateProblem)) return "another-edition";
   if (statusIsAboutAFinishedEdition(onFile, accepted, today)) return "a-finished-edition";
+  if (ownText !== null && !statusOnOwnPage(status, ownText)) return String(ownText || "").trim() ? "not-on-its-own-page" : "own-page-not-read";
   return "";
 };
 

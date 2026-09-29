@@ -116,6 +116,25 @@ export const SWEEPS = [
     noResearch: true,
     question: `What is this place FOR? Choose 1 to ${MAX_THEMES} from EXACTLY this list and nothing else: ${PLACE_THEMES.join(", ")}. Pick only what the entry gives a real reason to go for. Almost every Danish town has a church and a bakery, so history and food belong here only when the entry treats them as a reason to visit rather than as scenery. Fewer is better than more.`,
   },
+  // ── AND THE SAME FOR ATTRACTIONS ─────────────────────────────────
+  // Oliver, 29 Sep 2026: "Is it possible to sweep the tier system, but for
+  // like 'history' 'nature' 'kids'." The Category filter on Attractions has
+  // guessed those from each entry's words since 28 Sep because attractions
+  // never had themes. This fills them, read out of the entry's own words with
+  // a quote the same way the town sweep does, and the filter and the "good
+  // for families" chip then read the stored answer instead of the guess.
+  {
+    id: "attractionThemes",
+    label: "What an attraction is for",
+    blurb: "Fills history, nature and family on attractions that have none, so the Category filter and the family chip read the entry's own words instead of guessing from them.",
+    types: ["free"],
+    fields: ["themes"],
+    missing: ["themes"],
+    cap: 80,
+    revisable: true,
+    noResearch: true,
+    question: `What is this attraction FOR? Choose 1 to ${MAX_THEMES} from EXACTLY this list and nothing else: ${PLACE_THEMES.join(", ")}. history: a castle, church, museum of the past, ruin or monument the entry treats as the reason to come. nature: a forest, heath, cliff, dune, lake or park landscape. family: ONLY when the entry gives children their own reason to go (animals, play, rides, hands-on exhibits, a children's trail), never just because children are allowed in or get in free. Fewer is better than more.`,
+  },
   {
     id: "soldout",
     label: "Sold out, read again",

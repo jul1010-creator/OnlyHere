@@ -284,7 +284,44 @@ export const CHIP_MAX = 40;
 // Not "Paid entry" or "Costs money": the shortest true thing, sitting where a
 // "Free" chip sits on the row above it, so the two read as the same question
 // answered two ways.
-export const PAID_LABEL = "Paid";
+// Oliver, 29 Sep 2026: "Paid also need to change somehow", and on what
+// should replace it: "kids make this complicated. Families might be
+// misguided." So the word is "Entry fee", and wherever the row says who pays
+// what, the chip says it: the adult price and what children pay. See
+// familyChip below.
+export const PAID_LABEL = "Entry fee";
+
+// ── WHO PAYS WHAT, IN A CHIP ────────────────────────────────────────
+// Only figures the row ties to a person are used. The first amount in a
+// sentence is never taken on its own (see the Fårup note below): "Adults 229
+// kr" is a price, "229 kr" beside a guided tour and an entry is a guess.
+const KR = "(?:dkk|kr\\.?|kroner|,-)";
+// An age after the word is only an age in brackets or with a plus ("Adults
+// (18+)", "Adults 18+"); "Adults 145" is the price.
+const ADULT_BEFORE = new RegExp(`\\b(?:adults?|voksne?|voksen)\\b(?:\\s*\\(\\s*\\d{1,2}\\s*\\+?\\s*\\)|\\s*\\d{1,2}\\s*\\+)?\\s*[:=]?\\s*(?:${KR}\\s*)?(\\d{1,4})(?:\\s*${KR})?`, "i");
+const ADULT_AFTER = new RegExp(`(\\d{1,4})\\s*${KR}\\s*(?:for|per|pr\\.?)\\s*(?:adults?|voksne?|voksen)\\b`, "i");
+const UNDER_FREE = /\b(?:under|below)\s*(\d{1,2})\b[^.;]{0,30}?\b(?:free|gratis)\b|\b(?:free|gratis)\b[^.;]{0,30}?\b(?:under|below)\s*(\d{1,2})\b/i;
+const RANGE_FREE = /\b(?:children|kids|børn)\b\s*(?:aged\s*)?0\s*(?:to|til|-)\s*(\d{1,2})\b[^.;]{0,20}?\b(?:free|gratis)\b/i;
+const KIDS_FREE = /\b(?:children|kids|børn)\b[^.;0-9]{0,20}?\b(?:free|gratis)\b|\b(?:free|gratis)\b[^.;0-9]{0,12}\b(?:for\s+)?(?:children|kids|børn)\b/i;
+// Not across a comma or a semicolon: "children under 18 free, students 95 DKK"
+// is not a child price of 95.
+const KIDS_PAY = new RegExp(`\\b(?:children|child|kids|børn|barn)\\b[^.;,]{0,25}?(\\d{1,4})\\s*${KR}`, "i");
+export const familyChip = (says) => {
+  const t = String(says || "");
+  const adult = (ADULT_BEFORE.exec(t) || ADULT_AFTER.exec(t) || [])[1] || "";
+  const under = UNDER_FREE.exec(t);
+  const range = RANGE_FREE.exec(t);
+  const free = under ? `under ${under[1] || under[2]} free` : range ? `under ${Number(range[1]) + 1} free` : KIDS_FREE.test(t) ? "kids free" : "";
+  const pay = (KIDS_PAY.exec(t) || [])[1] || "";
+  const kidsPay = pay && free !== "kids free" ? pay : "";
+  // "Adults 190 · kids 95 kr · under 3 free" is the whole of what a family
+  // needs to know before tapping; the currency is said once when two prices
+  // share it.
+  const head = adult ? (kidsPay ? `Adults ${adult}` : `Adults ${adult} kr`) : PAID_LABEL;
+  const full = [head, kidsPay ? `kids ${kidsPay} kr` : "", free].filter(Boolean).join(" · ");
+  if (full.length <= CHIP_MAX) return full;
+  return [head, kidsPay ? `kids ${kidsPay} kr` : free].filter(Boolean).join(" · ");
+};
 export const priceChip = (row) => {
   const { free, says, impliesPaid } = entryPrice(row);
   if (free === true) return "Free";
@@ -316,7 +353,7 @@ export const priceChip = (row) => {
     // Neither is fixable inside 24 characters, so the chip stops trying. It
     // says the honest thing it has room for, and the full line is already on
     // the page one tap away, in At a Glance, in the operator's own words.
-    return PAID_LABEL;
+    return familyChip(says);
   }
   // ── AND A CONCESSION SAYS PAID WITHOUT NAMING A FIGURE ───────
   // The row told us somebody pays and never told us how much, so this is the
@@ -325,7 +362,7 @@ export const priceChip = (row) => {
   // inside CHIP_MAX and it would sit in the slot where "Free" sits one row
   // up, answering "who gets in free" to a reader asking "how much". The
   // operator's own line is already on the page, in At a Glance, one tap away.
-  if (free === null && impliesPaid) return PAID_LABEL;
+  if (free === null && impliesPaid) return familyChip(says);
   return "";
 };
 
@@ -452,7 +489,8 @@ export const entryBooking = (row) => {
 // priceChip so the two claims on one card are written in one file.
 export const bookingChip = (row) => {
   const { walkIn } = entryBooking(row);
-  if (walkIn === true) return "Walk in, no booking";
+  // "Walk in" is no longer printed anywhere, 29 Sep 2026: "get rid of this
+  // 'walk in no booking' bs." Only the warning is left.
   if (walkIn === false) return "Book ahead";
   return "";
 };

@@ -597,3 +597,41 @@ Oliver, 28 Sep 2026, going to bed: "make sure these affiliates actually get it r
   - A guide titled as a sommerhus trip gets the house link and not hotels.
 - **Not changed:** the "Official site" label on the website button (Fable rated it low) and the hotel label on hostel stays.
 - **Guide test.** Chrome was in the background, so a full build ran at about one word every ten seconds. Instead I ran the guide's cost list with the new code on the stops from your ten most recent saved guides and the live ticket rows. Zoo, National Museum, Tivoli and Tivoli Gardens, Legoland, Kronborg and Amalienborg get their link; Experimentarium and Louisiana get none; Tivoli Friheden gets none. The sommerhus guide ("A Wadden Sea Autumn") is recognised as a house trip. A full build with the screen on is still worth doing once this is pushed.
+
+## Batch 155: event updates, closed places, and what a card tells a family
+
+Oliver, 29 Sep 2026: "events that are like, let's say, happening from the 18th till the 19th, will attempt on being updated till happening from the 19th", "events where something 'may be on sale', turns out to clearly not to be on sale", "can you program it, so it doesn't apply places that are permanently closed down? It found Hornslet bar", "sweep the tier system, but for like 'history' 'nature' 'kids'", "get rid of this 'walk in no booking' bs", "Paid also need to change somehow", and on kids: "Families might be misguided... recommended for families... We need to make this convinient."
+
+- **18th to 19th read as "moved to the 19th".** The check that reads the event's OWN page never knew the event's end date, so a page naming the second day ("Lørdag 19. oktober") looked like a move. It knows the run now, and a page naming any day of it confirms the dates instead of changing them (and saves the paid search that used to follow). Dates are also compared as days, so "2026-10-18" and "18 Oct 2026" are the same.
+- **"May be on sale" that wasn't.** A ticket status from the web search is now only offered when the event's own site or ticket page, read on the same run, says it: sold out needs "sold out" or "udsolgt", on sale needs a way to buy and no "coming soon" or "billetsalget starter". When the site could not be read, the status is not offered. The scheduled check applies the same two rules.
+- **Permanently closed places.** Google's own listing status is now fetched with every branch and location lookup (same price tier), and a permanently closed address is never offered, in Studio's "find other addresses" or the Cheap gems location sweep. Temporarily closed ones are still shown, since they reopen. Nothing in the live library carries a Hornslet branch, so it was caught before it was applied.
+- **Themes for attractions.** A new sweep in Studio, "What an attraction is for", fills history, nature, family (and the other theme words) on attractions, read from each entry's own words with a quote, the same way the town sweep works. "Family" is only given when the entry gives children their own reason to go (animals, play, rides, hands-on), never just because children get in free. The Category filter uses the stored answer once it is there.
+- **Cards.**
+  - "Walk in" and "Walk in, no booking" are gone. "Book ahead" stays, since being turned away at a door is the costly mistake.
+  - "Good for families" appears on a card when the entry's stored themes include family, and only then.
+  - "Paid" is gone. The price chip now says who pays what when the entry states it: "Adults 190 · kids 95 kr · under 3 free", "Adults 145 kr · under 18 free", "Adults 125 · kids 60 kr". When the entry gives no adult price it reads "Entry fee", plus what children pay when that is stated ("Entry fee · under 3 free"). A student or pensioner price is never read as a child price, and the first number in a mixed sentence is never taken as the adult price.
+
+## Batch 156: Klaipėda, a demo for the tourism centre
+
+Oliver, 29 Sep 2026. He worked for Klaipėda's tourism centre and wants to show
+them what Gemlyx would add to klaipedatravel.lt before rebuilding the app to
+work outside Denmark. He chose two trips: four hours off a cruise ship, and a
+full day.
+
+- Address: /lithuania/klaipeda. Linked from nowhere, and the page rewrites the
+  robots tag to noindex while it is open.
+- Written by hand in src/data/klaipedaDemo.js and drawn by
+  src/pages/KlaipedaDemo.jsx. Nothing in the Danish app reads either file, and
+  neither touches the pipeline.
+- Every stop carries the page its facts came from. Hours and prices were read on
+  29 Sep 2026 from each place's own site. Where klaipedatravel.lt disagreed
+  (castle museum summer days), the museum's own site won.
+- The day picker answers per stop whether it is open on the chosen day, in the
+  season that day falls in, on Klaipėda time (an hour ahead of Denmark).
+- Prices are euros. The cruise trip counts from the gangway (+0:15), because
+  ships arrive at different hours.
+
+For the local check before it is shown: walking times are estimates; confirm
+the Black Ghost's spot in the castle harbour, whether Meridianas serves food
+today (its restaurant site says yes, klaipedatravel.lt says it no longer does),
+the talking sculpture count, and the Old Ferry timetable.

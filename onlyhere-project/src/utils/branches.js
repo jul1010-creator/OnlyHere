@@ -236,6 +236,13 @@ export const branchCandidates = (entryName, candidates) => {
   const seen = new Set();
   const out = [];
   for (const c of (Array.isArray(candidates) ? candidates : [])) {
+    // ── A CLOSED PLACE IS NOT A BRANCH ──────────────────────────────
+    // Oliver, 29 Sep 2026: "can you program it, so it doesn't apply places
+    // that are permanently closed down? It found Hornslet bar, but apparently
+    // it is closed." Google says so on the listing itself, and places-locate
+    // now passes that on. A permanently closed address is never offered; the
+    // route drops it too, and this drops it again for any other caller.
+    if (String(c?.status || "").toUpperCase() === "CLOSED_PERMANENTLY") continue;
     const town = String(c?.town ?? "").trim();
     const address = String(c?.address ?? "").trim();
     if (!town && !address) continue;
