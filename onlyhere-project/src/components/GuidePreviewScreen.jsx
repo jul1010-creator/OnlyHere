@@ -1,3 +1,4 @@
+import { activeCountry, countryProfile, DEFAULT_COUNTRY } from "../utils/countries";
 import { barsIntoStreets } from "../utils/nightlife";
 import { shopsIntoPlaces } from "../utils/shopping";
 import { useEffect, useState } from "react";
@@ -752,7 +753,7 @@ export const GuidePreviewScreen = ({
         <div style={{ fontSize: 13, color: C.muted, marginBottom: 10, textAlign: "center" }}>
           {totalShown > 0
             ? (matched.some(p => p._viaRegion)
-                ? "Places you named, and what Gemlyx holds in the part of Denmark you asked about. The route itself comes next."
+                ? `Places you named, and what Gemlyx holds in the part of ${countryProfile(activeCountry()).name} you asked about. The route itself comes next.`
                 : matched.some(p => p._viaReach)
                 // ── AND THE QUOTE HAS TO BE ONE THEY GAVE ─────────
                 // The reach pass has two doors now. One opens because somebody
@@ -780,7 +781,9 @@ export const GuidePreviewScreen = ({
                 // idea say so on themselves.
                 : matched.every(p => p._byThem)
                 ? "Places you have already mentioned that Gemlyx has its own page for. The route itself comes next."
-                : "Places from your conversation that Gemlyx has its own page for. The route itself comes next.")
+                : activeCountry() !== DEFAULT_COUNTRY
+                  ? "Places Gemlyx has checked that fit your visit. The route itself comes next."
+                  : "Places from your conversation that Gemlyx has its own page for. The route itself comes next.")
             : "Gemlyx will pick the stops and build your full guide next."}
         </div>
         {season.rows.length > 0 && (
@@ -1183,7 +1186,7 @@ export const GuidePreviewScreen = ({
                     ? "The one Gemlyx thinks fits this trip best."
                     : `The ${cat.picks.length} Gemlyx thinks fit this trip best.`}
                   {cat.offered.length > cat.picks.length
-                    ? ` ${cat.offered.length - cat.picks.length} more are not shown. Ask Gemlyx if none of these are right.`
+                    ? ` ${cat.offered.length - cat.picks.length} more are not shown.${askGemlyx ? " Ask Gemlyx if none of these are right." : ""}`
                     : ""}
                 </div>
                 {cat.picks.map(({ place, reason }) => {
@@ -1207,10 +1210,10 @@ export const GuidePreviewScreen = ({
                         )}
                         <div style={{ fontSize: 12, color: C.light, lineHeight: 1.5, marginTop: 3 }}>{cardLine(place, undefined, { want: themes })}</div>
                       </div>
-                      <button onClick={notTheFrame(() => setAskItem(place))}
+                      {askGemlyx && <button onClick={notTheFrame(() => setAskItem(place))}
                         style={{ flexShrink: 0, background: "none", border: `1px solid ${C.gold}55`, color: C.gold, borderRadius: 100, padding: "6px 11px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                         Ask
-                      </button>
+                      </button>}
                     </div>
                   );
                 })}
@@ -1305,7 +1308,9 @@ export const GuidePreviewScreen = ({
             that instead, which is the next piece of work. */}
         {totalShown === 0 && (
           <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px 16px", marginBottom: 18, fontSize: 12.5, color: C.light, lineHeight: 1.65 }}>
-            Nothing here yet, and that is expected: this list only fills in once you have named a place Gemlyx already covers. Your stops get chosen in the next step.
+            {activeCountry() !== DEFAULT_COUNTRY
+              ? "Your stops get chosen in the next step, from the places Gemlyx has checked."
+              : "Nothing here yet, and that is expected: this list only fills in once you have named a place Gemlyx already covers. Your stops get chosen in the next step."}
           </div>
         )}
         {usedToday && !pendingRandomGuideMode ? (

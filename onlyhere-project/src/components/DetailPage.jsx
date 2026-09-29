@@ -32,7 +32,7 @@ import { HowWeKnow } from "./HowWeKnow";
 import { SocialSection } from "./SocialSection";
 import { JourneyCard } from "./JourneyCard";
 import { showsJourneyForKind, journeyOriginForKind, showsTicketForKind } from "../utils/journeyScope";
-import { arrivalGlanceRow } from "../utils/journey";
+import { arrivalOrBusRow, busStopRow } from "../utils/busStop";
 import { audioLine } from "../utils/wegotripMatch";
 // ── AND THE WORDS ON THIS PAGE, IN THE READER'S LANGUAGE ────────────
 // Oliver, 7 Sep 2026: "translating more of the website from English to Danish
@@ -681,7 +681,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
             // arrivalGlanceRow rather than arrivalRow: the row is earned by the
             // measured walk at the far end, and it says that walk. See the note
             // above ARRIVAL_WALK_LIMIT in utils/journey.js.
-            arrivalGlanceRow(item, kind),
+            arrivalOrBusRow(item, kind, here),
             { icon: "🎟️", label: "Tickets", value: pricedLine(item.ticketInfo, item), link: bookRow },
             tourRow ? { icon: "🥾", label: "Tours", value: "", link: tourRow } : null,
             // ── "MAKE PEOPLE AWARE" ──────────────────────────────────
@@ -1058,7 +1058,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
                It is gone at the reader, at the writer and at the schema. */
             { icon: "💰", label: "Extra Costs", value: item.extraCosts },
             { icon: "♿", label: "Accessibility", value: item.accessibility },
-            arrivalGlanceRow(item, kind),
+            arrivalOrBusRow(item, kind, here),
           ]} />
         )}
         {/* ── NO TIME NEEDED ON FOOD ────────────────────────────────
@@ -1166,6 +1166,10 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
             { icon: "🍽️", label: "Serves", value: item.category },
             { icon: "💰", label: "Price", value: item.price, link: bookRow },
             { icon: "📍", label: "Neighbourhood", value: item.location },
+            // The local bus where the city publishes one (Klaipėda). Danish
+            // food and nightlife rows never carried an arrival row, and still
+            // do not: busStopRow is null outside the feed's area.
+            busStopRow(here),
             tourRow ? { icon: "🥾", label: "Tours", value: "", link: tourRow } : null,
           ]} />
         )}
@@ -1183,6 +1187,10 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
             { icon: "🍺", label: "Type", value: item.category },
             { icon: "💰", label: "What it costs", value: item.priceNote, link: bookRow },
             { icon: "📍", label: "Neighbourhood", value: item.location },
+            // The local bus where the city publishes one (Klaipėda). Danish
+            // food and nightlife rows never carried an arrival row, and still
+            // do not: busStopRow is null outside the feed's area.
+            busStopRow(here),
             tourRow ? { icon: "🥾", label: "Tours", value: "", link: tourRow } : null,
           ]} />
         )}
