@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { activeCountry, DEFAULT_COUNTRY } from "../utils/countries";
+import { activeCountry, countryProfile, DEFAULT_COUNTRY } from "../utils/countries";
 import { C } from "../utils/theme";
 import { getEventDate, travelLabel, isUpcoming, isCurrentlyLive, arrivalRow, externalHref, hasFinished, TRAVEL_ORIGIN } from "../utils/helpers";
 import { byEventDate } from "../utils/eventDates";
@@ -519,9 +519,9 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
             The second button only exists once something is saved, because an
             offer to plan a trip around nothing is the empty-checklist tone
             Oliver objected to. */}
-        {/* Not on another country's page yet: the trip it adds to is built by
-            the planner, which is Phase 3 of LITHUANIA_PLAN_29SEP.md. */}
-        {onToggleSave && activeCountry() === DEFAULT_COUNTRY && (
+        {/* On every country's page since Phase 3: the planner there takes
+            "Include my saved places" too (PlanAbroadForm). */}
+        {onToggleSave && (
           <div style={{ marginBottom: 16 }}>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
               <button onClick={onToggleSave}
@@ -840,7 +840,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
                   <div style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 8 }}>
                     {uiT("entry.localEssentials", lang).replace("{town}", item.name)}
                   </div>
-                  <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.6, marginBottom: 12 }}>{uiT("entry.localEssentialsNote", lang)}</div>
+                  <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.6, marginBottom: 12 }}>{activeCountry() === DEFAULT_COUNTRY ? uiT("entry.localEssentialsNote", lang) : `Only applies here. Everything that applies all over ${countryProfile(activeCountry()).name} is on the Essentials page.`}</div>
                   {here.map((row, i) => {
                     // linksOf, not row.link: a merged row carries `links` and
                     // two operators, and reading the singular field on one of
