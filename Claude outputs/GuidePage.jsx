@@ -1,0 +1,3434 @@
+import { useState, useEffect, useRef, useMemo } from "react";
+import { readableAuthor } from "../utils/photoAuthor";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
+import { C } from "../utils/theme";
+import { languageBlock } from "../utils/readerLanguage";
+// ── AND THE ENTRY PAGES OPENED FROM A GUIDE ─────────────────────────
+// The five DetailPages at the bottom of this file are the same component the
+// front of the site opens, and a guide is exactly where Oliver's mixed-language
+// complaint lives: "Danish prose with English weather blocks, English ticket
+// blocks and English leg lines." This page is ROUTED rather than rendered by
+// App.jsx, so it reads the stored choice itself instead of being handed it.
+import { currentUiLanguage, isUiLanguage, t as uiT } from "../utils/uiLanguage";
+import { readerCurrency, fxRateFor } from "../utils/profile";
+// ── AND THE GUIDE'S OWN WORDS FOLLOW THE GUIDE'S OWN LANGUAGE ───────
+// Not the picker. The picker says what language the SITE is in; a guide was
+// written in whatever language the traveller wrote their brief in, and it now
+// records that on itself as __lang. Furniture inside the document follows the
+// document, which is the whole of Oliver's "mixing of language in the guide":
+// "Danish prose with English weather blocks, English ticket blocks and English
+// leg lines." An entry page opened FROM a guide is a different document and
+// keeps following the picker.
+import { entryWord } from "../utils/entryWords";
+import { SUPABASE_URL, SUPABASE_KEY } from "../config";
+// The table name, from the file that owns it, so the guide feedback row and a
+// Feedback message from the support page cannot end up in two places.
+import { SUPPORT_TABLE } from "../utils/support";
+import { GemlyxLoader, GemlyxMark } from "../components/GemlyxLogo";
+import { TypewriterText } from "../components/TypewriterText";
+import { DetailPage } from "../components/DetailPage";
+import { GuideRouteMap } from "../components/GuideRouteMap";
+import { showablePhoto } from "../components/ChatPlaceCards";
+import { samePlaceName } from "../utils/danishNames";
+import { creditFor, creditIsRequired, loadImageCredits } from "../utils/imageCredits";
+import { ensureLiveContentLoaded } from "../utils/liveContent";
+import { guideTours } from "../utils/tourSweep";
+import { previewPools } from "../utils/previewMatch";
+import { placedLibrary, nearbyPublished, describeLocation } from "../utils/nearbyPlaces";
+import { addInTitle, ADD_IN_SUB, addInOffers, addInSeed, addInKindOf, addInNear } from "../utils/addIn";
+import { bikeRentalFits } from "../utils/affiliates";
+import { travelModeKey } from "../utils/routeOrder";
+import { BAJABIKES_RENTAL_SLUG } from "../config";
+import { stopCard } from "../utils/mapStops";
+import { markMany, canBeMarked, dayVisitRows } from "../utils/beenThere";
+import { cleanBeen } from "../utils/beenSync";
+import { towns } from "../data/towns";
+import { islands } from "../data/islands";
+import { freeEntrance } from "../data/freeEntrance";
+import { foodSpots } from "../data/food";
+import { nightlifeSpots } from "../data/nightlife";
+import { shops } from "../data/shops";
+import { craftItemsFallback } from "../data/craft";
+import { events, majorEvents } from "../data/events";
+import { lookupRealPlace, placeCoords, resolveStopCoords, resolveStopCoordsDetailed, townKeyFor, townFallbackFor, townPointFor, resolveLegMode, kmBetween, estimateDurationText, isSameTownWalk, legDistanceKm, isSameSpot, WALK_MAX_MINUTES, walkEstimateTooFar, stopTown, measuredLeg, mapsRouteUrl, foundAPlace, looseStop } from "../utils/guideEnrichment";
+import { operatorsForLeg, operatorNote, OPERATORS } from "../utils/operators";
+import { partOfCountry } from "../utils/geography";
+import { journeyFromStored, legSteps, worthShowingLegs, journeyAgencies, JOURNEY_SOURCE } from "../utils/journey";
+import { dayWeather, weatherIsStale, weatherChanges, weatherNoteNow } from "../utils/weather";
+import { dayWarnings, dayCrossings, tripWeatherWarning } from "../utils/weatherWarn";
+import { askClaude } from "../utils/aiClient";
+import { testTravelerLine, isFerryText, daysUntil, readerView, guideWithoutFiller } from "../utils/helpers";
+import { aiDisclosureFor } from "../utils/aiDisclosure";
+import { stopKind, tripScaleLine, tripCharacter, bookingActions, tripDayDate, stopEventWhen, clampNote } from "../utils/guideReading";
+import { bedStateOf, needsABed } from "../utils/nightsOpen";
+import { doorsFor, doorOn, sameBaseLine, staysIn, nightsLabel } from "../utils/stayDoors";
+import { houseDoor, sameHouseLine } from "../utils/houseTrip";
+import { journeyUrl, journeyLabel } from "../utils/rejseplanen";
+import { moreOnLine } from "../utils/communityEvents";
+import { accessOf, accessNote } from "../utils/eventAccess";
+import { newFinds, findsLine, findDetail, withFind, withoutFind, wasTurnedDown } from "../utils/guideFinds";
+import { communityEvents } from "../data/events";
+import { gems } from "../data/gems";
+import { gemsForGuide, gemHeading, checkedLabel, isOwnSite, AUDIENCE_LABEL } from "../utils/cheapGems";
+import { namedIslandOf } from "../utils/geography";
+import { BOOKING_AFFILIATE_ID } from "../config";
+import { tiqetsBrowseUrl, partnerDisclosure, supportNote, partnerLinkCount, isPartnerLink, carRentalFits, stayDoorUrl, tripcomStayUrl, stayDisclosure, STAY_DISCLOSURE, outboundLink, featuredStayFor, tourMerchant } from "../utils/affiliates";
+import { CostsBlock } from "../components/CostsBlock";
+import { GuideDayPager } from "../components/GuideDayPager";
+import { pagerStep, pagerAt, swipeDirection } from "../utils/dayPager";
+import { fuelCost, drivingLegs, DRIVEN_MODES } from "../utils/fuel";
+import { costLines, partyFrom, partyOf } from "../utils/costLedger";
+import { PartnerSheet, PartnerOpener } from "../components/PartnerSheet";
+import { partnerSections, partnerCount } from "../utils/partnerSheet";
+import { tourPhrase } from "../utils/tourSweep";
+import { dayStart, dayKey, dayPlus } from "../utils/calendarDay";
+import { TripCalendarCard } from "../components/TripCalendarCard";
+import { StopChangeSheet } from "../components/StopChangeSheet";
+import { problemList, problemHeading, PROBLEM_NOTE } from "../utils/planProblems";
+import { guideWithSwap, swapNote, swapIsAllowed, swapBlockedNote, isTravelPoint } from "../utils/stopSwap";
+import { constraintViolations } from "../utils/constraintCheck";
+import { detectLegMode } from "../utils/helpers";
+import { shareMessage, shareTitle } from "../utils/share";
+import { returnLeg, describeReturn, REACH_FAR, overnightMove, describeOvernightMove, sameMode, howForReader } from "../utils/routeOrder";
+import { stayTextProblem } from "../utils/accommodation";
+import { GUIDE_RIGHTS_SHORT, copyrightLine } from "../utils/rights";
+import { GuideFeedback } from "../components/GuideFeedback";
+import { withContext, readBrowserFacts } from "../utils/problemContext";
+import { APP_VERSION } from "../config";
+import { guideHero, heroCaption } from "../utils/guideHero";
+import { PhotoCredit } from "../components/PhotoCredit";
+import { DETOUR_PATH, hashForTab } from "../utils/tabUrl";
+import { countryProfile, DEFAULT_COUNTRY, homePath } from "../utils/countries";
+import { libraryRow, LIBRARY_TABLE } from "../utils/tripLibrary";
+
+// ─── GUIDE PAGE ───────────────────────────────────────────────────
+// The ONLY place a guide is ever shown, per Oliver ("get rid of the popup") —
+// the old in-app "little book" guide modal in App.jsx is gone, and this is
+// what it used to link out to as an optional "View as full page" extra. A card
+// grid (same visual language as the "Hidden Towns" nav page — see the
+// .towns-grid class used there) instead of a scrolling wall of text, with an
+// explicit confirm-before-save step and a real shareable URL once saved.
+//
+// Two ways this component gets used:
+//  1. FRESH / UNSAVED — App.jsx's generateGuide navigates here with a finished,
+//     fully-enriched `guide` object via router state (maps/exact routes/
+//     accommodation/weather already baked in — see that function for why it
+//     waits for all of that before ever navigating here). Shows the card grid
+//     + a "Looks good, save my guide" confirmation step. Saving POSTs to
+//     Supabase and redirects to the real /guide/:id URL.
+//  2. SAVED / SHARED — visited directly via a real /guide/:id URL (from a saved
+//     link, or after step 1 completes). Fetches the guide from Supabase by id
+//     and shows it read-only, with its own "Save to my guides" (bookmark) option
+//     for whoever's viewing the link.
+//
+// REQUIRES the "gemlyx_guides" Supabase table (id text primary key, payload
+// jsonb, created_at timestamptz default now()) with public insert+select RLS
+// policies — this may already exist from an earlier pass; if this page's Save
+// button ever fails, that table not existing yet is the first thing to check
+// in the Supabase dashboard.
+
+const dayIcon = (i) => ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩", "⑪", "⑫", "⑬", "⑭"][i] || `Day ${i + 1}`;
+
+// ── THE SHAPE OF THE TRIP, BEFORE ANY OF THE DETAIL ─────────────────
+// Oliver, 7 Aug 2026: "We just need to make the guide less overwhelming as
+// well. Easier to understand." And, when I offered to collapse the days to do
+// it: "I, personally, think putting it up as days is good though. Some people
+// like a schedule. And people coming to Denmark, have no idea about Denmark.
+// How long the transport is. How long it takes to settle, etc."
+//
+// That rules out the obvious fix and points at the real problem. The page was
+// never overwhelming because it had too much in it; it was overwhelming because
+// it opened straight into Day 1 with no answer to "how big is this thing". You
+// scroll for a while and still cannot say how many towns you are visiting or
+// how much of the week is spent moving.
+//
+// So nothing is removed. This computes the four numbers a person actually wants
+// first, and they go above the days: how many days, how many stops, which towns
+// in order, and how much travelling that adds up to.
+//
+// EVERY FIGURE IS ALL-OR-NOTHING. A distance total built from the legs that
+// happened to resolve, silently missing the ferry crossing, is worse than no
+// total: it reads as complete and understates the trip. So if one leg cannot be
+// measured, the whole figure is withheld rather than quietly wrong. Same for
+// time, and the longest single journey is only claimed to BE the longest when
+// every journey was measured.
+export const tripShape = (guide, legKm) => {
+  const days = guide?.days || [];
+  const stops = days.flatMap(d => d.stops || []).filter(s => s && s.name);
+  const towns = [];
+  stops.forEach(s => {
+    const t = String(s.town || "").trim();
+    if (t && !towns.some(x => x.toLowerCase() === t.toLowerCase())) towns.push(t);
+  });
+  const geo = guide?._geo || {};
+  const durations = guide?._exactDurations || {};
+  let km = 0, kmKnown = stops.length > 1;
+  let minutes = 0, minutesKnown = stops.length > 1;
+  let longest = null;
+  for (let i = 0; i < stops.length - 1; i++) {
+    const a = stops[i].name, b = stops[i + 1].name;
+    const d = legKm(a, b, geo);
+    if (d == null) kmKnown = false; else km += d;
+    // The mode is resolved down in the render, so match on the pair and take
+    // whichever mode was actually measured for it.
+    const hit = Object.keys(durations).find(k => k.startsWith(`${a}|${b}|`));
+    const mins = hit ? durations[hit]?.durationMinutes : null;
+    if (typeof mins !== "number") minutesKnown = false;
+    else {
+      minutes += mins;
+      if (!longest || mins > longest.minutes) longest = { minutes: mins, from: a, to: b, text: durations[hit].durationText };
+    }
+  }
+  return {
+    dayCount: days.length,
+    stopCount: stops.length,
+    towns,
+    km: kmKnown && km >= 1 ? Math.round(km) : null,
+    minutes: minutesKnown && minutes > 0 ? minutes : null,
+    longest: minutesKnown ? longest : null,
+  };
+};
+
+// "3h 20m", or "45m". Hours matter to someone working out whether a day is
+// mostly travelling; seconds-level precision does not.
+export const humanMinutes = (m) => {
+  if (typeof m !== "number" || m <= 0) return null;
+  const h = Math.floor(m / 60), rest = Math.round(m % 60);
+  if (!h) return `${rest}m`;
+  return rest ? `${h}h ${rest}m` : `${h}h`;
+};
+
+// `now` is a PROP with a default rather than a Date() read inside the body, and
+// tests/render.mjs explains why better than a comment here can: "THE LIVE LAYER
+// IS A PURE FUNCTION OF (data, now)". The costs block below refuses a ticket for
+// an event that does not run on the traveller's dates, and that refusal cannot
+// be checked at all by an instrument that can only ever ask about today.
+export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date() }) => {
+  const uiLang = currentUiLanguage();
+  const { guideId } = useParams();
+  const navigate = useNavigate();
+  const location = useLocation();
+  // Reached two ways: navigate("/guide/new", { state: { guide } }) once a fresh
+  // build finishes (App.jsx's generateGuide) or from a saved-guide click on Home,
+  // or a plain `guide` prop for standalone/test use — router state wins when both
+  // are somehow present. Per Oliver ("get rid of the popup"), this page is now
+  // the ONLY place a guide is ever shown — there's no in-app modal anymore.
+  const freshGuide = location.state?.guide || guideProp || null;
+  // ── "IF SOMEONE HAS FINISHED THAT DAY" ────────────────────────────
+  //
+  // Oliver, 6 Sep 2026, on the been feature: "if it has been in the guide
+  // before, and someone has finished that day, then it should automatically be
+  // put into the 'already been'."
+  //
+  // Nothing recorded that a day was finished, so the day gets a way to say so
+  // and marking it files that day's stops.
+  //
+  // ── WHY THIS TALKS TO LOCAL STORAGE DIRECTLY ──────────────────────
+  //
+  // The been list lives in GemlyxApp's state, and GuidePage is a SIBLING
+  // ROUTE: the two are never mounted together, so there is no prop to pass and
+  // no state to lift that either one could read. Local storage is the store
+  // they already share, and GemlyxApp seeds from it on mount.
+  //
+  // Through markMany and cleanBeen rather than a second shape written here, so
+  // the cap, the dedupe and the "never move an existing date" rule are the same
+  // ones the button on an entry page obeys.
+  //
+  // KNOWN LIMIT, worth saying rather than hiding: a mark made here reaches the
+  // ACCOUNT the next time the main app is opened, because the push effect lives
+  // there. It is never lost, it is just not instant on another device.
+  const readBeen = () => {
+    try { return cleanBeen(JSON.parse(localStorage.getItem("gemlyx_been") || "[]")); } catch { return []; }
+  };
+  const [daysMarked, setDaysMarked] = useState(() => new Set());
+  const markDayDone = (day, dayIdx) => {
+    const rows = dayVisitRows(day?.stops, lookupRealPlace);
+    const before = readBeen();
+    const after = markMany(before, rows);
+    try { localStorage.setItem("gemlyx_been", JSON.stringify(after)); } catch { /* private mode */ }
+    setDaysMarked(prev => new Set(prev).add(day?.day || dayIdx + 1));
+    return { added: after.length - before.length, of: rows.length };
+  };
+
+  const [guide, setGuide] = useState(() => guideWithoutFiller(freshGuide) || null);
+  // ── WHICH COUNTRY THIS GUIDE IS IN ───────────────────────────────
+  // Read off the guide and never off the address: every guide lives at
+  // /guide/..., which is a Danish address, so a Klaipėda guide opened from a
+  // shared link would otherwise be drawn as a Denmark trip. generateGuide
+  // writes _country; a guide saved before it existed is Danish.
+  const guideLand = countryProfile(guide?._country || DEFAULT_COUNTRY);
+  const abroadGuide = guideLand.code !== DEFAULT_COUNTRY;
+  const backPath = abroadGuide ? `${homePath(guideLand.code)}${hashForTab("ai")}` : DETOUR_PATH;
+  // The language THIS GUIDE was written in, read off the guide itself rather
+  // than off the picker, and after the state that may still be loading it. A
+  // guide built before __lang existed, or one whose tag nobody has a
+  // translation for, falls back to the picker.
+  const guideLang = isUiLanguage(guide?.__lang) ? guide.__lang : uiLang;
+  const [loading, setLoading] = useState(!freshGuide && !!guideId);
+  const [loadError, setLoadError] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState(null);
+  const isUnsaved = !!freshGuide && !guideId;
+
+  // ── SENDING IT TO SOMEBODY ────────────────────────────────────
+  // Oliver, 8 Aug 2026, after the competitor research: "Aight, let's try!" —
+  // sharing was the first of the four things worth taking from the rest of the
+  // category. Wanderlog's most praised feature is collaboration; G8Trip won its
+  // own bake-off on coordinating four people. Almost nobody plans a trip alone.
+  //
+  // What was here before was a "Copy link ↗" button that called
+  // navigator.clipboard.writeText and said NOTHING afterwards — no toast, no
+  // state change, no error if the browser refused. Clicking it and clicking a
+  // dead button were the same experience, so there was no way to learn which
+  // one you had done. Every path below reports what happened.
+  // ── OPENING THE PANEL ON THE TRANSITION, NOT AT MOUNT ─────────
+  // useState(justSaved) was wrong in both directions, and wrong in the useful
+  // one. saveGuide navigates /guide/new → /guide/:id WITHOUT unmounting this
+  // component (that is what the liveGuide comment below is about), so the
+  // initialiser had already run with justSaved false and the panel never opened
+  // on the one path that sets it. Meanwhile history.state SURVIVES A RELOAD, so
+  // pressing F5 on the guide an hour later remounted with justSaved true and
+  // announced "Saved." all over again. The only case it fired was the wrong one.
+  //
+  // Same class of bug as keptAlready below, which reads guideId. Anything
+  // derived from route state in here needs an effect, not an initialiser.
+  // Which stop's change sheet is open, as "dayIndex-stopIndex". One at a time:
+  // two open sheets is two half-made decisions and a guide in an unclear state.
+  const [changing, setChanging] = useState(null);
+  // A swap the stated constraints refused, quoted back in their own words.
+  const [swapBlocked, setSwapBlocked] = useState("");
+  const [shareOpen, setShareOpen] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
+  useEffect(() => {
+    if (!location.state?.justSaved) return;
+    setShareOpen(true);
+    setJustSaved(true);
+    // Consume it: replace the history entry with the same guide and no flag, so
+    // a reload shows the guide rather than re-announcing the save. The guide
+    // stays in state, so nothing refetches. Re-running this effect is harmless
+    // because the flag it keys on is now gone.
+    navigate(location.pathname, { replace: true, state: { guide: location.state.guide } });
+  }, [location]);
+  const [copied, setCopied] = useState(null);
+  const urlRef = useRef(null);
+  const copyTimer = useRef(null);
+  // Read once: navigator.share disappearing mid-session is not a thing, and
+  // reading it during render on every keystroke is pointless work.
+  const [canSend] = useState(() => typeof navigator !== "undefined" && typeof navigator.share === "function");
+  // Built from the id this page is actually showing, on the origin it is
+  // actually running on. Not window.location.href, which would carry whatever
+  // query string the person happened to arrive with; not a hardcoded domain,
+  // which would send somebody testing on localhost to production.
+  const shareUrl = typeof window === "undefined" ? ""
+    : guideId ? `${window.location.origin}/guide/${guideId}`
+      : window.location.origin + window.location.pathname;
+
+  const copyLink = async () => {
+    clearTimeout(copyTimer.current);
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("no clipboard api");
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied("done");
+      // "✓ Copied" is a confirmation and has a job that is finished in two
+      // seconds. The refusal message below is an instruction, so it STAYS —
+      // clearing it on a timer left somebody reading it halfway through with a
+      // Copy button that had visibly done nothing, which is the exact dead end
+      // this whole change set out to remove. Timer is held in a ref so a second
+      // click cannot have its confirmation cancelled by the first one's timeout.
+      copyTimer.current = setTimeout(() => setCopied(null), 2600);
+    } catch {
+      // An insecure context, an old browser, or a refused permission. Select
+      // the field so the link is one keystroke away instead of telling somebody
+      // it failed and leaving them there.
+      try { urlRef.current?.select(); } catch { /* ignore */ }
+      setCopied("manual");
+    }
+  };
+  useEffect(() => () => clearTimeout(copyTimer.current), []);
+
+  const sendLink = async () => {
+    if (!canSend) return copyLink();
+    try {
+      await navigator.share({ title: shareTitle(guide), text: shareMessage(guide), url: shareUrl });
+    } catch {
+      // Closing the share sheet throws AbortError. A person changing their mind
+      // is not an error and must not surface as one.
+    }
+  };
+
+  // App.jsx's generateGuide navigates here as soon as a guide first exists, then
+  // keeps enriching it in the background (exact travel times, weather, where to
+  // stay) via the same object, identified by _gid. GemlyxApp never unmounts
+  // across a route change, so it passes that same live-updating object down as
+  // liveGuide on every re-render — mirror it in here as it changes, instead of
+  // freezing on the snapshot taken at the moment of navigation. Only applies to
+  // the fresh/unsaved case (matched by _gid); a saved guide loaded by id below
+  // is untouched by this.
+  useEffect(() => {
+    if (liveGuide && typeof liveGuide === "object" && liveGuide._gid && guide?._gid === liveGuide._gid) {
+      setGuide(guideWithoutFiller(liveGuide));
+    }
+  }, [liveGuide]);
+
+  // Fold in anything published via Content Studio (same one-time, dedup-safe
+  // loader App.jsx uses) so a stop that matches a real Gemlyx entry — including
+  // one published after this page's own code shipped — can actually be found by
+  // lookupRealPlace below, even for someone landing here cold via a shared link
+  // who never visited "/" first in this browser tab.
+  useEffect(() => { ensureLiveContentLoaded(); }, []);
+
+  // Click a stop that matches something real Gemlyx already knows (a town, a
+  // free attraction, a restaurant, a nightlife venue, an event) to open that
+  // actual page — same feature the old in-app guide modal had, now here since
+  // this is the only guide view left. DetailPage itself is a self-contained
+  // full-screen overlay (no route change), so "back" is always instant.
+  const [eventDetail, setEventDetail] = useState(null);
+  const [townDetail, setTownDetail] = useState(null);
+  const [nightlifeDetail, setNightlifeDetail] = useState(null);
+  const [freeDetail, setFreeDetail] = useState(null);
+  const [foodDetail, setFoodDetail] = useState(null);
+  // Craft/booking matches deliberately don't open anything here — App.jsx's own
+  // craft detail is a separate bespoke modal (not the shared DetailPage this
+  // page reuses), out of scope for this pass. lookupRealPlace's caller below
+  // filters craft matches out of "clickable" for the same reason, so a craft
+  // stop's card never shows a pointer cursor for a click that would do nothing.
+  // ── WHAT THIS DISPATCHER CAN OPEN, IN ONE PLACE ─────────────────
+  //
+  // The filter below used to read `_src !== "craft"`, which is a list of what
+  // this cannot open written as its opposite, kept in a second place, and it
+  // went wrong the first time a new _src appeared: bar streets were added to
+  // lookupRealPlace's pools on 3 Sep 2026 with _src "nightlifeStreet", passed
+  // `!== "craft"`, and rendered as cards with a pointer cursor and a Read more
+  // that did nothing. Exactly the dead click the comment above promised could
+  // not happen.
+  //
+  // So the two are one list now. A stop is clickable if and only if there is a
+  // setter here for it, and adding a kind to the pools without adding it here
+  // makes the card quietly non-clickable rather than falsely clickable.
+  //
+  // A bar street opens as a nightlife page: the same DetailPage the URL route
+  // already opens it with (App.jsx merges streets into the nightlife pool).
+  const STOP_OPENS_AS = {
+    free: setFreeDetail,
+    food: setFoodDetail,
+    nightlife: setNightlifeDetail,
+    nightlifeStreet: setNightlifeDetail,
+    town: setTownDetail,
+    event: setEventDetail,
+  };
+  const canOpenStop = (real) => !!real && !!STOP_OPENS_AS[real._src];
+  const openStopDetail = (real) => {
+    if (!canOpenStop(real)) return;
+    STOP_OPENS_AS[real._src](real);
+  };
+  const [liveInfo, setLiveInfo] = useState({});
+  const [liveInfoLoading, setLiveInfoLoading] = useState(null);
+  const checkLiveInfo = async (item) => {
+    setLiveInfoLoading(item.name);
+    try {
+      const query = `${item.name} ${item.location || item.town || ""} Instagram Facebook official page latest update opening hours events 2026`;
+      const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+      const data = await res.json();
+      setLiveInfo(prev => ({ ...prev, [item.name]: data.answer || (data.results?.[0]?.snippet) || uiT("guide.noUpdates", uiLang) }));
+    } catch {
+      setLiveInfo(prev => ({ ...prev, [item.name]: uiT("guide.checkFailed", uiLang) }));
+    }
+    setLiveInfoLoading(null);
+  };
+  const [savedPlaces, setSavedPlaces] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("gemlyx_saved_places") || "[]"); } catch { return []; }
+  });
+  const isPlaceSaved = (kind, id) => savedPlaces.some(p => p.kind === kind && p.id === id);
+
+  // "Your Saved Guides" on the home page reads this list. saveGuide writes to
+  // it, but saveGuide only runs for the person who BUILT the trip — so the
+  // friend who opened the link had nowhere to put it. Same list, same shape.
+  const keptCheck = (id) => {
+    try { return JSON.parse(localStorage.getItem("gemlyx_saved_guides") || "[]").some(g => g && g.id === id); }
+    catch { return false; }
+  };
+  // Initialised AND re-checked, because guideId changes under this component:
+  // the page starts life at /guide/new with no id, and saveGuide navigates it
+  // to /guide/:id without unmounting. Read only at mount, this said "＋ Keep"
+  // to the very person who had just saved the guide.
+  const [keptAlready, setKeptAlready] = useState(() => keptCheck(guideId));
+  useEffect(() => { setKeptAlready(keptCheck(guideId)); }, [guideId]);
+  const keepGuide = () => {
+    if (!guide || !guideId) return;
+    try {
+      const list = JSON.parse(localStorage.getItem("gemlyx_saved_guides") || "[]");
+      if (list.some(g => g && g.id === guideId)) { setKeptAlready(true); return; }
+      // arrivalDate is the one field the LIST itself reads rather than the guide:
+      // App.jsx's checkSavedGuidesWeather walks the saved rows and lines each day
+      // up against the forecast from it. Without it a kept guide is skipped
+      // silently and its owner never hears that the rain moved. The trip itself
+      // does not need to be copied here, because a string id means the full
+      // payload is already in gemlyx_guides and openSavedGuide routes to it.
+      const updated = [{ id: guideId, title: guide.title, days: guide.days, savedAt: new Date().toISOString(), arrivalDate: guide._arrivalDate || null }, ...list].slice(0, 20);
+      localStorage.setItem("gemlyx_saved_guides", JSON.stringify(updated));
+      setKeptAlready(true);
+    } catch { /* a full or blocked localStorage is not worth an error message here */ }
+  };
+  const toggleSavePlace = (kind, item, townName) => {
+    setSavedPlaces(prev => {
+      const exists = prev.some(p => p.kind === kind && p.id === item.id);
+      const updated = exists
+        ? prev.filter(p => !(p.kind === kind && p.id === item.id))
+        : [{ kind, id: item.id, name: item.name, emoji: item.emoji, town: townName || item.town || item.city || item.location || "" }, ...prev].slice(0, 40);
+      try { localStorage.setItem("gemlyx_saved_places", JSON.stringify(updated)); } catch { /* ignore */ }
+      return updated;
+    });
+  };
+
+  useEffect(() => {
+    if (freshGuide || !guideId) return;
+    setLoading(true);
+    setLoadError(null);
+    fetch(`${SUPABASE_URL}/rest/v1/gemlyx_guides?select=payload&id=eq.${encodeURIComponent(guideId)}`, {
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+    })
+      .then(r => r.json())
+      .then(rows => {
+        if (!rows?.[0]?.payload) { setLoadError(uiT("guide.linkGone", uiLang)); return; }
+        setGuide(guideWithoutFiller(rows[0].payload));
+      })
+      .catch(() => setLoadError(uiT("guide.loadOffline", uiLang)))
+      .finally(() => setLoading(false));
+  }, [guideId, freshGuide]);
+
+  const saveGuide = async () => {
+    if (!guide || saving) return;
+    setSaving(true);
+    setSaveError(null);
+    // Short, URL-friendly id — collision odds are negligible at this scale, and a
+    // free-read/free-insert table (see the SQL file) doesn't need anything fancier.
+    const id = Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4);
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_guides`, {
+        method: "POST",
+        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+        // TEST SCAFFOLDING NEVER GETS SAVED. _testProfile and _testPlan exist
+        // so Oliver can see what went into a Random-guide run; they are for him
+        // and nobody else. Saving them puts them in the payload permanently, and
+        // the shared link then shows a stranger a dashed gold box headed
+        // "Pipeline test" describing a traveler who does not exist. Stripped
+        // here rather than only hidden at render, because the render guard
+        // cannot help a payload that is already in the database.
+        //
+        // ── AND _planProblems, FOR THE SAME REASON ────────────────────
+        // Added 12 Aug 2026. The guide's logistics gates write their findings
+        // into planProblems, and those are notes to HIM in the pipeline's own
+        // voice: "This suggests a bus for the last leg, and the last leg was
+        // MEASURED at 8 minutes on foot from Ribe Station." Nothing renders
+        // them, so this is not a display leak, but they were being written into
+        // the saved payload of every shared guide and sent to every browser
+        // that opens the link. The same night's Studio fix moved the identical
+        // findings out of `uncertainties` for the identical reason; this is the
+        // other half of it, on the pipeline he cares about most.
+        body: JSON.stringify({ id, payload: (({ _testProfile, _testPlan, _planProblems, ...rest }) => rest)(guide) }),
+      });
+      if (!res.ok) { setSaveError(uiT("guide.saveFailed", uiLang)); setSaving(false); return; }
+      // Also bookmark it into the same "gemlyx_saved_guides" localStorage list
+      // Home's "Your Saved Guides" quick list reads — this is what used to happen
+      // from the old popup's own separate "Save Guide" button, now this page's
+      // real Supabase save is the only save flow, so it does both jobs. The
+      // string id (not a Date.now() number) is what tells Home's list this entry
+      // has a real shareable link and should route straight to /guide/:id.
+      try {
+        const bookmarks = JSON.parse(localStorage.getItem("gemlyx_saved_guides") || "[]");
+        const updated = [{ id, title: guide.title, days: guide.days, savedAt: new Date().toISOString(), arrivalDate: guide._arrivalDate || null }, ...bookmarks].slice(0, 20);
+        localStorage.setItem("gemlyx_saved_guides", JSON.stringify(updated));
+      } catch { /* bookmark list is a convenience, never block the real save over it */ }
+      // ── AND A TRIP SOMEBODY KEPT JOINS THE PUBLISHED LIST ──
+      //
+      // Oliver, 19 Sep 2026: "when someone used a guide, it will be published."
+      // Saving is the closest thing to a vote this app has: it is the moment a
+      // traveller decides the trip is theirs.
+      //
+      // ── A NEW ID, NOT THIS ONE ──────────────────────────────────
+      //
+      // The published copy is stripped of the person and the saved one is not,
+      // and they must not share an address. With one id, a reader who found a
+      // trip on the public list could change /trips/x to /guide/x and read the
+      // conversation it was built from. Two ids, two rows, and the public one
+      // has no way back to the private one. See stripForLibrary.
+      //
+      // FIRE AND FORGET. This is a side effect of a save, so it may not slow
+      // one down and it may not fail one: the table does not exist until the
+      // migration in LIBRARY_SETUP_SQL is run, and a traveller being told their
+      // guide did not save because a list page is not set up yet would be the
+      // worst trade in this file.
+      const published = libraryRow(guide, { id: `lib_${Math.random().toString(36).slice(2, 9)}${Date.now().toString(36).slice(-4)}` });
+      if (published) {
+        fetch(`${SUPABASE_URL}/rest/v1/${LIBRARY_TABLE}`, {
+          method: "POST",
+          headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+          body: JSON.stringify(published),
+        }).catch(() => { /* see above: never a traveller's problem */ });
+      }
+      // The guide travels WITH the navigation for two reasons. It skips the
+      // refetch-from-Supabase flash on a page the person has been staring at
+      // for a minute already, and justSaved opens the share panel — the moment
+      // somebody actually wants to send a trip is the second it becomes real,
+      // not whenever they think to look for a button.
+      navigate(`/guide/${id}`, { replace: true, state: { guide, justSaved: true } });
+    } catch {
+      setSaveError(uiT("guide.saveOffline", uiLang));
+    }
+    setSaving(false);
+  };
+
+  // PERSISTENT GEMLYX CHAT — per Oliver: once a guide is built, the traveler
+  // should still be able to talk to Gemlyx from right here, instead of the
+  // conversation dead-ending once App.jsx's Detour chat hands off to this page.
+  // This is a lightweight, separate conversation (not the same thread as the
+  // one that built the trip) — it can answer questions about the built trip
+  // (using the itinerary as context below) or anything else Denmark-related,
+  // but it doesn't edit the saved guide object directly; it points back to the
+  // main chat for that, same as the itinerary rebuild flow already works.
+  // ── STOP NOTES OPEN ON DEMAND ──────────────────────────────────
+  // The note was cut at 140 characters with an ellipsis, which is the worst of
+  // both: it spends the space AND withholds the sentence. Nothing on this page
+  // let you read the rest. Keyed by day and stop index.
+  const [openNotes, setOpenNotes] = useState({});
+  // ── "SOME PEOPLE MIGHT HATE A LONG PAGE OF DAYS AND TRIPS" ────────
+  //
+  // Oliver, 24 Sep 2026. Two ways to hold the same guide, switched here rather
+  // than chosen before the build: a choice made before anybody has seen the
+  // guide is a guess, and a toggle also reaches a guide saved weeks ago.
+  //
+  // NOTHING PERSISTS. He was offered a version that remembers which view a
+  // reader last used and picked the plain toggle, so there is no storage here
+  // and no effect that writes any. See utils/dayPager.js.
+  const [dayMode, setDayMode] = useState("all");
+  const [dayAt, setDayAt] = useState(0);
+  // Where a touch started, so the handler at the bottom can tell a page turn
+  // from a scroll. A ref rather than state: a value read once on touchend and
+  // never rendered has no business re-rendering the guide on every touch.
+  const swipeFrom = useRef(null);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState([
+    { role: "assistant", text: "Hi again ◆ I'm still here if you want to talk through this trip, ask about a stop, or anything else about Denmark." }
+  ]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
+  // Which assistant message index has already finished streaming in — see
+  // components/TypewriterText.jsx and App.jsx's main Detour chat, same pattern.
+  const [chatRevealedUpTo, setChatRevealedUpTo] = useState(0);
+  const chatEndRef = useRef(null);
+  useEffect(() => {
+    if (chatOpen) chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatMessages, chatOpen]);
+  const sendChatMessage = async () => {
+    const text = chatInput.trim();
+    if (!text || chatLoading || !guide) return;
+    const nextMessages = [...chatMessages, { role: "user", text }];
+    setChatMessages(nextMessages);
+    setChatInput("");
+    setChatLoading(true);
+    const convoText = nextMessages.slice(1).map(m => `${m.role}: ${m.text}`).join("\n");
+    const stopList = (guide.days || []).map(d => `Day ${d.day || ""}: ${d.title || ""}. Stops: ${(d.stops || []).map(s => s.name).join(", ") || "no stops yet"}`).join("\n");
+    const prompt = `You are Gemlyx's Local Assist, continuing to help with a Denmark trip after the itinerary below was already built. Answer naturally and conversationally, like a knowledgeable local friend giving real advice. Never claim to have personally visited a place. You're a happy, upbeat guy who loves helping; a fitting emoji or two per reply is welcome where it adds warmth, never a wall of them. Never use em dashes or en dashes anywhere in your reply. Keep answers focused and reasonably short unless the question needs more detail. If asked to change the itinerary itself, explain what you'd change in words, since you can't directly edit this saved guide from here, so tell them to describe the change back on the main planning chat to rebuild it.\n\nTHE TRIP ALREADY BUILT:\nTitle: ${guide.title || "Untitled trip"}\n${stopList}${guide.essentials ? `\nBudget: ${guide.essentials.budgetReality || ""}\nGetting around: ${guide.essentials.transportTip || ""}\nKeep in mind: ${guide.essentials.keepInMind || ""}` : ""}\n\nCONVERSATION SO FAR:\n${convoText}\n\nRespond to the traveler's last message.${languageBlock()}`;
+    const result = await askClaude(prompt, 500);
+    setChatMessages(prev => [...prev, { role: "assistant", text: result.error ? uiT("guide.chatFailed", uiLang) : result.text }]);
+    setChatLoading(false);
+  };
+
+  // ── THE PIN A READER TAPPED, AND OUR OWN PLACES TO PUT BESIDE IT ──
+  // Declared UP HERE, with every other hook, and the reason is written out at
+  // length below: three hooks once sat under `if (loading) return` and broke every
+  // shared guide link in the product. The suite has guarded that ever since, and it
+  // caught these three within a minute of my writing them in the wrong place.
+  //
+  // mapLibrary is every published row carrying a real coordinate, towns excluded:
+  // "close to Copenhagen" is not a fact worth printing on a pin already in
+  // Copenhagen. previewPools is the same library the preview screen matches
+  // against, so the map cannot show something the rest of the app does not have.
+  //
+  // libraryTick is READ in the memo, not merely set. ensureLiveContentLoaded fills
+  // the imported arrays in place, so the list is empty on first paint and correct a
+  // moment later, and a state variable nothing reads is a re-render that never
+  // happens.
+  const [mapPin, setMapPin] = useState(null);
+  // The side panel every paid door now lives in. See utils/partnerSheet.js.
+  const [partnersOpen, setPartnersOpen] = useState(false);
+  const [libraryTick, setLibraryTick] = useState(0);
+  useEffect(() => { ensureLiveContentLoaded().then(() => setLibraryTick(t => t + 1)).catch(() => {}); }, []);
+  // The credits file, for the line under a town picture on the map. Fetched
+  // once per session and cached in the module, so this costs one request
+  // however many pictures end up on screen; the tick is what makes the card
+  // redraw with its credit once it lands, because creditFor reads a module
+  // that is empty on first paint. Same shape as the line above it.
+  useEffect(() => { loadImageCredits().then(() => setLibraryTick(t => t + 1)).catch(() => {}); }, []);
+  // ── ONE PARTNER ACTIVITY PER TOWN, WHERE THE TOWN IS ────────────────
+  //
+  // Oliver, 9 Sep 2026: "If they're sent to Roskilde, then a GetYourGuide
+  // activity could be recommended." It reads the field the sweep already
+  // filled, so this searches nothing and costs nothing, and it reads the
+  // traveller's OWN exclusions out of the guide: see guideTours in
+  // utils/tourSweep.js for why a paid line needs that gate when a town tab
+  // does not. libraryTick is read here for the same reason mapLibrary reads
+  // it: the towns array is empty until the published rows land.
+  const dayTours = useMemo(
+    () => guideTours(guide?.days, { rows: towns, excluded: guide?._constraints?.excluded || [] }),
+    [guide, libraryTick],
+  );
+  // ── "WHAT ARE YOU INTERESTED IN HERE?" ──────────────────────────
+  //
+  // Oliver, 10 Sep 2026: "when the build is done there will be a question for
+  // the user ... And then Gemlyx AI is ready to communicate with the user or
+  // the user can instantly pick something ... Then instead it's just into that
+  // specific day."
+  //
+  // The reader is built once off the same pools the map library uses, so a stop
+  // and a chip cannot disagree about what kind of place something is. See
+  // utils/addIn.js for why the match is exact.
+  const addInKind = useMemo(
+    () => (name) => addInKindOf(name, { free: freeEntrance, food: foodSpots, nightlife: nightlifeSpots }),
+    [libraryTick],
+  );
+  const [addInOpen, setAddInOpen] = useState(null);   // `${dayIdx}:${cat.key}`
+
+  // ── THE PICTURE OF THE TOWN A STOP IS IN ────────────────────────
+  //
+  // Oliver, 22 Sep 2026: "And also, the 'town' pictures gotta pop up. BUT ONLY
+  // WHEN THEY'RE NOT OVERLAPPING ONE ANOTHER!!!" The map decides the second
+  // half, which is a question about the screen; this answers the first, which
+  // is a question about the library.
+  //
+  // OFF A PUBLISHED ROW AND NOTHING ELSE. The photograph is the one on the
+  // town's own entry, so a picture on the map is a picture somebody chose for
+  // that town, and a stop in a town Gemlyx has not written yet shows no card
+  // rather than a stock image of Denmark.
+  //
+  // THE LICENCE RULE IS THE SAME ONE THE CARDS USE. showablePhoto refuses a
+  // photo whose credit is required and missing, which is the rule with a legal
+  // edge on it, and it lives in one place for that reason. Where a credit IS
+  // required and present, the photographer's name goes on the card, because a
+  // CC BY picture without its line is the same problem in the other direction.
+  const townPhotoFor = useMemo(() => {
+    const rows = [...towns, ...islands].filter(t => t?.name && t?.photo);
+    return (p) => {
+      const key = String(p?.townName || p?.town || "").trim();
+      if (!key) return null;
+      const row = rows.find(t => samePlaceName(t.name, key)) || null;
+      if (!row) return null;
+      const shot = showablePhoto(row);
+      if (!shot) return null;
+      const credit = shot.credit || creditFor(shot.photo);
+      return {
+        photo: shot.photo,
+        town: row.name,
+        credit: credit && creditIsRequired(credit) ? readableAuthor(credit.photographer) : "",
+      };
+    };
+    // libraryTick for the same reason mapLibrary reads it: the arrays are
+    // filled in place once the published rows land.
+  }, [libraryTick]);
+
+  const mapLibrary = useMemo(
+    () => placedLibrary(previewPools({
+      towns, islands, freeEntrance, foodSpots, nightlifeSpots, shops, craftItemsFallback, events, majorEvents,
+    })),
+    [libraryTick],
+  );
+
+  // The header photograph, up here for the same reason and on the same
+  // libraryTick: lookupRealPlace reads the imported arrays, which are empty on
+  // first paint, so without the tick a guide would render its plain header once
+  // and never pick the picture up. `guide` is in the dependency list because a
+  // shared link resolves it asynchronously too.
+  const hero = useMemo(() => guideHero(guide, lookupRealPlace), [guide, libraryTick]);
+
+  // ── EVERY HOOK LIVES ABOVE THE EARLY RETURNS ────────────────────
+  // These three used to sit BELOW `if (loading) return` and
+  // `if (loadError || !guide) return`, which is a hooks-order violation and it
+  // broke every shared guide link in the product.
+  //
+  // The sequence: someone opens /guide/:id cold, from a WhatsApp link, a
+  // bookmark or a search result. freshGuide is null, so `loading` starts true,
+  // render one bails at the loading guard having mounted 22 hooks. The Supabase
+  // fetch resolves, setGuide and setLoading(false) commit together, render two
+  // falls past both guards and reaches hook 23. React throws "Rendered more
+  // hooks than during the previous render", the ErrorBoundary catches it, and
+  // the recipient is told "Something broke on our end". Reloading re-runs the
+  // identical path, so it is a permanent dead end rather than a glitch.
+  //
+  // WHY NOBODY SAW IT. The person who built the guide never hits it: saving
+  // navigates with the guide in router state, so freshGuide is set and loading
+  // was false from the first render. And a BROKEN id sets loadError, which
+  // returns at the second guard with the same 22 hooks and renders "Guide not
+  // found" perfectly. Only a VALID shared link crashes, which is the one case
+  // that never gets tested by hand because it looks like the working case.
+  //
+  // `days` is derived here rather than read from the const below, because that
+  // const is declared after the guards and cannot be reached from up here.
+  // A saved guide's weather is frozen at the moment it was built, so a trip
+  // saved in August still shows August's answer when it is opened in October.
+  // Re-checking on open fixes that with no cron and no subscriber list, and it
+  // makes the forecast ARRIVE on its own: a guide saved fourteen weeks out
+  // shows ten year averages, and the same guide opened the week before flying
+  // has crossed into the forecast window and shows a real forecast, with
+  // nobody having done anything. See utils/weather.js for what this honestly
+  // does not do, which is tell somebody who never opens the app.
+  const [freshWeather, setFreshWeather] = useState(null);
+  const [weatherMoved, setWeatherMoved] = useState([]);
+  // ── "AN EVENT NEARBY YOUR PATH WAS JUST DISCOVERED" ──────────────
+  //
+  // Oliver, 19 Sep 2026: "we have the live weather being rendered. I also
+  // believe we need these notifications added onto the guide."
+  //
+  // The same shape as weatherMoved directly above: a guide is not a document,
+  // it is a thing somebody opens again the week before they travel, and by then
+  // the world has moved. Computed on every render rather than fetched, because
+  // the community rows are a module array the live content loader already
+  // fills, so there is nothing to wait for. See utils/guideFinds.js for what
+  // counts as new and why it is the row reaching Gemlyx rather than the event.
+  const finds = useMemo(() => newFinds({
+    guide,
+    pool: communityEvents,
+    dayDateFor: (n) => tripDayDate(guide?._arrivalDate, n),
+    islandOf: (where) => namedIslandOf(lookupRealPlace(where)),
+  }).filter(r => !wasTurnedDown(guide, r)), [guide]);
+  useEffect(() => {
+    const days = guide?.days || [];
+    if (!guide || !Array.isArray(days) || !days.length) return;
+    if (!weatherIsStale(guide._weatherFetchedAt)) return;
+    let cancelled = false;
+    // dayStart, not new Date: an arrival is stored as a calendar day now, and
+    // the legacy timestamp form still reads as the local day it used to.
+    const arrival = dayStart(guide._arrivalDate);
+    // daysUntil, not the subtraction written out again. `new Date(arrival)` was a
+    // clone and the setHours a no-op on a value dayStart had already normalised,
+    // so this read as a raw parse of a stored date while being harmless, which is
+    // the worst of both: it teaches the shape without paying for it.
+    const startOffset = arrival ? Math.max(0, daysUntil(arrival)) : 0;
+    (async () => {
+      const next = await Promise.all(days.map(async (d, i) => {
+        const st = (d.stops || []).map(x => resolveStopCoords(x.name, guide._geo || {}, x.town)).find(Boolean);
+        if (!st) return d.weather || null;
+        // The same shared primitive App.jsx's build path uses, so the weather
+        // baked into a guide and the weather refreshed when it is reopened are
+        // computed for the same day. See dayPlus in utils/calendarDay.js.
+        const on = dayPlus(arrival || new Date(), i);
+        return await dayWeather({
+          point: st, date: on, daysOut: startOffset + i,
+          fetchJson: (url) => fetch(url).then(r => r.json()).catch(() => null),
+        }) || d.weather || null;
+      }));
+      if (cancelled) return;
+      setFreshWeather(next);
+      setWeatherMoved(weatherChanges(days.map(d => d.weather), next));
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [guide?._gid, guide?._weatherFetchedAt, (guide?.days || []).length]);
+
+  if (loading) {
+    return (
+      <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <GemlyxLoader size={44} />
+      </div>
+    );
+  }
+
+  if (loadError || !guide) {
+    return (
+      <div style={{ minHeight: "100vh", background: C.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24, textAlign: "center" }}>
+        <div style={{ fontSize: 16, color: C.text, fontWeight: 700, marginBottom: 8, fontFamily: "'Fraunces', serif" }}>{uiT("guide.notFound", uiLang)}</div>
+        <div style={{ fontSize: 13, color: C.muted, marginBottom: 20 }}>{loadError || uiT("guide.loadFailed", uiLang)}</div>
+        {/* The chat rather than the front page: a guide that failed to load is
+            a reason to build another one, and the front page is where a reader
+            has to start the whole hunt again. See DETOUR_PATH in tabUrl.js. */}
+        <button onClick={() => navigate(backPath)} style={{ background: C.accent, color: "#fff", border: "none", borderRadius: 100, padding: "10px 20px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{uiT("guide.back", uiLang)}</button>
+      </div>
+    );
+  }
+
+  const days = guide.days || [];
+  // One cheap gem a day at most, read now rather than stored at build, so a
+  // guide opened in a month shows what is live in a month. See gemsForGuide
+  // in utils/cheapGems.js. Not a hook: this line sits below an early return.
+  const gemByDay = gemsForGuide(days, gems);
+  // The cost lines What you pay prices, read once more here for the panel.
+  const guideLines = costLines({
+    guide,
+    rowFor: lookupRealPlace,
+    dayDateFor: (n) => tripDayDate(guide?._arrivalDate, n),
+    today: now,
+    mode: guide?._mode || "",
+    saidNoCar: !!guide?._onlyWalking,
+    // The same reader, with the same town for each end, that legChip measures
+    // a hop with, so "the long hops on day 3" under To arrange names a day
+    // whose chip also names DSB and FlixBus. 22 Sep 2026, see transportLines.
+    legKm: (a, b) => legDistanceKm(a.name, b.name, guide._geo || {}, stopTown(a, lookupRealPlace(a.name)), stopTown(b, lookupRealPlace(b.name))),
+  });
+  // ── ONE BOOKING BUTTON PER BED, NOT PER NIGHT ────────────────────
+  //
+  // Oliver, 19 Sep 2026, relaying an outside read and agreeing with it: "the
+  // guide has begun to look like a massive advertisement page."
+  //
+  // Counted before it was changed: the stay card renders once per night and
+  // carries up to three outbound buttons, so a seven night trip put up to
+  // twenty-one hotel links on one page. Nineteen of them were the same search
+  // repeated, because a trip sleeping three nights in Odense is one booking.
+  //
+  // Computed once here rather than inside the loop, because which night gets
+  // the door is a fact about the WHOLE run of nights and a day cannot answer
+  // it alone. The card and the sentence still render every night; only the
+  // buttons move. See utils/stayDoors.js.
+  const stayNights = days
+    .map((d, i) => Number(d?.day || i + 1))
+    .filter(n => needsABed(n, bedStateOf(guide)));
+  // ── ONE HOUSE IS ONE STAY ──────────────────────────────────────
+  // A sommerhus trip books one house for every night, so the whole run is one
+  // stay with one link to houses near the base, and no hotel search anywhere.
+  // See utils/houseTrip.js.
+  const houseStay = houseDoor(guide, stayNights);
+  const stayDoors = houseStay
+    ? { [houseStay.nights[0]]: { door: true, compare: false, featured: false, nights: houseStay.nights.length, list: houseStay.nights.slice() } }
+    : doorsFor(days, stayNights);
+  // ── "USE OUR AFFILIATES (OPTIONAL)" ────────────────────────────────
+  // Oliver, 21 Sep 2026. Every paid door on the guide, gathered into the one
+  // panel a reader opens on purpose: a room per STAY with its nights on it,
+  // the tickets What you pay prices, the car, the tours, the bike. See
+  // utils/partnerSheet.js for what it says and components/PartnerSheet.jsx for
+  // the panel.
+  // Not for a house: Novasol is not a partner, and a hotel for a house trip is
+  // the thing he reported. The house's own link is on its card.
+  const partnerStays = (houseStay ? [] : staysIn(days, stayNights)).map((run, i) => {
+    const d = days.find((x, j) => Number(x?.day || j + 1) === run.first) || {};
+    const lastTown = (d.stops || []).map(x => x?.town).filter(Boolean).slice(-1)[0] || "";
+    const place = d?.glance?.stayArea || lastTown || "";
+    const first = tripDayDate(guide?._arrivalDate, run.first);
+    const last = tripDayDate(guide?._arrivalDate, run.nights[run.nights.length - 1]);
+    const adultsSaid = (guide?._travelers || "").match(/\d+/);
+    const door = stayDoorUrl({
+      area: place, near: lastTown,
+      checkin: first ? dayKey(first) : undefined,
+      checkout: last ? dayKey(dayPlus(last, 1)) : undefined,
+      adults: adultsSaid ? adultsSaid[0] : "2",
+      slot: "partner-stay",
+    });
+    const featured = featuredStayFor(place);
+    const featuredOut = featured ? outboundLink(featured.url) : null;
+    return {
+      place,
+      nights: run.nights,
+      door: door?.href ? { href: door.href, area: !!door.area, label: door.area ? `Hotels in ${place}` : "Find a room on Booking.com" } : null,
+      featured: featuredOut?.href ? { merchant: featured.merchant, href: featuredOut.href } : null,
+      compare: i === 0 ? (tripcomStayUrl(place) || "") : "",
+    };
+  });
+  const partnerTours = days.map((d, i) => {
+    const t = dayTours[i];
+    if (!t?.url) return null;
+    const phrase = entryWord(tourPhrase(t.url, "town"), uiLang);
+    return { day: Number(d?.day || i + 1), url: t.url, label: `${tourMerchant(t.url)}: ${phrase.charAt(0).toUpperCase()}${phrase.slice(1)}` };
+  }).filter(Boolean);
+  const bikeDays = days.map((d, i) => {
+    const town = (d.stops || []).filter(x => x && x.name).map(x => stopTown(x)).find(Boolean) || "";
+    return bikeRentalFits({ mode: travelModeKey(guide._mode), town }) ? Number(d?.day || i + 1) : null;
+  }).filter(Boolean);
+  const partnerBikes = bikeDays.length
+    ? [{ url: `https://www.bajabikes.eu/en/${BAJABIKES_RENTAL_SLUG}/`, label: "Bike rental in Copenhagen", days: bikeDays }]
+    : [];
+  const partnerGroups = partnerSections({ stays: partnerStays, lines: guideLines, tours: partnerTours, bikes: partnerBikes, arrival: guide?._arrivalDate || null });
+  const partnerTotal = partnerCount(partnerGroups);
+  // Oliver's map-vs-plain choice, made before this page ever sees the guide
+  // (App.jsx's generateGuide, search "chosenMode") — _lightMode true means
+  // the plain day-by-day pick, so no route map and no leg time chips here,
+  // just the stop cards, photos, click-through, accommodation, and weather.
+  const lightMode = !!guide._lightMode;
+  const shape = tripShape(guide, legDistanceKm);
+
+  // ── WHICH DAY CROSSES WHICH BELT ────────────────────────────────
+  // Computed once for the whole page rather than per day, because a crossing is
+  // a fact about a PAIR of days and asking day 3 about it means also resolving
+  // day 4. See utils/weatherWarn.js for why only the Great Belt and the
+  // Bornholm ferry produce a warning and the other crossings deliberately
+  // produce nothing.
+  //
+  // partOfCountry answers off the kommune map, which is why it is trusted here:
+  // it is the same function the towns page filters on, and it returns null
+  // rather than guessing when a coordinate cannot be placed. A null breaks the
+  // chain in dayCrossings instead of being guessed through.
+  const dayParts = days.map(d => {
+    const c = (d.stops || [])
+      .map(st => resolveStopCoords(st.name, guide._geo || {}, stopTown(st, lookupRealPlace(st.name))))
+      .find(Boolean);
+    return c ? partOfCountry({ __lat: c.lat, __lon: c.lon }) : null;
+  });
+  const crossings = dayCrossings(dayParts);
+  // The traveller's own stated mode, which decides whether 12 m/s is a footnote
+  // or the whole character of the day. Same field returnLeg and overnightMove
+  // read, so a bike trip cannot get a driver's wind line on one card and a
+  // cyclist's on the next.
+  const tripMode = guide._mode || null;
+
+  // ── ONE MAP, NOT SIX ────────────────────────────────────────────
+  // Oliver, 7 Aug 2026: "damn, it looks so overwhelming. Let's make the leaflet
+  // map more simple on the Gemlyx Guide. Have one big map at the top or bottom
+  // that shows the entire road on map."
+  //
+  // Measured on his five day guide before this change: six separate Leaflet
+  // maps on one page, 6153 pixels tall. Each one showed a single day in
+  // isolation, so the thing a person most wants to see, the SHAPE of the trip
+  // across Denmark, was the one thing no map showed. Six tile layers is also
+  // six sets of network requests and six Leaflet instances for less
+  // information than one map carries.
+  //
+  // His scaling rule needs no code: "If it is multiple towns in Zealand, then
+  // show all of Zealand. If it's multiple towns around Denmark, then show
+  // Denmark. If it's just in Copenhagen, then show the places around
+  // Copenhagen." That is fitBounds, which GuideRouteMap already does, with a
+  // maxZoom so a tight cluster does not end up at street level. Feed it every
+  // stop and the right scale falls out of the geometry.
+  //
+  // The per-day leg chips stay exactly where they are. He asked to keep the
+  // transport visible and it is the thing first-time visitors need most.
+  // ── "IT SHOULD BE TRACKING EVERYDAY FOR THEM" ──────────────────
+
+  const tripGeo = guide._geo || {};
+  // Free time is not a pin: a map dot for "Aalborg shopping streets" is a
+  // claim about one spot that nobody made. See looseStop.
+  const allStops = days.flatMap((d, di) => (d.stops || []).map(st => ({ ...st, _day: d.day || di + 1 })))
+    .filter(st => !looseStop(st));
+  // ── A PIN THAT IS A TOWN CENTRE MUST NOT LOOK LIKE A VENUE ──────
+  // Oliver, 10 Aug 2026: "coordination is off", and "if we screw
+  // coordinations, it might hurt our guide too". He is right, and this is the
+  // sharpest version of it.
+  //
+  // resolveStopCoordsDetailed has always returned a `precise` flag saying
+  // whether a coordinate is the real place or the crude town-centre fallback.
+  // Two things in this codebase read it, both distance checks. Every PIN on
+  // every map used resolveStopCoords, which computes that flag and throws it
+  // away, so a stop that Nominatim could not find was plotted at the middle of
+  // its town and labelled "Day 3 · Samsø Island Distillery".
+  //
+  // That is not a small inaccuracy, it is the map asserting something nobody
+  // checked, in the one place a reader trusts completely. A pin is a claim
+  // about where a thing is.
+  //
+  // Now it is kept, and an approximate pin says so: drawn differently, named
+  // for the town it was approximated to, and counted under the map beside the
+  // stops that could not be placed at all. Same rule as that line, which this
+  // file already got right: never a silently shorter or a silently vaguer map.
+  const tripPoints = allStops.map(st => {
+    // st.town is what the planner said this stop is in, and the schema marks
+    // it REQUIRED for exactly this reason. Passing it is what stops a
+    // coordinate about somewhere else being drawn as a confident pin.
+    const c = resolveStopCoordsDetailed(st.name, tripGeo, st.town);
+    if (!c) return null;
+    // Labelled with the day so one pin in a fourteen stop route still says
+    // WHEN as well as where.
+    // Labelled from the SAME function that chose the point, so the name under
+    // the pin is always the town the pin is actually at.
+    const town = c.precise ? null : (townFallbackFor(st.town, st.name)?.key || null);
+    return {
+      name: `Day ${st._day} · ${st.name}${c.precise ? "" : town ? ` (somewhere in ${town})` : " (approximate)"}`,
+      stopName: st.name,
+      // The day as a field and not only inside the label. pinNumber narrows by
+      // it, so a place visited twice in a week gets each card the number of its
+      // own pin; reading it back out of that string would be parsing a sentence
+      // written for a reader.
+      _day: st._day,
+      approx: !c.precise,
+      town,
+      // ── AND WHICH TOWN IT IS IN, EVEN WHEN THE PIN IS EXACT ──────
+      // `town` above is only filled for a pin that FELL BACK to a town
+      // centre, because that is what it was written for: the "(somewhere in
+      // Ribe)" in the label. The picture needs the town for every stop,
+      // including the ones we placed to the door, so it is read from what the
+      // planner said and from the name as a fallback. Oliver, 22 Sep 2026:
+      // "the 'town' pictures gotta pop up."
+      townName: String(st.town || "").trim() || town || townKeyFor(st.name) || "",
+      lat: c.lat,
+      lon: c.lon,
+      // ── AND WHAT THE GUIDE ALREADY SAID ABOUT IT ────────────────
+      // Oliver, 5 Sep 2026: "explain what this is with a short 50 words
+      // resume", and asked where the words should come from, he picked the
+      // guide's own line over a fresh summary. It was already on the page under
+      // the stop card and was not on the map, so the map's own panel could only
+      // say what was NEAR the place and never what it was. See
+      // utils/mapStops.js.
+      note: st.note || "",
+    };
+  });
+  // ── A STOP WITH NO COORDINATES IS DROPPED, SILENTLY ────────────
+  // The other half of the missing-Odense report, and the more important half.
+  // resolveStopCoords returns null for anything it cannot place, and this list
+  // was filtered with a bare .filter(Boolean), so a stop that failed to
+  // geocode simply stopped existing on the map. No warning, no gap, just a
+  // shorter route that looks complete. That is the exact shape this project
+  // keeps finding: a silent failure that looks like a working feature.
+  //
+  // Counted rather than hidden, and printed under the map, because "3 towns"
+  // above a map showing two is the thing that makes a founder distrust the
+  // whole page.
+  const tripUnplaced = allStops.filter((st, i) => !tripPoints[i]).map(st => st.name);
+  const tripPlaced = tripPoints.filter(Boolean);
+  // Consecutive duplicates are the same place twice (an overnight stop that is
+  // also the next morning's start). One pin, not two stacked on each other.
+  const tripRoute = tripPlaced.filter((p, i) => i === 0 || Math.abs(p.lat - tripPlaced[i - 1].lat) > 1e-6 || Math.abs(p.lon - tripPlaced[i - 1].lon) > 1e-6);
+  // ── COUNTED OFF WHAT IS DRAWN, NOT OFF WHAT WAS PLACED ────────────
+  // This read tripPoints, i.e. BEFORE the dedupe on the line above, so it could
+  // name a pin that is not on the map. Oliver's screenshot: "2 pins are
+  // approximate: Tivoli Christmas market, Amalienborg", on a map where the second
+  // of any consecutive pair had already been collapsed away. The note counted
+  // stops; the map draws points.
+  // Counted by pin, named once each: the same airport at both ends of a trip
+  // read "Copenhagen Airport, Helsingør Old Town, Copenhagen Airport" on the
+  // live guide, 21 Sep 2026.
+  const tripApproxPins = tripRoute.filter(p => p.approx).map(p => p.stopName);
+  const tripApprox = [...new Set(tripApproxPins)];
+  // ── AND WHICH PIN A STOP IS, IF IT IS ONE ─────────────────────────
+  // Read off tripRoute itself, so the number under the map and the number ON the
+  // map cannot drift. Two stops in one place collapse to one pin by design, and
+  // both cards then point at that pin, which is the truth: it is one dot.
+  // ── AND THE SAME PLACE ON TWO DAYS IS TWO PINS ────────────────────
+  //
+  // Found by Fable reviewing the legs of guide 9vkdc564l13, 19 Sep 2026. This
+  // searched by NAME and took the first match, and tripRoute only collapses
+  // CONSECUTIVE identical coordinates, so a place visited on day 2 and again on
+  // day 6 has two pins and day 6's card carried day 2's number.
+  //
+  // The dot was in the right spot, which is why nobody saw it: the two pins sit
+  // on the same coordinates. The NUMBER was wrong, and the map's own caption
+  // promises every stop below is numbered in order, so a reader counting cards
+  // against pins finds the sequence jump backwards and no explanation.
+  //
+  // The day narrows it, and the name still decides within the day: two stops on
+  // one day that collapsed to one pin keep pointing at that pin, which is the
+  // case the paragraph above this is about and which stays true. `_day` is
+  // stamped onto every entry where tripRoute is built, so this reads the same
+  // field the pin was drawn from rather than a second idea of which day it is.
+  //
+  // `dayNo` is optional and the name-only search is the fallback, so a caller
+  // that has no day in hand behaves exactly as before rather than losing its
+  // number.
+  const pinNumber = (stop, dayNo = null) => {
+    const name = String(stop?.name || "");
+    if (!name) return null;
+    const sameName = (p) => String(p.stopName || p.name || "") === name;
+    if (dayNo != null) {
+      const onTheDay = tripRoute.findIndex(p => sameName(p) && p._day === dayNo);
+      if (onTheDay >= 0) return onTheDay + 1;
+    }
+    const at = tripRoute.findIndex(sameName);
+    return at < 0 ? null : at + 1;
+  };
+  // How many stops the dedupe removed, said out loud rather than left as a map
+  // that is quietly shorter than the list. The unplaced note below covers the
+  // other reason a stop is missing; this covers the one nothing mentioned.
+  const tripCollapsed = tripPlaced.length - tripRoute.length;
+  const tripLegs = tripRoute.slice(0, -1).map((p, i) => ({
+    mode: resolveLegMode(null, guide._mode, p.name, tripRoute[i + 1].name, guide._onlyWalking, tripGeo),
+  }));
+
+  return (
+    // overflowX clip, not hidden: `hidden` on an ancestor turns every sticky
+    // child into a non-sticky one, and this page's header and save bar are
+    // both sticky. `clip` stops the sideways scroll without that side effect.
+    // Oliver's screenshot has the header clipped to "ack" at the left edge,
+    // which only happens when the document itself is scrolled sideways, and
+    // that also drags the corner launcher out past the window.
+    <div style={{ minHeight: "100vh", background: C.bg, paddingBottom: 60, overflowX: "clip", maxWidth: "100%" }}>
+      {/* BUG FIX: .towns-grid was only ever defined in App.jsx's own <style>
+          tag, which only exists while GemlyxApp (the "/" route) is mounted.
+          A guide reached via a direct/shared link never mounts GemlyxApp at
+          all — React Router only renders the ONE matching route — so this
+          page's stop-card grid was silently falling back to plain stacked
+          block layout with zero columns for anyone opening a shared guide
+          link cold, never noticed because every live test so far started
+          from "/" first (where GemlyxApp's style tag was still around from
+          the client-side nav). Defined locally now so this page never
+          depends on another route's CSS still being mounted. */}
+      <style>{`
+        .towns-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px 14px; }
+        @media (min-width: 900px) { .towns-grid { grid-template-columns: repeat(3, 1fr); gap: 34px 22px; } }
+      `}</style>
+      <div style={{ position: "sticky", top: 0, zIndex: 10, background: `${C.bg}ee`, backdropFilter: "blur(8px)", borderBottom: `1px solid ${C.border}`, padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        {/* `onBack` is the modal case, where the guide is drawn over the chat
+            and the chat is still mounted behind it. On its own route there is
+            nothing behind it, and the page a guide belongs to is the chat. */}
+        <button onClick={() => (onBack ? onBack() : navigate(backPath))}
+          style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "8px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>
+          ‹ Back
+        </button>
+        {!isUnsaved && (
+          <div style={{ display: "flex", gap: 8 }}>
+            {/* Someone who opened a link a friend sent them had no way to keep
+                it: the bookmark into "Your Saved Guides" only ever happened
+                inside saveGuide, which only the person who BUILT the trip runs.
+                A shared guide that the recipient cannot keep is a dead end. */}
+            {guideId && !keptAlready && (
+              <button onClick={keepGuide}
+                style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "8px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>
+                ＋ Keep
+              </button>
+            )}
+            {guideId && keptAlready && (
+              <span style={{ color: C.muted, fontSize: 12.5, fontWeight: 700, padding: "8px 4px" }}>✓ Kept</span>
+            )}
+            <button onClick={() => setShareOpen(o => !o)}
+              style={{ background: shareOpen ? C.surface : "none", border: `1px solid ${shareOpen ? C.gold + "77" : C.border}`, color: shareOpen ? C.gold : C.light, borderRadius: 100, padding: "8px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>
+              Share ↗
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* ── THE SHARE PANEL ──────────────────────────────────────────
+          Under the header rather than floating over it: a dropdown here would
+          have to win a z-index argument with the sticky bar, the chat launcher
+          and the save bar, all of which already collided once (see the PASS 27
+          comment further down). Pushing the page down cannot collide with
+          anything. */}
+      {shareOpen && !isUnsaved && (
+        <div style={{ background: C.surface, borderBottom: `1px solid ${C.border}` }}>
+          <div style={{ maxWidth: 960, margin: "0 auto", padding: "18px 16px 20px" }}>
+            <div style={{ fontSize: 14.5, fontWeight: 700, color: C.text, marginBottom: 3 }}>
+              {justSaved ? uiT("guide.saved", uiLang) : uiT("guide.sendIt", uiLang)}
+            </div>
+            <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.6, marginBottom: 13, maxWidth: 520 }}>
+              Anyone with the link can open it, on any device. Nobody needs an account, and it does not expire.
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+              {/* The FULL url including https://, not a prettified one. When
+                  the clipboard is refused, this field is what a person copies
+                  by hand, and a scheme-less link pasted into an email body is
+                  not always linkified. */}
+              <input ref={urlRef} readOnly value={shareUrl}
+                onFocus={e => e.target.select()}
+                style={{ flex: "1 1 260px", minWidth: 0, background: C.bg, border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "10px 16px", fontSize: 12.5, fontFamily: "'Inter', sans-serif" }} />
+              <button onClick={copyLink}
+                style={{ background: copied === "done" ? C.gold : "none", border: `1px solid ${copied === "done" ? C.gold : C.border}`, color: copied === "done" ? C.onGold : C.light, borderRadius: 100, padding: "10px 18px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>
+                {copied === "done" ? uiT("guide.copied", uiLang) : uiT("guide.copyLink", uiLang)}
+              </button>
+              {canSend && (
+                <button onClick={sendLink}
+                  style={{ background: `linear-gradient(135deg, ${C.accent}, #C22A3C)`, color: "#fff", border: "none", borderRadius: 100, padding: "10px 20px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>
+                  Send ↗
+                </button>
+              )}
+            </div>
+            {/* The clipboard can be refused: an insecure context, an old
+                browser, a denied permission. Saying nothing is what the old
+                button did. Naming it, and pointing at the link that is now
+                selected, is the difference between a failure and a dead end.
+                Not "press Ctrl+C" — half the people reading this are on a Mac. */}
+            {copied === "manual" && (
+              <div style={{ fontSize: 12, color: C.gold, marginTop: 9 }}>
+                Your browser wouldn't let the page copy for you. The link is selected above, so copy it by hand.
+              </div>
+            )}
+            {/* Desktop has no share sheet, and "copy it then go and find the
+                app yourself" is where a share flow loses people. These two
+                cover almost everything a trip gets sent through. */}
+            {!canSend && (
+              <div style={{ display: "flex", gap: 14, marginTop: 12 }}>
+                <a href={`https://wa.me/?text=${encodeURIComponent(`${shareMessage(guide)} ${shareUrl}`)}`}
+                  target="_blank" rel="noopener noreferrer"
+                  style={{ fontSize: 12.5, fontWeight: 700, color: C.gold, textDecoration: "none" }}>WhatsApp ↗</a>
+                <a href={`mailto:?subject=${encodeURIComponent(shareTitle(guide))}&body=${encodeURIComponent(`${shareMessage(guide)}\n\n${shareUrl}`)}`}
+                  style={{ fontSize: 12.5, fontWeight: 700, color: C.gold, textDecoration: "none" }}>Email ↗</a>
+              </div>
+            )}
+            {/* Its own component so it can be RENDERED and read by the
+                instrument, which cannot open a panel gated on useState. See
+                components/TripCalendarCard.jsx. */}
+            <TripCalendarCard guide={guide} guideUrl={shareUrl} />
+
+            {/* The rule stated where the action is, which is the only place a
+                rule in a terms page ever lands. Note that every target
+                this panel offers — the native sheet, WhatsApp, email — is
+                person to person, so the panel and the rule already agree: this
+                is for the people coming with you. */}
+            <div style={{ fontSize: 10.5, color: C.muted, marginTop: 12, lineHeight: 1.6, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+              For the people coming with you. Posting the guide publicly or republishing the text is not allowed.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── WHAT THE CHECKS CAUGHT ────────────────────────────────
+          Oliver's Limfjord guide, 26 Aug 2026: the logistics gate measured the
+          last leg at 1 minute on foot, caught the guide suggesting a bus for it
+          — his own rule, SHORT_WALK_MINUTES — wrote the finding into
+          _planProblems, and the save path deleted it. The comment on that line,
+          written 12 August, says "Nothing renders them". This renders them.
+
+          No permission check needed: the save path strips the field, so a
+          shared guide never carries one and a reader sent a link cannot see
+          this. The person looking at an unsaved guide is the one who built it. */}
+      {(() => {
+        const problems = problemList(guide);
+        if (!problems.length) return null;
+        return (
+          <div style={{ maxWidth: 960, margin: "0 auto", padding: "20px 16px 0" }}>
+            <div style={{ background: C.surface, border: `1px solid ${C.gold}55`, borderRadius: 12, padding: "15px 17px" }}>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: C.gold, fontFamily: "'Fraunces', serif", marginBottom: 8 }}>
+                {problemHeading(problems.length)}
+              </div>
+              <ul style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 7 }}>
+                {problems.map((x, i) => (
+                  <li key={i} style={{ fontSize: 12, color: C.light, lineHeight: 1.6 }}>{x}</li>
+                ))}
+              </ul>
+              <div style={{ fontSize: 10.5, color: C.muted, marginTop: 11, lineHeight: 1.6, borderTop: `1px solid ${C.border}`, paddingTop: 9 }}>
+                {PROBLEM_NOTE}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      <div style={{ maxWidth: 960, margin: "0 auto", padding: "36px 16px 28px" }}>
+        {/* Redesign pass: kicker + roomier title, and the essentials box became a
+            labeled "Before you go" card instead of three anonymous ◆ bullet lines —
+            same data, but each line now says what KIND of tip it is at a glance. */}
+        {/* ── THE PICTURE BEHIND THE TITLE ───────────────────────────
+            Oliver, 17 Aug 2026: "I wonder if we should get a picture of
+            something Danish in the background when the guide is given."
+
+            Right that the page opens on nothing, and the literal version would be
+            wrong: a stock Nyhavn behind a bicycle trip from Aalborg to Skagen is a
+            photograph of somewhere they are not going, unsourced, sitting above a
+            page where every price is traced and every distance measured. So it is
+            their OWN first stop, from a row he published himself, with the credit
+            the licence requires. A different picture on every guide, no research
+            and no new API call. utils/guideHero.js carries the full argument.
+
+            No photograph anywhere in the trip means no header image. Never a stock
+            fallback: that would put a picture of somewhere they are not going on
+            exactly the guides where we know least. */}
+        {hero?.photo && (
+          <div style={{ position: "relative", height: 260, borderRadius: 18, overflow: "hidden", marginBottom: 18, border: `1px solid ${C.border}` }}>
+            <img src={hero.photo} alt={heroCaption(hero) || "A place on this trip"}
+              onError={e => { e.target.style.display = "none"; }}
+              style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            {/* A scrim, not a flat overlay: the title sits over the bottom third
+                and text on a photograph without one is unreadable on whichever
+                image happens to be bright exactly there. */}
+            <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(10,15,30,0.92) 0%, rgba(10,15,30,0.45) 45%, rgba(10,15,30,0.15) 100%)" }} />
+            <div style={{ position: "absolute", left: 18, right: 18, bottom: 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 2, textTransform: "uppercase", marginBottom: 8 }}>✦ Your Gemlyx guide</div>
+              <div style={{ fontSize: 34, fontWeight: 500, fontFamily: "'Fraunces', serif", color: "#fff", lineHeight: 1.1, maxWidth: 680, textShadow: "0 2px 18px rgba(0,0,0,0.55)" }}>{guide.title || uiT("guide.fallbackTitle", uiLang)}</div>
+              {/* Said out loud. An unlabelled photograph on a page about where to
+                  go is a decoration; a labelled one is information. */}
+              {heroCaption(hero) && (
+                <div style={{ fontSize: 11, color: "#E8ECF6", opacity: 0.9, marginTop: 7 }}>{heroCaption(hero)}</div>
+              )}
+            </div>
+          </div>
+        )}
+        {/* CC BY and CC BY-SA require attribution reasonably near the work, so a
+            photograph promoted to a header takes its credit up with it. */}
+        {hero?.photo && (
+          <PhotoCredit photo={hero.photo} credit={hero.credit} style={{ marginTop: -10, marginBottom: 16 }} />
+        )}
+
+        {/* Still exactly the old header on any guide whose stops have no
+            photograph between them. */}
+        {!hero?.photo && (
+          <>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 2, textTransform: "uppercase", marginBottom: 10 }}>✦ Your Gemlyx guide</div>
+            <div style={{ fontSize: 36, fontWeight: 500, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.1, marginBottom: lightMode ? 10 : 24, maxWidth: 680 }}>{guide.title || uiT("guide.fallbackTitle", uiLang)}</div>
+          </>
+        )}
+        {/* So the absence of maps/routes reads as the choice it was, not a bug. */}
+        {lightMode && (
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 100, padding: "5px 12px", marginBottom: 24, fontSize: 11, color: C.muted, fontWeight: 600 }}>
+            📋 Simple guide, no maps or transport times
+          </div>
+        )}
+
+        {/* ── AT A GLANCE, BEFORE THE DETAIL ──────────────────────────
+            The answer to "how big is this trip", which the page previously made
+            you scroll the whole thing to work out. Only figures that are
+            known appear: tripShape withholds a total rather than
+            build one out of the legs that happened to resolve. */}
+        {/* ── WHAT KIND OF TRIP, BEFORE HOW BIG ──────────────────────
+            The numbers below answer "how big" and dodge "what shape". Both are
+            counted from the plan, never written by a model, and both stay
+            silent rather than guess. The scale line is the one a first-time
+            visitor needs most: 38 minutes means nothing until you know that in
+            Denmark it is a long way. */}
+        {(() => {
+          const character = tripCharacter(guide, shape);
+          const scale = tripScaleLine(shape);
+          if (!character && !scale) return null;
+          return (
+            <div style={{ marginBottom: 20, maxWidth: 640 }}>
+              {character && <div style={{ fontSize: 15.5, color: C.text, fontFamily: "'Fraunces', serif", lineHeight: 1.45 }}>{character}</div>}
+              {scale && <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.6, marginTop: 5 }}>{scale}</div>}
+            </div>
+          );
+        })()}
+
+        {shape.stopCount > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 18, maxWidth: 640 }}>
+            {[
+              { n: shape.dayCount, label: uiT(shape.dayCount === 1 ? "guide.day" : "guide.days", uiLang) },
+              { n: shape.stopCount, label: uiT(shape.stopCount === 1 ? "guide.stop" : "guide.stops", uiLang) },
+              shape.towns.length ? { n: shape.towns.length, label: uiT(shape.towns.length === 1 ? "guide.town" : "guide.towns", uiLang) } : null,
+              shape.km ? { n: shape.km, label: uiT("guide.kmTravel", uiLang), sub: true } : null,
+              shape.minutes ? { n: humanMinutes(shape.minutes), label: uiT("guide.movingTotal", uiLang), sub: true } : null,
+            ].filter(Boolean).map((s2, i) => (
+              <div key={i} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "9px 14px", minWidth: 76 }}>
+                <div style={{ fontSize: 20, fontWeight: 600, fontFamily: "'Fraunces', serif", color: s2.sub ? C.light : C.gold, lineHeight: 1.1 }}>{s2.n}</div>
+                <div style={{ fontSize: 10, color: C.muted, letterSpacing: 0.9, textTransform: "uppercase", marginTop: 3 }}>{s2.label}</div>
+              </div>
+            ))}
+          </div>
+        )}
+        {shape.towns.length > 1 && (
+          <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.7, marginBottom: shape.longest ? 8 : 24, maxWidth: 640 }}>
+            <span style={{ color: C.muted, fontWeight: 700 }}>{uiT("guide.yourRoute", uiLang)} </span>{shape.towns.join(" → ")}
+          </div>
+        )}
+        {/* His words, on why the transport has to stay visible: "people coming
+            to Denmark, have no idea about Denmark. How long the transport is."
+            The single longest journey is the one that decides whether a day is
+            a day out or a travel day, so it is named rather than buried in a
+            chip halfway down. */}
+        {shape.longest && (
+          <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.7, marginBottom: 24, maxWidth: 640 }}>
+            <span style={{ color: C.muted, fontWeight: 700 }}>{uiT("guide.longestLeg", uiLang)} </span>
+            {shape.longest.text}, {shape.longest.from} to {shape.longest.to}
+          </div>
+        )}
+
+        {/* ── AND THE TWO WAYS TO HOLD IT ──────────────────────────
+            Oliver, 24 Sep 2026: "Make a 'swipe through' option. Because some
+            people might hate a long page of days and trips." Above the day
+            buttons rather than beside them, because it changes what those
+            buttons do: in the long view they scroll, in the one-day view they
+            select. See utils/dayPager.js. */}
+        {days.length > 1 && (
+          <GuideDayPager
+            mode={dayMode}
+            onMode={(m) => { setDayMode(m); if (m === "one") setDayAt(a => pagerAt(a, days.length)); }}
+            C={C} count={days.length} at={dayAt}
+            dayNo={days[pagerAt(dayAt, days.length)]?.day || null}
+            onStep={(by) => setDayAt(a => pagerStep(a, by, days.length))}
+          />
+        )}
+        {/* A seven day guide is a long page. Jumping is not a substitute for the
+            day structure, which he asked to keep, it is a way to get back to
+            Thursday without scrolling past Monday again. */}
+        {/* Five days, not three: on a short guide these are three buttons
+            that scroll past what they are covering.
+
+            IN THE ONE-DAY VIEW THE FLOOR GOES, and the reason is that these
+            stop being a shortcut and become the navigation: a three day guide
+            paged one day at a time still needs a way to reach day 3 without
+            two swipes. */}
+        {(dayMode === "one" ? days.length > 1 : days.length >= 5) && (
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 26 }}>
+            {days.map((d, i) => {
+              const here = dayMode === "one" && pagerAt(dayAt, days.length) === i;
+              return (
+                <button key={i} onClick={() => {
+                  if (dayMode === "one") { setDayAt(pagerAt(i, days.length)); return; }
+                  document.getElementById(`gx-day-${d.day || i + 1}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}
+                  aria-current={here ? "true" : undefined}
+                  style={{ background: here ? `${C.gold}26` : C.surface, border: `1px solid ${here ? C.gold : C.border}`, color: here ? C.gold : C.light, borderRadius: 100, padding: "6px 13px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                  Day {d.day || i + 1}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {!lightMode && tripRoute.length > 1 && (
+          <div style={{ marginBottom: 28, maxWidth: 640 }}>
+            {/* ── FLY DOWN, AND SAY WHERE YOU LANDED ────────────────────
+                Oliver, 17 Aug 2026: "Can you make a design that when you click on
+                one of them, you instantly fly down to the area? And then it pops up
+                in the right corner where you read shortly about its location."
+
+                The card sits INSIDE the map's box, top right, over the tiles,
+                because the point is that it belongs to the pin you just tapped.
+
+                Not one word of it is written by a model. describeLocation is
+                arithmetic: haversine between this pin and the coordinates of rows
+                he published himself, phrased. On a map, which is the surface a
+                reader trusts most, an invented "close to King's Garden" would be
+                the same class of claim as the restaurant the chat quoted out of a
+                model's memory this morning. The sentence can be dull. It cannot be
+                wrong, and it gets better as his library grows. */}
+            <div style={{ height: 320, borderRadius: 16, overflow: "hidden", border: `1px solid ${C.border}`, position: "relative" }}>
+              <GuideRouteMap
+                points={tripRoute}
+                legs={tripLegs}
+                nearby={mapLibrary}
+                photoFor={townPhotoFor}
+                selectedName={mapPin?.name || ""}
+                onSelect={setMapPin}
+              />
+              {mapPin && (
+                <div style={{
+                  position: "absolute", top: 10, right: 10, zIndex: 500, maxWidth: 232,
+                  background: C.scrim, backdropFilter: "blur(6px)",
+                  border: `1px solid ${C.border}`, borderRadius: 12, padding: "10px 12px",
+                }}>
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 800, color: C.text, fontFamily: "'Fraunces', serif", lineHeight: 1.25, flex: 1 }}>
+                      {mapPin.name}
+                    </div>
+                    <button
+                      onClick={() => setMapPin(null)}
+                      aria-label={uiT("guide.closePin", uiLang)}
+                      style={{ background: "transparent", border: 0, color: C.muted, fontSize: 15, lineHeight: 1, cursor: "pointer", padding: 2 }}
+                    >×</button>
+                  </div>
+                  {/* ── WHAT IT IS, THEN WHERE IT IS ──────────────────
+                      This read only the second half, so the card on a map of his
+                      own trip said "Nothing else in our own guides is within a
+                      1200 m walk of Day 2 · LEGO House yet." — a true sentence
+                      about the neighbours of a place it never described.
+                      stopCard puts the guide's own words first and the distances
+                      after, which is the order a reader who has just flown down
+                      to a pin wants them in. */}
+                  <div style={{ fontSize: 11, color: C.light, lineHeight: 1.55, marginTop: 5 }}>
+                    {/* stopName, not name: the pin's `name` is "Day 2 · LEGO House" and the
+                        published rows are called "LEGO House", so the exclusion never
+                        matched and only the 20 m floor stopped the card listing the stop
+                        as its own nearest neighbour. */}
+                    {stopCard(mapPin, describeLocation(mapPin, nearbyPublished(mapPin, mapLibrary, { exclude: mapPin.stopName || mapPin.name }), { town: mapPin.town }))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div style={{ fontSize: 11, color: C.muted, marginTop: 7 }}>
+              The whole route, numbered in order. Tap a pin to fly down to it and read what it is; a pin with a number in a ring is several stops on top of each other, and opening it separates them. Close the card to come back out.
+            </div>
+            {/* Said out loud rather than left as a shorter map. A stop with no
+                coordinate used to vanish from here with nothing to show it
+                had, which is how a route naming three towns drew two. */}
+            {tripUnplaced.length > 0 && (
+              <div style={{ fontSize: 11, color: "#FFB347", marginTop: 5, lineHeight: 1.55 }}>
+                {tripUnplaced.length === 1
+                  ? uiT("guide.unplacedOne", uiLang)
+                  : `${tripUnplaced.length} ${uiT("guide.unplacedMany", uiLang)}`} {tripUnplaced.join(", ")}. {uiT(tripUnplaced.length === 1 ? "guide.unplacedEndOne" : "guide.unplacedEndMany", uiLang)}
+              </div>
+            )}
+            {tripCollapsed > 0 && (
+              <div style={{ fontSize: 11, color: C.muted, marginTop: 5, lineHeight: 1.5 }}>
+                {tripCollapsed === 1
+                  ? uiT("guide.sharedPinOne", uiLang)
+                  : `${tripCollapsed} ${uiT("guide.sharedPinMany", uiLang)}`}
+              </div>
+            )}
+            {tripApprox.length > 0 && (
+              <div style={{ fontSize: 11, color: C.muted, marginTop: 6, lineHeight: 1.5 }}>
+                {tripApproxPins.length === 1
+                  ? uiT("guide.approxOne", uiLang)
+                  : `${tripApproxPins.length} ${uiT("guide.approxMany", uiLang)}`} {tripApprox.join(", ")}. {uiT(tripApproxPins.length === 1 ? "guide.approxEndOne" : "guide.approxEndMany", uiLang)}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── DECISIONS, NOT INFORMATION ─────────────────────────────
+            The real anxiety of a first trip abroad is not what to see, it is
+            what you have to sort out before you go. Only things the guide can
+            stand up appear here: a dated event, a ferry, a bed.
+            Nothing pads it out, because a "book ahead" list that repeats itself
+            is one a traveler learns to skip. */}
+        {(() => {
+          const actions = bookingActions(guide, lookupRealPlace);
+          if (actions.length === 0) return null;
+          return (
+            <div style={{ background: `${C.accent}12`, border: `1px solid ${C.accent}44`, borderRadius: 16, padding: "16px 18px", marginBottom: 26, maxWidth: 640 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.accent, letterSpacing: 1.4, textTransform: "uppercase", marginBottom: 10 }}>{uiT("guide.bookAhead", uiLang)}</div>
+              {actions.map((a, i) => (
+                <div key={i} style={{ display: "flex", gap: 10, alignItems: "baseline", marginBottom: i === actions.length - 1 ? 0 : 9 }}>
+                  <span style={{ color: C.accent, fontSize: 12 }}>◆</span>
+                  <span style={{ fontSize: 13, color: C.light, lineHeight: 1.6 }}>
+                    <b style={{ color: C.text }}>{a.what}.</b> {a.why}
+                  </span>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
+
+        {guide.essentials && (
+          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "16px 18px", marginBottom: 30, maxWidth: 640 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 1.4, textTransform: "uppercase", marginBottom: 10 }}>{uiT("guide.beforeYouGo", uiLang)}</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {/* ── WHAT A HUNDRED KRONER IS WORTH, ONCE ──────────
+                  Oliver, 21 Aug 2026: "In the create an account, ask what
+                  country they're from. Because then the guide can probably
+                  write in their currency."
+
+                  He asked for that immediately after reading "hostels here run
+                  around DKK 600/night while central hotels start near $200" in
+                  one of his own guides and judging it "just not true at all".
+                  Every price in this guide is in DKK and stays that way, because
+                  that is what he will be charged at the desk. This is the one
+                  conversion, given once, so he can calibrate the rest himself.
+
+                  STAMPED, NOT LIVE. The rate and the date it was published are
+                  baked onto the guide at build time, so a guide saved tonight
+                  and opened in March still says which day its number is from
+                  instead of quietly showing March's rate under tonight's trip.
+                  Absent whenever the rate could not be fetched, and a guide with
+                  no rate line is still completely correct. */}
+              {/* ── AND WHAT THAT IS IN MONEY THEY KNOW ───────────
+                  Oliver, 24 Sep 2026: "convert it to US dollars and Euro when
+                  guide shows." Several rates now, off one ECB publication, so
+                  they share a date by construction. A guide saved before this
+                  carries only the flat to/amount pair, which is why that is
+                  still read as a fallback rather than replaced. */}
+              {/* ── ONE RATE, THEIRS, AND NOTHING FOR A DANE ──────
+                  Oliver, 26 Sep 2026: "Don't make it so complicated.. just
+                  tell the user what the rate is in their own currency.. if
+                  it's a Dane, just leave it out." See readerCurrency and
+                  fxRateFor in utils/profile.js. */}
+              {(() => {
+                // The guide was fetched in the builder's currency; the reader
+                // may be somebody the link was shared with, so their own is
+                // read again here and a Dane sees no line.
+                const fxOwn = fxRateFor(guide._fx, readerCurrency({ locale: typeof navigator !== "undefined" ? navigator.language : "" }))
+                  || fxRateFor(guide._fx, guide._fx?.rates?.length === 1 ? guide._fx.rates[0].to : null);
+                const isDane = readerCurrency({ locale: typeof navigator !== "undefined" ? navigator.language : "" }) === "DKK";
+                if (!fxOwn || isDane) return null;
+                const line = `${fxOwn.base} DKK ${uiT("guide.isAbout", uiLang)} ${fxOwn.amount} ${fxOwn.to}.`;
+                return (
+                  <div style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
+                    <span style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, letterSpacing: 0.8, textTransform: "uppercase", flexShrink: 0, width: 92 }}>{uiT("guide.kroner", uiLang)}</span>
+                    <span style={{ fontSize: 13, color: C.light, lineHeight: 1.6 }}>{line}</span>
+                  </div>
+                );
+              })()}
+              {[["guide.money", guide.essentials.budgetReality], ["guide.gettingAround", guide.essentials.transportTip], ["guide.keepInMind", guide.essentials.keepInMind], ["guide.weather", weatherNoteNow(guide.essentials.weatherNote, weatherMoved)]].filter(([, v]) => v).map(([label, v]) => (
+                <div key={label} style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, letterSpacing: 0.8, textTransform: "uppercase", flexShrink: 0, width: 92 }}>{uiT(label, uiLang)}</span>
+                  <span style={{ fontSize: 13, color: C.light, lineHeight: 1.6 }}>{v}</span>
+                </div>
+              ))}
+              {/* ── WHAT YOU PAY FOR ───────────────────────
+                  Oliver, 26 Aug 2026, replacing one Tiqets browse link: "I'd
+                  rather you give them a list of what they have to pay for
+                  instead. Direct links."
+
+                  ITS OWN COMPONENT SO IT CAN BE RENDERED. Written inline here it
+                  sat 1,400 lines into a component behind a router and three
+                  hooks, where the suite could assert costLines was CALLED and
+                  never ask what came out — which is the gap four wiring failures
+                  shipped through this month. See components/CostsBlock.jsx. */}
+              {/* ── AND WHAT THE ROUTE BURNS ────────────────────
+                  Oliver, 24 Sep 2026: "990 dkk? Think about gas prices.. that
+                  needs to be calculated." Worked out here rather than in the
+                  block, because it needs the leg distances and that component
+                  has never known where anything is. Only on a trip that
+                  drives: a public transport guide pays fares, not petrol, and
+                  those are already their own lines. */}
+              {/* Its fares, meals and fuel are Danish figures in DKK, so a
+                  guide in another country goes without until it has its own. */}
+              {!abroadGuide && <CostsBlock guide={guide} C={C} rowFor={lookupRealPlace} now={now}
+                fuel={DRIVEN_MODES.has(String(guide?._mode || "").trim().toLowerCase())
+                  ? fuelCost(drivingLegs(guide, legDistanceKm) || {})
+                  : null}
+                /* ── AND WHAT EATING COSTS ────────────────────────
+                   Off the published food library's own checked prices, not off
+                   a national average about residents who cook at home. The
+                   party count is the one the brief read, and partyOf is only a
+                   fallback for a guide built before _party existed, which is
+                   the same pair CostsBlock uses for tickets. See
+                   utils/mealsEstimate.js. */
+                /* The trip's shape, not a figure. Which of the three ways to
+                   eat applies is the reader's to pick, inside the block, so
+                   the page hands over the days and the heads and nothing
+                   else. See utils/mealsEstimate.js. */
+                meals={{ days: days.length, heads: (partyFrom(guide?._party) || partyOf(guide?._travelers))?.heads || 1 }} />}
+              {/* ── THE ONE WAY IN TO EVERY PAID DOOR ─────────────
+                  Oliver, 21 Sep 2026: "Make a 'use our affiliates
+                  (optional)' and make it something clickable. When you click
+                  it, it then pops out into the side of the panel." Under the
+                  prices, so the reader has the numbers first and the doors
+                  only if they ask for them. */}
+              <PartnerOpener count={partnerTotal} onOpen={() => setPartnersOpen(true)} style={{ marginTop: 14 }} />
+              <PartnerSheet open={partnersOpen} sections={partnerGroups} onClose={() => setPartnersOpen(false)} />
+            </div>
+          </div>
+        )}
+
+        {isUnsaved && (
+          <div style={{ background: `${C.gold}14`, border: `1px solid ${C.gold}55`, borderRadius: 14, padding: "14px 16px", marginBottom: 24, maxWidth: 640 }}>
+            <div style={{ fontSize: 13.5, color: C.text, fontWeight: 700, marginBottom: 4 }}>{uiT("guide.previewTitle", uiLang)}</div>
+            <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.6 }}>{uiT("guide.previewSub", uiLang)}</div>
+          </div>
+        )}
+
+        {/* PIPELINE TEST CARD (Oliver: "Can you in the test pipeline also show
+            me what the plan was? I want to see what recommendations is given
+            to the different types of people... did they include events") —
+            only ever present on guides built from Studio's Random-guide test
+            button (guide._testProfile is attached exclusively on that path,
+            see App.jsx's randomTestProfileRef). Shows the fabricated traveler,
+            the planner's raw day/stop skeleton BEFORE the writer touched it,
+            and whether any real events made it into the final guide. */}
+        {guide._testProfile && isUnsaved && (() => {
+          const p = guide._testProfile;
+          let plan = null;
+          try { plan = guide._testPlan ? JSON.parse(guide._testPlan) : null; } catch { /* skeleton unparseable — show the rest without it */ }
+          // ── AND A NAME ALONE DOES NOT ANSWER HIS QUESTION ──────
+          // "Did they include events" was answered with a list of names, which
+          // is the same gap the stop cards had: Tivoli Halloween in a September
+          // plan reads as a hit here and is a miss on the ground. The window
+          // comes along, and so does a flag when the day the planner chose is
+          // outside it, because this panel is where that gets noticed.
+          const eventStops = (guide.days || [])
+            .flatMap((d, i) => (d.stops || []).map(s => ({ s, dayNo: d.day || i + 1 })))
+            .map(x => ({ ...x, real: lookupRealPlace(x.s.name) }))
+            .filter(x => x.real?._src === "event")
+            .map(x => {
+              const w = stopEventWhen(x.real, tripDayDate(guide._arrivalDate, x.dayNo));
+              if (!w) return x.s.name;
+              return `${x.s.name} (${w.runs}${w.offWindow ? `, NOT on day ${x.dayNo}` : ""})`;
+            });
+          // The brief no longer names towns or "extras", because naming
+          // published entries pre-solved the hardest thing the pipeline does.
+          // This panel used to read p.towns.join() unguarded, which would have
+          // thrown on the very first Random-guide click after that change: a
+          // white screen, from a debug panel. What it shows now is WHO the
+          // fabricated traveler is, which is the thing that varies.
+          const line = testTravelerLine(p);
+          return (
+            <div style={{ background: `${C.gold}0D`, border: `1px dashed ${C.gold}66`, borderRadius: 14, padding: "14px 16px", marginBottom: 24, maxWidth: 640, fontSize: 12.5, lineHeight: 1.7 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 8 }}>◈ Pipeline test: what went in</div>
+              <div style={{ color: C.light }}><span style={{ color: C.text, fontWeight: 700 }}>Test traveler:</span> {line}</div>
+              {p.brief && (
+                <div style={{ color: C.muted, fontStyle: "italic", marginTop: 6, paddingLeft: 10, borderLeft: `2px solid ${C.gold}44` }}>{p.brief}</div>
+              )}
+              {plan?.days?.length > 0 && (
+                <div style={{ marginTop: 8 }}>
+                  <div style={{ color: C.text, fontWeight: 700 }}>Planner's structure (before the writer):</div>
+                  {plan.days.map((d, i) => (
+                    <div key={i} style={{ color: C.light }}>Day {d.day || i + 1}{d.title ? ` · ${d.title}` : ""}: {(d.stops || []).map(s => (typeof s === "string" ? s : s?.name)).filter(Boolean).join(" → ")}</div>
+                  ))}
+                </div>
+              )}
+              <div style={{ marginTop: 8, color: C.light }}><span style={{ color: C.text, fontWeight: 700 }}>Events included:</span> {eventStops.length ? eventStops.join(", ") : "none matched this plan"}</div>
+            </div>
+          );
+        })()}
+
+        {/* Only what is worth interrupting somebody for. A degree of drift is
+            not news; a dry day turning wet is, because it decides whether they
+            take the walking day or the museum day.
+
+            ── AND THE SAVED NOTE AGREES WITH THIS ONE, 19 SEP 2026 ──
+            Oliver's own guide had both on screen about the same day: "rain
+            likely on Day 3, worth packing a light rain layer" in the saved
+            essentials, and "Day 3 has dried up" here. Both were true of what
+            they were reading, and neither knew the other existed. The saved
+            sentence is now read against this one before it renders, in
+            weatherNoteNow. */}
+        {weatherMoved.length > 0 && (
+          <div style={{ background: C.surface, border: "1px solid #FFB34766", borderRadius: 12, padding: "10px 14px", marginBottom: 20, fontSize: 12, color: C.text, lineHeight: 1.6 }}>
+            <b style={{ color: "#FFB347" }}>{uiT("guide.forecastMoved", uiLang)}</b> {weatherMoved.join(". ")}.
+          </div>
+        )}
+        {/* ── AND WHAT TURNED UP SINCE THIS WAS WRITTEN ──────────
+            Oliver, 19 Sep 2026: "an event nearby your path was just
+            discovered! And then you can click it, and add or make slight
+            changes to your route."
+
+            UNDER THE WEATHER BANNER, because it is the same kind of thing: the
+            guide re-read the world on open and something moved. The claim is
+            exactly what it says and no more, which is that the row was not in
+            Gemlyx when this guide was written. Nothing here knows whether the
+            event is new.
+
+            ADDING ONE PINS IT TO ITS DAY rather than making it a stop. Nothing
+            in this tier has been checked the way a published entry is, and the
+            writer is told never to build a day around one, so a route change
+            would be the app acting on something it cannot stand behind. See
+            withFind in utils/guideFinds.js. */}
+        {finds.length > 0 && (
+          <div style={{ background: C.surface, border: `1px solid ${C.gold}66`, borderRadius: 12, padding: "12px 14px", marginBottom: 20 }}>
+            <div style={{ fontSize: 12, color: C.text, lineHeight: 1.6, marginBottom: 8 }}>
+              <b style={{ color: C.gold }}>Something turned up. </b>{findsLine(finds)}
+            </div>
+            {finds.map((r, i) => (
+              <div key={`${r.name}-${r.date}-${i}`} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", padding: "6px 0", borderTop: i ? `1px solid ${C.border}` : "none" }}>
+                <span style={{ fontSize: 12, color: C.light, flex: "1 1 200px", lineHeight: 1.5 }}>
+                  <b>{r.name}</b>
+                  <span style={{ color: C.muted }}>
+                    {" "}Day {r.day}{r.town ? `, ${r.town}` : ""}{findDetail(r) ? `, ${findDetail(r)}` : ""}
+                    {accessNote(accessOf(r), uiLang) ? ` (${accessNote(accessOf(r), uiLang)})` : ""}
+                  </span>
+                </span>
+                <button onClick={() => setGuide(withFind(guide, r))}
+                  style={{ background: C.gold, border: "none", borderRadius: 100, padding: "6px 13px", fontSize: 11.5, fontWeight: 700, color: C.onGold, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                  Put it on day {r.day}
+                </button>
+                <button onClick={() => setGuide(withoutFind(guide, r))}
+                  style={{ background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 100, padding: "6px 12px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                  Not for me
+                </button>
+              </div>
+            ))}
+            <div style={{ fontSize: 10.5, color: C.muted, marginTop: 6, lineHeight: 1.5 }}>
+              Off a village calendar, so nobody has checked it. Adding one puts it on that day and leaves your route alone.
+            </div>
+          </div>
+        )}
+        {/* ── AND THE SWIPE ITSELF ────────────────────────────────
+            Wrapped around the days rather than put on each one, so a gesture
+            that starts on a stop card and ends on the stay card underneath is
+            still one swipe. The handlers come off entirely in the long view:
+            a page that quietly watches every touch on a fourteen thousand
+            character article for a gesture it will never act on is work done
+            for nothing, and one misread diagonal there would jump the reader
+            to a day they never asked for.
+
+            swipeDirection refuses a drag that moved further down than across,
+            which is what stops a thumb arcing through a scroll from turning
+            the page. See utils/dayPager.js. */}
+        <div
+          onTouchStart={dayMode === "one" ? (e) => {
+            const t = e.touches && e.touches[0];
+            swipeFrom.current = t ? { x: t.clientX, y: t.clientY } : null;
+          } : undefined}
+          onTouchEnd={dayMode === "one" ? (e) => {
+            const from = swipeFrom.current;
+            swipeFrom.current = null;
+            const t = e.changedTouches && e.changedTouches[0];
+            if (!from || !t) return;
+            const way = swipeDirection({ startX: from.x, startY: from.y, endX: t.clientX, endY: t.clientY });
+            if (!way) return;
+            setDayAt(a => pagerStep(a, way === "next" ? 1 : -1, days.length));
+          } : undefined}
+        >
+        {days.map((day, dayIdx) => {
+          // ── ONE DAY, WITHOUT RENUMBERING ANYTHING ─────────────────
+          // Filtered here rather than by slicing the array, so dayIdx stays the
+          // day's TRUE index. Half this block reads it: the weather lookup is
+          // freshWeather?.[dayIdx], the add-in panel keys on `${dayIdx}:${cat}`,
+          // and the done-marker is markDayDone(day, dayIdx). Handing this loop
+          // a one-element array would renumber every one of those to 0 and the
+          // guide would show Monday's weather on Thursday.
+          if (dayMode === "one" && dayIdx !== pagerAt(dayAt, days.length)) return null;
+          // Real coordinates for this guide (from geocodeStopsForGuide, baked onto
+          // the guide object as _geo when the build handed off to this page — see
+          // App.jsx's generateGuide) plus this day's own real exact-duration/route
+          // data (_exactDurations/_noRouteFound), so route links/maps here use the
+          // exact same numbers the guide-building pipeline already verified,
+          // instead of a second, separately-computed guess.
+          const geo = guide._geo || {};
+          const exactDurations = guide._exactDurations || {};
+          const noRouteFound = guide._noRouteFound || {};
+          // The calendar day this day of the trip falls on, computed ONCE for
+          // the whole day and read by both the stop cards and the "Where to
+          // stay" booking link below. It used to be built inside that booking
+          // block alone, which was fine while it had one reader. See
+          // tripDayDate in utils/guideReading.js for why it is not inline.
+          const dayDate = tripDayDate(guide._arrivalDate, day.day || dayIdx + 1);
+          // ── ONE BADGE, READ ONCE ──────────────────────────────────
+          // This was `(freshWeather?.[dayIdx] || day.weather)` written out TEN
+          // times across the badge below, and the repetition was not just
+          // noise, it was hiding a crash. One of the ten read
+          // `day.weather.years` instead of the resolved badge's — so a day whose
+          // refresh-on-open produced a normals badge while the SAVED guide had
+          // none (a guide saved before weather worked, or a day whose stop had
+          // no coordinate at build time and resolves now) hit
+          // `null.years` and took the whole page down on render.
+          //
+          // Hoisting it makes that impossible to write again, and it is what
+          // the warnings below need anyway.
+          const wx = freshWeather?.[dayIdx] || day.weather || null;
+          // Measured warnings for this day: wind, rain in millimetres, the
+          // cold-and-wet pair, frost, heat, what the sky is doing, and the belt
+          // crossing if this is the day it happens on. Every one of them cites
+          // the number it came from. See utils/weatherWarn.js.
+          // ── TEN YEARS OF WEATHER IS NOT A WARNING ─────────────────
+          // Oliver, 21 Sep 2026, with two of these highlighted: "not
+          // necessary to write." On a day read from the normals, the quiet
+          // lines say what the badge beside the day title already says, "about
+          // 5 days in ten see rain", and a second time in the Weather line at
+          // the top. Only a "warn", which changes what somebody does, survives
+          // on a normals day. A real forecast keeps every line, because there
+          // the lines carry numbers the badge does not.
+          const wxWarnings = dayWarnings(wx, { mode: tripMode, crossing: crossings[dayIdx] || "" })
+            .filter(w => wx?.source !== "normals" || w.level === "warn");
+          // LINK PARITY FIX (Oliver: "Public transport says 19 minutes... you
+          // then check maps, and it's 27"): the in-app duration was fetched
+          // with real resolved COORDINATES, but this Google Maps link was built
+          // from plain text names — Google's own geocoder can resolve those to
+          // different endpoints (a different station, a same-named place
+          // elsewhere), so the linked route legitimately disagreed with the
+          // quoted one. When we have a genuinely precise coordinate for a stop
+          // (real data or this guide's own geocode — NOT the town-center
+          // fallback), the link now uses it, so Maps opens the same journey the
+          // chip's number came from.
+          // stopTown, not `.town` alone, for the reason written at the card's
+          // meta line: the plan fills `town` when it happens to, and our own
+          // published row knows the answer either way. This feeds the Maps links
+          // and the coordinate resolution, so a stop the plan left untowned was
+          // being geocoded on a bare name.
+          const stopTownOf = (name) => {
+            const s = (day.stops || []).find(x => x.name === name);
+            const fromRow = s ? stopTown(s, lookupRealPlace(name)) : "";
+            return fromRow || (dayIdx > 0 ? days[dayIdx - 1]?.stops?.slice(-1)[0]?.town : null);
+          };
+          // ── AND "PRECISE" HAS TO MEAN PRECISE ─────────────────────
+          // This promised "NOT the town-center fallback" in its own comment and
+          // then returned whatever row lookupRealPlace matched, town centres
+          // included, with no look at the `precise` flag and no coordFitsTown.
+          // That is how a Maps link for ARoS → Aarhus Ø opened with a bare pair
+          // that Google labelled simply "Aarhus": the link and the chip were
+          // built from the same wrong point, so they agreed with each other and
+          // with nothing on the ground. resolveStopCoordsDetailed answers the
+          // question this was trying to ask, and answers it with the flag.
+          const preciseCoord = (name) => {
+            const d = resolveStopCoordsDetailed(name, geo, stopTownOf(name));
+            return d && d.precise ? { lat: d.lat, lon: d.lon } : null;
+          };
+          const routeUrl = (originName, destName, mode) => {
+            // READABILITY over raw precision in the LINK (Oliver's screenshot:
+            // Google Maps opening with "55.2613281,12.1288198" sitting in the
+            // origin field — reads as broken): a town-qualified place name
+            // resolves reliably in Google's own geocoder AND displays as a
+            // human place, so prefer it whenever a town is known; fall back to
+            // the precise coordinate only for stops with no town context at
+            // all (where a bare name genuinely risks matching the wrong place).
+            const originTown = stopTownOf(originName);
+            const destTown = (day.stops || []).find(s => s.name === destName)?.town;
+            const oc = preciseCoord(originName), dc = preciseCoord(destName);
+            const originText = originTown ? `${originName}, ${originTown}, ${guideLand.name}` : oc ? `${oc.lat},${oc.lon}` : `${originName}, ${guideLand.name}`;
+            const destText = destTown ? `${destName}, ${destTown}, ${guideLand.name}` : dc ? `${dc.lat},${dc.lon}` : `${destName}, ${guideLand.name}`;
+            // THE MEASURED PLACES, when there are any. See measuredLeg: the
+            // name stays readable and Google opens the exact place the chip's
+            // number was measured to, rather than guessing a second time.
+            const measured = measuredLeg(exactDurations, originName, destName);
+            return mapsRouteUrl({ originText, destText, mode,
+              originPlaceId: measured?.placeIds?.origin || "", destPlaceId: measured?.placeIds?.destination || "" });
+          };
+          // A stop that names no place (see looseStop) is free time: the
+          // card stays, and no leg in or out of it is drawn, measured or
+          // linked. Looked up on today and on yesterday, because the first
+          // chip of a day starts at yesterday's last stop.
+          const looseByName = (nm) => looseStop((day.stops || []).find(s => s.name === nm)
+            || (dayIdx > 0 ? (days[dayIdx - 1]?.stops || []).find(s => s.name === nm) : null) || { name: nm });
+          const legChip = (originName, destName, how) => {
+            if (looseByName(originName) || looseByName(destName)) return null;
+            // ── TIVOLI TO TIVOLI NEEDS NO TRANSPORT ──────────────
+            // Oliver, 17 Aug 2026, with a screenshot: "Tivoli Gardens" and
+            // "Tivoli Christmas market" as two stops on one day, and between
+            // them a chip reading "No direct route, check Rome2Rio". They are the
+            // same grounds. The Christmas market IS Tivoli after dark, and the
+            // entry's own text says so: "The same grounds transform once the
+            // light drops."
+            //
+            // Nothing below could have caught it. Both stops resolve to the same
+            // point, so Google was asked to route from a place to itself, came
+            // back with no transit itinerary, and the no-route branch printed the
+            // most alarming line in the file.
+            //
+            // Checked on the DISTANCE first, then on the name, because either one
+            // alone misses a case: two stops on one site can carry different
+            // coordinates a hundred metres apart, and two stops with the same
+            // first word can be genuinely far apart ("Aarhus Domkirke" and
+            // "Aarhus Ø"). The distance is the reliable half and the name only
+            // speaks when there is no distance to read.
+            if (isSameSpot(originName, destName, geo, stopTownOf(originName), (day.stops || []).find(s => s.name === destName)?.town)) {
+              return (
+                <div style={{ display: "flex", justifyContent: "center", padding: "2px 0 6px" }}>
+                  <span style={{ fontSize: 11, color: C.muted, fontWeight: 600 }}>{uiT("guide.samePlace", uiLang)}</span>
+                </div>
+              );
+            }
+            let mode = resolveLegMode(how, guide._mode, originName, destName, guide._onlyWalking, geo);
+            // Same-town transit legs are walks even when no coordinates ever
+            // resolved (the Ribe VikingeCenter → Ribe Old Town report) — same
+            // rule, same town source (stop.town) as fetchExactDurations, so
+            // the cache key each computes always matches the other's.
+            const legOriginTown = stopTownOf(originName);
+            const legDestTown = (day.stops || []).find(s => s.name === destName)?.town;
+            // The same distance guard as the fetch, computed by the same reader
+            // for the same reason: a render that decides the mode differently
+            // looks up a key the build never wrote. See isSameTownWalk.
+            if (isSameTownWalk(mode, legOriginTown, legDestTown, how, legDistanceKm(originName, destName, geo))) mode = "walking";
+            // ── A STORED ZERO IS STILL A ZERO ────────────────────
+            // Found on the live site minutes after the fix shipped. Refusing to
+            // RECORD a zero minute leg stops the next guide having one; it does
+            // nothing for the guides already saved carrying
+            // "Faaborg Havn|Faaborg Camping|bicycling" at 0 minutes, which is
+            // still rendering as "1 min by bike" for a 2.27 km ride. The same
+            // rule has to apply on the way out, and then every already-built
+            // guide heals the next time someone opens it, exactly like the
+            // walking cap below.
+            const storedExact = exactDurations[`${originName}|${destName}|${mode}`];
+            const rawExact = storedExact && storedExact.durationMinutes >= 1 ? storedExact : null;
+            // ── A WALK FROM THE MIDDLE OF A TOWN IS NOT A WALK ANYBODY MEASURED ──
+            //
+            // 22 Sep 2026, a live guide in South Jutland: "1 min on foot" from
+            // Højer, the town, to Hoejer Sluse, the sluice about 4 km outside
+            // it. The note under the map on the same page said the sluice pin
+            // was approximate and sat at the middle of the town.
+            //
+            // Both facts came from the same place. Nothing placed the sluice,
+            // so the resolver handed back the Højer town centre as a stand-in,
+            // flagged precise: false. The build then did the right thing with
+            // that flag and sent the stop to Google by NAME, and Google's
+            // geocoder, finding no such venue, settled on the locality, which
+            // is the same town centre. Two ends on one point, one minute, and
+            // the number was stored and printed with the confidence of a
+            // measurement.
+            //
+            // The straight-line estimate below already refuses this: legDistanceKm
+            // returns null for a sub-kilometre gap when either end is a stand-in,
+            // because half a kilometre of slop is normal in a town centre point.
+            // A walk is the one mode that lives entirely inside that slop, so
+            // the same reasoning covers a measured walk too: whatever Google
+            // answered, one end of the question was "somewhere in Højer", and a
+            // walking time to somewhere in a town is not a fact about the
+            // sluice. A transit or driving answer over the same ends is
+            // different in kind, a few hundred metres inside a two hour journey
+            // change nothing, so those still print.
+            //
+            // So when either end is only a town centre stand-in, no walking time
+            // is printed at all, measured or estimated. The chip falls back to
+            // the model's own leg text with "Check Maps", which is what every
+            // other unverified leg on the page already does.
+            const standInEnd = (nm) => {
+              const d = resolveStopCoordsDetailed(nm, geo, stopTownOf(nm));
+              return !d || !d.precise;
+            };
+            // ── UNLESS GOOGLE FOUND BOTH PLACES, AND THE LINK NOW OPENS THEM ──
+            // The stand-in rule exists because a walk measured to "somewhere in
+            // Højer" is not a walk to the sluice. When Google's answer names a
+            // real place at both ends, the measurement IS about those places,
+            // and since the link carries their place_ids the reader opens the
+            // same two points. Showing the model's own guess instead, as it did
+            // for "Aalborg shopping streets", is what put a 10 minute chip next
+            // to a 97 minute link.
+            const googlePlaced = !!(rawExact?.placeIds?.origin && rawExact?.placeIds?.destination
+              && foundAPlace(rawExact?.placeTypes?.origin) && foundAPlace(rawExact?.placeTypes?.destination));
+            const standIn = !googlePlaced && (standInEnd(originName) || standInEnd(destName));
+            const walkOnStandIn = standIn && (rawExact?.modeUsed || mode) === "walking";
+            // Walking cap tightened 180 → WALK_MAX_MINUTES (Oliver: "there has
+            // to be rules. No walking more than 15-20 minutes"). 180 minutes
+            // is why a three-hour-capped "1 hour 15 min on foot" sailed through
+            // and shipped as a suggested leg. Rejecting it here makes an
+            // ALREADY-BUILT guide heal on next view too, not just new builds:
+            // the chip falls back to the honest estimate for a real mode
+            // instead of presenting an absurd walk.
+            const plausibleCap = mode === "walking" ? WALK_MAX_MINUTES : mode === "bicycling" ? 300 : Infinity;
+            const exact = rawExact && !walkOnStandIn && (rawExact.durationMinutes <= plausibleCap || (rawExact.modeUsed && rawExact.modeUsed !== "walking")) ? rawExact : null;
+            // A transit leg with no transit route can have been rescued as a real
+            // walking route by the build (see fetchExactDurations' walking retry) —
+            // modeUsed is the mode the result actually came from, and the icon/
+            // label/link must match IT, not the originally-resolved mode.
+            const usedMode = exact?.modeUsed || mode;
+            const icon = usedMode === "bicycling" ? "🚲" : usedMode === "driving" ? "🚗" : usedMode === "walking" ? "🚶" : isFerryText(how) ? "⛴" : "🚆";
+            // legDistanceKm, not kmBetween — when two stops only resolved to
+            // the same town centre we do NOT know the distance, and saying so
+            // (null → the AI's own leg text, or "Check route") is the honest
+            // answer. kmBetween returned 0 there, which estimateDurationText
+            // turned into a confident "~1 min" for legs that were really 30:
+            // the exact bug Oliver has now reported four times.
+            const km = legDistanceKm(originName, destName, geo, legOriginTown, legDestTown);
+            // The distance a WALKING figure may be built from. Null on a
+            // stand-in end, for the reason written above rawExact: a walking
+            // time from the middle of a town is not about the stop.
+            const walkKm = standIn && usedMode === "walking" ? null : km;
+            const modeLabel = uiT(usedMode === "bicycling" ? "guide.byBike" : usedMode === "driving" ? "guide.byCar" : usedMode === "walking" ? "guide.onFoot" : "guide.byTransit", uiLang);
+            const routeFailed = noRouteFound[`${originName}|${destName}|${mode}`];
+            if (routeFailed) {
+              // SHORT-LEG GUARD, also covers guides built before the fetch-side
+              // fixes: a "no route" leg that is genuinely close together (or
+              // inside one town) is a walk — show a real walking chip with a
+              // walking Maps link, never "check Rome2Rio" for a five minute
+              // stroll. Rome2Rio stays only for real long-distance dead ends
+              // (island crossings needing ferry+train combinations).
+              // THE CAP APPLIES HERE TOO, AND DID NOT. This branch accepted any
+              // km up to 3, which at the route factor is up to about 54 minutes
+              // printed as a "short leg" under a rule that says 20. It is the
+              // same mistake as the fallback estimate below it, in the one
+              // branch that runs when Google found nothing at all: the less we
+              // know about a leg, the more careful the number has to be, not
+              // less. walkEstimateTooFar is the single rule for this, already
+              // used four lines further down.
+              if ((km != null && !walkEstimateTooFar(km)) || (km == null && legOriginTown && legDestTown && legOriginTown.trim().toLowerCase() === legDestTown.trim().toLowerCase())) {
+                return (
+                  <a href={routeUrl(originName, destName, "walking")} target="_blank" rel="noreferrer"
+                    style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", background: C.bg, border: `1px solid ${C.gold}44`, borderRadius: 100, padding: "6px 12px" }}>
+                    <span style={{ fontSize: 12 }}>🚶</span>
+                    <span style={{ fontSize: 11, color: C.gold, fontWeight: 600 }}>{km != null && !standIn ? `${estimateDurationText(km, "walking")} ${uiT("guide.onFoot", uiLang)}` : uiT("guide.shortWalk", uiLang)}</span>
+                    <span style={{ fontSize: 9.5, color: C.light, fontWeight: 700 }}>· Maps ↗</span>
+                  </a>
+                );
+              }
+              // ── TWO THINGS WRONG WITH WHAT THIS USED TO SAY ─────────
+              // Oliver, 19 Aug 2026, on a live guide: "for some reason there are
+              // far more things in the actual guide... it suddenly mentions
+              // rome2rio or whatever it is called."
+              //
+              // FIRST, IT NAMED A COMPETITOR. Rome2Rio is a booking aggregator.
+              // Sending a reader off Gemlyx to one, in gold, on the guide they
+              // just paid for, is the last link this page should carry. The
+              // national journey planner covers every Danish operator at once —
+              // trains, buses, the metro and the ferries — which is exactly why
+              // operators.js already keeps it as the answer for a crossing where
+              // naming one company would be a guess.
+              //
+              // SECOND, AND WORSE, IT STATED SOMETHING NOBODY CHECKED. "No
+              // direct route" is a claim about the world. What actually happened
+              // is that Google returned no itinerary for the mode we asked about
+              // — and App.jsx's own prompt rules say, in as many words, that this
+              // means UNCONFIRMED and NOT "no route exists", because rural Danish
+              // bus links and island ferries are frequently missing from the
+              // transit feed. The screenshot proves it: this chip sat on
+              // Helsingør to Hillerød, a scheduled train the guide's own text
+              // describes as "roughly 30-40 minutes with a change".
+              //
+              // So it says what is true — that this leg needs looking up — and
+              // sends them to the authority for it.
+              // ── AND IT ARRIVES WITH THE LEG ALREADY IN IT ─────────
+              //
+              // Oliver, 20 Sep 2026, after reading what the API costs: "So the
+              // alternative is deep link."
+              //
+              // It is, and it is the better half for this. Rejseplanen's own
+              // link format prefills both ends, the date and the hour and runs
+              // the search, with no key, no approval and no quota. Checked
+              // against the live site rather than only against the
+              // documentation: Havnsø to Sejerø arriving by 16:15 on 6 October
+              // opened with both fields filled and three real connections on it.
+              //
+              // WHICH TURNS THIS CHIP FROM HOMEWORK INTO AN ANSWER. It said
+              // "check the times" and sent somebody to a front page to type in
+              // two stop names they would have to go and find. Same sentence,
+              // and now the page it opens is the one with this leg on it.
+              //
+              // ARRIVE, not depart: the stop has a time on it because that is
+              // when the day wants them there. See utils/rejseplanen.js.
+              // Rejseplanen is Denmark's planner. Abroad the same chip opens
+              // Google Maps on public transport for the leg instead.
+              if (abroadGuide) {
+                return (
+                  <a href={routeUrl(originName, destName, "transit")} target="_blank" rel="noreferrer"
+                    style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", background: C.bg, border: `1px solid ${C.gold}44`, borderRadius: 100, padding: "6px 12px" }}>
+                    <span style={{ fontSize: 12 }}>🚌</span>
+                    <span style={{ fontSize: 11, color: C.gold, fontWeight: 600 }}>{uiT("guide.checkTimes", uiLang)}</span>
+                    <span style={{ fontSize: 9.5, color: C.light, fontWeight: 700 }}>· Maps ↗</span>
+                  </a>
+                );
+              }
+              const rpHref = journeyUrl({
+                from: originName,
+                to: destName,
+                date: dayDate,
+                // The DESTINATION stop's own arrival time, read the way every
+                // other line in this function reads it. `nextStop` is not a
+                // name in this scope and never was.
+                time: (day.stops || []).find(x => x.name === destName)?.arrivalTime,
+                timeSel: "arrive",
+              });
+              return (
+                <a href={rpHref || OPERATORS.rejseplanen.url} target="_blank" rel="noreferrer"
+                  title={rpHref ? journeyLabel({ from: originName, to: destName, lang: uiLang }) : ""}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", background: C.bg, border: `1px solid ${C.gold}44`, borderRadius: 100, padding: "6px 12px" }}>
+                  <span style={{ fontSize: 12 }}>🚆</span>
+                  <span style={{ fontSize: 11, color: C.gold, fontWeight: 600 }}>{uiT("guide.checkTimes", uiLang)}</span>
+                  <span style={{ fontSize: 9.5, color: C.light, fontWeight: 700 }}>↗</span>
+                </a>
+              );
+            }
+            // Transit times get an honest "~" even when they come from the real
+            // Directions API — a transit journey's duration depends on when you
+            // leave (the API answered for "now" at build time), so presenting it
+            // as exact is what made "says 19, Maps says 27" feel like a bug
+            // rather than schedule variance.
+            const exactLabel = exact ? `${usedMode === "transit" ? "~" : ""}${exact.durationText} ${modeLabel}` : null;
+            // ── THE CAP HAS TO APPLY TO THE GUESS TOO ────────────
+            // Oliver, 9 Aug 2026: "maps still seem to get things wrong",
+            // holding "~24 min on foot" for Christiania → Reffen next to
+            // Google's 3.2 km and 44 minutes. WALK_MAX_MINUTES was checked
+            // on `exact` above and nowhere else, so the branch that runs
+            // when there is NO real answer was the one branch allowed to
+            // print any walk it liked. With the detour factor now in
+            // estimateMinutes the same leg comes out at 38, so it fails
+            // here rather than rendering as a stroll. A traveler told 24
+            // and handed 44 is not slightly inconvenienced, they have
+            // missed something.
+            const estIsImpossibleWalk = !exact && usedMode === "walking" && walkEstimateTooFar(km);
+            // Nothing verified this leg: no Directions answer, and the two
+            // stops never resolved to coordinates we would divide. What is
+            // left is the model's own sentence, and the prompt asks it to
+            // write "~18 min by bike" whether or not it knows. Shown,
+            // because it is usually right and always better than a blank,
+            // but never dressed as a measurement.
+            const unverified = !exactLabel && !estIsImpossibleWalk && walkKm === null;
+            const estLabel = estIsImpossibleWalk
+              ? `Too far to walk, check the route`
+              : walkKm !== null ? `${estimateDurationText(walkKm, usedMode)} ${modeLabel}` : (how || uiT("guide.checkRoute", uiLang));
+            // ── "PERHAPS REFER THEM TO FLIXBUS OR DSB" ─────────
+            // Oliver, 9 Aug 2026. A chip saying "~1h30 by train/bus" states a
+            // fact and leaves the reader to work out who sells that seat, and
+            // the Maps link cannot help with that: Google will show them the
+            // journey and cannot put them on it. See utils/operators.js for
+            // why a ferry gets the national planner and never a company name.
+            const ferryLeg = isFerryText(how) || usedMode === "ferry";
+            // ── WHICH LANDMASS EACH END OF THIS LEG IS ON ──────
+            // Deliberately NOT preciseCoord. A precise coordinate is what the
+            // Maps link needs, because the wrong side of a city is a wrong
+            // journey. A town centre answers "is this stop in Jutland" perfectly
+            // well, and demanding precision here would withhold Kombardo on
+            // every leg whose stops only resolved to their town, which is most
+            // of them. See isRegionCrossing in utils/operators.js.
+            const partAtStop = (nm) => {
+              const c = resolveStopCoordsDetailed(nm, geo, stopTownOf(nm));
+              const lat = Number(c?.lat), lon = Number(c?.lon);
+              return Number.isFinite(lat) && Number.isFinite(lon)
+                ? (partOfCountry({ __lat: lat, __lon: lon }) || "")
+                : "";
+            };
+            const ops = operatorsForLeg({
+              km, mode: ferryLeg ? "ferry" : usedMode, how,
+              fromPart: ferryLeg ? "" : partAtStop(originName),
+              toPart: ferryLeg ? "" : partAtStop(destName),
+            });
+            const opsNote = operatorNote({ mode: ferryLeg ? "ferry" : usedMode, how });
+            const chip = (
+              <a href={routeUrl(originName, destName, estIsImpossibleWalk ? (guide._mode === "bike" ? "bicycling" : guide._mode === "car" ? "driving" : "transit") : usedMode)} target="_blank" rel="noreferrer"
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", background: C.bg, border: `1px solid ${C.gold}44`, borderRadius: 100, padding: "6px 12px" }}>
+                <span style={{ fontSize: 12 }}>{estIsImpossibleWalk ? "🗺" : icon}</span>
+                <span style={{ fontSize: 11, color: C.gold, fontWeight: 600 }}>
+                  {exactLabel || estLabel}
+                </span>
+                <span style={{ fontSize: 9.5, color: unverified ? C.muted : C.light, fontWeight: 700 }}>{unverified ? "· Check Maps ↗" : "· Maps ↗"}</span>
+              </a>
+            );
+            // ── AND THE JOURNEY IT ALREADY HAD ───────────────────
+            // Oliver, 13 Aug 2026: "Why it is that our drafts refuse to give
+            // the reader a proper guide for transport."
+            //
+            // The answer for the guide was never the ordering: its directions
+            // genuinely already run last. It is that /api/directions returns
+            // every step with its line, its operator, its two stops and its
+            // minutes, fetchExactDurations stores the WHOLE response, and this
+            // chip reads two fields out of it. A leg Google described as an IC
+            // to Slagelse, a change, then bus 470R to Skælskør Busterminal was
+            // sitting in the browser at full detail and reaching the reader as
+            // "~1h 59 by train/bus 🚆".
+            //
+            // Nothing is fetched for this and nothing upstream changes. It
+            // prints what was measured, and only when there is something to
+            // print: one unnamed ride is already fully described by the chip.
+            const journey = exact ? journeyFromStored(exact) : null;
+            const steps = journey && worthShowingLegs(journey) ? legSteps(journey) : [];
+            const legList = steps.length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 3, maxWidth: 340, width: "100%" }}>
+                {steps.map((st, i) => (
+                  <div key={`${st.kind}-${i}`} style={{ display: "flex", alignItems: "baseline", gap: 7, fontSize: 11, lineHeight: 1.5 }}>
+                    <span style={{ fontSize: 10, opacity: 0.75 }}>
+                      {st.kind === "walk" ? "🚶" : st.kind === "wait" ? "⏱" : st.vehicle === "ferry" ? "⛴" : st.vehicle === "bus" ? "🚌" : st.vehicle === "metro" ? "🚇" : "🚆"}
+                    </span>
+                    <span style={{ color: st.kind === "ride" ? C.light : C.muted, flex: 1 }}>
+                      {st.text}
+                      {st.mins ? <span style={{ color: C.muted }}> · {st.mins} min</span> : null}
+                    </span>
+                  </div>
+                ))}
+                {journey.hasFerry && (
+                  <div style={{ fontSize: 10.5, color: C.muted, marginTop: 2 }}>
+                    {journey.ferries.length
+                      ? `Ferry: ${journey.ferries.map(f => [f.line, f.from && f.to ? `${f.from} to ${f.to}` : ""].filter(Boolean).join(", ")).filter(Boolean).join(" · ")}`
+                      : uiT("guide.ferryLeg", uiLang)}
+                  </div>
+                )}
+                {/* ── WHO RAN IT, AND WHO MEASURED IT ──────────────────
+                    The same licence line the place page carries, for the same
+                    reason: this leg list is Google Directions data, and its
+                    policy asks for a visible attribution plus "the names and
+                    URLs of the transit agencies that supply the trip results".
+                    A guide has no Google map on it either, so it is said in
+                    words here too. See utils/journey.js for the readers. */}
+                <div style={{ fontSize: 10, color: C.muted, marginTop: 3, lineHeight: 1.5 }}>
+                  {journeyAgencies(journey).length > 0 && (
+                    <span>
+                      Run by{" "}
+                      {journeyAgencies(journey).map((a, ai) => (
+                        <span key={a.name}>
+                          {ai > 0 ? ", " : ""}
+                          {a.url
+                            ? <a href={a.url} target="_blank" rel="noreferrer" style={{ color: C.light, textDecoration: "underline" }}>{a.name}</a>
+                            : a.name}
+                        </span>
+                      ))}
+                      {". "}
+                    </span>
+                  )}
+                  {JOURNEY_SOURCE}
+                </div>
+              </div>
+            );
+            if (!ops.length && !legList) return chip;
+            return (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
+                {chip}
+                {legList}
+                <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 6 }}>
+                  {ops.map(op => (
+                    <a key={op.id} href={op.url} target="_blank" rel="noreferrer"
+                      style={{ display: "inline-flex", alignItems: "center", gap: 5, textDecoration: "none", background: "none", border: `1px solid ${C.border}`, borderRadius: 100, padding: "4px 10px" }}>
+                      <span style={{ fontSize: 10.5, color: C.light, fontWeight: 700 }}>{op.name}</span>
+                      <span style={{ fontSize: 9.5, color: C.muted }}>{op.what}</span>
+                    </a>
+                  ))}
+                </div>
+                {opsNote && (
+                  <div style={{ fontSize: 10, color: C.muted, lineHeight: 1.5, maxWidth: 340, textAlign: "center" }}>{opsNote}</div>
+                )}
+              </div>
+            );
+          };
+          return (
+          <div key={day.day || dayIdx} id={`gx-day-${day.day || dayIdx + 1}`} style={{ marginBottom: 44, scrollMarginTop: 70 }}>
+            {/* Redesign pass: day headers went from a cramped gold uppercase micro-line
+                to a proper serif heading with a hairline rule — the day number stays
+                small and gold, the day's title gets the size it deserves. */}
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: 6, flexWrap: "wrap" }}>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 1.6, textTransform: "uppercase", flexShrink: 0 }}>Day {day.day || dayIdx + 1}</span>
+                {day.title && <span style={{ fontSize: 22, fontWeight: 500, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.2 }}>{day.title}</span>}
+                {/* Quiet, and after the title, because this is bookkeeping
+                    somebody does on the day rather than a call to action while
+                    they are still reading the plan. It says what it will do
+                    before it does it, because "done" that silently changes
+                    future guides is a surprise nobody asked for. */}
+                {(day.stops || []).some(st => canBeMarked(lookupRealPlace(st?.name)?._src)) && (
+                  daysMarked.has(day.day || dayIdx + 1) ? (
+                    <span style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 0.3 }}>
+                      ✓ Marked as done
+                    </span>
+                  ) : (
+                    <button onClick={() => markDayDone(day, dayIdx)}
+                      style={{ background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 100, padding: "4px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                      We did this day
+                    </button>
+                  )
+                )}
+              </div>
+              {/* ── "WEATHER ICONS NEED TO BE MORE PROMINENT" ────
+                  Oliver, 9 Aug 2026. It was an 11px chip with a 5px gap, the
+                  same visual weight as everything else on the row, so the one
+                  thing that changes what you pack read as a tag. The icon is
+                  now 22px and the temperature 15px.
+                  The label under it is the more important change: this badge
+                  can now be a real forecast OR a ten year average, and those
+                  are different promises. It says which. See utils/weather.js.
+                  The old title attribute said "Forecast assumes the trip
+                  starts today", which stopped being true the moment arrival
+                  dates became real. */}
+              {wx && (
+                <div title={wx.source === "normals"
+                  ? `Ten year average for this place and this week${wx.years ? `, from ${wx.years} years of records` : ""}. Not a forecast.`
+                  : uiT("guide.realForecast", uiLang)}
+                  style={{ display: "flex", alignItems: "center", gap: 8, background: C.surface, border: `1px solid ${wx.risk === "high" ? "#FFB34766" : C.border}`, borderRadius: 14, padding: "7px 13px", fontSize: 11 }}>
+                  <span style={{ fontSize: 22, lineHeight: 1 }}>{wx.icon}</span>
+                  <span style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                    <span style={{ display: "flex", alignItems: "baseline", gap: 5 }}>
+                      <span style={{ color: C.text, fontWeight: 700, fontSize: 15 }}>{wx.temp}°</span>
+                      <span style={{ color: C.muted, fontWeight: 700, fontSize: 9, letterSpacing: 0.8, textTransform: "uppercase" }}>{wx.label || "forecast"}</span>
+                    </span>
+                    {wx.source === "normals" && wx.detail && (
+                      <span style={{ color: C.muted, fontSize: 10, lineHeight: 1.35 }}>{wx.detail}</span>
+                    )}
+                  </span>
+                  {/* The bare "rain likely" chip stays ONLY when nothing better
+                      was measured. Where wind, millimetres or a symbol code came
+                      through, the warnings below say the actual number and this
+                      would be a vaguer duplicate of the same fact. */}
+                  {wx.source !== "normals" && wx.risk === "high" && !wxWarnings.length && <span style={{ color: "#FFB347", fontWeight: 700 }}>· rain likely</span>}
+                </div>
+              )}
+            </div>
+            {/* ── THE WARNINGS ─────────────────────────────────────
+                Oliver, 18 Aug 2026: "it shows the weather forecast, but nothing
+                else. Surely it's able to give some warnings+"
+
+                Under the header rather than inside the badge, because they are
+                sentences and the badge is a glance. "warn" is gold and bordered
+                — it changes what somebody does today. "watch" is quiet — it
+                changes what they pack. Nothing renders at all when nothing
+                crossed a threshold, which is most days: an "all clear" chip on
+                every ordinary day would train people to stop reading the row
+                that matters. */}
+            {wxWarnings.length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
+                {wxWarnings.map(w => (
+                  <div key={w.id} style={{
+                    display: "flex", alignItems: "flex-start", gap: 8,
+                    background: w.level === "warn" ? "#3D2A0A" : C.surface,
+                    border: `1px solid ${w.level === "warn" ? "#FFB34766" : C.border}`,
+                    borderRadius: 10, padding: "7px 11px",
+                    fontSize: 11.5, lineHeight: 1.5,
+                    color: w.level === "warn" ? "#FFB347" : C.muted,
+                  }}>
+                    <span style={{ flexShrink: 0, fontWeight: 700 }}>{w.level === "warn" ? "◷" : "·"}</span>
+                    <span>{w.text}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ height: 1, background: C.border, margin: "10px 0 18px" }} />
+            {/* If today only has one stop, the real journey worth showing is the leg
+                connecting it to yesterday's last stop, not nothing at all.
+                Skipped in light mode, same reasoning as the route map below. */}
+            {!lightMode && day.stops?.length === 1 && dayIdx > 0 && days[dayIdx - 1]?.stops?.length > 0
+              && days[dayIdx - 1].stops.slice(-1)[0].name.trim().toLowerCase() !== day.stops[0].name.trim().toLowerCase() && (
+              <div style={{ marginBottom: 14 }}>{legChip(days[dayIdx - 1].stops.slice(-1)[0].name, day.stops[0].name, day.glance?.legs?.[0]?.how)}</div>
+            )}
+            {/* TIMELINE LAYOUT (Oliver: "having the transport under each is
+                odd... put it up so it looks a little bit more understanding",
+                his pick from the options offered): the two-column card grid put
+                each transport chip under one card in grid space, visually
+                attached to nothing. A day is a SEQUENCE, so it now renders as
+                one: a single column of stop cards with the transport chip
+                sitting on a small connector line BETWEEN the two stops it
+                joins. The cards themselves are unchanged (same photo
+                height as the Towns nav, per Oliver's earlier call). */}
+            <div style={{ maxWidth: 620 }}>
+              {/* Redesign pass: stops became real cards (surface, border, radius) instead
+                  of floating text under a gray box, and the empty-photo state is now a
+                  designed monogram plate — the place's initial in italic serif on a
+                  layered gradient — rather than a lonely ◆ in a void. Now also clickable
+                  when the stop matches something real Gemlyx already has its own page
+                  for (a town, a free attraction, a restaurant, a venue, an event). */}
+              {/* ── NOT EVERY STOP IS A POSTCARD ────────────────────────
+                  This is where the page got heavy. Every stop rendered as a big
+                  card, and since only stops matching a published Gemlyx entry
+                  have a photo, most days were three or four 96px monogram
+                  plates: a large decorated box whose entire content is the
+                  first letter of a name you can already read underneath it. A
+                  four day trip was a very long scroll made mostly of gradient.
+
+                  Nothing is dropped, the weight is just spent where there is
+                  something to look at. A stop with a real photo keeps the full
+                  card. Everything else becomes a compact row, which also makes
+                  the ones with photos read as the highlights of the day rather
+                  than as four equal things in a queue. */}
+              {(day.stops || []).map((stop, stopIdx) => {
+                const matched = lookupRealPlace(stop.name);
+                const real = canOpenStop(matched) ? matched : null;
+                const nextStop = day.stops[stopIdx + 1];
+                const noteKey = `${dayIdx}-${stopIdx}`;
+                const noteOpen = !!openNotes[noteKey];
+                // ── "WHY SO MUCH READ MORE?" ─────────────────────────
+                // Oliver, 26 Aug 2026: "Only read more for stuff that can be
+                // irrelevant." The clamp was 160 characters against a note the
+                // writer is asked to make 2-3 sentences long, so it fired on
+                // every stop in the product and hid one sentence each time. The
+                // rule now lives in utils/guideReading.js, where it can be
+                // tested against real notes rather than guessed at here.
+                const note = stop.note || "";
+                const clamped = clampNote(note);
+                const longNote = clamped.clipped;
+                const noteBlock = note ? (
+                  <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6, marginTop: 7 }}>
+                    {longNote && !noteOpen ? `${clamped.shown}… ` : `${note} `}
+                    {longNote && (
+                      <button onClick={e => { e.stopPropagation(); setOpenNotes(o => ({ ...o, [noteKey]: !noteOpen })); }}
+                        style={{ background: "none", border: "none", padding: 0, color: C.gold, fontWeight: 700, fontSize: 12, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                        {noteOpen ? uiT("guide.readLess", uiLang) : uiT("guide.readMore", uiLang)}
+                      </button>
+                    )}
+                  </div>
+                ) : null;
+                // ── WHAT IS THIS PLACE, IN ONE WORD ──────────────────
+                // Oliver asked whether the guide would overwhelm someone who
+                // has never been to Denmark. This is the answer I was least
+                // expecting and the cheapest to act on: to a visitor,
+                // "Vikingeskibsmuseet", "Roskilde Domkirke" and "Faxe
+                // Kalkbrud" are three long unpronounceable strings that look
+                // identical, and you have to read a paragraph before you know
+                // whether one is a museum, a church or a hole in the ground.
+                // Danish compound names already carry the answer, so this costs
+                // one small tag and no research at all.
+                const loose = looseStop(stop, matched);
+                const looseLeg = loose || (!!nextStop && looseStop(nextStop));
+                const kind = loose ? uiT("guide.freeTime", guideLang) : entryWord(stopKind(stop.name, real), guideLang);
+                // ── AND WHEN IT RUNS, IF IT IS AN EVENT ──────────────
+                // Null for everything that is not one, so a restaurant is
+                // untouched. See stopEventWhen in utils/guideReading.js: this
+                // card was the reason a correct Tivoli Halloween offer looked
+                // wrong and could only be checked by leaving the site.
+                const when = stopEventWhen(real, dayDate);
+                // ── WHERE IT IS, AND THE APP ALREADY KNEW ────────────
+                // Oliver, 17 Aug 2026: "I think you need to make it explicit
+                // where these places are.. like 'JOJO'.. nobody knows that is in
+                // Aarhus.."
+                //
+                // This line read `stop.town` alone, and the guide writer fills
+                // that when it happens to. When it did not, the card printed a
+                // bare name — while the published row underneath, the one he
+                // wrote, carried the town all along in whichever of four fields
+                // its content type uses. See stopTown in utils/guideEnrichment.js.
+                const townLabel = stopTown(stop, real);
+                const titleRow = (
+                  <>
+                    <div style={{ fontSize: real?.photo ? 17 : 15, fontWeight: 600, color: real ? C.gold : C.text, fontFamily: "'Fraunces', serif", lineHeight: 1.2, textDecoration: real ? "underline" : "none", textDecorationColor: real ? `${C.gold}55` : "none", textUnderlineOffset: 3 }}>{stop.name}{real ? " ↗" : ""}</div>
+                    {(kind || townLabel || stop.suggestedStay || (!real?.photo && stop.arrivalTime)) && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap", marginTop: 6 }}>
+                        {kind && (
+                          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6, color: C.gold, background: `${C.gold}16`, border: `1px solid ${C.gold}33`, borderRadius: 100, padding: "2px 8px" }}>{kind}</span>
+                        )}
+                        <span style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: 1.1 }}>
+                          {[!real?.photo && stop.arrivalTime, townLabel, stop.suggestedStay].filter(Boolean).join(" · ")}
+                        </span>
+                      </div>
+                    )}
+                    {when && (
+                      <div style={{ fontSize: 11.5, color: when.offWindow ? "#FFB347" : C.light, marginTop: 6, fontWeight: when.offWindow ? 700 : 400 }}>
+                        {when.offWindow ? `⚠ Runs ${when.runs}, which is not the day this stop falls on` : `Runs ${when.runs}`}
+                      </div>
+                    )}
+                    {noteBlock}
+                  </>
+                );
+                // ── THE CHANGE BUTTON ────────────────────────────────
+                // Only where a swap can be offered: it needs a point to search
+                // around. That is the stop's own coordinate when one is held,
+                // and otherwise the centre of its town, which resolveStopCoords
+                // falls back to, so "too far out of the way" is then measured
+                // from the town centre. A stop with neither gets no control.
+                // (This comment used to promise a precise point; a review on
+                // 21 Sep 2026 found the code never asked for one.)
+                const swapPoint = resolveStopCoords(stop.name, guide._geo || {}, stopTown(stop, real));
+                const swapOpen = changing === `${dayIdx}-${stopIdx}`;
+                const changedFrom = swapNote(stop);
+                // ── THE SWAP, INSIDE THE CARD IT CHANGES ──────────────
+                // Oliver, 21 Sep 2026, of "Change this stop" under Aarhus Street
+                // Food: "Is that related to Aarhus streetfood? Bad design. Put
+                // it inside the frame or something.. And make it smaller. Like
+                // a 'swap' icon in the right corner." It stood under the leg
+                // chip, so it read as belonging to the NEXT stop. Now a small
+                // ⇄ in the card's own corner, and the sheet it opens sits
+                // straight under that card, above the leg to the next.
+                // Never on an airport, a station or a ferry terminal: see
+                // isTravelPoint.
+                const canSwap = !lightMode && !!swapPoint && !isTravelPoint(stop);
+                const swapIcon = canSwap ? (
+                  <button onClick={(e) => { e.stopPropagation(); setChanging(swapOpen ? null : `${dayIdx}-${stopIdx}`); setSwapBlocked(""); }}
+                    aria-label={uiT("guide.changeStop", uiLang)} title={uiT("guide.changeStop", uiLang)}
+                    style={{ position: "absolute", top: 10, right: 10, width: 30, height: 30, borderRadius: 100, display: "flex", alignItems: "center", justifyContent: "center", background: swapOpen ? `${C.gold}26` : C.surface, border: `1px solid ${swapOpen ? C.gold : `${C.gold}55`}`, color: C.gold, fontSize: 14, fontWeight: 700, cursor: "pointer", padding: 0, fontFamily: "'Inter', sans-serif" }}>
+                    {swapOpen ? "✕" : "⇄"}
+                  </button>
+                ) : null;
+                return (
+                <div key={stopIdx} style={{ marginBottom: nextStop && (lightMode || looseLeg) ? 14 : 0 }}>
+                  {real?.photo ? (
+                  <div onClick={() => openStopDetail(real)}
+                    style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden", cursor: "pointer" }}>
+                    {/* Per Oliver: "avoid the horizontal pictures, you can't see the
+                        whole castle — go with the same size as on the town
+                        navigation." This was a much shorter/wider box (116px tall)
+                        than the Towns page's own stop photos (210px, same
+                        .towns-grid column width) — a short, wide crop of a tall
+                        subject like a castle cuts off its towers/spires. Now
+                        matches Towns exactly. */}
+                    <div style={{ position: "relative", height: 210, overflow: "hidden" }}>
+                      <img src={real.photo} alt={stop.name} onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      {stop.arrivalTime && (
+                        <div style={{ position: "absolute", top: 10, left: 10, background: C.scrim || "rgba(10,15,30,0.78)", backdropFilter: "blur(6px)", color: C.gold, fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: 100, border: `1px solid ${C.gold}44` }}>{stop.arrivalTime}</div>
+                      )}
+                      {/* ── AND THE NUMBER, WHICH ONLY THIS VARIANT LOST ──
+                          Guide scyek6rypzn numbered its stops 1, 2, 3, 4, 5,
+                          then Amalienborg with no badge at all, then 7. Later:
+                          10, 11, Culture Night with no badge, 13. Both of the
+                          unnumbered ones were photo cards.
+
+                          The plate that prints it lives in the OTHER branch of
+                          this ternary, so a stop with a photo consumed a pin
+                          number on the map and printed none on its card, and the
+                          map's own caption promises that every stop below is
+                          numbered in order. A reader counting cards against pins
+                          finds two missing and no explanation.
+
+                          Top RIGHT, because the arrival time already has the
+                          left corner. Same gold, same scrim, same rule about a
+                          stop that is not on the map: it keeps its letter rather
+                          than being given a number it has not earned. */}
+                      <div style={{ position: "absolute", top: 10, right: 10, width: 30, height: 30, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", background: C.scrim || "rgba(10,15,30,0.78)", backdropFilter: "blur(6px)", border: `1px solid ${C.gold}44` }}>
+                        <span style={{ fontFamily: "'Fraunces', serif", fontStyle: pinNumber(stop, day.day || dayIdx + 1) ? "normal" : "italic", fontSize: 15, fontWeight: pinNumber(stop, day.day || dayIdx + 1) ? 800 : 500, color: C.gold }}>{pinNumber(stop, day.day || dayIdx + 1) || (stop.name || "◆").slice(0, 1)}</span>
+                      </div>
+                    </div>
+                    <div style={{ position: "relative", padding: canSwap ? "12px 48px 14px 14px" : "12px 14px 14px" }}>{titleRow}{swapIcon}</div>
+                  </div>
+                  ) : (
+                  <div onClick={real ? () => openStopDetail(real) : undefined}
+                    style={{ position: "relative", display: "flex", gap: 12, alignItems: "flex-start", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: canSwap ? "12px 48px 12px 14px" : "12px 14px", cursor: real ? "pointer" : "default" }}>
+                    <div style={{ flexShrink: 0, width: 32, height: 32, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", background: `${C.gold}18`, border: `1px solid ${C.gold}33` }}>
+                      {/* ── THE NUMBER THE CAPTION PROMISED ────────────
+                          The map's caption has always said "every stop below is
+                          numbered here in order", and nothing below the map was
+                          numbered: this plate showed the first LETTER of the name.
+                          The one function in the file that could print ① is defined
+                          and called from nowhere.
+
+                          pinNumber is the stop's real position among the pins that
+                          were drawn, so tapping pin 4 and finding the fourth card
+                          works. A stop that is not on the map keeps its letter,
+                          because giving it a number would be the promise breaking
+                          in the other direction. */}
+                      <span style={{ fontFamily: "'Fraunces', serif", fontStyle: pinNumber(stop, day.day || dayIdx + 1) ? "normal" : "italic", fontSize: 16, fontWeight: pinNumber(stop, day.day || dayIdx + 1) ? 800 : 500, color: C.gold }}>{pinNumber(stop, day.day || dayIdx + 1) || (stop.name || "◆").slice(0, 1)}</span>
+                    </div>
+                    <div style={{ minWidth: 0, flex: 1 }}>{titleRow}</div>
+                    {swapIcon}
+                  </div>
+                  )}
+                  {canSwap && (changedFrom || swapOpen) && (
+                    <div style={{ marginTop: 8 }}>
+                      {/* Said on the CARD, not in a changelog nobody opens: a
+                          traveller who swapped something and then shared the
+                          guide has a companion who never saw it happen. */}
+                      {changedFrom && (
+                        <div style={{ fontSize: 11, color: C.muted }}>{changedFrom}</div>
+                      )}
+                      {swapOpen && (
+                        <StopChangeSheet
+                          stop={stop} guide={guide} point={swapPoint}
+                          library={mapLibrary} nearby={nearbyPublished}
+                          blocked={swapBlocked}
+                          onClose={() => { setChanging(null); setSwapBlocked(""); }}
+                          onSwap={(pick) => {
+                            const next = guideWithSwap(guide, dayIdx, stopIdx, pick);
+                            // ── THE GATE ────────────────────────────
+                            // A swap is where a guide that HONOURED the
+                            // traveller's constraints quietly stops honouring
+                            // them: they said no ferries and the replacement is
+                            // on an island. See utils/constraintCheck.js, which
+                            // has existed since this afternoon and until now had
+                            // no caller. This is the moment it is for.
+                            const constraints = guide?._constraints || null;
+                            const allowed = swapIsAllowed(guide, next, constraints, {
+                              violationsOf: (g, c) => constraintViolations(g, c, { modeOf: detectLegMode }),
+                            });
+                            if (!allowed) {
+                              setSwapBlocked(swapBlockedNote(constraintViolations(next, constraints, { modeOf: detectLegMode })));
+                              return;
+                            }
+                            setGuide(next);
+                            setChanging(null);
+                            setSwapBlocked("");
+                          }}
+                        />
+                      )}
+                    </div>
+                  )}
+                  {/* Connector: the leg chip sits ON the line between the two
+                      stops it joins, centered — reads as "then you travel",
+                      not as a stray label under a random card. */}
+                  {/* ── A PLACE IS NOT A JOURNEY FROM ITSELF ───────────
+                      "Ærøskøbing" appeared as Day 2's overnight stop and again
+                      as Day 3, and the connector between them read "1 min on
+                      foot". The Directions API had honestly answered zero for a
+                      route from a point to itself. A stop repeated as a base is
+                      not a leg and gets no chip. */}
+                  {!lightMode && nextStop && !looseLeg && nextStop.name.trim().toLowerCase() !== stop.name.trim().toLowerCase() && (
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "4px 0" }}>
+                      <div style={{ width: 1, height: 16, background: `${C.gold}55` }} />
+                      {legChip(stop.name, nextStop.name, day.glance?.legs?.[stopIdx]?.how)}
+                      <div style={{ width: 1, height: 16, background: `${C.gold}55` }} />
+                    </div>
+                  )}
+                </div>
+                );
+              })}
+            </div>
+            {/* ── SOMETHING LOCAL ON WHILE THEY ARE HERE ──────────
+                Oliver, 19 Sep 2026: "I'm put on Sejerø. So the Sejerø event
+                should be published, which I can't.."
+
+                It was a block in the writer's prompt and nothing else, which
+                made it an invitation the writer could decline, and it declined.
+                Printed from the guide's own data now, so a row that reached the
+                plan reaches the reader. The writer is told it is here and told
+                not to write it out again: one voice, the same rule the stay
+                card and the weather line already follow.
+
+                NOT A TICKET AND NOT A PLAN. These come off a village's own
+                calendar and nobody has checked them the way a published entry
+                is checked, so the line says what is on and where, and promises
+                nothing. See utils/communityEvents.js. */}
+            {((guide?._community?.[day.day || dayIdx + 1]?.rows) || guide?._community?.[day.day || dayIdx + 1] || []).length > 0 && (() => {
+              const cell = guide._community[day.day || dayIdx + 1];
+              const rows = Array.isArray(cell) ? cell : (cell?.rows || []);
+              const more = Array.isArray(cell) ? 0 : (cell?.more || 0);
+              return (
+              <div style={{ display: "flex", gap: 8, alignItems: "flex-start", background: C.surface, border: `1px solid ${C.gold}33`, borderRadius: 12, padding: "12px 14px", marginTop: 16 }}>
+                <span style={{ fontSize: 14, flexShrink: 0 }}>◆</span>
+                <div style={{ fontSize: 12.5, lineHeight: 1.6 }}>
+                  <span style={{ color: C.muted, fontWeight: 700 }}>On locally </span>
+                  {rows.map((r, i) => (
+                    <span key={`${r.name}-${i}`} style={{ color: C.light }}>
+                      {i > 0 ? " · " : ""}
+                      <b style={{ color: C.gold }}>{r.name}</b>
+                      {r.town ? `, ${r.town}` : ""}
+                      {r.time ? `, from ${r.time}` : ""}
+                      {r.venue ? `, at ${r.venue}` : ""}
+                      {/* ── AND WHETHER A VISITOR CAN WALK INTO IT ──
+                          Oliver, 19 Sep 2026: "these islands are going to
+                          depend on a lot on your language" and "Anything about
+                          'theater' should be a clear nono as a foreigner."
+                          Four words off the row's own wording, never a verdict:
+                          a members' dinner and an hour of spoken Danish are
+                          both real events and neither is one to send somebody
+                          to without saying so. See utils/eventAccess.js. */}
+                      {accessNote(accessOf(r), uiLang) && (
+                        <span style={{ color: C.muted }}> ({accessNote(accessOf(r), uiLang)})</span>
+                      )}
+                    </span>
+                  ))}
+                  {/* ── AND A DAY WITH MORE ON THAN IT CAN NAME ────
+                      Oliver, 19 Sep 2026, on Læsø's calendar: "We can't have a
+                      billion events popping up.. I guess we can do a 'multiple
+                      events' currently going on." Two named and the rest
+                      counted, so a busy island reads as busy rather than as a
+                      calendar. */}
+                  {more > 0 && (
+                    <span style={{ color: C.muted }}>, {moreOnLine(more, rows[0]?.town)}</span>
+                  )}
+                  <div style={{ color: C.muted, fontSize: 11, marginTop: 4 }}>
+                    Off the village's own calendar. Worth checking it is still on before you plan an evening around it.
+                  </div>
+                </div>
+              </div>
+              );
+            })()}
+            {/* ── A CHEAP GEM ON THE WAY ───────────────────────────
+                Oliver, 21 Sep 2026: "Then do that", of a gem on the day a
+                guide passes it. Printed from the published row as it stands
+                today, with its own checked date and its own page, the same
+                way the Cheap gems page prints it. The writer never sees it,
+                so the writer cannot restate a discount in its own words. */}
+            {gemByDay[dayIdx] && (() => {
+              const { gem: g } = gemByDay[dayIdx];
+              return (
+                <div style={{ background: C.surface, border: `1px solid ${C.gold}33`, borderRadius: 12, padding: "12px 14px", marginTop: 16, fontSize: 12.5, color: C.light, lineHeight: 1.6 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 3 }}>{gemHeading(gemByDay[dayIdx])}</div>
+                  {/* WHO THE SHOP IS FOR, first and in its own line. Oliver,
+                      24 Sep 2026, of a gem he had published: "i just realised
+                      this is Women-only". A saving is worth nothing to
+                      somebody the shop does not sell to, and that belongs
+                      above the saving rather than in a sentence about it. */}
+                  {g.audience && <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: 0.6 }}>{AUDIENCE_LABEL[g.audience]} only</div>}
+                  <div><b style={{ color: C.text }}>{g.name}</b>{g.what ? `: ${g.what}` : ""}{g.who ? `, for ${g.who.charAt(0).toLowerCase()}${g.who.slice(1)}` : ""}.</div>
+                  {g.how && <div>{g.how}</div>}
+                  {g.catch && <div style={{ color: C.text }}><b>The catch:</b> {g.catch}</div>}
+                  <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>
+                    {checkedLabel(g)} · <a href={g.source} target="_blank" rel="noreferrer" style={{ color: C.gold, fontWeight: 700, textDecoration: "none" }}>{isOwnSite(g.source, g.name) ? "Their page" : "Where this comes from"} ↗</a>
+                  </div>
+                </div>
+              );
+            })()}
+            {day.glance?.accommodation && needsABed(day.day || dayIdx + 1, bedStateOf(guide)) && (() => {
+              // ── "IT'S NOT EXACTLY A 'DAY-TRIP' FROM COPENHAGEN" ───
+              // Oliver, 17 Aug 2026. The arithmetic for this was written that
+              // night and wired to nothing, which the next morning's grep found:
+              // the guide went on printing the claim while the module that knew
+              // better sat unimported. This is the call that closes it.
+              //
+              // The measurement is the FURTHEST stop of the day, not the nearest
+              // — a day trip has to reach all of them, and the nearest one would
+              // let a single close stop wave through a day that ends 200 km out.
+              // See stayTextProblem in utils/accommodation.js.
+              const stayProblem = stayTextProblem({
+                text: day.glance.accommodation,
+                mode: guide._mode,
+                kmFromTown: (town) => {
+                  const base = townPointFor(town);
+                  if (!base) return null;
+                  const reach = (day.stops || [])
+                    .filter(st => st?.name)
+                    .map(st => resolveStopCoords(st.name, geo, stopTown(st, lookupRealPlace(st.name))))
+                    .filter(Boolean)
+                    .map(pt => kmBetween(base, pt))
+                    .filter(n => Number.isFinite(n));
+                  // No measurable stop means no measurement, and dayTripHonest
+                  // refuses an unmeasured claim rather than waving it through.
+                  return reach.length ? Math.max(...reach) : null;
+                },
+              });
+              const stayText = stayProblem ? stayProblem.repaired : day.glance.accommodation;
+              // Logged, not printed. A READER should just get the honest
+              // sentence — a page that narrates its own corrections is the
+              // "People will think the draft is incorrect" failure again. The
+              // reason a cut happened belongs where a founder looks, so it goes
+              // to the console with the numbers behind it, same as the withheld
+              // ready marker in App.jsx.
+              if (stayProblem) console.warn("Gemlyx guide: day-trip claim removed from the stay line.", stayProblem.note);
+              // The whole sentence was the false claim. A card with nothing
+              // honest left in it is worse than no card.
+              if (!stayText) return null;
+              // dayDate is this day of the trip, computed once at the top of the
+              // day render and shared with the stop cards. Checkout is the next
+              // morning, through the same tested primitive rather than a second
+              // mutating setDate.
+              // The Booking, Trip.com and partner hotel doors that were built
+              // here moved to the affiliates panel on 21 Sep 2026, built once
+              // per STAY above the day loop. See partnerStays.
+              // ── WHICH OF THESE THIS NIGHT ACTUALLY GETS ──────────
+              //
+              // Oliver, 19 Sep 2026: "the guide has begun to look like a
+              // massive advertisement page." The card and the sentence are on
+              // every night, under the standing rule above that they survive
+              // every rebuild. The BUTTONS are on the first night of each stay,
+              // because three nights in Odense is one booking and the second
+              // and third buttons were the same search again.
+              //
+              // Decided for the whole page above the day loop, since which
+              // night opens a stay is a fact about the run of nights. See
+              // utils/stayDoors.js.
+              const doors = doorOn(stayDoors, day.day || dayIdx + 1);
+              const stayHere = partnerStays.find(p => (p.nights || []).includes(Number(day.day || dayIdx + 1))) || null;
+              const sameBed = doors.door ? ""
+                : houseStay ? (houseStay.nights.includes(Number(day.day || dayIdx + 1)) && Number(day.day || dayIdx + 1) > houseStay.nights[0] ? sameHouseLine(houseStay.nights[0]) : "")
+                : sameBaseLine(stayDoors, day.day || dayIdx + 1, days);
+              return (
+                <div style={{ display: "flex", gap: 8, alignItems: "flex-start", background: C.surface, border: `1px solid ${C.gold}33`, borderRadius: 12, padding: "12px 14px", marginTop: 16 }}>
+                  <span style={{ fontSize: 14, flexShrink: 0 }}>🏡</span>
+                  <div style={{ fontSize: 12.5, lineHeight: 1.6 }}>
+                    <span style={{ color: C.muted, fontWeight: 700 }}>{uiT("guide.whereToStay", uiLang)} </span>
+                    <span style={{ color: C.light }}>{stayText}</span>
+
+                    {/* Not on a same-bed night. Found on the live guide the
+                        night of 21 Sep 2026: night 2 named "Copenhagen Admiral
+                        Hotel" right above "Same bed as night 1", which had
+                        named Next House. Each day's enrichment picks a hotel
+                        on its own, so a night that is the same bed must not
+                        print a second one. */}
+                    {day.glance.recommendedStay && !sameBed && (
+                      <div style={{ marginTop: 3 }}><span style={{ color: C.gold, fontWeight: 700 }}>{day.glance.recommendedStay}</span></div>
+                    )}
+                    {/* ── HOW LONG, AND THE WAY TO BOOK IT ─────────────
+                        Oliver, 21 Sep 2026, of guide z8f8otncrz2: "There is no
+                        clear idea of how long time the person is staying at a
+                        hotel.. and the affiliate link constantly feels like
+                        advertisement."
+
+                        The first night of each stay now says how many nights
+                        it is, which is the fact a person books with. The
+                        Booking, Trip.com and partner hotel buttons that stood
+                        here moved into the affiliates panel, grouped by stay
+                        with those same nights on them, and this card keeps the
+                        way in to it. That is how the standing rule of 7 Aug
+                        2026 survives this rebuild too: a guide with a night in
+                        it still shows a way to book that night, one tap away,
+                        instead of a button to a booking site on every card. */}
+                    {/* ── THE AREA IS THE LINK ──────────────────────────
+                        Oliver, 21 Sep 2026, of "Where to book these nights ›"
+                        opening the whole partner panel: "I click the link, and
+                        all of the affiliate pops up? I have a better idea..
+                        make 'central copenhagen' a hyperlink to booking in the
+                        suggested area." So the area this stay is in is the
+                        link, to rooms there on these nights, and it goes
+                        nowhere else. The panel keeps the full list. */}
+                    {/* The house: its nights, and houses near the base on those
+                        dates. A plain link, not a partner one. */}
+                    {houseStay && doors.door && (
+                      <div style={{ fontSize: 12, color: C.text, fontWeight: 700, marginTop: 6 }}>
+                        {nightsLabel(houseStay.nights, guide?._arrivalDate || null)}
+                        {" · "}
+                        <a href={houseStay.href} target="_blank" rel="noreferrer"
+                          style={{ color: C.gold, textDecoration: "underline", textUnderlineOffset: 3 }}>{houseStay.label}</a>
+                        <span style={{ color: C.muted, fontWeight: 600, fontSize: 11 }}> ↗</span>
+                      </div>
+                    )}
+                    {!houseStay && doors.door && doors.list?.length > 0 && (
+                      <div style={{ fontSize: 12, color: C.text, fontWeight: 700, marginTop: 6 }}>
+                        {nightsLabel(doors.list, guide?._arrivalDate || null)}
+                        {/* Only a search IN the area may carry the area's name. A door
+                            that goes to Booking's front page does not. */}
+                        {stayHere?.door?.href && stayHere.door.area && stayHere.place && (<>
+                          {" in "}
+                          <a href={outboundLink(stayHere.door.href).href || stayHere.door.href} target="_blank" rel={outboundLink(stayHere.door.href).rel}
+                            style={{ color: C.gold, textDecoration: "underline", textUnderlineOffset: 3 }}>{stayHere.place}</a>
+                          <span style={{ color: C.muted, fontWeight: 600, fontSize: 11 }}> on Booking.com ↗</span>
+                        </>)}
+                        {/* AND WHEN THE LINK CANNOT CARRY THE AREA. With
+                            Booking's deep links off, the door is Booking's
+                            front page, and the area's name may not be put on
+                            it. Found by review the same night: the card then
+                            had no way to book at all. So it says what it is. */}
+                        {stayHere?.door?.href && !stayHere.door.area && (<>
+                          {" · "}
+                          <a href={outboundLink(stayHere.door.href).href || stayHere.door.href} target="_blank" rel={outboundLink(stayHere.door.href).rel}
+                            style={{ color: C.gold, textDecoration: "underline", textUnderlineOffset: 3 }}>Find a room on Booking.com</a>
+                          <span style={{ color: C.muted, fontWeight: 600, fontSize: 11 }}> ↗</span>
+                        </>)}
+                      </div>
+                    )}
+                    {/* ── AND A NIGHT WITH NO BUTTON SAYS WHY ────────
+                        Without it a reader on night four sees a stay card with
+                        no way to book and reads the page as broken. With it
+                        they read the true thing, which is that it is the same
+                        room as the night before. */}
+                    {sameBed && (
+                      <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.5, marginTop: 6 }}>{sameBed}</div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* ── AND THE JOURNEY TO TOMORROW ────────────────────────
+                Oliver, 17 Aug 2026: "the route is even worse…"
+
+                His guide read: 2 DAYS · 3 STOPS · 92 KM OF TRAVEL, Aalborg →
+                Skagen. Day 1 ends in Aalborg. Day 2 opens at 15:00 in Skagen,
+                ninety-two kilometres away, on a bicycle, with NOTHING drawn
+                between them. Not a wrong estimate — no journey at all.
+
+                The cause is one line above: `day.stops[stopIdx + 1]`. A leg is
+                the gap between two stops IN A DAY, so the single largest journey
+                of the trip was the one gap nothing looked at. The stat bar
+                counted those kilometres and the itinerary never spent them.
+
+                Rendered at the FOOT of the day rather than the head of the next
+                one, because it is the thing that has to happen before tomorrow
+                starts, and it belongs next to where they are sleeping. Silent
+                when the next day begins where this one ended, which is most
+                trips. See overnightMove in utils/routeOrder.js. */}
+            {!lightMode && (() => {
+              const nextDay = days[dayIdx + 1];
+              const lastHere = (day.stops || []).filter(s => s?.name).slice(-1)[0];
+              const firstThere = (nextDay?.stops || []).filter(s => s?.name)[0];
+              if (!lastHere || !firstThere) return null;
+              const fromT = stopTown(lastHere, lookupRealPlace(lastHere.name));
+              const toT = stopTown(firstThere, lookupRealPlace(firstThere.name));
+              // ── TWO DAYS IN THE SAME TOWN IS NOT A JOURNEY ──────────
+              //
+              // Guide scyek6rypzn printed "About 1 km to Copenhagen, roughly
+              // under an hour and a half on a bike" between two days both spent
+              // in Copenhagen, and "About 2 km to Aarhus" between two days both
+              // in Aarhus. Three of its seven overnight moves were not journeys
+              // at all.
+              //
+              // fromT and toT were already computed on the two lines above and
+              // nothing compared them. overnightMove's own guard is a distance
+              // one (km < 1), which cannot catch a two kilometre hop across the
+              // same city, because that IS a real distance. The question is not
+              // how far apart they are, it is whether the traveller changes town
+              // overnight, and the town is the thing that answers it.
+              //
+              // The intra-day renderer already has the right sentence for this
+              // case and has had it for weeks: "Same place, nothing to travel."
+              // Here the honest thing is to print nothing at all, because there
+              // is no gap between the days to describe.
+              const sameTown = fromT && toT && fromT.trim().toLowerCase() === toT.trim().toLowerCase();
+              if (sameTown) return null;
+              const a = resolveStopCoords(lastHere.name, geo, fromT);
+              const b = resolveStopCoords(firstThere.name, geo, toT);
+              if (!a || !b) return null;
+              const move = overnightMove({
+                from: a, to: b, fromName: lastHere.name, toName: toT || firstThere.name,
+                days: days.length, mode: guide._mode,
+              });
+              // ── AND THE MEASURED ANSWER, IF THERE IS ONE ────────────
+              // fetchExactDurations now routes every cross-day pair, not only
+              // the ones whose next day had a single stop, so this leg usually
+              // has a real Directions result. Looked up under the same key shape
+              // the intra-day chips use, under the leg's OWN resolved mode:
+              // a bike trip whose Copenhagen to Aarhus leg was re-routed as
+              // transit is stored under transit, which is the honest answer and
+              // the one worth printing.
+              const overnightMode = resolveLegMode(null, guide._mode, lastHere.name, firstThere.name, guide._onlyWalking, geo);
+              // ONE KEY. The second lookup here used `guide._mode`, which is the
+              // app's vocabulary ("bike", "car"), while every key in
+              // _exactDurations is written with Google's ("bicycling",
+              // "driving"). Two disjoint sets, so that fallback could never
+              // match, and with _mode null it built the literal key "A|B|null".
+              // It read as a safety net and was not one. Deleted rather than
+              // repaired: overnightMode is resolved exactly as the fetch side
+              // resolves it, so if the two ever disagree the fix belongs there.
+              const measuredMove = (guide._exactDurations || {})[`${lastHere.name}|${firstThere.name}|${overnightMode}`] || null;
+              // THE MODE THE CALL WAS MADE WITH travels with the measurement.
+              // Without it describeOvernightMove fell back to the mode the
+              // traveller ASKED for, and a Great Belt crossing re-routed to
+              // transit came back as "3h 5m on a bike".
+              const usableMeasure = measuredMove && measuredMove.durationMinutes >= 1
+                ? { ...measuredMove, mode: measuredMove.modeUsed || overnightMode }
+                : null;
+              const line = describeOvernightMove(move, usableMeasure);
+              if (!line) return null;
+              const heavy = move.eatsTheDay || move.band === REACH_FAR;
+              return (
+                <div style={{ display: "flex", gap: 10, alignItems: "flex-start", background: C.surface, border: `1px solid ${heavy ? "#FFB347" : C.gold}44`, borderRadius: 12, padding: "12px 14px", marginTop: 14, maxWidth: 620 }}>
+                  <span style={{ fontSize: 15, flexShrink: 0 }}>{heavy ? "⚠" : "→"}</span>
+                  <div style={{ fontSize: 12.5, lineHeight: 1.6 }}>
+                    <span style={{ color: heavy ? "#FFB347" : C.gold, fontWeight: 700 }}>
+                      Getting to Day {nextDay.day || dayIdx + 2}:{" "}
+                    </span>
+                    <span style={{ color: C.light }}>{line}</span>
+                    {/* Same honesty as Getting back, and for the same reason:
+                        every other distance on this page is a measured road
+                        journey and this one is not. */}
+                    {/* The note has to match what was done. Saying
+                        "straight line, not a measured route" under a measured
+                        route is the same class of error as the estimate it
+                        replaced, in the opposite direction: it throws away
+                        credibility the number has earned. */}
+                    <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>
+                      {usableMeasure
+                        // sameMode, not !==. This compared Google's word against
+                        // the app's, "driving" against "car", which can never be
+                        // equal, so an ordinary car trip announced "routed as
+                        // driving" and exposed API jargon to a reader. The note
+                        // is only worth printing when the leg genuinely was NOT
+                        // done the way they asked, which is the Great Belt case.
+                        ? `Measured with Google Maps${usableMeasure.mode && !sameMode(usableMeasure.mode, guide._mode) ? `, routed as ${howForReader(usableMeasure.mode)}` : ""}. The distance is straight line, the time is the real route.`
+                        : uiT("guide.straightLine", uiLang)}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+            {/* ── AND ONE LINE ABOUT SOMEBODY ELSE'S ACTIVITY ───────
+                At the foot of the day, in his own sentence, never as a card in
+                the stop list. Same decision TourLine.jsx records for the town
+                tab and for the same reason: the cards above are Gemlyx's own
+                checked writing, and a partner product in that slot borrows
+                their standing. A line underneath is obviously somebody
+                pointing somewhere else. */}
+            {/* The day's tour moved into the affiliates panel on 21 Sep
+                2026 with every other paid door. See utils/partnerSheet.js. */}
+
+            {/* ── AND A BIKE, ON THE DAY THEY NEED ONE ───────────────
+                Oliver, 11 Sep 2026, asked where bike rental belonged and chose
+                the day over the town page: "on a bike day", at the point the
+                question is theirs. Two conditions and both are necessary, see
+                bikeRentalFits: Copenhagen, because Baja has no other Danish
+                city, and bike, because a traveller on trains is being sold
+                something they did not ask for. */}
+            {/* The bike rental moved into the affiliates panel on 21 Sep
+                2026, on the days it fits. See partnerBikes above. */}
+
+            {/* ── AND THE GAP THE BUILDER WOULD HAVE GUESSED AT ──────
+                Oliver, 10 Sep 2026, asked what fills the slots the nightlife cap
+                frees up: "depends on the person. Do they fancy a nice dinner or
+                a quick kebab before drinking ... Ask is better than
+                hallucination."
+
+                TWO DOORS, which is the pair GuidePreviewScreen already has and
+                the reason it has them: a door onto an empty composer hands the
+                traveller the job of writing the question. So either they pick,
+                and the published places near this day open underneath, or the
+                question goes to Gemlyx already typed and already naming the day.
+
+                Only the categories the day is SHORT of, so a day with two
+                restaurants is not offered a third. */}
+            {(() => {
+              const offers = addInOffers(day, { kindOf: addInKind });
+              if (!offers.length) return null;
+              const dayNo = day.day || dayIdx + 1;
+              const stops = (day.stops || []).filter(s => s && s.name);
+              const town = stops.map(s => stopTown(s)).find(Boolean) || "";
+              // ── AND THE NEARBY LIST HAS NEVER ONCE RUN ──────────
+              //
+              // Oliver, 24 Sep 2026, of the chips at the foot of every day:
+              // "when you click this, it takes you back to detour.. it should
+              // not do that. It should give a list of options nearby."
+              //
+              // It should, and it could not. resolveStopCoords takes a NAME, a
+              // geo map and a TOWN, and this call handed it a stop object and
+              // the whole guide. So `geo[name]` read guide["[object Object]"],
+              // the town was the empty default, every fallback missed, and
+              // `anchor` came back null on every day of every guide ever
+              // built. A null anchor means addInNear is never called, the list
+              // is always empty, and the panel always falls through to its own
+              // "nothing of ours is close enough" line with the door back to
+              // the Detour underneath it. The only control that ever worked
+              // was the one that threw the reader out of an unsaved guide.
+              //
+              // The ninth helper this codebase has found written, tested and
+              // wired to nothing, and the first one where the wrong wiring was
+              // an ARITY rather than a missing import: two arguments into a
+              // three argument function is legal JavaScript and reads fine.
+              // The suite now asserts the call passes a name and a town, which
+              // is the shape that was wrong rather than the fact that a call
+              // exists.
+              //
+              // stopTown is what the line above already uses for the day's
+              // town, so the reader is the same one, not a second guess at the
+              // same question.
+              const anchor = stops
+                .map(s => resolveStopCoords(s.name, guide._geo || {}, stopTown(s)))
+                .find(p => p && Number.isFinite(p.lat));
+              return (
+                /* ── AND THE ADD-ON SHE NEVER SAW ────────────────────
+                   Oliver, 14 Sep 2026: "she didn't even notice the 'add on'
+                   that you can do."
+
+                   THE DASHED BORDER WAS THE WHOLE BUG. A dashed outline means
+                   one thing everywhere on the web, an empty slot waiting to be
+                   filled, and this box is the opposite: it is the only place on
+                   the page where the reader can change the plan. She did not
+                   skip it, it did not look like anything.
+
+                   Solid, and tinted in the colour this page already uses for a
+                   thing you can act on, so it reads as part of the guide rather
+                   than as a gap in it. */
+                <div style={{ marginTop: 18, background: C.surface, border: `1px solid ${C.gold}44`, borderRadius: 12, padding: "13px 15px" }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, color: C.text }}>✦ {addInTitle(dayNo)}</div>
+                  <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.55, margin: "3px 0 9px" }}>{abroadGuide ? "Pick what it is short of. We show what is near." : ADD_IN_SUB}</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {offers.map(cat => {
+                      const key = `${dayIdx}:${cat.key}`;
+                      const on = addInOpen === key;
+                      return (
+                        /* ── AND THE PILLS HAD NO SURFACE ──────────────
+                           11.5px grey on nothing, inside a 0.67px hairline in
+                           C.border, which is one shade off the box behind them.
+                           A control has to look raised or bordered enough to be
+                           worth a finger. Filled, in the page's own ground, with
+                           a gold edge and the text at full strength. */
+                        <button key={cat.key} onClick={() => setAddInOpen(on ? null : key)}
+                          style={{ background: on ? `${C.gold}26` : C.bg, border: `1px solid ${on ? C.gold : `${C.gold}55`}`, color: on ? C.gold : C.text, borderRadius: 100, padding: "7px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                          {cat.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {offers.map(cat => {
+                    if (addInOpen !== `${dayIdx}:${cat.key}`) return null;
+                    const near = anchor ? addInNear(cat, anchor, mapLibrary, nearbyPublished, { limit: 3 }) : [];
+                    return (
+                      <div key={cat.key} style={{ marginTop: 10 }}>
+                        {near.length > 0 ? (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                            {near.map(r => (
+                              <div key={r.name} onClick={() => openStopDetail(r)}
+                                style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "8px 10px", cursor: "pointer" }}>
+                                <div style={{ fontSize: 12.5, fontWeight: 700, color: C.text }}>{r.name}</div>
+                                <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{r.walk ? `${r.walk} min walk` : describeLocation(r, [], { town })}</div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          /* Nothing published near this day for that category.
+                             Said plainly rather than shown as an empty box, and
+                             the other door still works. */
+                          <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.6 }}>Nothing of ours is close enough to this day to suggest. Ask and Gemlyx will look.</div>
+                        )}
+                        {/* ── AND IT ASKS WITHOUT LEAVING THE GUIDE ────
+                            This navigated to "/" with the question seeded, and
+                            "/" is where GemlyxApp remounts. lastBuiltGuide is
+                            React state inside that component, so the remount
+                            clears it and the guide the reader was standing in
+                            is gone: asking for one more stop meant building
+                            the whole trip again, which is a second run and a
+                            second bill. Oliver, 24 Sep 2026: "it takes you
+                            back to detour.. it should not do that."
+
+                            This page has had its own chat panel the whole
+                            time, bottom right, which answers about THIS guide
+                            without unmounting it. That is the door, and the
+                            seed goes into its composer rather than into a
+                            route. The panel opens with the question already
+                            typed, so the reader still sees what is being asked
+                            before it is sent, which is the same thing the
+                            seeded route gave them.
+
+                            THE SEED NAMES THE DAY, which is the whole of his
+                            "instead it's just into that specific day". */}
+                        {!abroadGuide && <button onClick={() => { setChatInput(addInSeed(cat, { town, dayNo })); setChatOpen(true); }}
+                          style={{ marginTop: 8, background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 12px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                          Ask Gemlyx to add one to day {dayNo}
+                        </button>}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+          </div>
+          );
+        })}
+        </div>
+
+        {/* ── AND THEN HOW DO THEY GET HOME ──────────────────────────
+            A guide could end in Aalborg, five and a half hours from the airport
+            it started at, and say nothing at all. The plan runs between the
+            points the traveller named and stops at the last one.
+
+            Printed AFTER every day rather than folded into the last one, because
+            it is not part of the trip: it is what the trip leaves them holding.
+            The ORDER is untouched, deliberately, per the note above routeOrder in
+            utils/routeOrder.js. Silent when they end where they landed, and
+            silent when nothing in the brief said where that was. */}
+        {(() => {
+          const stops = (days || []).flatMap(d => (d.stops || []).map(s => {
+            const c = resolveStopCoords(s.name, guide._geo || {}, s.town);
+            return c ? { name: s.name, lat: c.lat, lon: c.lon } : { name: s.name };
+          }));
+          const home = returnLeg({ ordered: stops, from: guide._arrivalPoint || null, days: (days || []).length, mode: guide._mode || null });
+          const line = describeReturn(home);
+          if (!line) return null;
+          const far = home.band === REACH_FAR;
+          return (
+            <div style={{ display: "flex", gap: 10, alignItems: "flex-start", background: C.surface, border: `1px solid ${far ? "#FFB347" : C.gold}44`, borderRadius: 12, padding: "12px 14px", marginTop: 20, maxWidth: 620 }}>
+              <span style={{ fontSize: 15, flexShrink: 0 }}>{far ? "⚠" : "🧭"}</span>
+              <div style={{ fontSize: 12.5, lineHeight: 1.6 }}>
+                <span style={{ color: far ? "#FFB347" : C.gold, fontWeight: 700 }}>Getting back: </span>
+                <span style={{ color: C.light }}>{line}</span>
+                {/* Said out loud rather than implied. Every other distance on
+                    this page is a measured road journey and this one is not, so
+                    it must not be allowed to look like one. */}
+                <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>
+                  Straight line distance, not a measured route, so treat it as the shape of the problem rather than as a timetable.
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ── WHOSE WORDS THESE ARE ──────────────────────────────────
+            Oliver, 17 Aug 2026: "I also want you to write on the pages that I
+            claim copyright on my texts and guides. We need to make it strictly
+            forbidden to share the guides online" / "or publically rather."
+
+            At the foot of the guide, after the trip and after Getting back,
+            because it is about the document and not about the journey. Small and
+            quiet on purpose: a large legal box on a travel guide reads as a
+            threat, gets skipped, and makes the page feel like a licence
+            agreement. Two lines somebody will read beat six they will
+            not. The wording, and what it deliberately does NOT claim, is in
+            utils/rights.js. */}
+        {/* ── ASKING, ONCE, AT THE END ───────────────────────────────
+            Oliver, 26 Aug 2026: "Can you perhaps make it a thing to write in the
+            Guide that we'd appreciate if they use our affiliates."
+
+            At the foot, after the trip is written, and ONLY when the page
+            carries a partner link. The sentence is a claim about this
+            page — "some of the booking links in this guide" — and on a guide
+            that sends you nowhere paid it is false.
+
+            Counted off the rendered DOM rather than off what the app is capable
+            of, so it can never promise a link the page does not have. See
+            supportNote in utils/affiliates.js for the four rules the wording
+            follows, and for why "booking anywhere else is completely fine" is
+            the line that separates this from what he objected to in Layla. */}
+        {(() => {
+          if (typeof document === "undefined") return null;
+          const hrefs = [...document.querySelectorAll("a[href]")].map(a => a.getAttribute("href"));
+          const note = supportNote({ partnerLinks: partnerLinkCount(hrefs, { isPaid: isPartnerLink }) });
+          if (!note) return null;
+          return (
+            <div style={{ marginTop: 26, paddingTop: 14, borderTop: `1px solid ${C.border}`, maxWidth: 620, fontSize: 11.5, color: C.light, lineHeight: 1.7 }}>
+              {note}
+            </div>
+          );
+        })()}
+
+        {/* ── ASKED OF THE PERSON WHO BUILT IT, AND ONLY THEM ──────
+            Oliver, 15 Sep 2026: "a 'Satisfied with the buiild? We appreciate
+            any feedback.' After a guide has been created."
+
+            freshGuide is the test for "they built this": GuidePage receives the
+            trip in router state when the builder arrives, and null when a
+            stranger opens a shared link cold. Somebody sent a guide in WhatsApp
+            did not build anything, so asking them is a question about
+            somebody else's work.
+
+            Above the rights line rather than below it, because the last thing
+            on a page is where the small print goes and this is a question. */}
+        {freshGuide && (
+          <GuideFeedback
+            // guideId is undefined for a just-built guide, which is the only
+            // case this renders in, so the title is what actually identifies it
+            // and the component says so rather than pretending otherwise.
+            guideId={guideId}
+            title={guide?.title}
+            // ── TO THE TABLE, NOT TO AN INBOX, AS OF 15 SEP ─────
+            //
+            // This posted to api/report-problem, which mailed it. Oliver:
+            // "all the reports should go to Oliververhein@gmail.com's account.
+            // So not on the mail, but in a report fixes tab for studio."
+            //
+            // Same row and same table as a Feedback message from the support
+            // page, so the Studio panel reads one list rather than two. The
+            // anon key is what writes it: gemlyx_support is insert-only to
+            // anon and authenticated, and carries no select policy at all, so
+            // writing with the public key publishes nothing.
+            //
+            // Unawaited and unchecked, exactly as before. GuideFeedback thanks
+            // them either way, on purpose: a thank you they have earned is not
+            // withheld over a failed post, and there is nothing they could do
+            // about it if it were.
+            onSend={({ answer, note, title }) => fetch(`${SUPABASE_URL}/rest/v1/${SUPPORT_TABLE}`, {
+              method: "POST",
+              headers: {
+                apikey: SUPABASE_KEY,
+                Authorization: `Bearer ${SUPABASE_KEY}`,
+                "Content-Type": "application/json",
+                Prefer: "return=minimal",
+              },
+              body: JSON.stringify({
+                topic: "feedback",
+                created_at: new Date().toISOString(),
+                // A just-built guide has no id yet, so the title is the only
+                // handle on it. Sending an empty reference made every feedback
+                // mail about a guide he could not identify.
+                //
+                // AND IT CANNOT BE EMPTY NOW. reference is `not null` on the
+                // table, so an untitled guide from somebody who had not saved
+                // it would have had the whole row refused, which is the one
+                // case where the feedback is most likely to be about the thing
+                // that went wrong. "untitled guide" is a worse handle than a
+                // name and an infinitely better one than a lost row.
+                reference: guideId || String(guide?.title || "").slice(0, 40) || "untitled guide",
+                // The answer first, because a yes with no words is still an
+                // answer and has to survive an empty box. The guide's name and
+                // the browser facts ride along for the same reason they do on a
+                // bug report: so nothing has to be asked twice.
+                message: withContext(
+                  `Satisfied with the build: ${answer === "yes" ? "yes" : "not really"}\nGuide: ${title || "untitled"}\n\n${note || "(no note)"}`,
+                  readBrowserFacts({ version: APP_VERSION }),
+                ),
+              }),
+            })}
+          />
+        )}
+
+        <div style={{ marginTop: 28, paddingTop: 14, borderTop: `1px solid ${C.border}`, maxWidth: 620 }}>
+          <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.65 }}>
+            {GUIDE_RIGHTS_SHORT}
+          </div>
+          <div style={{ fontSize: 10.5, color: C.muted, marginTop: 6, opacity: 0.85 }}>
+            {copyrightLine(new Date().getFullYear())}{" "}
+            <a href="/terms.html" style={{ color: C.gold, textDecoration: "none" }}>Terms</a>
+          </div>
+        </div>
+
+        {isUnsaved && (
+          // PASS 27 BUG FIX (Oliver: "the Gemlyx Guide is on top of the 'sounds
+          // good' button... on phone"): this bar was only ever tested at desktop
+          // widths. It's centered and un-z-indexed, while the floating "Ask
+          // Gemlyx" launcher below is fixed bottom:20/right:20 with zIndex:40 —
+          // on a narrow phone this centered pill runs wide enough that its
+          // right end (the actual "Looks good, save my guide" button) sits
+          // directly under the launcher, which draws on top of it since the
+          // bar had no z-index of its own. zIndex 45 here guarantees the save
+          // button always wins the stack; the launcher itself also gets moved
+          // up out of the way below (className gxa-guide-savebar-active).
+          <div style={{ position: "sticky", bottom: 16, zIndex: 45, display: "flex", justifyContent: "center", marginTop: 20 }}>
+            <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 100, padding: 6, display: "flex", gap: 8, boxShadow: "0 8px 30px rgba(0,0,0,0.6)" }}>
+              {/* It says "Back to chat", so it goes to the chat. navigate(-1)
+                  is the browser's history, which on a guide opened from a link
+                  is whatever site the reader was on before this one. */}
+              <button onClick={() => (onBack ? onBack() : navigate(backPath))}
+                style={{ background: "none", border: "none", color: C.light, borderRadius: 100, padding: "12px 20px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+                {abroadGuide ? "Back to planner" : "Back to chat"}
+              </button>
+              <button onClick={saveGuide} disabled={saving}
+                style={{ background: `linear-gradient(135deg, ${C.accent}, #C22A3C)`, color: "#fff", border: "none", borderRadius: 100, padding: "12px 24px", fontSize: 13, fontWeight: 700, cursor: saving ? "default" : "pointer", opacity: saving ? 0.7 : 1, boxShadow: "0 4px 16px rgba(226,59,78,0.3)" }}>
+                {saving ? uiT("guide.saving", uiLang) : uiT("guide.saveCta", uiLang)}
+              </button>
+            </div>
+          </div>
+        )}
+        {saveError && <div style={{ textAlign: "center", color: "#FFB347", fontSize: 12.5, marginTop: 12 }}>{saveError}</div>}
+      </div>
+
+      {/* Persistent Gemlyx chat — a small floating launcher, bottom-right so it
+          never collides with the centered "save my guide" bar above. Opens a
+          fixed-position panel with its own scrollable history; closing it keeps
+          the conversation in memory for the rest of this page visit. */}
+      {/* PASS 27: on narrow phones, when the "Looks good, save my guide" bar
+          is on screen (isUnsaved), this launcher gets pushed up above it
+          instead of sitting at its usual bottom:20 — see the sticky bar's own
+          comment above for why they collided. Desktop/tablet is unaffected;
+          this only kicks in under 480px via the media query below. */}
+      {isUnsaved && (
+        <style>{`
+          @media (max-width: 480px) {
+            .gxa-guide-chat-launcher.gxa-savebar-active { bottom: 84px !important; }
+          }
+        `}</style>
+      )}
+      {/* No Local Assist on a guide outside Denmark: Oliver, 29 Sep 2026,
+          "Leave out the Chat Assistant". */}
+      {!chatOpen && !abroadGuide && (
+        <button onClick={() => setChatOpen(true)}
+          className={`gxa-guide-chat-launcher${isUnsaved ? " gxa-savebar-active" : ""}`}
+          style={{ position: "fixed", bottom: 20, right: 20, zIndex: 40, display: "flex", alignItems: "center", gap: 8, background: `linear-gradient(135deg, ${C.surface}, ${C.bg})`, border: `1px solid ${C.gold}55`, color: C.text, borderRadius: 100, padding: "12px 18px 12px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer", boxShadow: "0 8px 26px rgba(0,0,0,0.55)" }}>
+          <GemlyxMark size={20} ring={true} ringColor={C.gold} tone="gold" />
+          Ask Gemlyx
+        </button>
+      )}
+      {chatOpen && !abroadGuide && (
+        <div style={{ position: "fixed", bottom: 0, right: 0, zIndex: 40, width: "100%", maxWidth: 380, height: "min(560px, 82vh)", margin: "0 0 0 auto", display: "flex", flexDirection: "column", background: C.surface, border: `1px solid ${C.border}`, borderTopLeftRadius: 18, borderTopRightRadius: 18, borderBottomLeftRadius: 0, borderBottomRightRadius: 0, boxShadow: "0 -8px 30px rgba(0,0,0,0.55)", overflow: "hidden" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <GemlyxMark size={20} ring={true} ringColor={C.gold} tone="gold" />
+              <span style={{ fontSize: 13.5, fontWeight: 700, color: C.text }}>Gemlyx</span>
+            </div>
+            <button onClick={() => setChatOpen(false)}
+              style={{ background: "none", border: "none", color: C.muted, fontSize: 18, cursor: "pointer", lineHeight: 1, padding: 4 }}>
+              ✕
+            </button>
+          </div>
+          <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
+            {/* ── ARTICLE 50(1), AI ACT ──────────────────────────────
+                Local Assist is the third surface where a person types and a
+                model answers, and the one most likely to be opened mid-trip by
+                somebody who arrived from a shared link and has seen none of the
+                rest of the site. See utils/aiDisclosure.js. */}
+            <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5 }}>
+              {aiDisclosureFor(typeof navigator === "undefined" ? null : navigator, guideLang)}
+            </div>
+            {chatMessages.map((m, i) => {
+              const isLatestAssistant = m.role === "assistant" && i === chatMessages.length - 1;
+              const streaming = isLatestAssistant && i > chatRevealedUpTo;
+              return (
+              <div key={i} style={{ alignSelf: m.role === "user" ? "flex-end" : "flex-start", maxWidth: "85%", background: m.role === "user" ? C.accent : C.bg, border: m.role === "user" ? "none" : `1px solid ${C.border}`, color: m.role === "user" ? "#fff" : C.light, borderRadius: 14, padding: "9px 13px", fontSize: 13, lineHeight: 1.55 }}>
+                {m.role === "assistant"
+                  ? <TypewriterText text={readerView(m.text).text} active={streaming} onDone={() => setChatRevealedUpTo(prev => Math.max(prev, i))} />
+                  : m.text}
+              </div>
+              );
+            })}
+            {chatLoading && (
+              <div style={{ alignSelf: "flex-start", display: "flex", alignItems: "center", gap: 8, padding: "9px 13px" }}>
+                <GemlyxLoader size={18} ring={false} />
+                <span style={{ fontSize: 11.5, color: C.muted }}>Thinking…</span>
+              </div>
+            )}
+            <div ref={chatEndRef} />
+          </div>
+          <div style={{ display: "flex", gap: 8, padding: 12, borderTop: `1px solid ${C.border}`, flexShrink: 0 }}>
+            <input value={chatInput} onChange={e => setChatInput(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChatMessage(); } }}
+              placeholder={uiT("guide.askPlaceholder", uiLang)}
+              style={{ flex: 1, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 100, padding: "10px 14px", fontSize: 13, color: C.text, outline: "none" }} />
+            <button onClick={sendChatMessage} disabled={chatLoading || !chatInput.trim()}
+              style={{ background: C.accent, color: "#fff", border: "none", borderRadius: 100, width: 40, height: 40, flexShrink: 0, cursor: chatLoading ? "default" : "pointer", opacity: chatLoading || !chatInput.trim() ? 0.55 : 1, fontSize: 15 }}>
+              ↑
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Same DetailPage overlay every other page in the app uses to show a real
+          Gemlyx entry — self-contained, fixed full-screen, no route change, so
+          closing it is always instant and lands you right back on this guide. */}
+      <DetailPage lang={uiLang} item={eventDetail} onClose={() => setEventDetail(null)} kind="event" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={null} isSaved={eventDetail && isPlaceSaved("event", eventDetail.id)} onToggleSave={eventDetail ? () => toggleSavePlace("event", eventDetail, eventDetail.town) : null} />
+      <DetailPage lang={uiLang} item={townDetail} onClose={() => setTownDetail(null)} kind="town" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={null} isSaved={townDetail && isPlaceSaved("town", townDetail.id)} onToggleSave={townDetail ? () => toggleSavePlace("town", townDetail, townDetail.region) : null} />
+      <DetailPage lang={uiLang} item={nightlifeDetail} onClose={() => setNightlifeDetail(null)} kind="nightlife" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={null} isSaved={nightlifeDetail && isPlaceSaved("nightlife", nightlifeDetail.id)} onToggleSave={nightlifeDetail ? () => toggleSavePlace("nightlife", nightlifeDetail, nightlifeDetail.location) : null} />
+      <DetailPage lang={uiLang} item={freeDetail} onClose={() => setFreeDetail(null)} kind="free" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={null} isSaved={freeDetail && isPlaceSaved("free", freeDetail.id)} onToggleSave={freeDetail ? () => toggleSavePlace("free", freeDetail, freeDetail.city) : null} />
+      <DetailPage lang={uiLang} item={foodDetail} onClose={() => setFoodDetail(null)} kind="food" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={null} isSaved={foodDetail && isPlaceSaved("food", foodDetail.id)} onToggleSave={foodDetail ? () => toggleSavePlace("food", foodDetail, foodDetail.location) : null} />
+    </div>
+  );
+};
