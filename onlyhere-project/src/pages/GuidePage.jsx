@@ -1314,7 +1314,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
             <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(10,15,30,0.92) 0%, rgba(10,15,30,0.45) 45%, rgba(10,15,30,0.15) 100%)" }} />
             <div style={{ position: "absolute", left: 18, right: 18, bottom: 14 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 2, textTransform: "uppercase", marginBottom: 8 }}>✦ Your Gemlyx guide</div>
-              <div style={{ fontSize: 34, fontWeight: 500, fontFamily: "'Fraunces', serif", color: "#fff", lineHeight: 1.1, maxWidth: 680, textShadow: "0 2px 18px rgba(0,0,0,0.55)" }}>{guide.title || uiT("guide.fallbackTitle", uiLang)}</div>
+              <div style={{ fontSize: 34, fontWeight: 500, fontFamily: "'Fraunces', serif", color: "#fff", lineHeight: 1.1, maxWidth: 680, textShadow: "0 2px 18px rgba(0,0,0,0.55)" }}>{guide.title || (abroadGuide ? `Your ${guideLand.name} guide` : uiT("guide.fallbackTitle", uiLang))}</div>
               {/* Said out loud. An unlabelled photograph on a page about where to
                   go is a decoration; a labelled one is information. */}
               {heroCaption(hero) && (
@@ -1334,7 +1334,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
         {!hero?.photo && (
           <>
             <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 2, textTransform: "uppercase", marginBottom: 10 }}>✦ Your Gemlyx guide</div>
-            <div style={{ fontSize: 36, fontWeight: 500, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.1, marginBottom: lightMode ? 10 : 24, maxWidth: 680 }}>{guide.title || uiT("guide.fallbackTitle", uiLang)}</div>
+            <div style={{ fontSize: 36, fontWeight: 500, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.1, marginBottom: lightMode ? 10 : 24, maxWidth: 680 }}>{guide.title || (abroadGuide ? `Your ${guideLand.name} guide` : uiT("guide.fallbackTitle", uiLang))}</div>
           </>
         )}
         {/* So the absence of maps/routes reads as the choice it was, not a bug. */}
@@ -1357,7 +1357,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
             Denmark it is a long way. */}
         {(() => {
           const character = tripCharacter(guide, shape);
-          const scale = tripScaleLine(shape);
+          const scale = tripScaleLine(shape, guideLand.name);
           if (!character && !scale) return null;
           return (
             <div style={{ marginBottom: 20, maxWidth: 640 }}>
@@ -1540,7 +1540,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
             Nothing pads it out, because a "book ahead" list that repeats itself
             is one a traveler learns to skip. */}
         {(() => {
-          const actions = bookingActions(guide, lookupRealPlace);
+          const actions = bookingActions(guide, lookupRealPlace, { land: guideLand.name });
           if (actions.length === 0) return null;
           return (
             <div style={{ background: `${C.accent}12`, border: `1px solid ${C.accent}44`, borderRadius: 16, padding: "16px 18px", marginBottom: 26, maxWidth: 640 }}>
