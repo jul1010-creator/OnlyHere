@@ -214,3 +214,30 @@ Proposed, not built (waiting for Oliver): the menu as dropdowns. Advice
 (Essentials, Tips), Activities (Events, Full calendar), Gems (Cheap gems,
 Promotions), Places (Attractions, Towns, Islands), Eat & drink (Food,
 Nightlife, Shopping), and Plan a trip.
+
+**Batch 167, 30 Sep 2026 (overnight, with Fable).** Oliver: "work on it with
+Fable for an hour or so. Finish making it a template of the Denmark version
+with the changes we talked about."
+
+- The menu is dropdowns, on both sites: Explore, Advice (Essentials, Tips),
+  Activities (Events, Calendar), Gems (Cheap gems, Promotions), Places
+  (Attractions, Towns, Islands), Eat & drink (Food, Nightlife, Shopping), and
+  Plan my trip. A group with one page left shows as that page; an empty group
+  is not drawn. The burger has the same groups as an accordion.
+- Fable audited /lithuania for Danish leftovers. Fixed from its list:
+  "near you" and "km from you" now work for a visitor standing in Klaipėda
+  (they only worked inside Denmark); journeys and "from CPH" lines use the
+  country's hub (Vilnius) instead of Copenhagen; a Klaipėda guide no longer
+  says "Denmark is small" or talks about Danish towns and island ferries;
+  saving places works on /lithuania and "plan from saved" opens the planner
+  with them ticked, only this country's saved places go into a plan; the
+  trip library button is hidden abroad; Cheap gems, Shopping, Islands and
+  the weather strip speak about the page's country; share cards and the
+  sitemap cover /lithuania (a Klaipėda row is never served under /denmark).
+- Found on the way and fixed for Denmark too: every town and attraction
+  share card was titled "A Denmark guide", because the entry's own title and
+  description were being dropped before they reached the tags.
+- Still open from the audit: the Shopping kind "Danish label" is a stored
+  value (needs a Studio change, not a label change), the one-guide-a-day
+  window resets at Copenhagen midnight (server and browser must change
+  together), and privacy.html describes the service as Denmark only.
