@@ -131,4 +131,86 @@ pill; Studio can add a town's calendar to the Full calendar. To ask the
 tourism centre for: their events feed or API access, since
 wp-json/klaipeda-events/v1/events exists but refused an outside read.
 
-Phase 3 (guide builder and chat for Lithuania) is next.
+
+**Batch 162, 29 Sep 2026.** Studio shows at /lithuania#studio (the planner
+page stays in the menu while signed into Studio). The old workshops
+(Bornholm Ceramics, Moesgaard Viking Days, Sømods Bolcher, Viking Center
+Ribe, Viking Ship Museum) are gone in both countries: they came from the
+legacy craft_items table, which the app no longer reads. The table itself is
+untouched in Supabase and can be dropped whenever you like.
+
+**Batch 163, 29 Sep 2026.** Klaipėda's open bus timetable (the GTFS you
+uploaded, mdb-1042, from stops.lt) is in. Every Klaipėda entry with a point
+now shows "Nearest Bus Stop" in At a Glance: the stop, an estimated walk,
+which buses call there, and a "Live departures" link to that stop on stops.lt.
+Events, attractions, workshops, food and nightlife all get it. Danish entries
+are unchanged. The extract is data/klaipedaStops.js (511 stops); refresh it
+with `node tools/klaipedaStops.mjs <unzipped feed>` when routes change. Still
+to confirm with the operator or the tourism centre: the feed's licence terms,
+since the Mobility Database lists none.
+
+**Phase 3, batch 164, 29 Sep 2026: the guide builder for Lithuania, with no
+chat.** Oliver: "Leave out the Chat Assistant.. I doubt anyone will use it
+tbh.. but yes, start phase 3." And: "Where is the tips? That navigation gotta
+be there too.."
+
+- The planner page and Tips are back in the Lithuanian menu. The hero dates
+  and "✦ Plan my visit" button show there too.
+- /lithuania#detour has its own short form (PlanAbroadForm): arrival and
+  departure with times, who is coming, kids, where they start (cruise ship,
+  bus or train station, hotel, or typed), interests, how they get around,
+  free entry only, events on their dates, saved places. A same-day visit reads
+  "About 5.5 hours in town" and the plan has them back 45 minutes before
+  departure. The Danish form's budget estimate, sommerhus and "Explore
+  Denmark" rows are not on it: they run on Danish prices.
+- "✦ Plan my visit" goes straight to the "Here's what's coming up" preview
+  and then to the build, with no chat turn in between. The chat, the AI
+  notice that goes with it, the preview's Ask buttons and the guide's Local
+  Assist are all off on Lithuanian pages and Lithuanian guides. Studio stays.
+- The build: every AI prompt in generateGuide and the legs and stays step goes
+  through forLand (utils/guideAbroad.js), which swaps Denmark, Danish and DKK
+  for the country and adds a rule that Danish facts in the prompt (Rejsekort,
+  DSB, Jutland, islands, sommerhus, the Copenhagen Card) are not this trip.
+  The planner and writer get every published Lithuanian place as their list
+  to choose from, with events only on the trip's days and only when asked for.
+  Web research, geocoding and Google directions ask Lithuania.
+- A guide carries its country (`_country`), so a shared Klaipėda guide opened
+  at /guide/... is still drawn as Lithuanian: map links say Lithuania, the leg
+  chips open Google transit instead of Rejseplanen, Back goes to the Lithuanian
+  planner, and the costs block (Danish fares, meals and fuel in DKK) is left
+  out until Lithuania has its own figures. No currency line either: /api/fx
+  converts from DKK only.
+- Tips on /lithuania: "Packing for Lithuanian weather" and the FAQ, with the
+  covered towns listed. "Find a local" (about Danes) and the Travelbetter.dk
+  button stay on the Danish page. Lithuanian tips come from Studio like any
+  other row.
+
+Still open: Lithuanian cost figures (meals, fares) with sources, the currency
+line from EUR, and Klaipėda content in Studio, since the guide can only choose
+from what is published.
+
+**Batch 165, 29 Sep 2026: no account needed on Lithuanian pages.** Oliver: "I
+think if we do this Gemlyx experiment in Klaipeda, then we need to make people
+able to use everything without account." On /lithuania (OPEN_ABROAD):
+"Review article" opens for everybody, a shop's Gemlyx offer shows to everybody
+instead of "Only for paying users", "Report a problem" is in the menu without
+signing in, and the Log in and Sign up pills, the "Account needed" card on
+Home and the "your saves live on this device" strip are not drawn. Saving
+places and guides already worked without an account. Signing in is still in
+the menu. The Danish page keeps every gate it had.
+
+Not changed: one guide a day per visitor (a cost cap, not an account gate;
+perIp is 4 a day), and the Ask Gemlyx chat stays off abroad as decided.
+
+**Batch 166, 30 Sep 2026: Gemlyx promotions.** Oliver: "I think what will sell
+more is the discount.. should we get a 'Gemlyx promotions' navigation?" A new
+page next to Cheap gems (#promotions) lists every live Gemlyx offer, read off
+the entries' own `__offer` (added in Studio as before), ending soonest first,
+each card opening its entry. Open to everybody on /lithuania; on the Danish
+page it keeps the entry page's rule ("Only for paying users"). Out of the menu
+while no offer is live, except in Studio.
+
+Proposed, not built (waiting for Oliver): the menu as dropdowns. Advice
+(Essentials, Tips), Activities (Events, Full calendar), Gems (Cheap gems,
+Promotions), Places (Attractions, Towns, Islands), Eat & drink (Food,
+Nightlife, Shopping), and Plan a trip.
