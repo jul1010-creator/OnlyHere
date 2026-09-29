@@ -38,6 +38,7 @@ import { isNeverOwnSite } from "./sourcePolicy";
 // The one hostOf, which the suite holds to one declaration across utils.
 import { hostOf, textHasPrice, menuImagesToRead } from "./pageScan";
 import { haversineKm } from "./helpers";
+import { activeCountry, countryProfile } from "./countries";
 import { branchesOf, branchPoints, branchLabel, cleanBranches, branchCandidates } from "./branches";
 
 // The row type in gemlyx_content. Deliberately NOT in CONTENT_TYPES, for the
@@ -446,7 +447,8 @@ export const gemWhere = (g = {}, { point = null, me = null } = {}) => {
   // which is more than "all over Denmark" and is still true.
   if (!towns.length) {
     const list = branchesOf(g);
-    return list.length > 1 ? `${list.length} shops around Denmark` : "All over Denmark";
+    const land = countryProfile(activeCountry()).name;
+    return list.length > 1 ? `${list.length} shops around ${land}` : `All over ${land}`;
   }
   const where = towns.join(", ");
   const at = typeof point === "function" ? point(towns[0]) : null;

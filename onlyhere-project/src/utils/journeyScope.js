@@ -42,6 +42,7 @@
 // getting none, and nobody has to remember this file exists.
 import { CONTENT_TYPES } from "./sourcePolicy";
 import { haversineKm } from "./helpers";
+import { workingProfile } from "./countries";
 // TYPES_WITH_A_DOOR is the Studio answer to "does this charge admission", and
 // the kind table below is derived from it rather than written out again. See
 // the door section further down for why it lives in this file.
@@ -176,7 +177,13 @@ const point = (c) => `${c.lat},${c.lon}`;
 export const journeyOriginPoint = (type, { townName = "", townCentre = null, destination = null } = {}) => {
   const wants = journeyOriginFor(type);
   if (!wants) return null;
-  if (wants === "origin") return { point: point(TRAVEL_ORIGIN), name: TRAVEL_ORIGIN.name };
+  // The hub of the country being drafted for (Vilnius for a Klaipėda town),
+  // never Copenhagen for a place in another country. Fable's audit, 30 Sep.
+  if (wants === "origin") {
+    const land = workingProfile();
+    const hub = land.hubPoint ? { ...land.hubPoint, name: land.hub } : TRAVEL_ORIGIN;
+    return { point: point(hub), name: hub.name };
+  }
   const name = String(townName || "").trim();
   const lat = Number(townCentre?.lat), lon = Number(townCentre?.lon);
   // No town, or no centre for it. Refusing is the safe direction: a missing

@@ -39,6 +39,7 @@ export const COUNTRY_PROFILES = {
     // Where a visitor usually arrives, and so where a town's journey is
     // measured from. See journeyScope.
     hub: "Copenhagen",
+    hubPoint: { lat: 55.6761, lon: 12.5683 },
   },
   // The Curonian Spit reaches to about 20.95 east at Nida, so the west edge
   // sits at 20.8 to keep Smiltynė and the whole spit inside.
@@ -54,6 +55,7 @@ export const COUNTRY_PROFILES = {
     googleRegion: "LT",
     wikiLanguage: "lt",
     hub: "Vilnius",
+    hubPoint: { lat: 54.6872, lon: 25.2797 },
   },
 };
 

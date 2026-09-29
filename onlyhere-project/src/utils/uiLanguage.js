@@ -86,6 +86,13 @@ export const UI_STRINGS = {
   "nav.tips":        { en: "Tips",            da: "Tips",           de: "Tipps" },
   "nav.gems":        { en: "Cheap gems",      da: "Billige perler", de: "Günstige Perlen" },
   "nav.promotions":  { en: "Promotions",      da: "Tilbud",         de: "Angebote" },
+  // The menu groups, 30 Sep 2026. See utils/navGroups.js.
+  "nav.group.advice":     { en: "Advice",      da: "Råd",           de: "Ratgeber" },
+  "nav.group.activities": { en: "Activities",  da: "Aktiviteter",   de: "Aktivitäten" },
+  "nav.group.gems":       { en: "Gems",        da: "Perler",        de: "Perlen" },
+  "nav.group.places":     { en: "Places",      da: "Steder",        de: "Orte" },
+  "nav.group.eatdrink":   { en: "Eat & drink", da: "Mad og drikke", de: "Essen und Trinken" },
+  "nav.calendar":         { en: "Calendar",    da: "Kalender",      de: "Kalender" },
   // "Attraktionen" rather than "Sehenswürdigkeiten", which is the more usual
   // German word and is eighteen characters in a horizontal bar that already
   // hides itself below 1080px. Both are correct; this one fits.
