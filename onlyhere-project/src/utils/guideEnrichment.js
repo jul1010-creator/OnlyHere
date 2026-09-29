@@ -24,6 +24,7 @@ import { nightlifeStreets } from "../data/nightlifeStreets";
 import { foodSpots } from "../data/food";
 import { detectLegMode, haversineKm, isFerryText } from "./helpers";
 import { containsName, variantsOf, distinctiveWords, fold } from "./danishNames";
+import { workingProfile } from "./countries";
 
 // Looks up a stop name against everything real Gemlyx already knows, so a
 // guide can show real price/hours/type instead of just repeating the AI's
@@ -719,7 +720,9 @@ export const directionsEndpoint = (name, coord, town = "") => {
     return { param: `${coord.lat},${coord.lon}`, fromCoords: true };
   }
   const t = String(town || "").trim();
-  return { param: `${name}${t ? `, ${t}` : ""}, Denmark`, fromCoords: false };
+  // The country the page or the Studio draft is about (Denmark unless told
+  // otherwise), so a Klaipėda stop is not looked up in Denmark.
+  return { param: `${name}${t ? `, ${t}` : ""}, ${workingProfile().name}`, fromCoords: false };
 };
 
 // The companion rule, and the half that makes the above a fix rather than
