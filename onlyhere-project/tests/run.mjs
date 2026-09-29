@@ -278,6 +278,10 @@ writeFileSync(entry, `
   export { journeyUrl, journeyLabel, rpDate, rpTime, RP_BASE } from ${JSON.stringify(join(root, "src/utils/rejseplanen.js"))};
   export { FERRY_ROUTES, crossings, crossingsTo, timetableFerryUrl, RP_CREDIT, GTFS_READ_ON } from ${JSON.stringify(join(root, "src/data/ferryRoutes.js"))};
   export { ferryUrlOf } from ${JSON.stringify(join(root, "src/utils/ferryDoor.js"))};
+  export { nearestBusStop, busStopRow, linesPhrase, arrivalOrBusRow, BUS_STOP_MAX_M } from ${JSON.stringify(join(root, "src/utils/busStop.js"))};
+  export { KLAIPEDA_STOPS, KLAIPEDA_STOPS_READ_ON } from ${JSON.stringify(join(root, "src/data/klaipedaStops.js"))};
+  export { livePromotions, promoCard, untilLabel, PROMO_KINDS } from ${JSON.stringify(join(root, "src/utils/promotions.js"))};
+  export { abroadBriefParts, inventoryBlock, inventoryLine, forLand, landAsk, landRules, sameDayHours, startsFor, INVENTORY_CAP } from ${JSON.stringify(join(root, "src/utils/guideAbroad.js"))};
   export { FROZEN_TRANSPORT, frozenFrom, frozenIn, factsLost, frozenBlock, lostNote } from ${JSON.stringify(join(root, "src/utils/frozenFacts.js"))};
   export { PARTNER_OPENER, PARTNER_INTRO, partnerSections, partnerCount } from ${JSON.stringify(join(root, "src/utils/partnerSheet.js"))};
   export { baseKey, staysIn as stayRunsIn, doorsFor, doorOn, sameBaseLine, nightsLabel } from ${JSON.stringify(join(root, "src/utils/stayDoors.js"))};
@@ -5000,7 +5004,8 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // arrivalGlanceRow reads the walk the route measured at the far end, prints
   // it, and returns null when there is none or it is too long to be how you get
   // there. See the note above ARRIVAL_WALK_LIMIT in utils/journey.js.
-  ok("while attractions still draw one", /arrivalGlanceRow\(item, kind\)/.test(detail));
+  // Batch 163: through arrivalOrBusRow, which falls back to arrivalGlanceRow.
+  ok("while attractions still draw one", /arrivalOrBusRow\(item, kind, here\)/.test(detail));
   ok("and nothing asks for the bare field any more", !/arrivalRow\(item\.nearestStation\)/.test(detail));
 }
 
@@ -9443,7 +9448,8 @@ is("missing licence does not require credit", creditIsRequired({}), false);
 // Terminal" and called it a station.
 {
   const app4 = readFileSync(join(root, "src/App.jsx"), "utf8");
-  ok("the event card asks what the stop IS", /const row = arrivalGlanceRow\(event, "event"\);/.test(app4));
+  // Batch 163: arrivalOrBusRow asks the Klaipėda bus first, then arrivalGlanceRow.
+  ok("the event card asks what the stop IS", /const row = arrivalOrBusRow\(event, "event"\);/.test(app4));
   // The guard moved from the field to the row: a stop nobody measured a route
   // to, or one an hour's walk away, draws nothing rather than drawing a name.
   ok("and draws nothing when the row was not earned", /if \(!row\) return null;/.test(app4));
@@ -17385,8 +17391,9 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   const app7 = readFileSync(join(root, "src/App.jsx"), "utf8");
   // Anchored on the GUARD, because a source-text assertion on the call alone
   // survives the whole block being switched off.
+  // Batch 165: plus OPEN_ABROAD, no account on a Lithuanian page.
   ok("the strip only appears beside something saved",
-     /\{savedGuides\.length > 0 && \(\(\) => \{[\s\S]{0,300}shouldOfferAccount\(\{/.test(app7));
+     /\{savedGuides\.length > 0 && !OPEN_ABROAD && \(\(\) => \{[\s\S]{0,300}shouldOfferAccount\(\{/.test(app7));
   ok("it counts places as well as guides", /saveCount: savedPlaces\.length \+ savedGuides\.length/.test(app7));
   ok("and it is a strip, not a modal", !/shouldOfferAccount[\s\S]{0,400}position: "fixed"/.test(app7));
   ok("dismissing writes it down", /writeStored\(NUDGE_KEY, next\)/.test(app7));
@@ -18315,7 +18322,8 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   const gateAt = app.indexOf('<div className="gxa-topbar"');
   const gate = app.slice(gateAt, app.indexOf("{landingNote &&", gateAt));
   ok("the landing gate was found", gateAt > 0 && gate.length > 500 && gate.length < 8000 && /Sign up/.test(gate));
-  ok("and it reads whether somebody is signed in", /\{userSession \? \(/.test(gate));
+  // Batch 165: plus OPEN_ABROAD, no account on a Lithuanian page.
+  ok("and it reads whether somebody is signed in", /\{OPEN_ABROAD && !userSession \? null : userSession \? \(/.test(gate));
   ok("a signed-in visitor gets one control, not two", /onClick=\{openAccount\}/.test(gate));
   ok("and the pair is only for somebody signed out",
      gate.indexOf("{userSession ? (") < gate.indexOf("Log in"));
@@ -33680,7 +33688,6 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     "/auth/v1/token?grant_type=refresh_token",
     "/auth/v1/token?grant_type=password",
     "/rest/v1/gemlyx_suggestions",
-    "/rest/v1/craft_items?select=*&order=id",
     "/rest/v1/craft_requests",
   ]);
   // AND THE WRITE DOES NOT. A reader may read the notices and may never write
@@ -35736,7 +35743,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("there is a row for it in the menu",
        /\{ id: "problem", label: uiT\("menu\.problem", uiLang\), ico: "bulb", action: "problem" \}/.test(appR));
     ok("and it opens the page with the topic already chosen",
-       /navigate\(`\$\{SUPPORT_PATH\}\?topic=\$\{PROBLEM_TOPIC\}`\)/.test(appR));
+       // Batch 165: plus OPEN_ABROAD, no account on a Lithuanian page.
+       /navigate\(`\$\{SUPPORT_PATH\}\?topic=\$\{PROBLEM_TOPIC\}\$\{countryParam\(PAGE_COUNTRY\)\}`\)/.test(appR));
     // Above Support rather than inside it: they are different acts, and a row
     // somebody has to guess is behind another row is one they do not press.
     ok("above Support rather than hidden inside it",
@@ -36968,7 +36976,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // under Pub Crawl. Naming the owner means a fourth row cannot inherit it
     // either.
     ok("the conversation belongs to Sightseeing by name",
-       /display: detourTab === "sightseeing" \? "block" : "none"/.test(appG));
+       // Batch 164: and not on another country's page, which has PlanAbroadForm.
+       /display: !PAGE_ABROAD && detourTab === "sightseeing" \? "block" : "none"/.test(appG));
     // stripComments, because the sentence explaining the old shape contains the
     // old shape. That is the comment trap this repo has caught twice before: an
     // assertion satisfied by the note describing the bug it guards against.
@@ -37057,7 +37066,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       ok("nothing in it reads as a question about the guide",
          !/\?|interested|looking/i.test(M.addInTitle(4) + " " + M.ADD_IN_SUB));
       ok("the guide puts that title at the foot of a day", /\{addInTitle\(dayNo\)\}/.test(gp));
-      ok("with the line that says Gemlyx will go and look", /\{ADD_IN_SUB\}/.test(gp));
+      // Batch 164: on a Danish guide. Abroad there is no chat to go and look.
+      ok("with the line that says Gemlyx will go and look", /\{abroadGuide \? "Pick what it is short of\. We show what is near\." : ADD_IN_SUB\}/.test(gp));
       ok("and the door at the bottom says what it does, not only where it goes",
          /Ask Gemlyx to add one to day \{dayNo\}/.test(gp));
 
@@ -37534,8 +37544,9 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     const appFx = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
     // Oliver, 26 Sep 2026, replacing that: "just tell the user what the rate
     // is in their own currency.. if it's a Dane, just leave it out."
+    // Batch 164: and nothing on another country's page, whose guide is in euros.
     ok("only the reader's own currency is asked for, and nothing for a Dane",
-       /const fxWanted = wantFx && wantFx !== "DKK" \? \[wantFx\] : \[\];/.test(appFx));
+       /const fxWanted = !PAGE_ABROAD && wantFx && wantFx !== "DKK" \? \[wantFx\] : \[\];/.test(appFx));
     // ONE CALL FOR ALL OF THEM. Asking twice would let a build straddle 16:00
     // CET and stamp two different ECB dates on one line.
     ok("in one request, so every rate shares a publication date",
@@ -43612,7 +43623,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("a category with entries but no ranks still shows them",
        /const fallback = !ranked && pool\.length > 0/.test(appF));
     ok("and the render reads the fallback, not just the ranked rows",
-       /const shown = ranked \? rows : fallback;/.test(appF) && /\{shown\.map\(row => \(/.test(appF));
+       // Batch 165: plus OPEN_ABROAD, no account on a Lithuanian page.
+       /const shown = \(ranked \? rows : fallback\)\.filter\(r => !\(OPEN_ABROAD && r\.account && r\.account\.state === PREF_NO_ACCOUNT\)\);/.test(appF) && /\{shown\.map\(row => \(/.test(appF));
     // THE MESSAGE IS A CLAIM ABOUT HIS LIBRARY and it was false. It may only
     // appear when the pool for that category is genuinely empty.
     ok("and 'nothing published' is only said when nothing is",
@@ -47252,7 +47264,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // is almost nobody, so almost no guide carried the line. Oliver, 24 Sep 2026:
   // "convert it to US dollars and Euro when guide shows."
   ok("one currency, the reader's own, and none for a Dane",
-     /const fxWanted = wantFx && wantFx !== "DKK" \? \[wantFx\] : \[\];/.test(appF) && /if \(fxWanted\.length\) \{/.test(appF));
+     /const fxWanted = !PAGE_ABROAD && wantFx && wantFx !== "DKK" \? \[wantFx\] : \[\];/.test(appF) && /if \(fxWanted\.length\) \{/.test(appF));
   ok("and it is stamped onto the guide", /_fx: fxLine,/.test(appF));
 
   // FAILURE IS SILENCE, NEVER A GUESS. api/ask.js's rule, applied here: a thing
@@ -50440,13 +50452,15 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     const guide = stripComments(readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8"));
     // THE MODAL CASE IS NOT A ROUTE. When the guide is drawn over the chat, the
     // chat is still mounted behind it and closing the overlay is the way back.
+    // Batch 164: backPath is DETOUR_PATH for a Danish guide and the country's
+    // own planner for a guide made abroad.
     ok("the guide's own back closes the overlay when there is one",
-       /onBack \? onBack\(\) : navigate\(DETOUR_PATH\)/.test(guide));
+       /onBack \? onBack\(\) : navigate\(backPath\)/.test(guide) && /const backPath = abroadGuide \? `\$\{homePath\(guideLand\.code\)\}\$\{hashForTab\("ai"\)\}` : DETOUR_PATH;/.test(guide));
     // A guide opened from a link has no overlay and no history inside this app.
     ok("and a button that says back to chat goes to the chat",
        !/onBack \? onBack\(\) : navigate\(-1\)/.test(guide));
     ok("a guide that failed to load offers the chat rather than the front page",
-       /navigate\(DETOUR_PATH\)[\s\S]{0,400}guide\.back/.test(guide));
+       /navigate\(backPath\)[\s\S]{0,400}guide\.back/.test(guide));
   }
   {
     const aff = stripComments(readFileSync(join(root, "src/components/AffiliatesPage.jsx"), "utf8"));
@@ -55018,7 +55032,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // Cheap gems went in after Tips on 21 Sep 2026, which leaves Tips where
     // this line is about: next to Essentials.
     ok("and in the swipe order, next to Essentials",
-      /"home", "essentials", "tips", "gems", "attractions"/.test(app));
+      // Batch 166: Promotions sits between Cheap gems and Attractions.
+      /"home", "essentials", "tips", "gems", "promotions", "attractions"/.test(app));
     // ONE RENDER, TWO TABS. Copying the block is how the two start disagreeing
     // about what a card looks like.
     ok("both tabs are drawn by one block", /\(tab === "essentials" \|\| tab === "tips"\)/.test(app));
@@ -62015,7 +62030,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // would be the fifth copy of a hand-written list, and the one with the
   // omission in it.
   is("every detail page gets the buttons",
-     (appF.match(/<DetailPage windowed=\{entryWindowed\} lang=\{uiLang\} paid=\{hasPaidPlan\(userProfile\)\} signedIn=\{!!userSession\} onNeedAccount=/g) || []).length, 7);
+     // Batch 165: plus OPEN_ABROAD, no account on a Lithuanian page.
+     (appF.match(/<DetailPage windowed=\{entryWindowed\} lang=\{uiLang\} paid=\{OPEN_ABROAD \|\| hasPaidPlan\(userProfile\)\} signedIn=\{OPEN_ABROAD \|\| !!userSession\} onNeedAccount=/g) || []).length, 7);
   is("and none is left without them",
      (appF.match(/<DetailPage /g) || []).length, 7);
 
@@ -65133,7 +65149,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // Ten since the Islands page went in beside Towns on 16 Sep 2026, eleven
     // since Cheap gems went in beside Tips on 21 Sep 2026, twelve since
     // Shopping went in beside Nightlife on 22 Sep 2026.
-    is("every page in the nav is translated", navIds.length, 12);
+    // Batch 166: Promotions sits between Cheap gems and Attractions.
+    is("every page in the nav is translated", navIds.length, 13);
     ok("every nav entry names a key that exists", navIds.every(m => UI_KEYS.includes(`nav.${m[2]}`)));
     ok("and inside NAV_ITEMS the id and the key agree", navIds.every(m => m[1] === m[2]));
     // Across the whole file, every uiT key that is referenced has to exist.
@@ -72247,7 +72264,8 @@ SOURCE: https://www.tripadvisor.com/whatever`;
 
   // ── THE ROW IS NOT THERE WHEN THERE IS NO ACCOUNT ───────────────
   ok("the menu row is spread in only for a session",
-     /\.\.\.\(userSession \? \[\{ id: "problem"/.test(appF));
+     // Batch 165: plus OPEN_ABROAD, no account on a Lithuanian page.
+     /\.\.\.\(userSession \|\| OPEN_ABROAD \? \[\{ id: "problem"/.test(appF));
 
   // ── AND THE PAGE DOES NOT RELY ON THE ROW BEING HIDDEN ──────────
   //
@@ -72255,7 +72273,8 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   // reachable from the dropdown on the page itself. A hidden button is not a
   // gate; it is a button that is hidden.
   ok("the page decides it for itself",
-     /const needsAccount = form\.topic === PROBLEM_TOPIC && !signedIn;/.test(supF));
+     // Batch 165: plus OPEN_ABROAD, no account on a Lithuanian page.
+     /const needsAccount = form\.topic === PROBLEM_TOPIC && !signedIn && !fromOpenCountry;/.test(supF) && /const fromOpenCountry = countryFromParam\(params\.get\("country"\)\) !== DEFAULT_COUNTRY;/.test(supF));
   ok("the submit refuses before it validates anything else",
      /if \(needsAccount\) return;/.test(supF));
   ok("and the button is off while it holds", /disabled=\{sending \|\| needsAccount\}/.test(supF));
@@ -73874,7 +73893,8 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     const pageG = stripComments(readFileSync(join(root, "src/components/CheapGemsPage.jsx"), "utf8"));
     const panelG = stripComments(readFileSync(join(root, "src/components/CheapGemsPanel.jsx"), "utf8"));
     ok("it is a page in the navigation", /\{ id: "gems", label: uiT\("nav\.gems", uiLang\), ico: "tag" \}/.test(appG));
-    ok("beside Tips in the swipe order", /"tips", "gems", "attractions"/.test(appG));
+    // Batch 166: Promotions sits between Cheap gems and Attractions.
+    ok("beside Tips in the swipe order", /"tips", "gems", "promotions", "attractions"/.test(appG));
     is("with its own address", M.TAB_HASH.gems, "cheap-gems");
     ok("it renders the array liveContent fills", /tab === "gems" && <CheapGemsPage rows=\{gems\}/.test(appG));
     ok("the page decides nothing itself", /const narrowed = rows\.filter\(g => gemMatches\(g, \{ category, students, q \}\)\);\s*const view = gemsView\(narrowed, \{ town \}\);/.test(pageG));
@@ -75001,7 +75021,9 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   is("no dash in a Tips string", scan("src/data/essentials.js"), []);
   is("nor in the shop list", scan("src/data/shop.js"), []);
   const appD = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
-  ok("workshops read from craft_items go through the dash rule", /setCraftItems\(data\.map\(d => stripDashesDeep\(/.test(appD));
+  // Batch 162: the craft_items table is no longer read at all (the legacy
+  // workshops were removed), so there is nothing left to put through the rule.
+  ok("the legacy craft_items workshops are no longer fetched", !/rest\/v1\/craft_items/.test(appD));
 }
 
 // ── THE CHAT MAP AND THE PREVIEW, 22 SEP 2026 ───────────────────────
@@ -80011,7 +80033,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("only once the library has loaded", /!found && liveLoaded && !libraryFailed/.test(app));
 
   // Shopping is hidden while there is nothing in it.
-  ok("an empty Shopping tab leaves the nav and the pager", /const hideShopping = liveLoaded && !libraryFailed && !isStudio && shops\.length === 0 && shopPlaces\.length === 0;/.test(app) && /const TAB_ORDER = TAB_ORDER_ALL\.filter\(t => !\(t === "shopping" && hideShopping\) && !hideAbroad\(t\)\);/.test(app) && /\.filter\(item => TAB_ORDER\.includes\(item\.id\)\)/.test(app));
+  ok("an empty Shopping tab leaves the nav and the pager", /const hideShopping = liveLoaded && !libraryFailed && !isStudio && shops\.length === 0 && shopPlaces\.length === 0;/.test(app) && /const TAB_ORDER = TAB_ORDER_ALL\.filter\(t => !\(t === "shopping" && hideShopping\) && !\(t === "promotions" && hidePromotions\) && !hideAbroad\(t\)\);/.test(app) && /\.filter\(item => TAB_ORDER\.includes\(item\.id\)\)/.test(app));
 
   // One search and one filter panel, on every list that has either.
   ok("the filter bar takes a search box and one Filters button", /onSearch/.test(bar) && /searchPlaceholder/.test(bar) && /Filters/.test(bar) && /const Chip = /.test(bar));
@@ -80442,8 +80464,10 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("Danish essentials are taken off another country's page at load", /if \(activeCountry\(\) !== DEFAULT_COUNTRY\) \{\s*\n\s*const keep = essentials\.filter\(e => rowCountry\(e\) === activeCountry\(\)\);/.test(live));
   const app = readFileSync(join(root, "src/App.jsx"), "utf8");
   ok("the page's country is read once, at load", /const PAGE_COUNTRY = activeCountry\(\);/.test(app) && /const HOME_PATH = homePath\(PAGE_COUNTRY\);/.test(app));
-  ok("the planner, the chat and the Danish tips stay off a Lithuanian page", /const NOT_YET_ABROAD = \["ai", "tips"\];/.test(app) && /if \(PAGE_ABROAD\) return null;\s*\n\s*return <AskGemlyx/.test(app) && /\{!PAGE_ABROAD && <button className="gx-topnav-ai"/.test(app));
-  ok("an empty page leaves a Lithuanian menu by itself", /const hideAbroad = \(t\) => PAGE_ABROAD && \(NOT_YET_ABROAD\.includes\(t\) \|\| \(liveLoaded && !libraryFailed && !isStudio && emptyHere\[t\]\)\);/.test(app));
+  // Batch 164: the planner and Tips are on it now; the chat is still not.
+  ok("the chat stays off a Lithuanian page, the planner and Tips do not", /const NOT_YET_ABROAD = \[\];/.test(app) && /if \(PAGE_ABROAD\) return null;\s*\n\s*return <AskGemlyx/.test(app) && /\{<button className="gx-topnav-ai"/.test(app) && /\{!PAGE_ABROAD && \(<>/.test(app));
+  // Batch 162: and Studio, which lives on the planner's page, stays reachable at /lithuania#studio.
+  ok("an empty page leaves a Lithuanian menu by itself, and Studio keeps its page", /const hideAbroad = \(t\) => PAGE_ABROAD && \(\(NOT_YET_ABROAD\.includes\(t\) && !\(t === "ai" && isStudio\)\) \|\| \(liveLoaded && !libraryFailed && !isStudio && emptyHere\[t\]\)\);/.test(app));
   ok("the Danish video and photo stay on Danish pages", /\{!videoError && !PAGE_ABROAD && \(/.test(app) && /background: PAGE_ABROAD \? "linear-gradient/.test(app));
   ok("the Klaipėda demo moved off the town's own address", M.KLAIPEDA_DEMO_PATH === "/lithuania/trips");
   const dp = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
@@ -80474,13 +80498,119 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("and lives in its own list, read by nothing but the Events page", /if \(scale === "Calendar"\) return calendarEvents;/.test(live) && /FESTIVAL_SCALES = \["Major", "Local", "Community", "Calendar"\]/.test(live));
   const app = readFileSync(join(root, "src/App.jsx"), "utf8");
   const calReaders = app.split("\n").filter(l => /calendarEvents/.test(l) && !/^\s*\/\//.test(l));
-  ok("the only readers are the Events page's two lines and the credit", calReaders.every(l => /hasFullCalendar = calendarEvents|\.\.\.calendarEvents\]|calendarEvents\.map\(e => domainOf|import \{ communityEvents, calendarEvents \}/.test(l)) && calReaders.length === 4);
+  ok("the only readers are the Events page's two lines and the credit", calReaders.every(l => /hasFullCalendar = calendarEvents|\.\.\.calendarEvents\]|calendarEvents\.map\(e => domainOf|import \{ communityEvents, calendarEvents \}/.test(l)) && calReaders.length === 5); // Batch 164: the fifth is the planner's inventory, events on the trip's days
   ok("Major and Local are no longer tabs", !/\{ id: "local", label: "Local", ico: "town" \}/.test(app) && /\{ id: "picks", label: "Our picks", ico: "ticket" \}, \{ id: "calendar", label: "Full calendar", ico: "calendar" \}/.test(app));
   ok("and the tabs only show when a full calendar exists", /\{hasFullCalendar && \(\s*\n\s*<div style=\{\{ display: "flex", gap: 0, marginBottom: 16/.test(app));
   ok("Major is a badge now", /event\.__scale === "Major" && <span[^>]*>Worth travelling for<\/span>/.test(app));
   ok("what's on for you filters by day and by kids", /\.filter\(e => !whenDays \|\| eventOnDays\(e, whenDays\)\)/.test(app) && /\.filter\(e => !eventKids \|\| hasEventType\(e, "family"\)\)/.test(app) && /What's on for you/.test(app));
   ok("a calendar row opens the calendar it came from", /if \(!listed\) \{ setEventDetail\(event\); return; \}/.test(app));
   ok("Studio can add rows to the full calendar, in a country", /const \[calTarget, setCalTarget\] = useState\("community"\);/.test(app) && /type: calTarget === "calendar" \? typeWordFor\(`\$\{r\.name\} \$\{r\.desc \|\| ""\}`\) : "Community",/.test(app) && /\.\.\.\(studioCountry !== DEFAULT_COUNTRY \? \{ country: studioCountry \} : \{\}\),/.test(app));
+}
+
+// ── Batch 163: the nearest bus, from Klaipėda's own timetable ──────
+{
+  ok("the stops are an extract, dated", M.KLAIPEDA_STOPS.length > 400 && /^\d{4}-\d{2}-\d{2}$/.test(M.KLAIPEDA_STOPS_READ_ON));
+  ok("every stop has a name, lines and a point with a stops.lt page", M.KLAIPEDA_STOPS.every(([n, l, pts]) => n && l && pts.length && pts.every(p => Number.isFinite(p[0]) && Number.isFinite(p[1]) && p[2])));
+  const castle = M.busStopRow({ lat: 55.7063, lon: 21.1286 });
+  ok("the castle gets a stop, a walk and a live departures link", castle && castle.label === "Nearest Bus Stop" && /about \d+ min walk/.test(castle.value) && /^https:\/\/www\.stops\.lt\/klaipeda\/index\.html#stop\//.test(castle.link.href));
+  is("Copenhagen gets nothing", M.busStopRow({ lat: 55.6761, lon: 12.5683 }), null);
+  is("and a place with no point gets nothing", M.busStopRow(null), null);
+  ok("nothing past the limit", (() => { const s = M.nearestBusStop({ lat: 55.7063, lon: 21.1286 }); return s && s.metres <= M.BUS_STOP_MAX_M; })());
+  is("lines read as words", [M.linesPhrase(["9"]), M.linesPhrase(["1", "8", "15"]), M.linesPhrase(["1", "2", "3", "4", "5", "6", "7"])], ["bus 9", "buses 1, 8 and 15", "buses 1, 2, 3, 4, 5 and 2 more"]);
+  ok("no dash in anything the row says", !/[\u2013\u2014]/.test(castle.value));
+  is("a Danish entry keeps its measured row", M.arrivalOrBusRow({ lat: 55.6761, lon: 12.5683 }, "attraction"), null);
+  const detail = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
+  ok("detail pages ask for the bus first", (detail.match(/arrivalOrBusRow\(item, kind, here\)/g) || []).length === 2 && (detail.match(/busStopRow\(here\),/g) || []).length === 2);
+}
+
+// ── Batch 164: Phase 3, the guide on a Lithuanian page, with no chat ──
+{
+  const LT = { code: "LT", name: "Lithuania", adjective: "Lithuanian" };
+  const DK = { code: "DK", name: "Denmark", adjective: "Danish" };
+  is("a Danish prompt goes through untouched", M.forLand("A Denmark trip in DKK with Danish food", DK), "A Denmark trip in DKK with Danish food");
+  const lt = M.forLand("A Denmark trip in DKK with Danish food, as Danes eat it", LT);
+  ok("abroad the words follow the country", lt.startsWith("A Lithuania trip in EUR with Lithuanian food, as locals eat it"));
+  ok("and the Danish facts are named as examples only", /THIS TRIP IS IN LITHUANIA, NOT DENMARK/.test(lt) && /Rejsekort/.test(lt) && /euros/.test(lt));
+  ok("no dash in the rule it adds", !/[\u2013\u2014]/.test(M.landRules(LT)));
+  let seen = "";
+  const fake = (p, n) => { seen = p; return n; };
+  is("landAsk passes the other arguments through", M.landAsk(fake, LT)("Denmark", 7), 7);
+  ok("and the prompt through forLand", /^Lithuania/.test(seen));
+  is("and hands the Danish call back as it is", M.landAsk(fake, DK), fake);
+
+  is("a cruise stop is hours, not days", M.sameDayHours("2026-10-02T09:00", "2026-10-02T14:30"), 5.5);
+  is("two dates are not a same day visit", M.sameDayHours("2026-10-02T09:00", "2026-10-03T14:30"), null);
+  is("no dates, no brief", M.abroadBriefParts({ land: LT, arrival: "", departure: "" }), []);
+  const cruise = M.abroadBriefParts({ land: LT, arrival: "2026-10-02T09:00", departure: "2026-10-02T14:30", start: "cruise", travelers: "2 adults", counted: 2, interests: ["History"], transport: ["🚶 On foot"] });
+  ok("the cruise brief says the window and the way back", cruise.some(p => /about 5\.5 hours, from 09:00 to 14:30/.test(p) && /45 minutes before 14:30/.test(p)));
+  ok("starts at the terminal", cruise.includes("Starting point: the Klaipėda cruise ship terminal"));
+  ok("and reads like the Danish form", cruise.includes("Interests: History") && cruise.includes("Getting around: On foot") && cruise.some(p => /^Who's traveling: 2 adults \(that is 2 people/.test(p)));
+  ok("a longer stay counts its days", M.abroadBriefParts({ land: LT, arrival: "2026-10-02T09:00", departure: "2026-10-04T18:00", days: 3 }).includes("Exact trip length: 3 days"));
+  ok("no dash anywhere in a brief", !cruise.some(p => /[\u2013\u2014]/.test(p)));
+  is("Lithuania has three ways in", M.startsFor("LT").map(s => s.key), ["cruise", "station", "hotel"]);
+  is("and Denmark keeps its own form", M.startsFor("DK"), []);
+
+  const inv = M.inventoryBlock({ Attraction: [{ name: "Klaipėda Castle Museum", town: "Klaipėda", price: "€5", desc: "The castle's foundations." }], Food: [{ name: "" }] }, LT);
+  ok("the inventory names each place with its kind and town", /- Klaipėda Castle Museum \(Attraction, in Klaipėda, price €5\): The castle's foundations\./.test(inv));
+  ok("and says it is the only list", /the ONLY places a stop may be/.test(inv));
+  is("nothing published, no block", M.inventoryBlock({ Attraction: [] }, LT), "");
+  const many = Array.from({ length: 300 }, (_, i) => ({ name: `Place ${i}` }));
+  is("capped", M.inventoryBlock({ Attraction: many }, LT).split("\n").filter(l => l.startsWith("- ")).length, M.INVENTORY_CAP);
+
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("generateGuide's AI calls follow the page", /const askOpenAI = landAsk\(AI\.askOpenAI, PAGE_LAND\);\s*\n\s*const askClaude = landAsk\(AI\.askClaude, PAGE_LAND\);\s*\n\s*const askPerplexity = landAsk\(AI\.askPerplexity, PAGE_LAND\);/.test(app));
+  ok("and so do the legs and stays", /const enrichGuideDays = async[^\n]*\n[^\n]*\n\s*const askClaude = landAsk\(AI\.askClaude, PAGE_LAND\);/.test(app));
+  ok("the published places join the conversation abroad only", /const convoText = \(overrideConvoText \|\| aiMessages\.slice\(1\)[^\n]*\) \+ abroadInventory;/.test(app) && /const abroadInventory = !PAGE_ABROAD \? "" :/.test(app));
+  ok("research, geocoding and directions ask the right country", /\$\{PAGE_LAND\.name\} official website opening hours prices/.test(app) && /countrycodes=\$\{PAGE_COUNTRY\.toLowerCase\(\)\}/.test(app) && /\$\{departureParam\(legMode, tripDate, dayOffset, atTime\)\}\$\{countryParam\(PAGE_COUNTRY\)\}/.test(app));
+  ok("a guide knows its country", /setGuideModal\(\{ _gid: gid, _country: PAGE_COUNTRY,/.test(app));
+  ok("the form goes straight to the preview", /const buildAbroad = \(\) => \{[\s\S]{0,1600}setGuideModal\("preview"\);/.test(app) && /onBuild=\{buildAbroad\}/.test(app));
+  const gp = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+  ok("an abroad guide has no Local Assist and no Danish costs", /\{!chatOpen && !abroadGuide && \(/.test(gp) && /\{chatOpen && !abroadGuide && \(/.test(gp) && /\{!abroadGuide && <CostsBlock/.test(gp));
+  ok("and its map links name its own country", /\$\{originTown\}, \$\{guideLand\.name\}/.test(gp));
+  ok("and its legs check times on Google transit, not Rejseplanen", /if \(abroadGuide\) \{\s*\n\s*return \(\s*\n\s*<a href=\{routeUrl\(originName, destName, "transit"\)\}/.test(gp));
+  ok("the preview's line reads the form abroad and speaks its country", /aiMessages\.filter\(m => PAGE_ABROAD \|\| !m\.hidden\)/.test(app) && /await landAsk\(askClaude, PAGE_LAND\)\(\s*\n\s*`Based ONLY on this Denmark trip conversation/.test(app));
+  const pv = readFileSync(join(root, "src/components/GuidePreviewScreen.jsx"), "utf8");
+  ok("and the preview offers no chat when none is given", /\{askGemlyx && <button onClick=\{notTheFrame\(\(\) => setAskItem\(place\)\)\}/.test(pv) && /askGemlyx=\{PAGE_ABROAD \? null :/.test(app) && /guideModal === "preview" && !previewChatOpen && !PAGE_ABROAD && \(/.test(app));
+  const ge = readFileSync(join(root, "src/utils/guideEnrichment.js"), "utf8");
+  ok("directions by name ask the working country", /, \$\{workingProfile\(\)\.name\}`, fromCoords: false/.test(ge));
+  const form = readFileSync(join(root, "src/components/PlanAbroadForm.jsx"), "utf8");
+  ok("the form carries no dash and no Danish", !/[\u2013\u2014]/.test(form.replace(/\/\/.*$/gm, "")) && !/Denmark|DKK|sommerhus/i.test(form.replace(/\/\/.*$/gm, "")));
+}
+
+// ── Batch 165: nothing waits behind an account on a Lithuanian page ──
+{
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the switch is the page's country", /const OPEN_ABROAD = PAGE_ABROAD;/.test(app));
+  ok("and the Danish page keeps every gate it had", /paid=\{OPEN_ABROAD \|\| hasPaidPlan\(userProfile\)\}/.test(app) && /signedIn=\{OPEN_ABROAD \|\| !!userSession\}/.test(app));
+}
+
+// ── Batch 166: Gemlyx promotions, every live offer in one list ──────
+{
+  const today = new Date(2026, 8, 30);
+  const rows = {
+    free: [{ id: 1, name: "Castle Museum", city: "Klaipėda", __offer: { text: "20% off entry", until: "2026-12-31" } },
+           { id: 2, name: "Old one", city: "Klaipėda", __offer: { text: "Gone", until: "2026-09-01" } },
+           { id: 3, name: "No end", city: "Klaipėda", __offer: { text: "Forever" } },
+           { id: 4, name: "Nothing", city: "Klaipėda" }],
+    food: [{ id: 9, name: "Bakery", location: "Old Town", __offer: { text: "Free coffee with a pastry", until: "2026-10-05" } }],
+    island: [{ id: 5, name: "Not a kind here", __offer: { text: "x", until: "2026-12-31" } }],
+  };
+  const list = M.livePromotions(rows, today);
+  is("only live offers, ending soonest first", list.map(p => p.name), ["Bakery", "Castle Museum"]);
+  is("each card knows how to open", list.map(p => p._src), ["food", "free"]);
+  is("and where it is", list.map(p => p._where), ["Old Town", "Klaipėda"]);
+  const open = M.promoCard(list[1], { paid: true, today });
+  ok("open, the card says the offer", !open.locked && open.text === "20% off entry" && open.kind === "Attraction");
+  const shut = M.promoCard(list[1], { paid: false, today });
+  ok("locked, it says only that one exists", shut.locked && shut.text === "");
+  is("the end date reads like a date", M.untilLabel("2026-12-31", today), "Until 31 December");
+  is("with the year when it is not this one", M.untilLabel("2027-01-15", today), "Until 15 January 2027");
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the page reads the entries, not a list of its own", /const promotions = livePromotions\(\{/.test(app));
+  ok("out of the menu while nothing is on", /const hidePromotions = liveLoaded && !libraryFailed && !isStudio && promotions\.length === 0;/.test(app));
+  ok("open abroad, locked like the entry page in Denmark", /tab === "promotions" && <PromotionsPage promos=\{promotions\}[^\n]*\n\s*paid=\{OPEN_ABROAD \|\| hasPaidPlan\(userProfile\)\} onOpen=\{\(p\) => openStopDetail\(p\)\}/.test(app));
+  const page = readFileSync(join(root, "src/components/PromotionsPage.jsx"), "utf8");
+  ok("no dash in the page's copy", !/[\u2013\u2014]/.test(page.replace(/\/\/.*$/gm, "")));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
