@@ -211,15 +211,31 @@ export const isResellerUrl = (url) =>
 // never "is this Tiqets". Adding a third agent was a line here rather than an
 // edit in the publish gate, the render and the picker, which is what this
 // comment promised on 15 August and what it cost on 6 September.
+// ── AND A GETYOURGUIDE ENTRY TICKET, WHICH IS A TICKET ──────────────
+// Oliver, 28 Sep 2026, asked whether GetYourGuide's Amalienborg entry ticket
+// (sold by the Royal Danish Collection itself, free cancellation up to 24
+// hours, 10 kr over its own online price) could be the ticket where Tiqets has
+// none: "Yeh." The 9 Sep rule below still stands, a TOUR is not a ticket. This
+// admits only a product whose own address says entry or ticket and says
+// nothing about a tour, and like every Tiqets link it is offered as Tickets
+// only once its page has been read and checked. See utils/ticketOffer.js.
+const GYG_ENTRY_WORDS = /(?:^|-)(?:entry|entrance|admission|ticket|tickets|skip-the-line)(?:-|$)/i;
+export const isGetyourguideTicketUrl = (url) => {
+  if (!isGetyourguideProductUrl(url)) return false;
+  const seg = lastSegment(url).replace(/-t\d+$/i, "");
+  return GYG_ENTRY_WORDS.test(seg) && !TOUR_WORDS.test(seg);
+};
+
 export const isBookableTicketUrl = (url) =>
   (isTiqetsProductUrl(url) && !tiqetsSaysTour(url)) || isTicketmasterEventUrl(url) || isTicketmasterHubUrl(url)
-  || isWegotripTicketUrl(url);
+  || isWegotripTicketUrl(url) || isGetyourguideTicketUrl(url);
 
 // Which agent it is, for the render, which has to reach for the right template.
 export const ticketAgentOf = (url) =>
   isTiqetsProductUrl(url) && !tiqetsSaysTour(url) ? "tiqets"
   : isTicketmasterEventUrl(url) || isTicketmasterHubUrl(url) ? "ticketmaster"
   : isWegotripTicketUrl(url) ? "wegotrip"
+  : isGetyourguideTicketUrl(url) ? "getyourguide"
   : "";
 
 // ── AND GETYOURGUIDE IS NOT ONE OF THEM ─────────────────────────────
@@ -263,8 +279,9 @@ export const ticketAgentOf = (url) =>
 // and it answers "how do I get around" rather than "what shall I do". It has its
 // own place on a day in the guide, so it is refused here rather than printed at
 // the foot of a section as though it were an activity.
+// An entry ticket on GetYourGuide is a ticket, never "a guided walk".
 export const isTourUrl = (url) =>
-  isGetyourguideProductUrl(url) || (isBajabikesProductUrl(url) && !isBajabikesRental(url));
+  (isGetyourguideProductUrl(url) && !isGetyourguideTicketUrl(url)) || (isBajabikesProductUrl(url) && !isBajabikesRental(url));
 
 // ── AND IT IS STORED WITH NOTHING ON IT ─────────────────────────────
 //
@@ -293,6 +310,24 @@ export const isTourUrl = (url) =>
 // tracked link with no disclosure under it. His panel gives every link with both
 // already on, so without this every Baja URL he pastes would be stored tracked.
 const TOUR_QUERY_DROP = ["partner_id", "cmp", "ranking_uuid", "adults", "currency", "curr", "visitor-id", "q", "bb", "a_bid"];
+
+// ── AND A TICKET LINK IS STORED WITHOUT SOMEBODY ELSE'S AD CLICK ────
+// 29 Sep 2026, found reading the live rows: the Copenhagen ZOO ticket link was
+// stored with a Bing ad click on it (utm_*, msclkid), copied from whoever's
+// search found the page. Every reader since has carried that click to Tiqets
+// under our own tracking. Ad and session parameters come off; anything else
+// on the address is kept, for the reason cleanTourUrl gives.
+const AD_QUERY = /^(?:utm_[a-z_]+|msclkid|gclid|gbraid|wbraid|fbclid|dclid|yclid|_ga|_gl|mc_cid|mc_eid|ranking_uuid|visitor-id|partner_id|cmp)$/i;
+export const cleanTicketUrl = (url) => {
+  const raw = String(url || "").trim();
+  if (!/^https?:\/\//i.test(raw)) return raw;
+  try {
+    const u = new URL(raw);
+    for (const k of [...u.searchParams.keys()]) if (AD_QUERY.test(k)) u.searchParams.delete(k);
+    u.search = u.searchParams.toString();
+    return u.toString();
+  } catch { return raw; }
+};
 
 export const cleanTourUrl = (url) => {
   const raw = String(url || "").trim();

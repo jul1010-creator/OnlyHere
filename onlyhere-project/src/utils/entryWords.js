@@ -145,6 +145,7 @@ const GLANCE = {
   "Book on Tiqets":       { da: "Køb på Tiqets",       de: "Auf Tiqets buchen" },
   "Book on Ticketmaster": { da: "Køb på Ticketmaster", de: "Auf Ticketmaster buchen" },
   "Book on WeGoTrip":     { da: "Køb på WeGoTrip",     de: "Auf WeGoTrip buchen" },
+  "Book on GetYourGuide": { da: "Køb på GetYourGuide", de: "Auf GetYourGuide buchen" },
   // ── AND THE TOURS ROW, WHICH IS NOT THE TICKETS ROW ─────────────
   //
   // Oliver, 9 Sep 2026, asked what to do about Tiqets and GetYourGuide covering
@@ -211,6 +212,7 @@ const BOOK_ON = {
   tiqets: "Book on Tiqets",
   ticketmaster: "Book on Ticketmaster",
   wegotrip: "Book on WeGoTrip",
+  getyourguide: "Book on GetYourGuide",
 };
 
 export const BOOK_LABELS = Object.values(BOOK_ON);

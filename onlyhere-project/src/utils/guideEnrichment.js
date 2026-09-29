@@ -117,6 +117,9 @@ export const placeCoords = (row) => {
 // "Samsø" is the island, and a stop that merely SITS on Samsø must not match
 // the island row and be pinned to its harbour.
 const TOWN_ROW = (p) => p?._src === "town" || p?._src === "island";
+// Words that turn a place's name into the same place's longer name.
+const SAME_PLACE_WORDS = new Set(["the", "gardens", "garden", "have", "haven", "museum", "museet", "castle", "slot", "palace", "palae", "park", "parken", "resort", "zoo", "and", "og", "of", "tickets", "entry", "visit"]);
+
 export const lookupRealPlace = (name) => {
   if (!name) return null;
   const pools = [
@@ -143,9 +146,24 @@ export const lookupRealPlace = (name) => {
   // this is a Danish-letter-aware exact match without a second comparison rule.
   const narrowing = pools.filter(p => containsName(name, p.name));
   const exact = narrowing.filter(p => containsName(p.name, name));
-  if (exact.length) return exact.sort((a, b) => String(b.name).length - String(a.name).length)[0];
+  // WHICH TIER ANSWERED rides on the row, 29 Sep 2026 (Fable's review): a stop
+  // "Tivoli Friheden" in Aarhus narrows to the Tivoli row in Copenhagen, which
+  // is fine for "is there an entry near this name" and wrong for "sell a
+  // ticket for this stop". The costs list refuses a narrowed answer.
+  if (exact.length) return { ...exact.sort((a, b) => String(b.name).length - String(a.name).length)[0], _match: "exact" };
   const narrowed = narrowing.filter(p => !TOWN_ROW(p));
-  if (narrowed.length) return narrowed.sort((a, b) => String(b.name).length - String(a.name).length)[0];
+  if (narrowed.length) {
+    const best = narrowed.sort((a, b) => String(b.name).length - String(a.name).length)[0];
+    // "Tivoli Gardens" for the Tivoli row is the same place, and a guide
+    // writes it that way all the time; "Tivoli Friheden" is another park in
+    // another city. The difference is what is left of the stop's name once
+    // the row's is taken out: words that name no place (gardens, museum,
+    // castle) or the row's own town leave it the same place.
+    const words = (v) => fold(v).split(/[^a-z0-9]+/).filter(Boolean);
+    const own = new Set([...words(best.name), ...words(best.city || best.town || best.location || "")]);
+    const left = words(name).filter(w => !own.has(w));
+    return { ...best, _match: left.every(w => SAME_PLACE_WORDS.has(w)) ? "exact" : "narrow" };
+  }
   // NARROWING ONLY. Towns stay in the widening tier on purpose, and the two
   // directions are why: narrowing means the stop is MORE specific than the town
   // it names, which is the bug above. Widening means the stop is LESS specific
@@ -154,7 +172,7 @@ export const lookupRealPlace = (name) => {
   // with the town is right. Dropping towns here too was tried and no assertion
   // could be written that justified it, which is its own answer.
   const widening = pools.filter(p => containsName(p.name, name));
-  if (widening.length) return widening.sort((a, b) => String(a.name).length - String(b.name).length)[0];
+  if (widening.length) return { ...widening.sort((a, b) => String(a.name).length - String(b.name).length)[0], _match: "wide" };
   return null;
 };
 

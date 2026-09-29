@@ -73,7 +73,7 @@ writeFileSync(entry, `
   export { WEGOTRIP_DK, WEGOTRIP_TOWN_PAGE, CHECKED_ON as WEGOTRIP_CHECKED_ON } from ${JSON.stringify(join(root, "src/data/wegotrip.js"))};
   export { TAB_HASH, hashForTab, tabForHash, isEntryHash, ownsTheAddress, STUDIO_HASH } from ${JSON.stringify(join(root, "src/utils/tabUrl.js"))};
   export { venueCore, venueMentions, venueQuote, venueVerdict, venueVia, describeVenue, VENUE_MIN_MENTIONS, VENUE_MIN_MENTIONS_NO_TOWN, VENUE_MAX_KM, NO_NAME as V_NO_NAME, NOT_NAMED as V_NOT_NAMED, TOO_FAR as V_TOO_FAR, IS_AN_EVENT as V_IS_AN_EVENT, OK as V_OK } from ${JSON.stringify(join(root, "src/utils/venueMatch.js"))};
-  export { wrongEdition, urlYears, editionYearOf, isTiqetsProductUrl, tiqetsPageKind, ticketMatches, pickTicketUrl, describeTicketSearch, ticketQuery, ticketQueries, isBookableTicketUrl, ticketAgentOf, isTicketmasterEventUrl, isTicketmasterHubUrl, isWegotripTicketUrl, ticketUrlSaysElsewhere, ticketmasterVenuePhrase, ticketIsInDenmark, reviewPastedTicketUrl, ticketUrlIsASubEvent, MAX_TICKET_TOWN_KM, sameShop, priceSourceHost, isTourUrl, cleanTourUrl, typeHasAdmission, TICKET_FIELD, TOUR_FIELD, TOUR_TYPES, tiqetsSaysTour, isResellerUrl } from ${JSON.stringify(join(root, "src/utils/ticketLink.js"))};
+  export { wrongEdition, urlYears, editionYearOf, isTiqetsProductUrl, tiqetsPageKind, ticketMatches, pickTicketUrl, describeTicketSearch, ticketQuery, ticketQueries, isBookableTicketUrl, ticketAgentOf, isTicketmasterEventUrl, isTicketmasterHubUrl, isWegotripTicketUrl, ticketUrlSaysElsewhere, ticketmasterVenuePhrase, ticketIsInDenmark, reviewPastedTicketUrl, ticketUrlIsASubEvent, MAX_TICKET_TOWN_KM, sameShop, priceSourceHost, isTourUrl, cleanTourUrl, typeHasAdmission, TICKET_FIELD, TOUR_FIELD, TOUR_TYPES, tiqetsSaysTour, isResellerUrl, cleanTicketUrl, isGetyourguideTicketUrl } from ${JSON.stringify(join(root, "src/utils/ticketLink.js"))};
   export { dayStart, dayEnd, dayWithin, dayKey, dayPlus, dayLabel, eventLastDay } from ${JSON.stringify(join(root, "src/utils/calendarDay.js"))};
   export { essentials as ESSENTIALS_FOR_TEST } from ${JSON.stringify(join(root, "src/data/essentials.js"))};
   export { EDITABLE_TYPES, typeOf, isEditable, blockText, withBlockText, editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict, MAX_EDIT_LOG } from ${JSON.stringify(join(root, "src/utils/bodyEdit.js"))};
@@ -383,7 +383,7 @@ writeFileSync(entry, `
   export { describeGuide, guideLanguageMix, MIN_PLAIN_WORDS, guideProseOf, proseAt, writeProseAt } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { usableRuns } from ${JSON.stringify(join(root, "src/utils/runLog.js"))};
   export { alertKey, describeWeatherChange, unseenAlerts, usableSeen, seenAlerts, markAlertSeen, alertCountLine, SEEN_KEY, MAX_SEEN } from ${JSON.stringify(join(root, "src/utils/weatherAlerts.js"))};
-  export { classifyTiqetsText, productTitles, placeWords, titleKind, cleanTicketOffer, offerSellsTheDoor, ticketOfferLine, TICKET_OFFER_KINDS, refundFromText, entryProductUrl, withProductRefund, tiqetsReason, officialSiteLabel } from ${JSON.stringify(join(root, "src/utils/ticketOffer.js"))};
+  export { classifyTiqetsText, productTitles, placeWords, titleKind, cleanTicketOffer, offerSellsTheDoor, ticketOfferLine, TICKET_OFFER_KINDS, refundAndWords, entryProductUrl, withProductRefund, tiqetsReason, partnerReason, partnerPitchFits, officialSiteLabel, classifyGetYourGuideText, readTicketCheck, mergeTicketCheck, ticketCheckPrompt, offerIsTheDoor, sameLink } from ${JSON.stringify(join(root, "src/utils/ticketOffer.js"))};
   export { shortLabel, LABEL_MAX } from ${JSON.stringify(join(root, "src/utils/cardLine.js"))};
   export { tierRank } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { distanceLine } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
@@ -27940,7 +27940,9 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     is("and a ticket page is not", M.isTourUrl("https://www.tiqets.com/en/x-p1/"), false);
     is("so it may not be stored as a ticket link", M.isBookableTicketUrl(GYG), false);
     is("and the ticket render does not claim it", M.ticketAgentOf(GYG), "");
-    is("nor does it wear a Book tickets label of its own", M.bookLabel("getyourguide"), "Book tickets");
+    // 28 Sep 2026: a GetYourGuide ENTRY ticket is a ticket (Amalienborg, "Yeh"),
+    // so the agent has its own label now. The activity above still is not one.
+    is("the agent has its own label, used only for an entry ticket", M.bookLabel("getyourguide"), "Book on GetYourGuide");
     // The row it does get, named the way the self-guided walk above it is: two
     // adjacent rows naming a merchant two different ways reads as an accident.
     is("the tours row is translated", M.entryWord("Tours", "da"), "Ture");
@@ -34243,7 +34245,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // exact position the Chicago link was accepted from: an address and nothing
   // else.
   ok("the unreadable-page fallback checks the country too",
-     /unreadTicketUrls\.find\(u => !ticketUrlSaysElsewhere\(u, draftTown\)\)/.test(appT));
+     /unreadTicketUrls\.find\(u => !ticketUrlSaysElsewhere\(u, draftTown\)( && [^)]*\)[^)]*\)[^)]*\))?/.test(appT));
   ok("the picker is finally called", /const picked = pickTicketUrl\(candidates, \{ name, town: draftTown, where: /.test(appT));
   ok("over the pages this run already fetched",
      /Object\.keys\(pagesByUrl\)\.map\(u => \(\{ url: u, snippet:/.test(appT));
@@ -53787,6 +53789,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       __priceSource: { url: "https://cphdistortion.dk/billetter", host: "cphdistortion.dk", price: "450 DKK", at: "2026-08-20" } },
     "Rosenborg Slot": { _src: "free",
       ticketUrl: "https://www.tiqets.com/en/copenhagen-attractions/rosenborg-castle-tickets-p123456", ticketStatus: "on_sale",
+      // Batch 154: the guide sells a Tiqets link only once its page was checked as an entry ticket.
+      __ticketOffer: { kind: "entry", url: "https://www.tiqets.com/en/copenhagen-attractions/rosenborg-castle-tickets-p123456" },
       __priceSource: { url: "https://www.tiqets.com/en/copenhagen-attractions/rosenborg-castle-tickets-p123456", host: "tiqets.com", price: "145 DKK", at: "2026-08-19T09:12:44.000Z" } },
     "Nationalmuseet": { _src: "free", ticketStatus: "free" },
     "Louisiana": { _src: "free", ticketUrl: "https://www.tiqets.com/en/x-p9999", ticketStatus: "sold_out",
@@ -53972,6 +53976,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     const rows = {
       "Wow Park": { _src: "free", ticketStatus: "on_sale",
         ticketUrl: "https://www.tiqets.com/en/billund-attractions/wow-park-p1026717",
+        // Batch 154: a Tiqets link in a guide needs its page checked as an entry ticket.
+        __ticketOffer: { kind: "entry", url: "https://www.tiqets.com/en/billund-attractions/wow-park-p1026717" },
         ticketsGlance: "Day ticket from DKK 199 online for ages 3+",
         __priceSource: { url: "https://wowpark.dk/", host: "wowpark.dk", price: "199-199", at: "2026-09-07T20:38:31.535Z" } },
     };
@@ -53988,6 +53994,14 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // 2026-09-07" above a Tiqets checkout has been told both shops, which is
     // the whole of what the vanished link was protecting them from.
     ok("and a checkout to press", /tiqets\.com/.test(line.href));
+    // And the reverse, batch 154: the same row with no checked answer, or with
+    // Amalienborg's answer (a guided tour), offers nothing to press.
+    for (const [why, offer] of [["unchecked", undefined], ["a tour", { kind: "tour", url: rows["Wow Park"].ticketUrl }], ["another link's answer", { kind: "entry", url: "https://www.tiqets.com/en/x-p1" }]]) {
+      const bare = costLines({ guide: { days: [{ day: 1, stops: [{ name: "Wow Park" }] }] }, rowFor: () => ({ ...rows["Wow Park"], __ticketOffer: offer }), today: new Date("2026-09-08T09:00:00Z") }).find(l => l.name === "Wow Park");
+      ok(`no checkout for ${why}`, !bare?.href);
+    }
+    const narrowed = costLines({ guide: { days: [{ day: 1, stops: [{ name: "Wow Park" }] }] }, rowFor: () => ({ ...rows["Wow Park"], _match: "narrow" }), today: new Date("2026-09-08T09:00:00Z") }).find(l => l.name === "Wow Park");
+    ok("and none for a row found by a looser name than the stop's", !narrowed?.href);
     // Nothing is sold out, cancelled or off their dates, so nothing is refused
     // either: saying "sold out" over a live ticket would be false.
     is("and it is not dressed up as a refusal", line.refused, "");
@@ -56253,6 +56267,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       __priceSource: { url: "https://cphdistortion.dk/billetter", host: "cphdistortion.dk", price: "450 DKK", at: "2026-08-20" } },
     "Rosenborg Slot": { _src: "free",
       ticketUrl: "https://www.tiqets.com/en/copenhagen-attractions/rosenborg-castle-tickets-p123456", ticketStatus: "on_sale",
+      // Batch 154: the guide sells a Tiqets link only once its page was checked as an entry ticket.
+      __ticketOffer: { kind: "entry", url: "https://www.tiqets.com/en/copenhagen-attractions/rosenborg-castle-tickets-p123456" },
       __priceSource: { url: "https://www.tiqets.com/en/copenhagen-attractions/rosenborg-castle-tickets-p123456", host: "tiqets.com", price: "145 DKK", at: "2026-08-19T09:12:44.000Z" } },
     "Nationalmuseet": { _src: "free", ticketStatus: "free" },
     "Møns Klint": { _src: "free",
@@ -70012,9 +70028,9 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   // ── AND THE PANEL EXISTS AND PRINTS BOTH ADDRESSES ──────────────
   // The whole ask was "so I can test if it got it right", which means the
   // tracked address has to be on screen as something to press.
-  ok("Studio has the paste field", /const applyTicketPaste = \(\) => \{/.test(appT));
+  ok("Studio has the paste field", /const applyTicketPaste = (?:async )?\(\) => \{/.test(appT));
   ok("and it writes through studioDraftText, which is what Publish reads",
-     /applyTicketPaste[\s\S]{0,1400}setStudioDraftText\(JSON\.stringify\(draft, null, 2\)\)/.test(appT));
+     /applyTicketPaste[\s\S]{0,4000}setStudioDraftText\(JSON\.stringify\(draft, null, 2\)\)/.test(appT));
   // ── AND IT WRITES THE FIELD THE VERDICT NAMES ───────────────────
   // Not ticketUrl, since 9 Sep 2026: a GetYourGuide activity is a tour and lands
   // on tourUrl. The Studio must not be the thing deciding which, or the answer
@@ -79975,82 +79991,156 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
 }
 
 
-// ── Batch 151: what a Tiqets page sells ───────────────────────────────
-// Oliver, 28 Sep 2026: "recommending Amalienborg through Getyourguide or zoo
-// through Tiqets, is bad in the sense that it is 10 kr pricier. However, some
-// of them do include packages that make it cheaper and have refunding."
-// The titles below are the ones read off the live Tiqets pages that day.
+// ── Batches 151 to 154: what a partner ticket page sells, checked ─────
+// Oliver, 28 Sep 2026: "The Amalienborg Slot one must NOT happen. So if AI has
+// to go through the affiliate link and compare with its own website, then do
+// that." And: "make sure that there actually is a 24-hour cancellation... these
+// affiliates has to be fact-checked." The titles and sentences below are the
+// ones read off the live Tiqets and GetYourGuide pages that day.
 {
-  const md = (titles) => titles.map(t => `![](x.jpg) Attraction Passes\n### [${t}](https://www.tiqets.com/x)\nFrom $20`).join("\n");
+  const md = (titles) => `# Amalienborg Palace tickets\n` + titles.map(t => `![](x.jpg) Attraction Passes\n### [${t}](https://www.tiqets.com/x)\nFrom $20`).join("\n");
   const plain = (titles) => "Tiqets Log in Copenhagen attractions Amalienborg Palace tickets " + titles.map(t => `${t} Duration: 1h 30mins From $113.86 4.5`).join(" ") + " Frequently asked questions What is it? A palace.";
   const PAGES = {
-    amalienborg: ["Amalienborg Slot", "https://www.tiqets.com/en/amalienborg-palace-tickets-l259028", ["Amalienborg Palace: Guided Tour", "Copenhagen: Politically Incorrect Intro Tour"], "tour"],
-    kronborg: ["Kronborg Castle", "https://www.tiqets.com/en/kronborg-castle-tickets-l160792/", ["Copenhagen Card - DISCOVER: 80+ Attractions incl. Tivoli Gardens + Transport", "Kronborg Castle: Entry Ticket", "Helsingør, Lund & Malmö: Day Tour from Copenhagen + Ferry Ride", "Tivoli Gardens + Kronborg Castle"], "entry"],
-    experimentarium: ["Experimentarium", "https://www.tiqets.com/en/experimentarium-tickets-l213277", ["Copenhagen Card - DISCOVER: 80+ Attractions incl. Tivoli Gardens + Transport", "Copenhagen City Hall + Copenhagen Card - DISCOVER"], "card"],
-    louisiana: ["Louisiana Museum of Modern Art", "https://www.tiqets.com/en/louisiana-tickets-l213275", ["Copenhagen Card - DISCOVER: 80+ Attractions incl. Tivoli Gardens + Transport"], "card"],
-    zoo: ["Copenhagen ZOO", "https://www.tiqets.com/en/copenhagen-zoo-tickets-l147099/", ["Copenhagen ZOO: Skip The Line Ticket", "Copenhagen ZOO + Experimentarium: Entry Ticket"], "entry"],
-    legoland: ["Legoland", "https://www.tiqets.com/en/legoland-billund-resort-tickets-l181747", ["LEGOLAND® Billund Resort: 1-Day Ticket with All Rides Access", "Givskud Zoo + LEGOLAND® 1-Day Ticket"], "entry"],
+    amalienborg: ["Amalienborg Slot", ["Amalienborg Palace: Guided Tour", "Copenhagen: Politically Incorrect Intro Tour"], "tour"],
+    kronborg: ["Kronborg Castle", ["Copenhagen Card - DISCOVER: 80+ Attractions incl. Tivoli Gardens + Transport", "Kronborg Castle: Entry Ticket", "Helsingør, Lund & Malmö: Day Tour from Copenhagen + Ferry Ride", "Tivoli Gardens + Kronborg Castle"], "entry"],
+    experimentarium: ["Experimentarium", ["Copenhagen Card - DISCOVER: 80+ Attractions incl. Tivoli Gardens + Transport", "Copenhagen City Hall + Copenhagen Card - DISCOVER"], "card"],
+    louisiana: ["Louisiana Museum of Modern Art", ["Copenhagen Card - DISCOVER: 80+ Attractions incl. Tivoli Gardens + Transport"], "card"],
+    zoo: ["Copenhagen ZOO", ["Copenhagen ZOO: Skip The Line Ticket", "Copenhagen ZOO + Experimentarium: Entry Ticket"], "entry"],
+    legoland: ["Legoland", ["LEGOLAND® Billund Resort: 1-Day Ticket with All Rides Access", "Givskud Zoo + LEGOLAND® 1-Day Ticket"], "entry"],
   };
-  for (const [key, [name, url, titles, want]] of Object.entries(PAGES)) {
-    is(`${key}: read off the markdown copy`, M.classifyTiqetsText(md(titles), { name, url })?.kind, want);
-    is(`${key}: and off the plain text copy`, M.classifyTiqetsText(plain(titles), { name, url })?.kind, want);
+  for (const [key, [name, titles, want]] of Object.entries(PAGES)) {
+    is(`${key}: read off the markdown copy`, M.classifyTiqetsText(md(titles), { name })?.kind, want);
+    is(`${key}: and off the plain text copy`, M.classifyTiqetsText(plain(titles), { name })?.kind, want);
   }
-  ok("a combo is noticed as a combo", M.classifyTiqetsText(md(PAGES.kronborg[2]), { name: "Kronborg Castle", url: PAGES.kronborg[1] }).combos === true);
-  // Batch 152: refunds come off the ticket's own page, in its own words. The
-  // sentences are the ones Tiqets printed on 28 Sep 2026.
-  is("the three answers a ticket page gives", [
-    M.refundFromText("Cancellation is possible until 23:59 on the day before your visit"),
-    M.refundFromText("Cancel for free until 24 hours before your visit date and get a full refund"),
-    M.refundFromText("Get a full refund if you select a refundable ticket during checkout and cancel until 23:59 the day before your visit."),
-    M.refundFromText("This ticket is nonrefundable. Rescheduling is not possible for this ticket."),
-    M.refundFromText("Kronborg is a castle."),
-  ], ["free", "free", "option", "none", ""]);
-  const venue = `### [Kronborg Castle: Entry Ticket](https://www.tiqets.com/en/helsingr-attractions-c65326/tickets-for-kronborg-castle-p991370/?partner=x)\n### [Tivoli Gardens + Kronborg Castle](https://www.tiqets.com/en/x-p1/)`;
-  is("the ticket page is the one that sells the door", M.entryProductUrl(venue, { name: "Kronborg Castle", url: PAGES.kronborg[1] }), "https://www.tiqets.com/en/helsingr-attractions-c65326/tickets-for-kronborg-castle-p991370/");
-  is("and a link that is already a ticket page is its own", M.entryProductUrl("", { url: "https://www.tiqets.com/en/c-c1/tickets-for-x-p9/" }), "https://www.tiqets.com/en/c-c1/tickets-for-x-p9/");
-  is("nonrefundable on the ticket page clears it", M.withProductRefund({ kind: "entry", refund: "free", combos: true }, "This ticket is nonrefundable").refund, "");
-  is("the venue page alone claims nothing", M.classifyTiqetsText(md(PAGES.zoo[2]), { name: "Copenhagen ZOO" }).refund, "");
-  is("a page with nothing on it says nothing", M.classifyTiqetsText("", { name: "X" }), null);
-  ok("Amalienborg meets Amalienborg Palace on its own name", M.placeWords("Amalienborg Slot", PAGES.amalienborg[1]).includes("amalienborg") && !M.placeWords("Amalienborg Slot").includes("slot"));
-  is("a stored offer outside the four is dropped, and the old cancel flag still reads", [M.cleanTicketOffer({ kind: "ticket" }), M.cleanTicketOffer({ kind: "tour", cancel: true }), M.cleanTicketOffer({ kind: "entry", refund: "maybe" })], [null, { kind: "tour", refund: "free", combos: false }, { kind: "entry", refund: "", combos: false }]);
-  ok("a tour or a card is never the door, and an unread page is not refused", !M.offerSellsTheDoor({ kind: "tour" }) && !M.offerSellsTheDoor({ kind: "card" }) && M.offerSellsTheDoor(null) && M.offerSellsTheDoor({ kind: "combo" }));
-  // "currently tivoli is cheaper on tiqets than on tivoli's own site". No price claim either way.
-  ok("no line says which is cheaper", ["en", "da", "de"].every(l => !/dearer|cheaper|dyrere|billigere|teurer|günstiger/i.test(M.ticketOfferLine({ kind: "entry", refund: "free", combos: true }, { lang: l }))));
-  is("what Tiqets adds, in its own terms", M.ticketOfferLine({ kind: "entry", refund: "free", combos: true }), "Also on Tiqets: free cancellation up to a day before and combo deals on other sights");
-  is("a refundable option is never called free", M.ticketOfferLine({ kind: "entry", refund: "option" }), "Also on Tiqets: a refundable ticket you can pick at checkout");
-  is("nothing extra, nothing said", M.ticketOfferLine({ kind: "entry" }), "Also on Tiqets");
-  is("a tour says tour", M.ticketOfferLine({ kind: "tour" }), "Guided tour on Tiqets");
-  is("a card says card", M.ticketOfferLine({ kind: "card" }, { lang: "da" }), "Med i Copenhagen Card, som sælges på Tiqets");
-  const dash = (s) => /[—–]| - /.test(s);
-  ok("no dashes in any line a reader sees", ["en", "da", "de"].every(l => ["entry", "tour", "card"].every(k => ["free", "option"].every(r => !dash(M.ticketOfferLine({ kind: k, refund: r, combos: true }, { lang: l }))))));
+  ok("the page's own H1 saying 'tickets' is never read as a product", M.classifyTiqetsText(md(PAGES.amalienborg[1]), { name: "Amalienborg Slot" }).kind === "tour");
+  ok("a combo is noticed as a combo", M.classifyTiqetsText(md(PAGES.kronborg[1]), { name: "Kronborg Castle" }).combos === true);
+  // Fable, 29 Sep: a title naming the place with no ticket word was assumed to be the door.
+  is("a title that says neither ticket nor tour counts for nothing", M.titleKind("Copenhagen Royal Palaces Experience", M.placeWords("Amalienborg Slot")), "");
+  ok("and the needle is the entry's own name, not the page's address", M.placeWords("Amalienborg Slot").join() === "amalienborg");
 
-  const detail = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
-  ok("the entry page reads the offer only for Tiqets", /const ticketOffer = ticketAgent === "tiqets" \? cleanTicketOffer\(item\?\.__ticketOffer\) : null;/.test(detail));
-  ok("a tour or a card never becomes the Tickets row", /const bookRow = ticketHref && ticketSellsDoor/.test(detail));
-  // "Maybe we should just add both links? For people to decide themselves?"
-  ok("with a site of its own, both links side by side", /const showTicketPair = ticketAgent === "tiqets" && ticketSellsDoor && hasDirectSite;/.test(detail) && /data-testid="ticket-pair"/.test(detail) && /\{!showTicketPair && \(kind === "free" \|\| kind === "event"\) && externalHref\(item\.website\)/.test(detail));
-  ok("a tour or a card is the quieter line, never Tickets", /if \(ticketAgent === "tiqets" && !ticketSellsDoor\)/.test(detail) && /data-testid="tiqets-second"/.test(detail));
-  ok("and the reason sits under the pair and under a lone Tiqets button", (detail.match(/tiqetsReason\(ticketOffer, \{ lang \}\)/g) || []).length === 2);
+  // Refunds, only from the ticket's own page, with the words that said so.
+  is("the three answers a ticket page gives", [
+    M.refundAndWords("Cancellation is possible until 23:59 on the day before your visit").refund,
+    M.refundAndWords("Cancel up to 24 hours in advance for a full refund").refund,
+    M.refundAndWords("Get a full refund if you select a refundable ticket during checkout and cancel until 23:59 the day before your visit.").refund,
+    M.refundAndWords("This ticket is nonrefundable. Rescheduling is not possible for this ticket.").refund,
+    M.refundAndWords("Kronborg is a castle.").refund,
+  ], ["free", "free", "option", "none", ""]);
+  is("and the sentence is kept", M.refundAndWords("Free cancellation. Cancel up to 24 hours in advance for a full refund. Reserve now").refundSaid, "Free cancellation");
+  is("the venue page alone claims nothing, even with a badge on it", M.classifyTiqetsText(md(PAGES.zoo[1]) + "\nFree cancellation", { name: "Copenhagen ZOO" }).refund, "");
+  is("nonrefundable on the ticket page is kept as none", M.withProductRefund({ kind: "entry", refund: "", combos: true }, "This ticket is nonrefundable").refund, "none");
+  const venue = `### [Kronborg Castle: Entry Ticket](https://www.tiqets.com/en/helsingr-attractions-c65326/tickets-for-kronborg-castle-p991370/?partner=x)\n### [Tivoli Gardens + Kronborg Castle](https://www.tiqets.com/en/x-p1/)`;
+  is("the ticket page is the one that sells the door", M.entryProductUrl(venue, { name: "Kronborg Castle", url: "https://www.tiqets.com/en/kronborg-castle-tickets-l160792/" }), "https://www.tiqets.com/en/helsingr-attractions-c65326/tickets-for-kronborg-castle-p991370/");
+  is("and a link that is already a ticket page is its own", M.entryProductUrl("", { url: "https://www.getyourguide.com/copenhagen-l12/copenhagen-amalienborg-palace-museum-entry-ticket-t743612/" }), "https://www.getyourguide.com/copenhagen-l12/copenhagen-amalienborg-palace-museum-entry-ticket-t743612/");
+
+  // GetYourGuide: an entry ticket is a ticket, a tour stays a tour.
+  const GYG_T = "https://www.getyourguide.com/copenhagen-l12/copenhagen-amalienborg-palace-museum-entry-ticket-t743612/";
+  const GYG_TOUR = "https://www.getyourguide.com/copenhagen-l12/amalienborg-palace-nyhavn-frederiks-kirke-copenhagen-tour-t764334";
+  ok("a GetYourGuide entry ticket is bookable and its agent is named", M.isBookableTicketUrl(GYG_T) && M.ticketAgentOf(GYG_T) === "getyourguide");
+  ok("a GetYourGuide tour is not a ticket, and stays a tour", !M.isBookableTicketUrl(GYG_TOUR) && M.ticketAgentOf(GYG_TOUR) === "" && M.isTourUrl(GYG_TOUR) && !M.isTourUrl(GYG_T));
+  is("the GetYourGuide page read as what it sells", M.classifyGetYourGuideText("# Copenhagen: Amalienborg Palace Museum Entry Ticket\nFree cancellation", { name: "Amalienborg Slot", url: GYG_T })?.kind, "entry");
+  is("and a product about another place is nothing", M.classifyGetYourGuideText("# Copenhagen: Rosenborg Castle Entry Ticket", { name: "Amalienborg Slot", url: "https://www.getyourguide.com/copenhagen-l12/copenhagen-rosenborg-castle-entry-ticket-t1/" }), null);
+
+  // The AI check, read strictly.
+  const page = "Amalienborg Palace: Guided Tour. Duration 1h 30mins. Cancel up to 24 hours in advance for a full refund.";
+  const ai = (o) => M.readTicketCheck(JSON.stringify(o), page);
+  is("a refund the model reports counts only when its quote is on the page", [
+    ai({ samePlace: true, sells: "tour", refund: "free", refundQuote: "Cancel up to 24 hours in advance for a full refund", confidence: "high" }).refund,
+    ai({ samePlace: true, sells: "tour", refund: "free", refundQuote: "Free cancellation up to 48 hours before", confidence: "high" }).refund,
+  ], ["free", ""]);
+  ok("a model reply that is not JSON is no verdict", M.readTicketCheck("I think it is fine.", page) === null);
+  ok("the prompt carries both pages and asks for the quote", /ITS OWN WEBSITE/.test(M.ticketCheckPrompt({ name: "X", partnerText: "a", siteText: "b" })) && /refundQuote/.test(M.ticketCheckPrompt({})));
+  const rules = { kind: "entry", refund: "free", refundSaid: "Free cancellation", combos: true };
+  const U = "https://www.tiqets.com/en/x-l1";
+  is("not this place drops the link", M.mergeTicketCheck(rules, { samePlace: false, sells: "entry", confidence: "high", refund: "", why: "Rosenborg, not Amalienborg." }, { url: U }).drop, true);
+  is("Tickets needs both readers to say entry", [
+    M.mergeTicketCheck(rules, { samePlace: true, sells: "entry", confidence: "high", refund: "" }, { url: U }).kind,
+    M.mergeTicketCheck(rules, { samePlace: true, sells: "tour", confidence: "high", refund: "" }, { url: U }).kind,
+    M.mergeTicketCheck(rules, { samePlace: null, sells: "entry", confidence: "high", refund: "" }, { url: U }).kind,
+    M.mergeTicketCheck(rules, { samePlace: true, sells: "entry", confidence: "low", refund: "" }, { url: U }).kind,
+    M.mergeTicketCheck({ kind: "tour" }, { samePlace: true, sells: "entry", confidence: "high", refund: "" }, { url: U }).kind,
+  ], ["entry", "tour", "unknown", "unknown", "tour"]);
+  is("two readers that disagree about the refund claim none", M.mergeTicketCheck(rules, { samePlace: true, sells: "entry", confidence: "high", refund: "none", refundSaid: "This ticket is nonrefundable" }, { url: U }).refund, "");
+  ok("the answer is bound to its link", M.mergeTicketCheck(rules, null, { url: U }).url === U);
+
+  // The stored shape.
+  is("an answer from another address is no answer", M.cleanTicketOffer({ kind: "entry", url: "https://www.tiqets.com/en/a-l1" }, "https://www.tiqets.com/en/b-l2"), null);
+  ok("the same address with a query or slash is the same link", !!M.cleanTicketOffer({ kind: "entry", url: "https://www.tiqets.com/en/a-l1" }, "https://tiqets.com/en/a-l1/?partner=x"));
+  is("an unread answer is dropped", M.cleanTicketOffer({ kind: "ticket" }), null);
+  ok("only a checked entry ticket is the door", M.offerIsTheDoor({ kind: "entry" }) && !M.offerIsTheDoor({ kind: "combo" }) && !M.offerIsTheDoor({ kind: "tour" }) && !M.offerIsTheDoor({ kind: "unknown" }) && !M.offerIsTheDoor(null));
+
+  // The lines.
+  ok("no line says which is cheaper", ["en", "da", "de"].every(l => ["entry", "combo", "tour", "card", "unknown"].every(k => !/dearer|cheaper|dyrere|billigere|teurer|günstiger/i.test(M.ticketOfferLine({ kind: k }, { lang: l }) + M.partnerReason({ kind: k, refund: "free", combos: true }, { lang: l })))));
+  is("the quiet lines say what it is, and whose", [
+    M.ticketOfferLine({ kind: "tour" }), M.ticketOfferLine({ kind: "card" }, { lang: "da" }), M.ticketOfferLine({ kind: "combo" }), M.ticketOfferLine({ kind: "unknown", agent: "getyourguide" }),
+  ], ["Guided tour on Tiqets", "Med i Copenhagen Card, som sælges på Tiqets", "Combo tickets with other sights on Tiqets", "Also on GetYourGuide"]);
   // "Then we can sell the affiliate with 'We recommend Tiqets for its 24-hours refund policy'"
   is("recommended for free cancellation, and for nothing weaker", [
-    M.tiqetsReason({ kind: "entry", refund: "free", combos: true }),
-    M.tiqetsReason({ kind: "entry", refund: "option" }),
-    M.tiqetsReason({ kind: "entry", combos: true }),
-    M.tiqetsReason({ kind: "entry" }),
-    M.tiqetsReason({ kind: "card", refund: "free" }),
+    M.partnerReason({ kind: "entry", refund: "free", combos: true }),
+    M.partnerReason({ kind: "entry", agent: "getyourguide", refund: "free" }),
+    M.partnerReason({ kind: "entry", refund: "option" }),
+    M.partnerReason({ kind: "entry", combos: true }),
+    M.partnerReason({ kind: "entry", refund: "none", combos: true }),
+    M.partnerReason({ kind: "entry" }),
+    M.partnerReason({ kind: "card", refund: "free" }),
   ], [
     "We recommend Tiqets for its free cancellation up to a day before, and it has combo deals on other sights.",
+    "We recommend GetYourGuide for its free cancellation up to a day before.",
     "Tiqets lets you pick a refundable ticket at checkout.",
+    "Tiqets also has combo deals on other sights.",
     "Tiqets also has combo deals on other sights.",
     "",
     "",
   ]);
-  ok("in Danish and German too, with no dashes", ["da", "de"].every(l => { const t = M.tiqetsReason({ kind: "entry", refund: "free", combos: true }, { lang: l }); return t && !/We recommend/.test(t) && !/[—–]| - /.test(t); }) && M.officialSiteLabel("da") === "Officiel side");
+  ok("the general partner pitch never sits under a nonrefundable ticket, a tour or an unchecked link", !M.partnerPitchFits({ kind: "entry", refund: "none" }) && !M.partnerPitchFits({ kind: "tour" }) && !M.partnerPitchFits(null) && M.partnerPitchFits({ kind: "entry", refund: "free" }));
+  const dash = (x) => /[—–]| - /.test(x);
+  ok("no dashes in any line a reader sees", ["en", "da", "de"].every(l => ["entry", "combo", "tour", "card", "unknown"].every(k => ["free", "option", "none"].every(r => !dash(M.ticketOfferLine({ kind: k, refund: r, combos: true }, { lang: l }) + M.partnerReason({ kind: k, refund: r, combos: true }, { lang: l }))))) && M.officialSiteLabel("da") === "Officiel side");
+
+  // Where it is wired.
+  const detail = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
+  ok("the entry page reads an answer bound to this link, and unknown by default", /const ticketOffer = offerAgent \? \(cleanTicketOffer\(item\?\.__ticketOffer, ticketDest\) \|\| \{ kind: "unknown", agent: ticketAgent \}\) : null;/.test(detail) && /const ticketSellsDoor = !offerAgent \|\| offerIsTheDoor\(ticketOffer\);/.test(detail));
+  ok("a tour, card, combo or unchecked link never becomes the Tickets row", /const bookRow = ticketHref && ticketSellsDoor/.test(detail));
+  ok("both links side by side only for a checked entry ticket", /const showTicketPair = offerAgent && ticketSellsDoor && hasDirectSite;/.test(detail) && /data-testid="ticket-pair"/.test(detail) && /\{!showTicketPair && \(kind === "free" \|\| kind === "event"\) && externalHref\(item\.website\)/.test(detail));
+  ok("everything else is the quieter line", /if \(offerAgent && !ticketSellsDoor\)/.test(detail) && /data-testid="tiqets-second"/.test(detail));
+  ok("and the commission alone where the pitch cannot be true", /const offerNote = offerAgent && !partnerPitchFits\(ticketOffer\) \? commissionOnly : ticketNote;/.test(detail));
   const content = readFileSync(join(root, "src/utils/studioContent.js"), "utf8");
-  ok("the offer survives a redraft, beside its link only", /const offer = cleanTicketOffer\(t\?\.__ticketOffer\);\s*if \(offer && out\.ticketUrl\) out = \{ \.\.\.out, __ticketOffer: offer \};/.test(content));
+  ok("the answer survives a redraft only beside its own link", /const offer = out\.ticketUrl \? cleanTicketOffer\(t\?\.__ticketOffer, out\.ticketUrl\) : null;/.test(content));
+  ok("and a stored ticket link is refused for another year's edition", /!wrongEdition\(t\?\.ticketUrl, editionYearOf\(t\)\)/.test(content));
   const app = readFileSync(join(root, "src/App.jsx"), "utf8");
-  ok("the sweep reads the page before he ticks it, and the ticket page for refunds", /proposal\.verdict === AFF_FOUND && proposal\.agent === "tiqets"[\s\S]{0,200}readSourcePage\(proposal\.url\)[\s\S]{0,200}classifyTiqetsText\(page\?\.text/.test(app) && /withProductRefund\(offer, product === proposal\.url/.test(app));
-  ok("and so does a draft", /if \(ticketAgentOf\(t\.ticketUrl\) === "tiqets"\) \{[\s\S]{0,300}classifyTiqetsText\(text, \{ name, url \}\)/.test(app));
+  ok("one check, against the place's own site, with the model", /const checkTicketLink = async \(\{ url, name = "", town = "", type = "", website = "", alsoKnownAs = \[\], pages = \{\} \}\) => \{/.test(app) && /askClaude\(ticketCheckPrompt\(/.test(app) && /mergeTicketCheck\(rules, ai,/.test(app));
+  ok("called by the draft, the sweep, the paste and the backfill", (app.match(/await checkTicketLink\(\{/g) || []).length === 4);
+  ok("a page about another place loses the link in the draft and the backfill", /if \(checked\?\.drop\) \{\s*delete t\.ticketUrl; delete t\.__ticketOffer;/.test(app) && /checked\.drop \? \{ ticketUrl: "", __ticketOffer: null \}/.test(app));
+  ok("a pasted link clears the old answer first", /if \(verdict\.field === "ticketUrl"\) \{\s*delete draft\.__ticketOffer;/.test(app));
+  ok("the unread page fallback checks edition and sub event", /!ticketUrlSaysElsewhere\(u, draftTown\) && !wrongEdition\(u, editionYearOf\(t\)\) && !ticketUrlIsASubEvent\(u, name,/.test(app));
+
+  // The guide.
+  const ledger = readFileSync(join(root, "src/utils/costLedger.js"), "utf8");
+  ok("the guide sells only a checked entry ticket, and only for an exact stop", /if \(row\?\._match === "narrow"\) return null;\s*if \(OFFER_AGENTS\.includes\(ticketAgentOf\(url\)\) && !offerIsTheDoor\(cleanTicketOffer\(row\?\.__ticketOffer, url\)\)\) return null;/.test(ledger));
+  const enrich = readFileSync(join(root, "src/utils/guideEnrichment.js"), "utf8");
+  {
+    // Found on 29 Sep in his own saved guides: a stop "Tivoli Gardens" for the
+    // Tivoli row. The same place, so it keeps its link; Tivoli Friheden does not.
+    const before = M.freeEntrance.length;
+    M.freeEntrance.push({ name: "Tivoli", city: "Copenhagen" });
+    is("Tivoli Gardens is Tivoli, Tivoli Friheden and Tivoli Aarhus are not", [M.lookupRealPlace("Tivoli Gardens")?._match, M.lookupRealPlace("Tivoli Friheden")?._match, M.lookupRealPlace("Tivoli Aarhus")?._match, M.lookupRealPlace("Tivoli Copenhagen")?._match], ["exact", "narrow", "narrow", "exact"]);
+    M.freeEntrance.length = before;
+  }
+  ok("the place lookup says which tier answered", /_match: "exact"/.test(enrich) && /"narrow"/.test(enrich) && /_match: "wide"/.test(enrich));
+
+  // Stored links carry nobody's ad click. The Zoo row had a Bing one, 29 Sep.
+  is("an ad click comes off a ticket link, the rest stays", M.cleanTicketUrl("https://www.tiqets.com/en/copenhagen-zoo-tickets-l147099/?utm_source=bing&msclkid=abc&lang=da"), "https://www.tiqets.com/en/copenhagen-zoo-tickets-l147099/?lang=da");
+  is("and a clean one is unchanged", M.cleanTicketUrl("https://www.tiqets.com/en/x-l1"), "https://www.tiqets.com/en/x-l1");
+  ok("both writers clean it", /ticketUrl: isGetyourguideTicketUrl\(t\.ticketUrl\) \? cleanTourUrl\(t\.ticketUrl\) : cleanTicketUrl\(t\.ticketUrl\)/.test(content) && /set: \{ ticketUrl: cleanTicketUrl\(url\)/.test(readFileSync(join(root, "src/utils/affiliateSweep.js"), "utf8")));
+
+  // Stays: a house trip is also known by its title.
+  ok("a guide titled as a sommerhus trip gets the house door, not hotels", !!M.houseTripOf({ title: "A Wadden Sea Autumn: Sommerhus Days in South Jutland", days: [{ glance: { accommodation: "A base near Blåvand" } }] }) && !M.houseTripOf({ title: "Copenhagen by Hotel", days: [{ glance: { accommodation: "A base near Blåvand" } }] }));
+
+  // Tours: the town is the city segment, whole.
+  is("a short town name matches only its own city", [
+    M.tourUrlIsAboutTown("https://www.getyourguide.com/copenhagen-l12/copenhagen-canal-tour-from-nyhavn-t1/", "Ry"),
+    M.tourUrlIsAboutTown("https://www.getyourguide.com/aarhus-l32302/aarhus-craft-beerwalk-t693822", "Aarhus"),
+    M.tourUrlIsAboutTown("https://www.getyourguide.com/da-dk/kobenhavn-l12/x-t1", "Copenhagen"),
+  ], [false, true, true]);
 }
 
 
@@ -80064,7 +80154,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("every language says why, and still says the commission", ["en", "da", "de"].every(c => /partner|Partner/.test(M.UI_STRINGS["affiliate.disclosure"][c]) && /commission|kommission|Provision/.test(M.UI_STRINGS["affiliate.disclosure"][c])));
   ok("the short commission line exists in all three", ["en", "da", "de"].every(c => /commission|kommission|Provision/.test(M.UI_STRINGS["affiliate.commission"]?.[c] || "")));
   const detail = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
-  ok("under a reason, only the commission", /\{reason \? uiT\("affiliate\.commission", lang\) : note\}/.test(detail));
+  ok("under a reason, only the commission", /\{reason \? commissionOnly : note\}/.test(detail) && /\{extra \? commissionOnly : note\}/.test(detail) && /const commissionOnly = ticketNote \? uiT\("affiliate\.commission", lang\) : "";/.test(detail));
   ok("no dashes in the new sentences", ["affiliate.disclosure", "affiliate.commission"].every(k => ["en", "da", "de"].every(c => !/[—–]| - /.test(M.UI_STRINGS[k][c]))));
 }
 

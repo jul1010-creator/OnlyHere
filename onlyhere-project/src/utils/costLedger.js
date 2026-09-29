@@ -62,7 +62,8 @@
 // and never from anywhere else. A price band ("mid", "cheap") is NOT a price and
 // is never printed as one.
 import { normaliseTicketStatus } from "./tickets";
-import { isBookableTicketUrl } from "./ticketLink";
+import { isBookableTicketUrl, ticketAgentOf } from "./ticketLink";
+import { OFFER_AGENTS, offerIsTheDoor, cleanTicketOffer } from "./ticketOffer";
 import { stopEventWhen } from "./guideReading";
 import { affiliateHref, isPartnerLink, carRentalFits, carRentalUrl, stayDoorUrl, isWegotripUrl } from "./affiliates";
 import { OPERATORS, isLongLeg } from "./operators";
@@ -232,6 +233,14 @@ export const refuseTicket = ({ row, when = null, shutToday = false } = {}) => {
 const buyLink = (row) => {
   const url = String(row?.ticketUrl || "").trim();
   if (!isBookableTicketUrl(url)) return null;
+  // ── ONLY A CHECKED ENTRY TICKET, AND ONLY FOR THIS VERY STOP ───────
+  // 29 Sep 2026, Fable's review. The guide sold Amalienborg's guided tour page
+  // as "Buy tickets", because this read the address and nothing else. A
+  // Tiqets or GetYourGuide link now needs the stored answer that its page
+  // sells an entry ticket (utils/ticketOffer.js), and a row found by a looser
+  // name match than the stop's own name sells nothing for that stop.
+  if (row?._match === "narrow") return null;
+  if (OFFER_AGENTS.includes(ticketAgentOf(url)) && !offerIsTheDoor(cleanTicketOffer(row?.__ticketOffer, url))) return null;
   // ── AND THE PRICE ON THIS LINE IS ALREADY ATTRIBUTED ──────────────
   //
   // Oliver, 8 Sep 2026, of the WOW PARK entry: "199.. you click link, and it

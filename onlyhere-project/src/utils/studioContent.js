@@ -15,7 +15,7 @@ import { vibeOf } from "./streetVibe";
 import { shopKindOf } from "./shopping";
 import { cleanKind, cleanCategory } from "./essentialKind";
 import { cleanIsland, cleanRelation } from "./placeEdit";
-import { isBookableTicketUrl, ticketUrlSaysElsewhere, ticketUrlIsASubEvent, isTourUrl, cleanTourUrl } from "./ticketLink";
+import { isBookableTicketUrl, ticketUrlSaysElsewhere, ticketUrlIsASubEvent, isTourUrl, cleanTourUrl, isGetyourguideTicketUrl, wrongEdition, editionYearOf, cleanTicketUrl } from "./ticketLink";
 import { cleanBranches } from "./branches";
 import { cleanTicketOffer } from "./ticketOffer";
 import { isWegotripUrl } from "./affiliates";
@@ -802,7 +802,12 @@ export const shapeForLive = (type, t) => {
   // TYPES_WITH_A_DOOR moving into entryPrice.js on 6 Sep, and a town's own
   // attraction pass is the case it was written for. That is Oliver's call, and
   // it is in HANDOFF_19SEP.md rather than decided here.
-  if (isBookableTicketUrl(t?.ticketUrl) && !ticketUrlSaysElsewhere(t?.ticketUrl, t?.town || t?.city || "") && !ticketUrlIsASubEvent(t?.ticketUrl, t?.name, `${t?.town || t?.city || ""} ${t?.location || ""} ${t?.mapHint || ""}`)) out = { ...out, ticketUrl: String(t.ticketUrl).trim() };
+  // wrongEdition too, 29 Sep 2026 (Fable's review): this gate refused a
+  // sub-event and another town but let a 2024 edition through on any path that
+  // skipped the picker, the hand paste and the unread-page fallback among them.
+  // A GetYourGuide ticket is stored with its tracking and session taken off,
+  // for the reason cleanTourUrl gives.
+  if (isBookableTicketUrl(t?.ticketUrl) && !ticketUrlSaysElsewhere(t?.ticketUrl, t?.town || t?.city || "") && !ticketUrlIsASubEvent(t?.ticketUrl, t?.name, `${t?.town || t?.city || ""} ${t?.location || ""} ${t?.mapHint || ""}`) && !wrongEdition(t?.ticketUrl, editionYearOf(t))) out = { ...out, ticketUrl: isGetyourguideTicketUrl(t.ticketUrl) ? cleanTourUrl(t.ticketUrl) : cleanTicketUrl(t.ticketUrl) };
   // ── AND WHEN AN AGENT WAS LAST ASKED ABOUT THIS ROW ───────────────
   //
   // utils/affiliateSweep.js, 6 Sep 2026. sweeps.js's fifth rule is that a sweep
@@ -886,8 +891,9 @@ export const shapeForLive = (type, t) => {
   // field a sweep writes and this file does not name is gone on the next
   // redraft. See utils/ticketOffer.js.
   {
-    const offer = cleanTicketOffer(t?.__ticketOffer);
-    if (offer && out.ticketUrl) out = { ...out, __ticketOffer: offer };
+    // Bound to its link: an answer read off another address is dropped.
+    const offer = out.ticketUrl ? cleanTicketOffer(t?.__ticketOffer, out.ticketUrl) : null;
+    if (offer) out = { ...out, __ticketOffer: offer };
   }
   // ── AND THE PLACE'S OWN SOCIAL ACCOUNTS, WHICH WOULD HAVE BEEN
   //    THE NINTH ────────────────────────────────────────────────────

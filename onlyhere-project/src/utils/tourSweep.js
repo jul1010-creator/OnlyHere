@@ -19,7 +19,7 @@
 // that changes twice a year.
 import { isGetyourguideProductUrl } from "./affiliates";
 import { variantsOf } from "./danishNames";
-import { cleanTourUrl } from "./ticketLink";
+import { cleanTourUrl, isTourUrl } from "./ticketLink";
 import { parentTownOf } from "./previewMatch";
 import { isExcluded } from "./exclusions";
 
@@ -76,12 +76,24 @@ export const tourQuery = (town, kind) => {
 export const tourUrlIsAboutTown = (url, town) => {
   const said = String(town || "").trim();
   if (!said || !isGetyourguideProductUrl(url)) return false;
-  let path = "";
-  try { path = fold(new URL(String(url)).pathname); } catch { return false; }
-  if (!path) return false;
+  let segs = [];
+  try { segs = new URL(String(url)).pathname.split("/").filter(Boolean); } catch { return false; }
+  if (!segs.length) return false;
+  // ── THE CITY SEGMENT, AND THE WHOLE OF IT ─────────────────────────
+  // 29 Sep 2026, Fable's review: a substring anywhere in the path let Ry, Als,
+  // Møn ("mon") and Fanø ("fano") match inside almost any slug, so a
+  // Copenhagen product could land on the Ry page. GetYourGuide names the city
+  // in its own segment ("aarhus-l32302"), so the town has to BE that segment's
+  // name, word for word.
+  const city = (segs.find(seg => /-l\d+$/i.test(seg)) || "").replace(/-l\d+$/i, "");
+  if (!city) return false;
+  const words = city.split("-").map(fold).filter(Boolean);
+  const whole = words.join("");
   return variantsOf(said).some((v) => {
     const t = fold(v);
-    return !!t && path.includes(t);
+    // The whole segment, or one of its words when the town's name is long
+    // enough not to turn up by accident.
+    return !!t && (whole === t || (t.length >= 4 && words.includes(t)));
   });
 };
 
@@ -195,7 +207,9 @@ export const tourTownFor = (payload) => {
 // taking the engine's.
 export const pickTourUrl = (results, { town } = {}) => {
   const list = (Array.isArray(results) ? results : []).filter(r => r?.url);
-  const ok = list.filter(r => isGetyourguideProductUrl(r.url) && tourUrlIsAboutTown(r.url, town));
+  // isTourUrl, not a bare product test: an entry ticket is a ticket, never the
+  // thing to do in a town. See isGetyourguideTicketUrl in ticketLink.js.
+  const ok = list.filter(r => isGetyourguideProductUrl(r.url) && isTourUrl(r.url) && tourUrlIsAboutTown(r.url, town));
   return ok.length ? ok[0].url : null;
 };
 

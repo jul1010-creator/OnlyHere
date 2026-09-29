@@ -57,7 +57,7 @@
 // festival with no 2026 listing has a 2027 one the moment it goes on sale, and
 // a stamp that never expires would make this sweep answer no forever, cheaply
 // and wrongly. RESWEEP_DAYS puts the row back in the paid list on its own.
-import { ticketQueries, pickTicketUrl, describeTicketSearch, isBookableTicketUrl, ticketAgentOf, editionYearOf } from "./ticketLink";
+import { ticketQueries, pickTicketUrl, describeTicketSearch, isBookableTicketUrl, ticketAgentOf, editionYearOf, cleanTicketUrl } from "./ticketLink";
 import { ticketDestination } from "./affiliateAudit";
 import { TYPES_WITH_A_DOOR } from "./entryPrice";
 import { parentTownOf } from "./previewMatch";
@@ -236,7 +236,7 @@ export const FAILED = "failed";
 // honest generic rather than a capitalised key: PARTNER_MERCHANTS in
 // affiliates.js already carries the comment about why "Gjhkxmoh" is the failure
 // mode of capitalising whatever happens to be there.
-const AGENT_LABEL = { tiqets: "Tiqets", ticketmaster: "Ticketmaster", wegotrip: "WeGoTrip" };
+const AGENT_LABEL = { tiqets: "Tiqets", ticketmaster: "Ticketmaster", wegotrip: "WeGoTrip", getyourguide: "GetYourGuide" };
 export const agentLabel = (agent) => AGENT_LABEL[clean(agent)] || "a ticket agent";
 
 export const ticketProposal = (row, results, { today = new Date(), failed = 0 } = {}) => {
@@ -286,7 +286,7 @@ export const ticketProposal = (row, results, { today = new Date(), failed = 0 } 
     // Quoted back rather than summarised, rule 4. This is the line he reads
     // when deciding whether to accept, and "found a page" is not evidence.
     why: `${agentLabel(ticketAgentOf(url))} has a bookable page whose own title or slug names this place${town ? ` in ${town}` : ""}.`,
-    set: { ticketUrl: url, __ticketSweep: { at, found: true, url } },
+    set: { ticketUrl: cleanTicketUrl(url), __ticketSweep: { at, found: true, url: cleanTicketUrl(url) } },
   };
 };
 

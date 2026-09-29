@@ -53,7 +53,12 @@ export const houseTripOf = (guide) => {
   if (kind && kind !== "summerhouse") return null;
   const night = firstNightOf(guide);
   const text = [night?.glance?.recommendedStay, night?.glance?.stayArea, night?.glance?.accommodation].filter(Boolean).join(" ");
-  if (!kind && !HOUSE_WORDS.test(text)) return null;
+  // The guide's own title too, 29 Sep 2026 (Fable's review): an older guide
+  // whose first night says only "a base near Blåvand" got hotel links on a
+  // trip titled "Sommerhus Days". The title is written after the plan, so it
+  // says what the plan became; the chat is not read, because it holds the
+  // options the traveller turned down as well as the one they took.
+  if (!kind && !HOUSE_WORDS.test(text) && !HOUSE_WORDS.test(String(guide?.title || ""))) return null;
   // The base: the one the build recorded, else a checked coast the first
   // night names, the recommended stay first because the day card is told to
   // return the base's name there.

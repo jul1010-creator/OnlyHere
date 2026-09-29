@@ -568,3 +568,32 @@ Oliver, 28 Sep 2026: "Don't say 'exactly' the same.. because that's a lie. It te
 - The commission is still said, as the law asks.
 - Under the Tiqets pair, where the line above already gives a reason ("We recommend Tiqets for its free cancellation…"), only the short commission sentence is shown, so "we recommend" is not said twice in a row.
 - The Tips gear partner and the "Partner link." variant lost the same price promise too.
+
+## Batch 154: affiliates checked before a reader sees them
+
+Oliver, 28 Sep 2026, going to bed: "make sure these affiliates actually get it right... The Amalienborg Slot one must NOT happen. So if AI has to go through the affiliate link and compare with its own website, then do that." And: "make sure that there actually is a 24-hour cancellation... these affiliates has to be fact-checked." He asked for Fable to look through the affiliate system; Fable's review found twelve issues, and the ones that could put a wrong paid link in front of a reader are fixed here.
+
+- **A Tickets button now needs evidence.** Before, a Tiqets link with no stored check counted as a real ticket, so every link stored before 28 Sep still said "Book tickets", Amalienborg's tour page included. Now:
+  - Only a checked entry ticket for this place is shown as Tickets (the two buttons, or the Tickets row in At a Glance).
+  - Unchecked links, combo-only pages, tours and Copenhagen Card pages are a quieter line saying what they are ("Also on Tiqets", "Combo tickets with other sights on Tiqets", "Guided tour on Tiqets", "Included in the Copenhagen Card").
+  - The check is tied to the exact link it read. A link changed by hand is unchecked until it is read again.
+- **The AI check against the place's own website.** One check runs wherever a partner ticket link is written: new drafts, the affiliate sweep, a pasted link, and a new button in the Affiliates panel ("Check what N ticket pages sell") for rows stored before today. It reads the partner page, the ticket's own page and the place's own website, and asks the model whether it is the same place and what it sells. The model's answer is never taken alone:
+  - "Not this place" removes the link.
+  - Tickets needs both the rules and the model to say entry ticket.
+  - A refund the model reports counts only if its quoted sentence is really on the partner page.
+- **Refunds are fact-checked, sentence by sentence.** Read only from the ticket's own page and stored with the sentence that says it. Nonrefundable tickets are stored as such, and the "partners often offer extra packages or refund deals" line no longer appears under them, under tours, under cards or under unchecked links; those get the commission sentence alone.
+- **The guide.** It sold Amalienborg's tour page as "Buy tickets", because it read the address only. It now sells a partner link only when the place's page was checked as an entry ticket. It also refuses a link found by a looser name than the stop's own ("Tivoli Friheden" no longer gets Tivoli's ticket), while "Tivoli Gardens" still counts as Tivoli (both are in your saved guides).
+- **GetYourGuide entry tickets**, as you agreed: allowed as a ticket where the product's own address says entry or ticket and nothing about a tour. Tours stay tours.
+- **Live data, done tonight**, all nine partner ticket rows re-stored in the new shape with the page each answer came from:
+  - Amalienborg: GetYourGuide entry ticket, free cancellation ("Cancel up to 24 hours in advance for a full refund"), official site denkongeligesamling.dk.
+  - National Museum, Legoland: entry, free cancellation.
+  - Tivoli: entry, refundable ticket you pick at checkout.
+  - Zoo, Kronborg: entry, nonrefundable.
+  - Experimentarium, Louisiana, Humlebæk: Copenhagen Card only.
+- **Smaller fixes:**
+  - The Zoo link carried somebody's Bing ad click (utm and msclkid) and now no stored ticket link can.
+  - Links for another year's edition are refused even when pasted by hand or found from a page that would not open.
+  - Tour links now match the town on the city part of the address only, so short names like Ry, Als or Møn can no longer match inside other towns' tours.
+  - A guide titled as a sommerhus trip gets the house link and not hotels.
+- **Not changed:** the "Official site" label on the website button (Fable rated it low) and the hotel label on hostel stays.
+- **Guide test.** Chrome was in the background, so a full build ran at about one word every ten seconds. Instead I ran the guide's cost list with the new code on the stops from your ten most recent saved guides and the live ticket rows. Zoo, National Museum, Tivoli and Tivoli Gardens, Legoland, Kronborg and Amalienborg get their link; Experimentarium and Louisiana get none; Tivoli Friheden gets none. The sommerhus guide ("A Wadden Sea Autumn") is recognised as a house trip. A full build with the screen on is still worth doing once this is pushed.

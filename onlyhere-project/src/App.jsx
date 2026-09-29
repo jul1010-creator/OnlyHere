@@ -244,7 +244,7 @@ import { STAY_CHOICES, stayIsBooked, stayIsHouse, stayProblem, staySaid } from "
 import { hostelBlock, houseAreaBlock, houseBase, houseBaseBlock, houseNightSays, houseDistanceSays, dayPoints } from "./utils/stayAwareness";
 import { FOOD_TIERS } from "./utils/mealsEstimate";
 import { weighAdd, addCaution, tripLoadBlock } from "./utils/weighAdd";
-import { isBookableTicketUrl, pickTicketUrl, describeTicketSearch, ticketQueries, ticketUrlSaysElsewhere, ticketAgentOf, reviewPastedTicketUrl, isTourUrl, typeHasAdmission, editionYearOf, TICKET_FIELD, TOUR_FIELD } from "./utils/ticketLink";
+import { isBookableTicketUrl, pickTicketUrl, describeTicketSearch, ticketQueries, ticketUrlSaysElsewhere, ticketAgentOf, reviewPastedTicketUrl, isTourUrl, typeHasAdmission, editionYearOf, TICKET_FIELD, TOUR_FIELD, isResellerUrl, wrongEdition, ticketUrlIsASubEvent } from "./utils/ticketLink";
 import { tourQuery, tourKindFor, tourTownFor, pickTourUrl, tourPhrase, tourCandidates, tourProposal, replaceTour, describeTourFindings, tourAliveVerdict, tourRemovalFor, TOUR_RESWEEP_DAYS, FOUND as TOUR_FOUND, GONE as TOUR_GONE, UNKNOWN as TOUR_UNKNOWN, ALIVE as TOUR_ALIVE } from "./utils/tourSweep";
 import { currentUiLanguage, setStoredUiLanguage, t as uiT } from "./utils/uiLanguage";
 import { LanguageChoice } from "./components/LanguagePicker";
@@ -278,7 +278,7 @@ import { briefThemes , essentialsForTrip, essentialsBlock, reservedEssential, ni
 // render sites on the Essentials card asked for those separately and one of
 // them forgot two of the four. See outboundLink in utils/affiliates.js.
 import { affiliateHref, outboundLink, partnerAdsGear } from "./utils/affiliates";
-import { classifyTiqetsText, offerSellsTheDoor, entryProductUrl, withProductRefund } from "./utils/ticketOffer";
+import { classifyTiqetsText, classifyGetYourGuideText, entryProductUrl, withProductRefund, ticketCheckPrompt, readTicketCheck, mergeTicketCheck, cleanTicketOffer, offerIsTheDoor, OFFER_AGENTS, agentName } from "./utils/ticketOffer";
 import { sweepPlan, describeSweepPlan, ticketProposal, describeTicketFindings, affiliateWriteFor, agentLabel, FOUND as AFF_FOUND, RESWEEP_DAYS } from "./utils/affiliateSweep";
 import { wegotripProposals, describeWegotrip, wegotripWriteFor, AUDIO as WEGO_AUDIO } from "./utils/wegotripMatch";
 import { CHECKED_ON as WEGO_CHECKED_ON, WEGOTRIP_SOURCE } from "./data/wegotrip";
@@ -2260,6 +2260,46 @@ function GemlyxApp() {
       return await res.json();
     } catch (e) { return { text: "", error: String(e?.message || e) }; }
   };
+
+  // ── ONE CHECK FOR EVERY PARTNER TICKET LINK, BEFORE IT IS WRITTEN ──
+  //
+  // Oliver, 28 Sep 2026: "The Amalienborg Slot one must NOT happen. So if AI
+  // has to go through the affiliate link and compare with its own website,
+  // then do that." And: "make sure that there actually is a 24-hour
+  // cancellation... these affiliates has to be fact-checked."
+  //
+  // Called from all four writers: the draft pipeline, the affiliate sweep, the
+  // hand paste and the backfill of rows checked before this existed. Reads the
+  // partner page, the ticket's own page for its refund terms, and the place's
+  // own website, then asks the model to compare them. The rules and the model
+  // are merged in utils/ticketOffer.js, stricter answer first: "not this
+  // place" drops the link, and Tickets needs both to agree it is an entry
+  // ticket. Returns { offer } or { drop, why }, or null for a link this does
+  // not cover (Ticketmaster, WeGoTrip).
+  const checkTicketLink = async ({ url, name = "", town = "", type = "", website = "", alsoKnownAs = [], pages = {} }) => {
+    const agent = ticketAgentOf(url);
+    if (!OFFER_AGENTS.includes(agent)) return null;
+    const link = String(url).trim();
+    const read = async (u) => pages?.[u] || (await readSourcePage(u))?.text || "";
+    const text = await read(link);
+    let rules = agent === "tiqets" ? classifyTiqetsText(text, { name, alsoKnownAs }) : classifyGetYourGuideText(text, { name, url: link, alsoKnownAs });
+    const product = rules?.kind === "entry" || agent === "getyourguide" ? entryProductUrl(text, { name, url: link, alsoKnownAs }) : "";
+    const productText = product ? (product === link ? text : await read(product)) : "";
+    if (rules && productText) rules = withProductRefund(rules, productText);
+    const site = /^https?:\/\//i.test(String(website || "").trim()) && !isResellerUrl(website) ? String(website).trim() : "";
+    const siteText = site ? await read(site) : "";
+    const partnerText = `${text}\n\n${productText === text ? "" : productText}`.trim();
+    let ai = null;
+    if (partnerText) {
+      try {
+        const res = await askClaude(ticketCheckPrompt({ name, town, type, agent, url: link, partnerText, siteText, siteUrl: site }), 500, "claude-sonnet-5", true);
+        if (!res?.error) ai = readTicketCheck(res?.text || "", partnerText);
+      } catch { ai = null; }
+    }
+    const merged = mergeTicketCheck(rules, ai, { url: link, agent, at: dayKey(new Date()) });
+    return merged.drop ? { drop: true, why: merged.why } : { offer: merged, ai, rules };
+  };
+  const describeOffer = (o) => !o ? "" : `${o.kind === "entry" ? "an entry ticket" : o.kind === "combo" ? "only combo tickets" : o.kind === "tour" ? "a guided tour, no ticket" : o.kind === "card" ? "only the Copenhagen Card" : "nothing that could be confirmed"}${o.refund === "free" ? `, free cancellation ("${o.refundSaid || ""}")` : o.refund === "option" ? ", a refundable option at checkout" : o.refund === "none" ? ", nonrefundable" : ""}${o.combos ? ", combo deals" : ""}${o.checked === "ai" ? ", checked against the place's own site" : ", read by rules only (the AI check could not run)"}`;
 
   // ── AND THEN THE SAME BUG, ONE LAYER DOWN, THIRTY-FIVE TIMES ──────
   //
@@ -8360,7 +8400,11 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
             // This is the one branch with NO page text to vet against, which
             // is the exact position the Chicago link was accepted from. The
             // URL is all there is, so the URL has to answer for the country.
-            const fallback = unreadTicketUrls.find(u => !ticketUrlSaysElsewhere(u, draftTown)) || "";
+            // And the edition and sub-event tests the picker applies, 29 Sep
+            // 2026 (Fable's review): a "tinderbox-2024" or a guest slot
+            // named by a page that would not open passed on the town test
+            // alone, which an /event/ address can never fail.
+            const fallback = unreadTicketUrls.find(u => !ticketUrlSaysElsewhere(u, draftTown) && !wrongEdition(u, editionYearOf(t)) && !ticketUrlIsASubEvent(u, name, `${draftTown} ${t.location || ""} ${t.mapHint || ""}`)) || "";
             if (!fallback) {
               note("No ticket link", {
                 provider: "fetch",
@@ -8849,26 +8893,25 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
             noteToFounder(`No ticket link: the pages this run read had none, and asking Tiqets and Ticketmaster directly found none either. Plenty of Danish places sell only through their own site, and no ticket link is the right answer for those.`);
           }
         }
-        // ── WHAT THE TIQETS PAGE SELLS ───────────────────────────────
-        // 28 Sep 2026, and the reason is in utils/ticketOffer.js: the address
-        // of a Tiqets venue page says "tickets" whatever the page sells. Read
-        // off the copy this run already has when it has one, and fetched once
-        // when it does not.
-        if (ticketAgentOf(t.ticketUrl) === "tiqets") {
+        // ── WHAT THE PARTNER PAGE SELLS, CHECKED AGAINST THE PLACE ──────
+        // See checkTicketLink. A page about another place loses the link
+        // here; anything not confirmed as an entry ticket is kept but never
+        // shown as Tickets. And a stale answer from an earlier link goes.
+        if (t.__ticketOffer && !cleanTicketOffer(t.__ticketOffer, t.ticketUrl)) delete t.__ticketOffer;
+        if (OFFER_AGENTS.includes(ticketAgentOf(t.ticketUrl))) {
           const url = String(t.ticketUrl).trim();
-          const text = pagesByUrl[url] || (await readSourcePage(url))?.text || "";
-          let offer = classifyTiqetsText(text, { name, url });
-          // Refunds live on the ticket's own page and never on the venue page.
-          const product = offer?.kind === "entry" ? entryProductUrl(text, { name, url }) : "";
-          if (product) offer = withProductRefund(offer, product === url ? text : (pagesByUrl[product] || (await readSourcePage(product))?.text || ""));
-          if (offer) t.__ticketOffer = { ...offer, at: dayKey(new Date()) };
-          note("What the Tiqets page sells", {
+          const checked = await checkTicketLink({ url, name, town: draftTown, type: sType, website: t.website || placesWebsite || "", alsoKnownAs: t.alsoKnownAs || [], pages: pagesByUrl });
+          if (checked?.drop) {
+            delete t.ticketUrl; delete t.__ticketOffer;
+            noteToFounder(`The ${agentName(ticketAgentOf(url))} link was taken off: ${checked.why}`);
+          } else if (checked?.offer) t.__ticketOffer = checked.offer;
+          note(`What the ${agentName(ticketAgentOf(url))} page sells`, {
             provider: "fetch",
             detail: url.slice(0, 120),
-            outcome: offer ? "ok" : "empty",
-            used: !!offer,
-            got: offer ? `${offer.kind}${offer.refund === "free" ? ", free cancellation" : offer.refund === "option" ? ", a refundable option at checkout" : ""}${offer.combos ? ", combo deals" : ""}` : "no product titles could be read off the page",
-            why: offer ? "" : "The entry page then offers the link as a second choice under the place's own site, with no claims about what it includes.",
+            outcome: checked?.drop ? "empty" : "ok",
+            used: !checked?.drop,
+            got: checked?.drop ? `not this place: ${checked.why}` : describeOffer(checked?.offer),
+            why: checked?.offer && !offerIsTheDoor(checked.offer) ? "Not confirmed as an entry ticket, so the entry page shows it as what it is and never as Tickets." : "",
           });
         }
 
@@ -11587,7 +11630,7 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
   // trustworthy than a searched one and it is still a link typed at one in the
   // morning, and the foreign product page that started this is exactly as wrong
   // pasted as found.
-  const applyTicketPaste = () => {
+  const applyTicketPaste = async () => {
     let draft;
     try { draft = JSON.parse(studioDraftText); }
     catch { setTicketPasteResult({ ok: false, reason: "The draft JSON above is not parseable right now, so nothing was written. Fix the JSON first." }); return; }
@@ -11602,6 +11645,26 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
     // the link is rather than by which box he picked, and decided in ticketLink
     // where the question of what a link IS already lives.
     draft[verdict.field] = verdict.url;
+    // ── AND A PASTED TICKET IS CHECKED LIKE A FOUND ONE ─────────────
+    // 29 Sep 2026, Fable's review: pasting Amalienborg's Tiqets page by hand
+    // reproduced the Tickets button exactly, and an answer left over from the
+    // previous link survived the paste. Both closed here.
+    if (verdict.field === "ticketUrl") {
+      delete draft.__ticketOffer;
+      if (OFFER_AGENTS.includes(ticketAgentOf(verdict.url))) {
+        setTicketPasteResult({ ok: true, checking: true, reason: `Reading the ${agentName(ticketAgentOf(verdict.url))} page and checking it against the place's own site…` });
+        const checked = await checkTicketLink({ url: verdict.url, name: draft?.name || "", town: draft?.town || draft?.city || "", type: studioType, website: draft?.website || "", alsoKnownAs: draft?.alsoKnownAs || [] });
+        if (checked?.drop) {
+          delete draft.ticketUrl;
+          setTicketPasteResult({ ok: false, reason: `Not added. ${checked.why}` });
+          return;
+        }
+        if (checked?.offer) {
+          draft.__ticketOffer = checked.offer;
+          verdict.reason = `${verdict.reason || "Added."} The page sells ${describeOffer(checked.offer)}.`;
+        }
+      }
+    }
     setStudioDraft(draft);
     setStudioDraftText(JSON.stringify(draft, null, 2));
     setDraftEditError(null);
@@ -12889,20 +12952,18 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
       }
       if (row) {
         const proposal = ticketProposal(row, results, { today: new Date(), failed });
-        // ── AND WHAT THE PAGE SELLS, READ BEFORE HE TICKS IT ─────────
-        // 28 Sep 2026. A Tiqets venue page says "tickets" in its address
-        // whatever it sells, and Amalienborg's sold only a guided tour. One
-        // read of the page, only for a link that was found, and the answer
-        // rides on the write. See utils/ticketOffer.js.
-        if (proposal.verdict === AFF_FOUND && proposal.agent === "tiqets") {
-          const page = await readSourcePage(proposal.url);
-          let offer = classifyTiqetsText(page?.text, { name, url: proposal.url });
-          // Refunds live on the ticket's own page and never on the venue page.
-          const product = offer?.kind === "entry" ? entryProductUrl(page?.text, { name, url: proposal.url }) : "";
-          if (product) offer = withProductRefund(offer, product === proposal.url ? page?.text : (await readSourcePage(product))?.text);
-          if (offer) {
-            proposal.set = { ...proposal.set, __ticketOffer: { ...offer, at: proposal.at } };
-            if (!offerSellsTheDoor(offer)) proposal.why += ` The page sells ${offer.kind === "tour" ? "a guided tour" : "only the Copenhagen Card"} and no ticket of its own, so the entry page shows it as that and never as Tickets.`;
+        // ── AND WHAT THE PAGE SELLS, CHECKED BEFORE HE TICKS IT ──────
+        // See checkTicketLink: the partner page against the place's own site.
+        // A page about another place is not offered at all.
+        if (proposal.verdict === AFF_FOUND && OFFER_AGENTS.includes(proposal.agent)) {
+          const checked = await checkTicketLink({ url: proposal.url, name, town, type: row?.type || "", website: row?.payload?.website || "", alsoKnownAs: row?.payload?.alsoKnownAs || [] });
+          if (checked?.drop) {
+            proposal.verdict = "nothing";
+            proposal.why = `${agentLabel(proposal.agent)} had a page, and the check against the place's own site says it is about somewhere else: ${checked.why} Nothing is written but the stamp.`;
+            proposal.set = { __ticketSweep: { at: proposal.at, found: false } };
+          } else if (checked?.offer) {
+            proposal.set = { ...proposal.set, __ticketOffer: checked.offer };
+            proposal.why += ` The page sells ${describeOffer(checked.offer)}.${offerIsTheDoor(checked.offer) ? "" : " So the entry page shows it as that and never as Tickets."}`;
           }
         }
         list.push(proposal);
@@ -12955,6 +13016,38 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
     const couldNotAsk = (affSweep?.list || []).filter(p => !p.set && p.verdict !== AFF_FOUND).length;
     setAffSweep(null); setAffChosen(new Set());
     showToast(`🎫 ${added} ticket link${added === 1 ? "" : "s"} added${noes.length ? `, ${noes.length} stamped as asked` : ""}${couldNotAsk ? `, ${couldNotAsk} left alone because the search failed` : ""}`, 3600);
+  };
+
+  // ── AND THE ROWS CHECKED BEFORE THE CHECK EXISTED ─────────────────
+  // 29 Sep 2026, Fable's review: every Tiqets link stored before 28 Sep had no
+  // answer, and nothing ever went back for them. This goes back: each partner
+  // ticket link without an answer bound to it is read and checked against the
+  // place's own site, the answer is written, and a page about another place
+  // loses its link. One model call and two or three page reads per row.
+  const [offerRun, setOfferRun] = useState(null);
+  const uncheckedTicketRows = (rows) => (rows || []).filter(r => {
+    const url = String(r?.payload?.ticketUrl || "").trim();
+    return OFFER_AGENTS.includes(ticketAgentOf(url)) && !cleanTicketOffer(r?.payload?.__ticketOffer, url);
+  });
+  const runOfferBackfill = async () => {
+    const rows = uncheckedTicketRows(affPlan?.rows);
+    if (!rows.length) return;
+    const done = [];
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i], p = r.payload || {};
+      setOfferRun({ done: i, total: rows.length, name: p.name || "", list: done });
+      try {
+        const checked = await checkTicketLink({ url: p.ticketUrl, name: p.name || "", town: p.town || p.city || "", type: r.type || "", website: p.website || "", alsoKnownAs: p.alsoKnownAs || [] });
+        if (!checked) continue;
+        const set = checked.drop ? { ticketUrl: "", __ticketOffer: null } : { __ticketOffer: checked.offer };
+        const out = await patchRowPayload(r.id, set);
+        done.push({ id: r.id, name: p.name || "", said: checked.drop ? `link removed: ${checked.why}` : describeOffer(checked.offer), ok: out.ok, why: out.why || "" });
+      } catch (err) {
+        done.push({ id: r.id, name: p.name || "", said: "", ok: false, why: String(err?.message || err).slice(0, 80) });
+      }
+    }
+    setOfferRun({ done: rows.length, total: rows.length, name: "", list: done, finished: true });
+    bumpLiveContent(v => v + 1);
   };
 
   // ── THE SOCIAL SWEEP, IN THREE PRESSES ────────────────────────────
@@ -26589,6 +26682,26 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                             ? `Asking ${affRunning.done}/${affRunning.total}${affRunning.name ? ` · ${affRunning.name}` : ""}…`
                             : `Ask the agents about ${affPlan.plan.searchable.length} ${affPlan.plan.searchable.length === 1 ? "row" : "rows"}`}
                         </button>
+                      )}
+
+                      {/* The rows whose partner ticket page was never read and
+                          checked. See runOfferBackfill. */}
+                      {affPlan?.rows && uncheckedTicketRows(affPlan.rows).length > 0 && !offerRun?.finished && (
+                        <button onClick={runOfferBackfill} disabled={!!offerRun}
+                          style={{ display: "block", marginTop: 8, background: "none", border: `1px solid ${C.gold}`, color: offerRun ? C.muted : C.gold, borderRadius: 10, padding: "8px 14px", fontSize: 11.5, fontWeight: 700, cursor: offerRun ? "default" : "pointer", fontFamily: "'Inter', sans-serif" }}>
+                          {offerRun
+                            ? `Checking ${offerRun.done}/${offerRun.total}${offerRun.name ? ` · ${offerRun.name}` : ""}…`
+                            : `Check what ${uncheckedTicketRows(affPlan.rows).length} ticket ${uncheckedTicketRows(affPlan.rows).length === 1 ? "page sells" : "pages sell"}`}
+                        </button>
+                      )}
+                      {offerRun?.list?.length > 0 && (
+                        <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4 }}>
+                          {offerRun.list.map(x => (
+                            <div key={x.id} style={{ fontSize: 11, color: x.ok ? C.light : "#FFB347", lineHeight: 1.5 }}>
+                              {x.ok ? "✓" : "✕"} {x.name}: {x.ok ? x.said : `not written (${x.why})`}
+                            </div>
+                          ))}
+                        </div>
                       )}
 
                       {affSweep?.summary && <div style={{ fontSize: 11.5, color: C.light, lineHeight: 1.6, margin: "10px 0" }}>{affSweep.summary}</div>}

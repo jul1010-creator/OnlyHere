@@ -23,7 +23,7 @@ import { PhotoCredit } from "./PhotoCredit";
 import { PlaceMiniMap } from "./PlaceMiniMap";
 import { ticketmasterUrl, ticketDisclosure, tiqetsUrl, tiqetsDisclosure, affiliateHref, affiliateNote, isWegotripUrl, outboundLink } from "../utils/affiliates";
 import { isTiqetsProductUrl, ticketAgentOf, isBookableTicketUrl, isTourUrl, sameShop, priceSourceHost, isResellerUrl } from "../utils/ticketLink";
-import { cleanTicketOffer, offerSellsTheDoor, ticketOfferLine, tiqetsReason, officialSiteLabel } from "../utils/ticketOffer";
+import { cleanTicketOffer, offerIsTheDoor, ticketOfferLine, partnerReason, partnerPitchFits, officialSiteLabel, agentName, OFFER_AGENTS } from "../utils/ticketOffer";
 import { branchPoints, branchesOf, hasBranches, branchLine, branchLabel } from "../utils/branches";
 import { offerView, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE } from "../utils/offer";
 import { saveLabel, saveHint, planFromSavedLabel } from "../utils/savedTrip";
@@ -261,14 +261,26 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
   // to use it under it when its ticket page gives one. And a page that
   // sells a guided tour or only the Copenhagen Card is offered as exactly that,
   // never under a Tickets label. See utils/ticketOffer.js.
-  const ticketOffer = ticketAgent === "tiqets" ? cleanTicketOffer(item?.__ticketOffer) : null;
-  const ticketSellsDoor = offerSellsTheDoor(ticketOffer);
+  // ── AND ONLY A CHECKED ENTRY TICKET IS TICKETS ───────────────────
+  // 29 Sep 2026, Fable's review: a link with no stored answer counted as
+  // selling the door, so every row checked before 28 Sep still said "Book
+  // tickets", Amalienborg's tour page among them. Now the default is the other
+  // way: no answer, or an answer read off a different address, is "unknown",
+  // and unknown is the quieter "Also on Tiqets" line. Ticketmaster and WeGoTrip
+  // are untouched; their pages are events and a fixed catalogue.
+  const offerAgent = OFFER_AGENTS.includes(ticketAgent);
+  const ticketOffer = offerAgent ? (cleanTicketOffer(item?.__ticketOffer, ticketDest) || { kind: "unknown", agent: ticketAgent }) : null;
+  const ticketSellsDoor = !offerAgent || offerIsTheDoor(ticketOffer);
+  // The general partner sentence ("they often offer extra packages or refund
+  // deals") only where it can be true; the commission alone everywhere else.
+  const commissionOnly = ticketNote ? uiT("affiliate.commission", lang) : "";
+  const offerNote = offerAgent && !partnerPitchFits(ticketOffer) ? commissionOnly : ticketNote;
   const hasDirectSite = (kind === "free" || kind === "event") && !!externalHref(item?.website) && !isResellerUrl(externalHref(item?.website));
   // Oliver, 28 Sep 2026: "Maybe we should just add both links? For people to
   // decide themselves?" So where both exist, the official site and Tiqets sit
   // side by side as equals, and the separate Website button steps aside so the
   // site is not offered twice.
-  const showTicketPair = ticketAgent === "tiqets" && ticketSellsDoor && hasDirectSite;
+  const showTicketPair = offerAgent && ticketSellsDoor && hasDirectSite;
   // The row shape AtAGlanceCard takes, or null when there is nothing to link.
   // Null rather than an empty object, because that card already drops nulls and
   // a caller building this inline should not have to remember to.
@@ -344,7 +356,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
   // A tour or a card is not a ticket, so At a Glance's Tickets row does not
   // link to one. The line under the buttons still offers it as what it is.
   const bookRow = ticketHref && ticketSellsDoor
-    ? { href: ticketHref, label: bookLabel(ticketAgent), note: ticketNote, source: bookSource }
+    ? { href: ticketHref, label: bookLabel(ticketAgent), note: offerNote, source: bookSource }
     : null;
 
   // ── AND THE TOUR, WHICH IS A DIFFERENT QUESTION ─────────────────
@@ -1578,17 +1590,17 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
           // still renders no button rather than a bare link asking for money.
           if (!ticketAgent) return null;
           const href = ticketHref;
-          const note = ticketNote;
+          const note = offerNote;
           // ── BOTH, SIDE BY SIDE ───────────────────────────────────
           // The reader decides. The line under the pair is the reason to
-          // pick Tiqets, and only when its ticket page gives one. See
-          // tiqetsReason in utils/ticketOffer.js.
+          // pick the partner, and only when its ticket page gives one. See
+          // partnerReason in utils/ticketOffer.js.
           if (showTicketPair) {
             const siteDest = externalHref(item.website);
             const siteHref = affiliateHref(siteDest) || siteDest;
             const sitePaid = siteHref !== siteDest;
             const siteHost = (() => { try { return new URL(siteDest).hostname.replace(/^www\./, ""); } catch { return officialSiteLabel(lang); } })();
-            const reason = tiqetsReason(ticketOffer, { lang });
+            const reason = partnerReason(ticketOffer, { lang });
             const pairBtn = { flex: 1, minWidth: 0, display: "block", textAlign: "center", background: C.surface, borderRadius: 12, padding: "13px 8px", fontSize: 13, fontWeight: 700, textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
             return (
               <div data-testid="ticket-pair" style={{ marginBottom: 10 }}>
@@ -1599,7 +1611,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
                   </a>
                   <a href={href} target="_blank" rel={note ? "noreferrer sponsored nofollow" : "noreferrer"}
                     style={{ ...pairBtn, border: `1px solid ${C.gold}55`, color: C.gold }}>
-                    🎫 Tiqets
+                    🎫 {agentName(ticketAgent)}
                   </a>
                 </div>
                 {reason && (
@@ -1608,7 +1620,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
                 {/* With a reason already said above it, only the commission,
                     so "we recommend" is not said twice in a row. */}
                 {note && (
-                  <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 4, textAlign: "center" }}>{reason ? uiT("affiliate.commission", lang) : note}</div>
+                  <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 4, textAlign: "center" }}>{reason ? commissionOnly : note}</div>
                 )}
               </div>
             );
@@ -1616,8 +1628,8 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
           // A Tiqets page that sells a guided tour or only the Copenhagen
           // Card is offered as exactly that, as a quieter line, never under a
           // Tickets label.
-          if (ticketAgent === "tiqets" && !ticketSellsDoor) {
-            const line = ticketOfferLine(ticketOffer, { lang });
+          if (offerAgent && !ticketSellsDoor) {
+            const line = ticketOfferLine(ticketOffer, { lang, agent: ticketAgent });
             const icon = ticketOffer?.kind === "tour" ? "🧭" : "🎟️";
             return (
               <div data-testid="tiqets-second" style={{ marginTop: -4, marginBottom: 12, textAlign: "center" }}>
@@ -1631,7 +1643,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
               </div>
             );
           }
-          const extra = ticketAgent === "tiqets" ? tiqetsReason(ticketOffer, { lang }) : "";
+          const extra = offerAgent ? partnerReason(ticketOffer, { lang }) : "";
           return (
             <div style={{ marginBottom: 10 }}>
               <a href={href} target="_blank" rel={note ? "noreferrer sponsored nofollow" : "noreferrer"}
@@ -1643,7 +1655,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
                 <div style={{ fontSize: 11, color: C.light, lineHeight: 1.5, marginTop: 5, textAlign: "center" }}>{extra}</div>
               )}
               {note && (
-                <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 5, textAlign: "center" }}>{note}</div>
+                <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 5, textAlign: "center" }}>{extra ? commissionOnly : note}</div>
               )}
             </div>
           );
