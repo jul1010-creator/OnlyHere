@@ -51,6 +51,8 @@ export const festivalScale = (said) => {
   const v = String(said || "").trim().toLowerCase();
   if (v.startsWith("major")) return "Major";
   if (v.startsWith("community")) return "Community";
+  // Imported from a town's own calendar and shown only under Full calendar.
+  if (v.startsWith("calendar")) return "Calendar";
   return "Local";
 };
 

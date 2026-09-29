@@ -59,7 +59,7 @@ writeFileSync(entry, `
   export { runOnce } from ${JSON.stringify(join(root, "src/utils/inFlight.js"))};
   export { DINING_STYLES, DINING_STYLE_LABEL, diningStyleOf, diningStyleLabel, unstyledEntries, styleCoverage, STYLE_COVERAGE_MIN, showStyleFacet, buildFoodFacets, foodCitiesIn, FOOD_SORTS, byFoodPrice } from ${JSON.stringify(join(root, "src/utils/foodStyle.js"))};
   export { FILTER_THRESHOLD, showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, clearFacet, clearAllFacets, matchesQuery, toggleFacetValue, isOptionOn, selectedValues } from ${JSON.stringify(join(root, "src/utils/listControls.js"))};
-  export { EVENT_TYPES, EVENT_TYPE_LABEL, eventTypesOf, hasEventType, eventTypesPresent, eventTypeCounts, untypedEvents, UNINFORMATIVE } from ${JSON.stringify(join(root, "src/utils/eventTypes.js"))};
+  export { EVENT_TYPES, EVENT_TYPE_LABEL, eventTypesOf, hasEventType, eventTypesPresent, eventTypeCounts, untypedEvents, UNINFORMATIVE, typeWordFor } from ${JSON.stringify(join(root, "src/utils/eventTypes.js"))};
   export { TIERS, TIER_VALUES, TIER_RULE } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { STREET_VIBES, STREET_VIBE_VALUES, vibeOf, STREET_VIBE_RULE, STREET_TIER_RULE, TIERS_WITHOUT_STREET_MEANING } from ${JSON.stringify(join(root, "src/utils/streetVibe.js"))};
   export { REGION_NAMES, REGION_PART, canonicalRegion, isRegion, regionPart, kommunerIn, kommuneAt, kommuneNameAt, regionAt, regionOf, kommuneOf, sameRegion, regionsPresent, describeRegion, danishAddressIn } from ${JSON.stringify(join(root, "src/utils/regions.js"))};
@@ -136,6 +136,7 @@ writeFileSync(entry, `
   export { withoutCorrectionLead, directAnswers, askedBeforeTurns, lastAskedOnScreen, isRefusal, looksLikePlaceAnswer, daysAnswer, transportAnswer, stayAnswer, partyAnswer, partyLine, widestMode, isKnownPlace } from ${JSON.stringify(join(root, "src/utils/directAnswer.js"))};
   export { readableOn, contrastRatio, overlay, parseHex, luminance, READABLE_MIN, MAX_INK_SATURATION, PILL_ALPHA } from ${JSON.stringify(join(root, "src/utils/readableColor.js"))};
   export { journeyOriginFor, showsJourney, journeyOriginForKind, showsJourneyForKind, showsTicketForKind, KINDS_WITH_A_DOOR, KIND_OF_DOORED_TYPE, TYPES_WITH_A_JOURNEY, TYPES_WITHOUT_A_JOURNEY, TYPES_MEASURED_FROM_THE_ORIGIN, TYPES_MEASURED_FROM_THEIR_TOWN, journeyOriginPoint, IS_THE_CENTRE_KM, TRAVEL_ORIGIN } from ${JSON.stringify(join(root, "src/utils/journeyScope.js"))};
+  export { WHEN_CHOICES, daysFor, eventOnDays } from ${JSON.stringify(join(root, "src/utils/eventWhen.js"))};
   export { WEATHER_CITIES as MAP_WEATHER_CITIES, COUNTRY_MAPS, LT_SHAPES, ltProject } from ${JSON.stringify(join(root, "src/data/mapShapes.js"))};
   export { tripcomStayUrl, tripcomCity } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
   export { studioPrompts } from ${JSON.stringify(join(root, "src/utils/studioPrompts.js"))};
@@ -58140,7 +58141,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
               ok("the build names two and counts the rest",
                  /const \{ rows, more \} = communityDay\(\{/.test(appR) && /byDay\[i \+ 1\] = \{ rows, more \};/.test(appR));
               ok("and the notices are grouped by the day they fall on",
-                 /for \(const group of noticeGroups\(picked\)\)/.test(appR)
+                 // Batch 161: and only for Community rows; a town calendar sends no notices.
+                 /for \(const group of \(calTarget === "calendar" \? \[\] : noticeGroups\(picked\)\)\)/.test(appR)
                  && /rolledHeadline\(group\.rows\)\.slice\(0, 120\)/.test(appR));
               // ── AND A ROLLED ONE IS NOT PUT THROUGH THE READER ────
               // 19 Sep 2026, when notices started being translated and stripped.
@@ -58422,11 +58424,13 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     {
       const appCal = readFileSync(join(root, "src/App.jsx"), "utf8");
       ok("the sweep forces the source's own place rather than reading the address",
-         /const rows = communityRowsFrom\(\{ events, place, source, today: new Date\(\) \}\);/.test(appCal));
+         // Batch 161: with a town calendar's cap.
+         /const rows = communityRowsFrom\(\{ events, place, source, today: new Date\(\), limit: 400 \}\);/.test(appCal));
       ok("and a source with no place is refused rather than filed somewhere",
          /No place set, so there is nothing to file these under/.test(appCal));
       ok("and shapes the row the way the publish button does",
-         /shapeForLive\("festival", \{/.test(appCal) && /scale: "Community",/.test(appCal));
+         // Batch 161: Community, or the Full calendar when he picks it.
+         /shapeForLive\("festival", \{/.test(appCal) && /scale: calTarget === "calendar" \? "Calendar" : "Community",/.test(appCal));
       ok("through the same insert", /body: JSON\.stringify\(\{ type: "festival", payload: shaped, published: true \}\)/.test(appCal));
       // The venue is an address and the name is what the guide says out loud.
       ok("the address goes in the description rather than the name",
@@ -63634,7 +63638,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
      /type === "festival" \? FESTIVAL_HOMES[\s\S]{0,120}type === "booking" \? \[craftItemsFallback, bookingRowsCache\]/.test(
        liveD.slice(liveD.indexOf("export const removeLiveRow"))));
   ok("and the delete path reaches all three of them",
-     /const FESTIVAL_HOMES = \[events, majorEvents, communityEvents\];/.test(liveD));
+     // Batch 161: and the full calendar's list.
+     /const FESTIVAL_HOMES = \[events, majorEvents, communityEvents, calendarEvents\];/.test(liveD));
   is("there is one reader of which home a festival belongs in",
      (liveD.match(/homeFor\(item\)/g) || []).length, 2);
 
@@ -67723,7 +67728,8 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     // rather than to put anything on a page.
     is("undatedEvents is read in exactly six places in App.jsx", uses, 6);
     ok("the events grid is still built from events and majorEvents alone",
-       /const eventTabSource = eventTab === "local" \? events : majorEvents;/.test(appW));
+       // Batch 161: picks are both, and the full calendar adds imported rows, never community ones.
+       /const eventTabSource = eventTab === "calendar" && hasFullCalendar \? \[\.\.\.events, \.\.\.majorEvents, \.\.\.calendarEvents\] : \[\.\.\.events, \.\.\.majorEvents\];/.test(appW) && !/communityEvents\]/.test(appW.slice(appW.indexOf("const eventTabSource"), appW.indexOf("const eventTabSource") + 200)));
 
     // ── THE GATE'S SECOND EXIT ────────────────────────────────────
     ok("the date gate asks whether it can wait", /const wait = waitingReason\(shaped, \{/.test(appW));
@@ -80442,6 +80448,39 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("the Klaipėda demo moved off the town's own address", M.KLAIPEDA_DEMO_PATH === "/lithuania/trips");
   const dp = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
   ok("add to trip waits for the planner abroad", /\{onToggleSave && activeCountry\(\) === DEFAULT_COUNTRY && \(/.test(dp));
+}
+
+
+// ── Batch 161: Phase 2, part two, Events as picks and a full calendar ──
+// Oliver, 29 Sep 2026: "cut the 'major' and 'local'.. make full calenders
+// instead", "We can just adopt all of their events into our page", and of the
+// calendar being overwhelming, what's on for the person.
+{
+  const d = (y, m, day) => new Date(y, m - 1, day);
+  const iso = (x) => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`;
+  is("this weekend from a Tuesday, a Saturday and a Sunday", [M.daysFor("weekend", d(2026, 9, 29)).map(iso), M.daysFor("weekend", d(2026, 10, 3)).map(iso), M.daysFor("weekend", d(2026, 10, 4)).map(iso)], [["2026-10-03", "2026-10-04"], ["2026-10-03", "2026-10-04"], ["2026-10-04"]]);
+  is("today, tomorrow and the next seven days", [M.daysFor("today", d(2026, 9, 29)).map(iso), M.daysFor("tomorrow", d(2026, 9, 29)).map(iso), M.daysFor("week", d(2026, 9, 29)).length], [["2026-09-29"], ["2026-09-30"], 7]);
+  const run = { date: "2026-09-18", dateEnd: "2026-09-19" };
+  is("a two day event is on both days and neither side of them", [M.eventOnDays(run, [d(2026, 9, 18)]), M.eventOnDays(run, [d(2026, 9, 19)]), M.eventOnDays(run, [d(2026, 9, 20)]), M.eventOnDays(run, [d(2026, 9, 17)])], [true, true, false, false]);
+  is("and an event with no date is on no day", M.eventOnDays({ date: "TBA" }, [d(2026, 9, 29)]), false);
+  is("imported titles get a type in the page's own words, Lithuanian included",
+     ["Koncertas: Klaipėdos orkestras", "Kalėdų mugė", "Paroda", "Renginys vaikams", "Joga prie jūros", "Vaikščiojimas su gidu", "Karaoke night"].map(M.typeWordFor),
+     ["Music", "Market", "Art", "Family", "Sport", "Event", "Music"]);
+  ok("a type word always finds its own pill", ["Music", "Market", "Art", "Family", "Sport", "Culture", "Food", "Viking"].every(w => M.eventTypesOf({ type: w }).length === 1));
+  ok("and Event finds none", M.eventTypesOf({ type: "Event" }).length === 0);
+  is("Danish words still find theirs", ["Rockfestival", "Julemarked", "Kunstfestival", "Børnefestival"].map(t => M.eventTypesOf({ type: t })), [["music"], ["market"], ["art"], ["family"]]);
+  is("the calendar scale is its own", [M.festivalScale("Calendar"), M.festivalScale("calendar"), M.festivalScale("Community"), M.festivalScale("")], ["Calendar", "Community", "Community", "Local"].map((v, i) => i === 1 ? "Calendar" : v));
+  const live = readFileSync(join(root, "src/utils/liveContent.js"), "utf8");
+  ok("and lives in its own list, read by nothing but the Events page", /if \(scale === "Calendar"\) return calendarEvents;/.test(live) && /FESTIVAL_SCALES = \["Major", "Local", "Community", "Calendar"\]/.test(live));
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const calReaders = app.split("\n").filter(l => /calendarEvents/.test(l) && !/^\s*\/\//.test(l));
+  ok("the only readers are the Events page's two lines and the credit", calReaders.every(l => /hasFullCalendar = calendarEvents|\.\.\.calendarEvents\]|calendarEvents\.map\(e => domainOf|import \{ communityEvents, calendarEvents \}/.test(l)) && calReaders.length === 4);
+  ok("Major and Local are no longer tabs", !/\{ id: "local", label: "Local", ico: "town" \}/.test(app) && /\{ id: "picks", label: "Our picks", ico: "ticket" \}, \{ id: "calendar", label: "Full calendar", ico: "calendar" \}/.test(app));
+  ok("and the tabs only show when a full calendar exists", /\{hasFullCalendar && \(\s*\n\s*<div style=\{\{ display: "flex", gap: 0, marginBottom: 16/.test(app));
+  ok("Major is a badge now", /event\.__scale === "Major" && <span[^>]*>Worth travelling for<\/span>/.test(app));
+  ok("what's on for you filters by day and by kids", /\.filter\(e => !whenDays \|\| eventOnDays\(e, whenDays\)\)/.test(app) && /\.filter\(e => !eventKids \|\| hasEventType\(e, "family"\)\)/.test(app) && /What's on for you/.test(app));
+  ok("a calendar row opens the calendar it came from", /if \(!listed\) \{ setEventDetail\(event\); return; \}/.test(app));
+  ok("Studio can add rows to the full calendar, in a country", /const \[calTarget, setCalTarget\] = useState\("community"\);/.test(app) && /type: calTarget === "calendar" \? typeWordFor\(`\$\{r\.name\} \$\{r\.desc \|\| ""\}`\) : "Community",/.test(app) && /\.\.\.\(studioCountry !== DEFAULT_COUNTRY \? \{ country: studioCountry \} : \{\}\),/.test(app));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

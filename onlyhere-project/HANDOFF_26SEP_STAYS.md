@@ -728,3 +728,34 @@ Danish Studio lists Lithuanian rows with a few Denmark-flavoured audit notes.
 Not yet: a hero photo of Klaipėda (Wikimedia is blocked from the build machine,
 so it needs picking by hand), the Events page redesign and calendar import
 (part two), and the share cards in middleware.js for Lithuanian links.
+
+## Batch 161: Phase 2 of the Lithuania plan, part two, Events
+
+Oliver, 29 Sep 2026: "cut the 'major' and 'local'.. make full calenders
+instead", "I think they should be similar" (Denmark and Lithuania), "We can
+just adopt all of their events into our page", and "those events are
+overwhelming".
+
+- The Major and Local tabs are gone in both countries. "Our picks" is every
+  checked event; "Full calendar" adds rows imported from a town's own
+  calendar. With no imported calendar (Denmark today) there are no tabs, just
+  the picks.
+- Major is a "Worth travelling for" badge on the card. The scale field stays,
+  because the front page and the guide builder read it.
+- New scale "Calendar" (`calendarEvents` in data/events.js). Read only by the
+  Events page: not the front page, the chat or a guide. A calendar card shows
+  time, venue and "from klaipedatravel.lt ↗" and opens that page.
+- "What's on for you": Today, Tomorrow, This weekend, Next 7 days, With kids,
+  above the search. utils/eventWhen.js; a run counts on every day it spans.
+- Event categories read Lithuanian (koncertas, muzika, mugė, paroda, teatras,
+  vaikams, šeima) and have a new Sport pill. `typeWordFor` gives an imported
+  row a type in the page's vocabulary.
+- Studio, community feeds: after a sweep, "Add as" Community notices or Full
+  calendar, and a Country. Full calendar rows send no notices. The row cap for
+  a sweep is 400, since a town calendar is hundreds a month.
+
+For Klaipėda: add klaipedatravel.lt's events page as a calendar feed with the
+place "Klaipėda", sweep, pick Full calendar and Lithuania, and add. Their site
+has a JSON events API (wp-json/klaipeda-events/v1/events) that refused an
+outside read; ask the tourism centre for a feed or API access. The page read
+only gets as far as the first stretch of a month.

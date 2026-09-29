@@ -124,3 +124,11 @@ a "What's on for you" filter, and Klaipėda added to Trip.com's city list.
 **Phase 2, part one, done 29 Sep 2026 (batch 160).** /lithuania shows the
 Lithuanian rows through the same pages. Next: the Events page ("Our picks" and
 "Full calendar"), the calendar import and "What's on for you".
+
+**Phase 2, part two, done 29 Sep 2026 (batch 161).** Events are "Our picks"
+and "Full calendar" in both countries, with "What's on for you" and a Sport
+pill; Studio can add a town's calendar to the Full calendar. To ask the
+tourism centre for: their events feed or API access, since
+wp-json/klaipeda-events/v1/events exists but refused an outside read.
+
+Phase 3 (guide builder and chat for Lithuania) is next.

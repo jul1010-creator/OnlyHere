@@ -38,6 +38,16 @@ export const majorEvents = [];
 // are on Sejerø and is noise anywhere else.
 export const communityEvents = [];
 
+// ── THE FULL CALENDAR ───────────────────────────────────────────────
+// 29 Sep 2026, Phase 2 of LITHUANIA_PLAN_29SEP.md. Oliver: "cut the 'major'
+// and 'local'.. make full calenders instead." Rows imported from a town's own
+// event calendar (Klaipėda's first, with the tourism centre's say-so). Shown on
+// the Events page under Full calendar, beside the checked picks, and read by
+// nothing else: not the front page, not the chat, not a guide. A title and a
+// date copied off somebody else's calendar is a listing, not an entry Gemlyx
+// has checked.
+export const calendarEvents = [];
+
 // ── "IT SHOULD BE IN A MEMORY" ──────────────────────────────────────
 //
 // Oliver, 5 Sep 2026. A festival whose next edition nobody has announced yet.

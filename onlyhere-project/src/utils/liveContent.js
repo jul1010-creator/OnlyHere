@@ -42,7 +42,7 @@
 // RULE FOR ANY FUTURE WORK HERE: never guard a mutation of a module-level
 // array with component-scoped state (useRef/useState). If the data outlives
 // the component, so must the guard.
-import { events, majorEvents, undatedEvents, communityEvents } from "../data/events";
+import { events, majorEvents, undatedEvents, communityEvents, calendarEvents } from "../data/events";
 import { towns, TOWN_COORDS } from "../data/towns";
 import { islands } from "../data/islands";
 import { gems } from "../data/gems";
@@ -395,12 +395,13 @@ const ARRAY_FOR = {
 // COMMUNITY IS THE DEFAULT FOR NOTHING. An unrecognised or missing scale falls
 // to `events`, which is where every festival published before 19 Sep 2026 sits
 // and what this branch has always done. Hiding a row takes saying so.
-export const FESTIVAL_SCALES = ["Major", "Local", "Community"];
-const FESTIVAL_HOMES = [events, majorEvents, communityEvents];
+export const FESTIVAL_SCALES = ["Major", "Local", "Community", "Calendar"];
+const FESTIVAL_HOMES = [events, majorEvents, communityEvents, calendarEvents];
 export const homeFor = (item) => {
   const scale = String(item?.__scale || "").trim();
   if (scale === "Major") return majorEvents;
   if (scale === "Community") return communityEvents;
+  if (scale === "Calendar") return calendarEvents;
   return events;
 };
 

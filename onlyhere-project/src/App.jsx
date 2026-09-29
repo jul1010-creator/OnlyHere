@@ -266,7 +266,8 @@ import { ChatPlaceCards } from "./components/ChatPlaceCards";
 import { cardLine, shortLabel } from "./utils/cardLine";
 import { seasonBlock } from "./utils/seasonFit";
 import { activityAcross, activityBlock, DEFAULT_DAYS as ACTIVITY_DAYS } from "./utils/placeActivity";
-import { communityEvents } from "./data/events";
+import { communityEvents, calendarEvents } from "./data/events";
+import { WHEN_CHOICES, daysFor, eventOnDays } from "./utils/eventWhen";
 import { fixClock, clockNote, lateDays, lateDayNote } from "./utils/dayClock";
 import { communityOnDay, communityDay, communityBlock, moreOnLine, noticeGroups, rolledHeadline, rolledBody, placesIn } from "./utils/communityEvents";
 import { answerLengthBlock, depthBlock, answerTokens, readAnswerLength, storeAnswerLength, lengthLabel, SHORT as ANSWER_SHORT, LONG as ANSWER_LONG } from "./utils/answerLength";
@@ -364,7 +365,7 @@ import { THEME_LABEL, THEME_EMOJI, themesOf, hasTheme, themesPresent, tierLabel,
 // whether it is worth travelling for. See utils/streetVibe.js.
 import { STREET_VIBES, STREET_VIBE_VALUES, vibeOf } from "./utils/streetVibe";
 import { shopKindOf, shopsInPlace, inShopPlace, SHOP_KINDS } from "./utils/shopping";
-import { EVENT_TYPE_LABEL, eventTypesOf, hasEventType, eventTypesPresent, eventTypeCounts } from "./utils/eventTypes";
+import { EVENT_TYPE_LABEL, eventTypesOf, hasEventType, eventTypesPresent, eventTypeCounts, typeWordFor } from "./utils/eventTypes";
 import { SWEEPS, sweepById, selectRows, applyCap, knownPlacesFor, proposeSweep, applySweepPatch, buildSnapshot, readSnapshot, snapshotFilename, MARKS } from "./utils/sweeps";
 import { BACKFILL_SORTS, BACKFILL_SORT_DEFAULT, sortForBackfill, tierSpread } from "./utils/tierBackfill";
 import { classifyFerry, ferryFindings, FERRY } from "./utils/transport";
@@ -1215,7 +1216,16 @@ function GemlyxApp() {
   const [eventQuery, setEventQuery] = useState("");
   const [foodQuery, setFoodQuery] = useState("");
   const [eventType, setEventType] = useState(null);
-  const [eventTab, setEventTab] = useState("local");
+  // ── OUR PICKS AND THE FULL CALENDAR ──────────────────────────────
+  // Oliver, 29 Sep 2026: "cut the 'major' and 'local'.. make full calenders
+  // instead", and of Denmark and Lithuania, "I think they should be similar".
+  // Picks are every event Gemlyx has checked, Major and Local together; the
+  // full calendar adds what was imported from a town's own calendar. A country
+  // with no imported calendar yet has picks only, and no tabs.
+  const [eventTab, setEventTab] = useState("picks");
+  // What's on for you: a day and, if the kids are coming, the family events.
+  const [eventWhen, setEventWhen] = useState(null);
+  const [eventKids, setEventKids] = useState(false);
   // null, or one of the TIERS ids: must | high | worth | nearby. Read off the
   // entry's own tier so the filter agrees with what the card says about each
   // town, rather than being a second opinion. See the note below the state.
@@ -10078,6 +10088,13 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
   // the work should be unticking the two he does not want.
   const [calPicked, setCalPicked] = useState([]);
   const [calAdded, setCalAdded] = useState("");
+  // ── WHERE THE PICKED ROWS GO ──────────────────────────────────────
+  // Oliver, 29 Sep 2026: "We can just adopt all of their events into our
+  // page." A village noticeboard's rows are Community notices, hidden and read
+  // by a guide; a town's own calendar goes on the Full calendar where anybody
+  // can see it. His choice per batch, Community by default so every existing
+  // feed behaves as it did.
+  const [calTarget, setCalTarget] = useState("community");
   // The errands a notice leaves behind, kept on screen rather than in a toast.
   // Each one names the place, what came out of the notice and what to ask that
   // group for. Declared here because BOTH notice paths write to it and this is
@@ -10174,7 +10191,10 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
     } catch (err) {
       return { rows: [], notes: [], error: `Could not read it: ${String(err?.message || err).slice(0, 180)}` };
     }
-    const rows = communityRowsFrom({ events, place, source, today: new Date() });
+    // A town's calendar runs to hundreds of rows a month, where a village
+    // noticeboard has a handful, so the cap here is the town's. Nothing is
+    // added until he ticks it, and "All" and "None" are one tap each.
+    const rows = communityRowsFrom({ events, place, source, today: new Date(), limit: 400 });
     return { rows, notes: [...feedProblems({ place, rows, skipped, events }), ...notes], error: "" };
   };
 
@@ -10207,11 +10227,17 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
           // the description rather than the name, because the name is what the
           // guide says out loud and "Halvvejs, Vestervej 15" is an address.
           desc: [r.desc, r.venue ? `Where: ${r.venue}` : "", r.time ? `Starts ${r.time}` : ""].filter(Boolean).join(" "),
-          scale: "Community",
-          type: "Community",
+          scale: calTarget === "calendar" ? "Calendar" : "Community",
+          // A calendar row gets a type in the Events page's own vocabulary,
+          // read off its title and description, so the category pills and
+          // "With kids" can find it. A community row stays "Community".
+          type: calTarget === "calendar" ? typeWordFor(`${r.name} ${r.desc || ""}`) : "Community",
           website: r.source,
           tier: "",
           ticketStatus: "",
+          // The country chosen in Studio, so Klaipėda's calendar lands on the
+          // Lithuanian pages. Nothing is added for Denmark.
+          ...(studioCountry !== DEFAULT_COUNTRY ? { country: studioCountry } : {}),
         });
         const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content`, {
           method: "POST",
@@ -10250,7 +10276,8 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
       //
       // AFTER the community rows, not beside them, because the grouping is a
       // question about the whole batch rather than about one row.
-      for (const group of noticeGroups(picked)) {
+      // A town's calendar is not a noticeboard, so it sends nobody a notice.
+      for (const group of (calTarget === "calendar" ? [] : noticeGroups(picked))) {
         const lead = group.rows[0];
         const here = pretendPlaces.find(pl => pl.name.toLowerCase() === String(lead.town || "").toLowerCase());
         // THE COORDINATE COMES FROM THE PLACE, the same rule sendAsNotice has: a
@@ -22798,8 +22825,18 @@ ${languageBlock()}`;
     const days = daysUntil(event.date);
     const away = !Number.isFinite(days) ? ""
       : days <= 0 ? "Happening now" : days === 1 ? "Tomorrow" : `${days} days away`;
+    // ── A CALENDAR ROW OPENS ITS OWN CALENDAR ─────────────────────────
+    // Imported from a town's calendar, it is a listing Gemlyx has not checked
+    // and has no page of its own worth opening, so a tap goes to the page it
+    // was listed on. See calendarEvents in data/events.js.
+    const listed = event.__scale === "Calendar";
+    const listedAt = listed ? (event.website || event.source || "") : "";
+    const openIt = () => {
+      if (!listed) { setEventDetail(event); return; }
+      if (/^https?:\/\//i.test(listedAt)) window.open(listedAt, "_blank", "noopener,noreferrer");
+    };
     return (
-      <div onClick={() => setEventDetail(event)} onMouseMove={tiltMove} onMouseLeave={tiltLeave}
+      <div onClick={openIt} onMouseMove={tiltMove} onMouseLeave={tiltLeave}
         style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden", cursor: "pointer", transition: "transform 0.18s ease, border-color 0.18s ease", willChange: "transform" }}>
         <div style={{ height: 136, position: "relative", overflow: "hidden", background: `radial-gradient(120% 90% at 18% 0%, ${event.color}2E 0%, transparent 60%), radial-gradient(100% 80% at 90% 100%, #23181F 0%, transparent 55%), ${C.bg}` }}>
           <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Fraunces', serif", fontStyle: "italic", fontSize: 52, fontWeight: 500, color: "rgba(148,163,199,0.3)" }}>{(event.name || "◆").slice(0, 1)}</span>
@@ -22849,10 +22886,15 @@ ${languageBlock()}`;
                 prompt showed no badge here. tierOf is the one matcher, and
                 placeThemes.js already says why: "the stored strings are long
                 and inconsistently cased across 71 rows written over weeks". */}
+            {/* Major, which used to be a tab, is a badge now: the one thing
+                it told a reader was that this is worth travelling for. */}
+            {event.__scale === "Major" && <span style={{ fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: 100, color: C.gold, background: `${C.gold}1c`, border: `1px solid ${C.gold}44` }}>Worth travelling for</span>}
             {tierOf(event)?.id === "must" && <span style={{ fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: 100, color: C.onGold, background: C.gold }}>★ Can't miss out</span>}
             {event.tier === "Highly Recommended" && <span style={{ fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: 100, color: "#6ECF97", background: "rgba(110,207,151,0.12)" }}>Highly Recommended</span>}
             {event.tier === "Best If You're Already Nearby" && <span style={{ fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: 100, color: "#FFB347", background: "#FFB34722" }}>Best if already nearby</span>}
-            <span style={{ fontSize: 11.5, color: C.muted }}>{travelLabel(userCoords, event.town, event.travelTime, event.__journey?.from || "")}</span>
+            {listed
+              ? <span style={{ fontSize: 11.5, color: C.muted }}>{`${event.time ? `${event.time} · ` : ""}${event.venue ? `${event.venue} · ` : ""}from ${domainOf(listedAt) || "the town's calendar"} ↗`}</span>
+              : <span style={{ fontSize: 11.5, color: C.muted }}>{travelLabel(userCoords, event.town, event.travelTime, event.__journey?.from || "")}</span>}
             {/* ── FOUR HARDCODED COMPARISONS, TWO OF THEM UNREACHABLE ───
                 Was sold_out, selling_fast, available, free. The festival
                 prompt has only ever asked for free / on_sale / limited /
@@ -22962,7 +23004,8 @@ ${languageBlock()}`;
   // Third dead render path found today, after the nightlife town that no line
   // could put on the page and the source list that reached no search. Viking is
   // a kind of event, so it is a type, and the type row already exists.
-  const eventTabSource = eventTab === "local" ? events : majorEvents;
+  const hasFullCalendar = calendarEvents.some(e => isCurrentlyLive(e.date, e.dateEnd) || isUpcoming(e.date));
+  const eventTabSource = eventTab === "calendar" && hasFullCalendar ? [...events, ...majorEvents, ...calendarEvents] : [...events, ...majorEvents];
   // isCurrentlyLive OR isUpcoming, not isUpcoming alone. isUpcoming only ever
   // reads the START, so a festival that opened yesterday and runs all week
   // vanished from this grid on the morning it opened, which is the single day
@@ -23016,7 +23059,7 @@ ${languageBlock()}`;
     ...eventTypesPresent(upcomingInTab),
     // North Zealand is not a type on any record, it is a group of towns. It stays
     // hand-added because there is nothing in the data to derive it from.
-    ...(eventTab === "local" && upcomingInTab.some(e => NORTH_ZEALAND_TOWNS.includes(e.town)) ? ["North Zealand"] : []),
+    ...(upcomingInTab.some(e => NORTH_ZEALAND_TOWNS.includes(e.town)) ? ["North Zealand"] : []),
   ];
   const eventTypeLabelFor = (t) => EVENT_TYPE_LABEL[t] || t;
 
@@ -23058,7 +23101,11 @@ ${languageBlock()}`;
   // its `test` once, applyFacets runs it for the list, and facetCounts runs the
   // same function for the counts, so a count and the filter it applies cannot
   // disagree by construction rather than by an assertion watching two copies.
-  const eventsSearched = upcomingInTab.filter(e => matchesQuery(e, eventQuery, ["town", "type", "desc", "location"]));
+  const whenDays = eventWhen ? daysFor(eventWhen, new Date()) : null;
+  const eventsSearched = upcomingInTab
+    .filter(e => matchesQuery(e, eventQuery, ["town", "type", "desc", "location"]))
+    .filter(e => !whenDays || eventOnDays(e, whenDays))
+    .filter(e => !eventKids || hasEventType(e, "family"));
   const filteredEvents = applyFacets(eventsSearched, eventFacets, eventFacetState)
     // Soonest first stays the default, because for an event the date IS the
     // point. A to Z is there for when you know the name and want to find it.
@@ -24559,6 +24606,22 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                   </span>
                                 </span>
                               </label>
+                            ))}
+                          </div>
+                          <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginBottom: 8 }}>
+                            <span style={{ fontSize: 10.5, fontWeight: 700, color: C.muted }}>Add as</span>
+                            {[["community", "Community notices"], ["calendar", "Full calendar"]].map(([id, label]) => (
+                              <button key={id} onClick={() => setCalTarget(id)} aria-pressed={calTarget === id}
+                                style={{ background: calTarget === id ? `${C.gold}22` : "none", border: `1px solid ${calTarget === id ? C.gold : C.border}`, color: calTarget === id ? C.gold : C.light, borderRadius: 100, padding: "4px 10px", fontSize: 10.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                {label}
+                              </button>
+                            ))}
+                            <span style={{ fontSize: 10.5, fontWeight: 700, color: C.muted, marginLeft: 6 }}>Country</span>
+                            {Object.values(COUNTRY_PROFILES).map(c => (
+                              <button key={c.code} onClick={() => setStudioCountry(c.code)} aria-pressed={studioCountry === c.code}
+                                style={{ background: studioCountry === c.code ? `${C.gold}22` : "none", border: `1px solid ${studioCountry === c.code ? C.gold : C.border}`, color: studioCountry === c.code ? C.gold : C.light, borderRadius: 100, padding: "4px 10px", fontSize: 10.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                {c.name}
+                              </button>
                             ))}
                           </div>
                           <div style={{ display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
@@ -29862,14 +29925,44 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Festivals, markets and local happenings across {PAGE_LAND.name}, all year round. From legendary stages to harbour markets nobody talks about. {PAGE_ABROAD ? "We guide you to what is worth going out for." : "We guide you to what's worth traveling for, and exactly how far it is from Copenhagen."}</div>
               </div>
 
+              {hasFullCalendar && (
               <div style={{ display: "flex", gap: 0, marginBottom: 16, borderBottom: `1px solid ${C.border}` }}>
-                {[{ id: "local", label: "Local", ico: "town" }, { id: "major", label: "Major", ico: "ticket" }].map(t => (
+                {[{ id: "picks", label: "Our picks", ico: "ticket" }, { id: "calendar", label: "Full calendar", ico: "calendar" }].map(t => (
                   <button key={t.id} onClick={() => { setEventTab(t.id); setEventMonth(null); setEventType(null); }}
                     style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 7, background: "none", border: "none", borderBottom: `2px solid ${eventTab === t.id ? C.accent : "transparent"}`, color: eventTab === t.id ? C.text : C.muted, padding: "12px 8px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                     <Ico name={t.ico} size={14} /> {t.label}
                   </button>
                 ))}
               </div>
+              )}
+              {/* ── WHAT'S ON FOR YOU ────────────────────────────────
+                  Oliver, 29 Sep 2026: "those events are overwhelming". A day
+                  and whether the kids are coming, one tap each, above the
+                  search and the filters rather than inside them. See
+                  utils/eventWhen.js. */}
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: C.muted, marginRight: 2 }}>What's on for you</span>
+                {WHEN_CHOICES.map(w => (
+                  <button key={w.id} onClick={() => setEventWhen(eventWhen === w.id ? null : w.id)} aria-pressed={eventWhen === w.id}
+                    style={{ background: eventWhen === w.id ? `${C.gold}22` : "none", border: `1px solid ${eventWhen === w.id ? C.gold : C.border}`, color: eventWhen === w.id ? C.gold : C.light, borderRadius: 100, padding: "5px 12px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                    {w.label}
+                  </button>
+                ))}
+                <button onClick={() => setEventKids(!eventKids)} aria-pressed={eventKids}
+                  style={{ background: eventKids ? "#64B5F622" : "none", border: `1px solid ${eventKids ? "#64B5F6" : C.border}`, color: eventKids ? "#64B5F6" : C.light, borderRadius: 100, padding: "5px 12px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                  With kids
+                </button>
+              </div>
+              {eventTab === "calendar" && hasFullCalendar && (() => {
+                // Whose calendar this is, named from the rows themselves, so
+                // the credit can never be to somebody whose events are not here.
+                const hosts = [...new Set(calendarEvents.map(e => domainOf(e.website || e.source || "")).filter(Boolean))];
+                return hosts.length ? (
+                  <div style={{ fontSize: 11.5, color: C.muted, marginBottom: 12, lineHeight: 1.6 }}>
+                    From {hosts.join(" and ")}, with our picks among them.
+                  </div>
+                ) : null;
+              })()}
               <FilterBar
                 items={eventsSearched}
                 search={eventQuery}

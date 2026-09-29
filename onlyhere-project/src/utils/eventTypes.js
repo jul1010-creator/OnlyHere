@@ -60,23 +60,33 @@
 //   word\b     the word ENDS a Danish compound (marked)
 //   \bword\b    an English word that is a substring of unrelated ones (metal,
 //              art, fair), where a loose match is a wrong pill on somebody's page
+// ── AND LITHUANIAN, FOR KLAIPĖDA'S CALENDAR ─────────────────────────
+// 29 Sep 2026, Phase 2 of LITHUANIA_PLAN_29SEP.md. Oliver: "events have
+// categories, right?" They do, and Klaipėda's calendar writes them in
+// Lithuanian as well as English: koncertas, muzika, mugė, paroda, teatras,
+// vaikams. \b does not treat Lithuanian letters (ė, ų, š) as part of a word, so
+// where one starts or ends a word the boundary is spelled out with a lookaround
+// instead. SPORT is new for the same calendar, which is full of runs, yoga and
+// basketball that no other pill could hold.
+const LT_LETTER = "a-ząčęėįšųūž";
 const RULES = [
   // Order matters only for readability of the pill row, not for matching: an
   // event can and does match several.
-  { id: "music", label: "🎵 Music", match: /\b(music|musik|rock|jazz|blues|concert|koncert|techno|electronic)|\b(metal|dj)\b/i },
+  { id: "music", label: "🎵 Music", match: /\b(music|musik|muzik|rock|jazz|blues|concert|koncert|techno|electronic|karaoke)|\b(metal|dj)\b/i },
   // One rule covers viking, vikinge and vikingemarked.
   { id: "viking", label: "⚔️ Viking", match: /\bviking/i },
   // "marked" ends Danish compounds, so it cannot take a leading boundary. The
   // lookbehind is the one English word that ruins it: "remarked" is a verb, and
   // it was matching. Known limit, written down rather than discovered: an
   // "earmarked" would still match, and is not a thing anybody types here.
-  { id: "market", label: "🛍 Market", match: /\b(market|markt|fair)\b|(?<!re)marked\b/i },
+  { id: "market", label: "🛍 Market", match: /\b(market|markt|fair)\b|(?<!re)marked\b|\bmug[ėe](?![a-z])/i },
   { id: "food", label: "🍽 Food", match: /\b(food|gastro|beer|wine|mad|vin|øl)\b|\bmadmarked|\bstreet ?food/i },
   // \bart\b so "artisan" is a craft and not an art festival. \bkunst loose at the
   // end for Kunstfestival, Kunsthal.
-  { id: "art", label: "🎨 Art & design", match: /\b(art|arts|design|film|theatre|theater|teater)\b|\b(kunst|teater)/i },
-  { id: "culture", label: "🏛 Culture", match: /\b(culture|heritage)\b|\b(kultur|histor)/i },
-  { id: "family", label: "🧸 Family", match: /\bfamil|\b(children|kids)\b|\bbørn/i },
+  { id: "art", label: "🎨 Art & design", match: /\b(art|arts|design|film|theatre|theater|teater)\b|\b(kunst|teater|teatr|parod|spektakl)/i },
+  { id: "culture", label: "🏛 Culture", match: /\b(culture|heritage)\b|\b(kultur|kultūr|histor|istorij)/i },
+  { id: "family", label: "🧸 Family", match: new RegExp(`\\bfamil|\\b(children|kids)\\b|\\bbørn|\\bvaik(ams|ų|ai|us)(?![${LT_LETTER}])|(?<![${LT_LETTER}])šeim`, "i") },
+  { id: "sport", label: "🏃 Sport", match: /\b(sport|sports|marathon|yoga|joga|football|basketball|futbol|regatta)\b|\b(krepšin|bėgim|sportas|idræt)/i },
 ];
 
 export const EVENT_TYPES = RULES.map(r => r.id);
@@ -134,3 +144,15 @@ export const eventTypeCounts = (list, types) => {
 // rather than a silence to live with.
 export const untypedEvents = (list) =>
   (Array.isArray(list) ? list : []).filter(e => eventTypesOf(e).length === 0);
+
+// ── A TYPE FOR A ROW THAT CAME WITH NONE ────────────────────────────
+// A calendar imported from somebody else's site gives a title and a date, and
+// the pills read `type`. So an imported row is given a type in the same closed
+// vocabulary, read off its own title and description: "Music / Family", or
+// "Event" when nothing matches, which carries no pill (see UNINFORMATIVE).
+const TYPE_WORD = { music: "Music", viking: "Viking", market: "Market", food: "Food", art: "Art", culture: "Culture", family: "Family", sport: "Sport" };
+export const typeWordFor = (text) => {
+  const t = String(text || "");
+  const ids = RULES.filter(r => r.match.test(t)).map(r => r.id);
+  return ids.length ? ids.map(id => TYPE_WORD[id] || id).join(" / ") : "Event";
+};
