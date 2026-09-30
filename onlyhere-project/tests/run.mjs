@@ -17,7 +17,19 @@
 // Only PURE functions are tested. Nothing here touches the network, Supabase,
 // or React, so it always runs in about a second and can never be flaky.
 
-import { mkdtempSync, writeFileSync, readFileSync, readdirSync, statSync, rmSync, existsSync } from "node:fs";
+import { mkdtempSync, writeFileSync, readFileSync as readFileRaw, readdirSync, statSync, rmSync, existsSync } from "node:fs";
+// ── THE SAME SOURCE ON EVERY MACHINE ────────────────────────────────
+//
+// 30 Sep 2026. .gitattributes says `* text=auto`, so a Windows checkout has
+// CRLF line endings and the runner has LF. Hundreds of the pins here read a
+// source file and match a "\n" inside it, so on Oliver's PC the pre-push hook
+// refused a tree that CI would have passed. Text reads are read as the repo
+// stores them, with LF, whatever the checkout did. Binary reads (no encoding)
+// are left alone.
+const readFileSync = (path, opts) => {
+  const out = readFileRaw(path, opts);
+  return typeof out === "string" ? out.replace(/\r\n/g, "\n") : out;
+};
 // One assertion needs a timezone that is not this machine's. See the event date
 // block near the end: the container runs on UTC, and UTC is the one zone where
 // the bug it guards cannot be seen.
