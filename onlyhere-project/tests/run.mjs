@@ -36707,7 +36707,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // Batch 167: the menu and the bar render the same GROUPS of NAV_ITEMS (utils/navGroups.js).
   is("the menu renders the list", (appN.match(/\{navGroups\.map\(\(g, i\) => \{/g) || []).length, 1);
   is("and the bar renders the same list minus the Detour button",
-     (appN.match(/const navGroups = groupNav\(NAV_ITEMS\.filter\(item => item\.id !== "ai"\)/g) || []).length, 1);
+     // Batch 168: the gold button is featuredTab (Special deals on /lithuania, the planner elsewhere).
+     (appN.match(/const navGroups = groupNav\(NAV_ITEMS\.filter\(item => item\.id !== featuredTab\)/g) || []).length, 1);
   ok("which is still the only source of the pages", !/const NAV_ITEMS_2|const TOP_NAV_ITEMS/.test(appN));
   ok("the bar is hidden until there is room for it", /\.gx-topnav \{ display: none;/.test(appN));
   // ── AND THE MEASUREMENT RETIRED, 5 SEP 2026 ─────────────────────
@@ -65218,7 +65219,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     }
     // Batch 167: the strip carries the groups, built from every page but Detour.
     ok("the strip carries the eight pages and not the ninth",
-       /NAV_ITEMS\.filter\(item => item\.id !== "ai"\)/.test(app) && /<NavStrip C=\{C\}>\s*\n\s*<NavGroupButtons groups=\{navGroups\}/.test(app));
+       /NAV_ITEMS\.filter\(item => item\.id !== featuredTab\)/.test(app) && /<NavStrip C=\{C\}>\s*\n\s*<NavGroupButtons groups=\{navGroups\}/.test(app));
     // Sliced rather than matched with [^>]*: the onClick contains an arrow
     // function, so the first ">" in that attribute list is inside "=>".
     {
@@ -80651,6 +80652,23 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("near you means the page's country", /export const isInDenmark = \(coords\) => isInCountry\(coords, activeCountry\(\)\);/.test(helpers));
   ok("and the journey origin is its hub", /export const TRAVEL_ORIGIN = countryProfile\(activeCountry\(\)\)\.hub;/.test(helpers));
   is("which outside a browser is still Copenhagen", M.TRAVEL_ORIGIN_NAME, "Copenhagen");
+}
+
+// ── Batch 168: Special deals on the gold button, the planner in the menu ──
+{
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the gold button is Special deals only on another country's page with deals", /const featuredTab = PAGE_ABROAD && TAB_ORDER\.includes\("promotions"\) \? "promotions" : "ai";/.test(app));
+  ok("and it opens whatever it names", /data-testid="nav-featured" onClick=\{\(\) => goTab\(featuredTab\)\}/.test(app));
+  ok("the burger's gradient row follows it", /NAV_ITEMS\.filter\(item => item\.id === featuredTab\)/.test(app));
+  const withAi = ["home", "gems", "promotions", "ai"].map(id => ({ id, label: id, ico: null }));
+  const g = M.groupNav(withAi.filter(i => i.id !== "promotions"));
+  is("the planner sits last in the menu when the button is taken", g.map(x => x.id), ["home", "gems", "plan"]);
+  is("as a plain item", [g.at(-1).single, g.at(-1).children[0].tab], [true, "ai"]);
+  ok("and is not drawn where the button carries it", !M.groupNav(withAi.filter(i => i.id !== "ai")).some(x => x.id === "plan"));
+  const ui = readFileSync(join(root, "src/utils/uiLanguage.js"), "utf8");
+  ok("one name everywhere: Special deals", /"nav\.promotions":\s+\{ en: "Special deals"/.test(ui));
+  const page = readFileSync(join(root, "src/components/PromotionsPage.jsx"), "utf8");
+  ok("the page title agrees", /title = "Special deals"/.test(page));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
