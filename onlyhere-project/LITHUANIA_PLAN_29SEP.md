@@ -249,3 +249,17 @@ with the changes we talked about."
 - The gold button reads Special deals on /lithuania while at least one deal
   is live. With none live it falls back to the planner, so it never opens an
   empty page. Denmark keeps "Plan my trip" on the gold button.
+
+### Batch 169 and 170 (30 Sep): tests on Windows, one Studio per country
+- 169: the suite reads source files with LF whatever the checkout did, so the
+  pre-push hook on Oliver's Windows PC agrees with CI.
+- 170, Oliver: "All of this has to be reset on the lithuanian studio.." Studio
+  on /lithuania drafts for Lithuania from the start. Manage Published, Reports,
+  Facts, Research sources and Community groups show this site's rows only.
+  Drafts, the queue (which now keeps its country), the recorder, the run log,
+  the chat thread and Pretend are stored per country; Denmark keeps its old
+  keys. Research prompts get the sources for the country being researched.
+  Random guide builds a random Klaipėda visit through the Lithuanian form.
+  The Lithuanian loading card shows Lithuanian facts only, and none until
+  there are some. SQL run in Supabase 30 Sep: a `country` column (default DK)
+  on gemlyx_sources, gemlyx_feeds and gemlyx_facts.
