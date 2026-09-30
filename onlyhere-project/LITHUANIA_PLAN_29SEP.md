@@ -241,3 +241,11 @@ with the changes we talked about."
   value (needs a Studio change, not a label change), the one-guide-a-day
   window resets at Copenhagen midnight (server and browser must change
   together), and privacy.html describes the service as Denmark only.
+
+### Batch 168 (30 Sep): Special deals on the gold button
+- Oliver: "Maybe change the golden buzzer out with 'special deals' instead?
+  Because right now, it's hidden." Lithuania only; the planner moves into the
+  menu as its own item; "Promotions" is called "Special deals" everywhere.
+- The gold button reads Special deals on /lithuania while at least one deal
+  is live. With none live it falls back to the planner, so it never opens an
+  empty page. Denmark keeps "Plan my trip" on the gold button.
