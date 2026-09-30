@@ -161,7 +161,7 @@ import { PromotionsPage } from "./components/PromotionsPage";
 import { livePromotions } from "./utils/promotions";
 import { groupNav, childActive, groupActive } from "./utils/navGroups";
 import { NavGroupButtons } from "./components/NavGroups";
-import { abroadBriefParts, inventoryBlock, landAsk } from "./utils/guideAbroad";
+import { abroadBriefParts, inventoryBlock, landAsk, randomAbroadVisit } from "./utils/guideAbroad";
 import * as AI from "./utils/aiClient";
 import { GuidePage } from "./pages/GuidePage";
 import { askClaude, parseClaudeJSON, askPerplexity, withRetry, askOpenAI, readDatesFromImage, readPosterText, wholeSentences, citationUrls } from "./utils/aiClient";
@@ -171,7 +171,7 @@ import { studioPrompts } from "./utils/studioPrompts";
 import { ensureLiveContentLoaded, refreshLiveContent, applyEditedRow, removeLiveRow, REMOVED, UNKNOWN_TYPE, liveContentFailure, LIVE_ID_OFFSET } from "./utils/liveContent";
 import { isRecording, startRecording, stopRecording, record, recordedEvents, recordingText, recordingFileName, safeUrl } from "./utils/studioRecorder";
 import { ensureLiveFactsLoaded, refreshLiveFacts } from "./utils/liveFacts";
-import { founderSources, ensureSourcesLoaded, refreshSources } from "./utils/liveSources";
+import { founderSources, ensureSourcesLoaded, refreshSources, sourcesFor } from "./utils/liveSources";
 import { arrivalOrBusRow } from "./utils/busStop";
 import { journeyParts, journeyFigure, WAIT_INSIDE_TOTAL, NO_TRANSIT_NOTE, journeyBlock, transitProblems, absenceClaims, contradictedAbsence, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, islandLegProblems, closedButPlanned, arrivalStop, vehicleMismatches, journeyCensus, censusNote } from "./utils/journey";
 import { correctEntry, keepMeasured, keepProse, MEASURED_FIELDS, pendingRemeasure, urlsIn, dropAppliedClaims } from "./utils/correction";
@@ -358,7 +358,7 @@ import { StudioReports } from "./components/StudioReports";
 // The Wikimedia results grid, one file rather than a third inline copy. See
 // components/CommonsResults.jsx.
 import { CommonsResults } from "./components/CommonsResults";
-import { filterReports, INBOX_SETUP_SQL } from "./utils/supportInbox";
+import { filterReports, INBOX_SETUP_SQL, reportCountry } from "./utils/supportInbox";
 import { SUPPORT_TABLE } from "./utils/support";
 import { DeleteAccountSheet, deleteReasonMessage } from "./components/DeleteAccountSheet";
 import { ProfileSheet } from "./components/ProfileSheet";
@@ -832,6 +832,8 @@ const SOURCES_SQL = `create table if not exists gemlyx_sources (
 );
 alter table gemlyx_sources enable row level security;
 alter table gemlyx_sources add column if not exists applies_place text default '';
+-- 30 Sep 2026: which country's research a source belongs to. Every row before it is Danish.
+alter table gemlyx_sources add column if not exists country text not null default 'DK';
 
 -- Dropped first so the whole script is safe to run again. Supabase runs the
 -- editor as one transaction, so a "policy already exists" error rolls back
@@ -875,6 +877,8 @@ alter table gemlyx_feeds enable row level security;
 -- was created before them. Same pattern as applies_place on gemlyx_sources.
 alter table gemlyx_feeds add column if not exists kind text default 'group';
 alter table gemlyx_feeds alter column group_id drop not null;
+-- 30 Sep 2026: which country's Studio a group belongs to. Every row before it is Danish.
+alter table gemlyx_feeds add column if not exists country text not null default 'DK';
 
 drop policy if exists "auth all gemlyx_feeds" on gemlyx_feeds;
 create policy "auth all gemlyx_feeds" on gemlyx_feeds for all to authenticated using (true) with check (true);`;
@@ -992,7 +996,7 @@ const researchRules = (type, where) => {
   const area = region || kommune
     ? `\n\nWHERE THIS IS, ALREADY MEASURED: ${[region, kommune && `${kommune} Kommune`].filter(Boolean).join(", ")}, in Denmark. ${measured ? "That came from a map lookup on this place's own coordinate before this search was written, so treat it as settled" : "That was read out of an address in the research rather than measured from this place's own coordinate, so it is the best guess available and NOT settled \u2014 if what you find says this place is somewhere else in Denmark, say so plainly rather than forcing it to fit"} and use it to NARROW what you look at. If a page you find is about a place of the same or a similar name somewhere else in Denmark, it is the wrong page and it is not evidence about this one. Do not restate this in your answer; it is here to aim the search.`
     : "";
-  return `${RESEARCH_SOURCE_RULES}${both}${area}${sourceRulesBlock(founderSources, type, where)}`;
+  return `${RESEARCH_SOURCE_RULES}${both}${area}${sourceRulesBlock(sourcesFor(), type, where)}`;
 };
 
 // ── THE DATE FIELD ON THE FRONT PAGE ─────────────────────
@@ -1532,7 +1536,7 @@ function GemlyxApp() {
       // NAMED, not "invalid". The two ways to miss are completely different
       // problems and only one of them is a typo.
       setPretendError(/\d/.test(pretendTyped)
-        ? `That is not a coordinate inside Denmark. It wants something like 55.95, 11.15.`
+        ? `That is not a coordinate inside ${PAGE_LAND.name}. It wants something like ${PAGE_ABROAD ? "55.71, 21.13" : "55.95, 11.15"}.`
         : `Nothing on file is called "${pretendTyped.trim()}". Try a published town or island, or paste the coordinate.`);
       return;
     }
@@ -2624,7 +2628,9 @@ function GemlyxApp() {
       }
       const rows = await res.json();
       const list = Array.isArray(rows) ? rows : [];
-      setReportRows(list);
+      // This site's reports only (see reportCountry). The SQL hint still looks
+      // at the whole table: an empty Lithuanian inbox is not a missing table.
+      setReportRows(list.filter(r => reportCountry(r) === PAGE_COUNTRY));
       setReportNeedsSql(list.length === 0);
     } catch {
       setReportError("Reports could not be read just now.");
@@ -2678,7 +2684,10 @@ function GemlyxApp() {
     try {
       const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=id,type,payload,published,created_at&order=id.desc`);
       const rows = await res.json();
-      const list = Array.isArray(rows) ? rows : [];
+      // This page's country only. Every reader of manageItems (the health
+      // check, the duplicate finder, "is this already published") is asking
+      // about the site he is standing on, so the filter goes here once.
+      const list = (Array.isArray(rows) ? rows : []).filter(r => rowCountry(r?.payload) === PAGE_COUNTRY);
       setManageItems(list);
       // Seeded here rather than on every render, so a group he opens or closes
       // by hand stays that way while he works through it. The free per-row
@@ -3369,7 +3378,9 @@ function GemlyxApp() {
   // Oliver, 29 Sep 2026: "the template that we have on Denmark, and put it onto
   // Klaipeda". Phase 1 of LITHUANIA_PLAN_29SEP.md. Denmark unless he picks
   // otherwise, and a queued draft keeps the country it was queued with.
-  const [studioCountry, setStudioCountry] = useState(DEFAULT_COUNTRY);
+  // 30 Sep 2026: seeded from the page, so the Studio on /lithuania drafts for
+  // Lithuania without a tap on the Country chip first.
+  const [studioCountry, setStudioCountry] = useState(PAGE_COUNTRY);
   const [studioLoading, setStudioLoading] = useState(false);
   // Ref mirror of studioLoading — the draft-queue runner is a long-lived async
   // loop whose closure would otherwise read a stale false and double-start.
@@ -3914,7 +3925,7 @@ Say which answer came from which source, so a fact from a vouched page and a fac
           model: "gpt-5.6-sol",
           response_format: { type: "json_object" },
           messages: [
-            { role: "system", content: `Extract every distinct Danish festival/event mentioned in this page text into strict JSON: {"items": [{"name": "exact name as written", "town": "town/city if given, else empty string", "dates": "date range as written, else empty string"}]}. Only include items present in the text — never invent, never guess at ones you think might exist. If the same festival appears twice (e.g. a duplicate listing), include it once. This is a discovery list only, not final content — the founder will individually research and verify each one before anything is published.` },
+            { role: "system", content: `Extract every distinct ${PAGE_LAND.adjective || "Danish"} festival/event mentioned in this page text into strict JSON: {"items": [{"name": "exact name as written", "town": "town/city if given, else empty string", "dates": "date range as written, else empty string"}]}. Only include items present in the text — never invent, never guess at ones you think might exist. If the same festival appears twice (e.g. a duplicate listing), include it once. This is a discovery list only, not final content — the founder will individually research and verify each one before anything is published.` },
             { role: "user", content: pageData.text },
           ],
           // max_tokens -> max_completion_tokens: "gpt-5.6-sol" REJECTS max_tokens
@@ -5123,7 +5134,7 @@ Say which answer came from which source, so a fact from a vouched page and a fac
           // was never sent to look at it.
           island: islandHere(),
         };
-        const searches = directSourceSearches(founderSources, sType, sourceCtx);
+        const searches = directSourceSearches(sourcesFor(), sType, sourceCtx);
         // ── WHICH SOURCES WERE CHOSEN, AND FROM WHAT ──────────────────
         // sourceHits already recorded the answer to "was kultunaut.dk searched"
         // on every draft and nothing wrote it down, which is why the providers
@@ -5142,8 +5153,8 @@ Say which answer came from which source, so a fact from a vouched page and a fac
             .filter(Boolean).join(", ") || "nothing placed this draft, so every place-scoped source was left out",
           outcome: searches.length ? "ok" : "empty",
           got: searches.length
-            ? `${searches.length} of ${founderSources.length}: ${searches.map(s => s.domain).join(", ")}`
-            : `none of ${founderSources.length} vouched sources were in scope`,
+            ? `${searches.length} of ${sourcesFor().length}: ${searches.map(s => s.domain).join(", ")}`
+            : `none of ${sourcesFor().length} vouched sources were in scope`,
           used: searches.length > 0,
         });
         for (const { domain, domains, query, fallbackQuery } of searches) {
@@ -5211,7 +5222,7 @@ Say which answer came from which source, so a fact from a vouched page and a fac
         //
         // include_domains takes a list, so the rest cost one call rather than
         // fourteen. See overflowSourceSearch for why the top four keep their own.
-        const rest = overflowSourceSearch(founderSources, sType, sourceCtx);
+        const rest = overflowSourceSearch(sourcesFor(), sType, sourceCtx);
         if (rest) {
           try {
             const runRest = async (q) => {
@@ -10763,7 +10774,8 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
     try {
       const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_facts?select=*&order=created_at.desc`, { headers });
       const rows = await res.json();
-      if (Array.isArray(rows)) { setFactSaved(rows); return; }
+      // This page's country only. A row from before the country column is Danish.
+      if (Array.isArray(rows)) { setFactSaved(rows.filter(r => rowCountry(r) === PAGE_COUNTRY)); return; }
       setFactSaved([]);
       setFactError(factsErrorFor(res.status, rows));
     } catch (e) { setFactError(String(e.message || e)); }
@@ -10794,13 +10806,13 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
   const draftOneFact = async () => {
     const subject = pickFactSubject();
     if (factSource === "published" && !subject) {
-      return { ok: false, error: "Every published place already has a fact. Switch to 'Anywhere in Denmark', or publish more entries first." };
+      return { ok: false, error: `Every published place already has a fact. Switch to 'Anywhere in ${PAGE_LAND.name}', or publish more entries first.` };
     }
     const used = [...usedFactSubjects()].slice(0, 60).join(", ");
     setFactStage("Researching");
     const researchPrompt = subject
-      ? `Find ONE interesting, specific, verifiable fact about ${subject} in Denmark. Prefer something a well-informed traveler would not already know. Give the fact plainly, and give the single best source URL that confirms it. If you cannot confirm anything specific and interesting, say exactly "NOTHING CONFIRMED".`
-      : `Pick ONE real, specific, verifiable fact about Denmark that an ordinary international traveler would find interesting. It can be about history, food, nature, design, language, daily life, or A CULTURAL NORM: an unwritten rule of behaviour a visitor would not know and could get wrong. Janteloven, cycle-lane etiquette, how tipping works, why nobody makes small talk on the bus, what hygge is used to mean in practice rather than in marketing, Sunday opening, splitting the bill, taking your shoes off indoors.
+      ? `Find ONE interesting, specific, verifiable fact about ${subject} in ${PAGE_LAND.name}. Prefer something a well-informed traveler would not already know. Give the fact plainly, and give the single best source URL that confirms it. If you cannot confirm anything specific and interesting, say exactly "NOTHING CONFIRMED".`
+      : `Pick ONE real, specific, verifiable fact about ${PAGE_LAND.name} that an ordinary international traveler would find interesting. It can be about history, food, nature, design, language, daily life, or A CULTURAL NORM: an unwritten rule of behaviour a visitor would not know and could get wrong. Janteloven, cycle-lane etiquette, how tipping works, why nobody makes small talk on the bus, what hygge is used to mean in practice rather than in marketing, Sunday opening, splitting the bill, taking your shoes off indoors.
 
 CULTURAL NORMS NEED MORE CARE THAN OTHER FACTS, NOT LESS. They are the easiest thing on this list to state confidently and wrongly, because the popular version is usually a flattened stereotype. Two rules: name the real origin where there is one (Janteloven is a set of rules from Aksel Sandemose's 1933 novel En flygtning krydser sit spor, satirising a fictional town, and Danes argue about how much it still applies, so it must never be presented as an official code Danes follow), and describe what people DO rather than what a listicle says they are like. If the honest version is "this is contested", that IS the interesting fact, and it is more useful to a traveler than a tidy one.
 
@@ -10844,7 +10856,7 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
       ok: true,
       draft: {
         key: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        subject: String(parsed.subject || subject || "Denmark").trim(),
+        subject: String(parsed.subject || subject || PAGE_LAND.name).trim(),
         // Deterministic dash strip, not just a prompt instruction. The prompt
         // bans the em dash and models still reach for it, and a fact is short
         // enough that one slipping through is very visible. A dash joining two
@@ -10907,6 +10919,8 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
           fact: draft.fact, subject: draft.subject, category: draft.category,
           photo: draft.photo || null, source_url: draft.sourceUrl || null, published: true,
           photo_credit: draft.credit || null,
+          // Stamped only abroad, so a Danish save is the exact request it always was.
+          ...(PAGE_ABROAD ? { country: PAGE_COUNTRY } : {}),
         }),
       });
       if (!res.ok) throw new Error((await res.text()).slice(0, 200));
@@ -11173,8 +11187,8 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
       // local listing rather than a national one.
       const ctxTown = discoverTown || (streetRow ? String(streetRow.town || "").trim() : "");
       const discoverCtx = ctxTown ? { name: streetRow ? `${streetRow.name}, ${ctxTown}` : ctxTown, town: ctxTown } : null;
-      const discoverHunt = discoverSourceSearch(founderSources, type, discoverCtx);
-      const discoverNote = discoverSourceNote(founderSources, type, discoverCtx);
+      const discoverHunt = discoverSourceSearch(sourcesFor(), type, discoverCtx);
+      const discoverNote = discoverSourceNote(sourcesFor(), type, discoverCtx);
 
       // BUG FIX: this was capped at 500 and, on a plain failure, threw immediately
       // with no retry — the same "Empty response from OpenAI" cause as Stage 1's
@@ -11849,7 +11863,8 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
     try {
       const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_sources?select=*&order=id.asc`, { headers });
       const rows = await res.json();
-      if (Array.isArray(rows)) { setSourceRows(rows); return; }
+      // This page's country only. A row from before the country column is Danish.
+      if (Array.isArray(rows)) { setSourceRows(rows.filter(r => rowCountry(r) === PAGE_COUNTRY)); return; }
       setSourceRows([]);
       setSourceError(sourcesErrorFor(res.status, rows));
     } catch (e) { setSourceError(String(e.message || e)); }
@@ -11860,7 +11875,7 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
   const probeSource = async (domain) => {
     setSourceProbe({ domain, state: "checking", count: 0 });
     try {
-      const res = await fetch(`/api/search?q=${encodeURIComponent(`${domain} Denmark`)}&domains=${encodeURIComponent(domain)}`);
+      const res = await fetch(`/api/search?q=${encodeURIComponent(`${domain} ${PAGE_LAND.name}`)}&domains=${encodeURIComponent(domain)}`);
       const data = await res.json();
       if (!res.ok || data.error) { setSourceProbe({ domain, state: "failed", count: 0 }); return; }
       const n = (data.results || []).length;
@@ -11885,7 +11900,7 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
       const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_sources`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Prefer: "return=representation" },
-        body: JSON.stringify({ domain, note: cleanNote(newSourceNote), applies_to: newSourceType, applies_place: cleanPlace(newSourcePlace), enabled: true }),
+        body: JSON.stringify({ domain, note: cleanNote(newSourceNote), applies_to: newSourceType, applies_place: cleanPlace(newSourcePlace), enabled: true, ...(PAGE_ABROAD ? { country: PAGE_COUNTRY } : {}) }),
       });
       const body = await res.json().catch(() => null);
       if (!res.ok) { setSourceError(sourcesErrorFor(res.status, body, "add to")); setSourceBusy(false); return; }
@@ -11946,7 +11961,8 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
     try {
       const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_feeds?select=*&order=id.asc`, { headers });
       const rows = await res.json();
-      if (Array.isArray(rows)) { setFeedRows(rows); return; }
+      // This page's country only. A row from before the country column is Danish.
+      if (Array.isArray(rows)) { setFeedRows(rows.filter(r => rowCountry(r) === PAGE_COUNTRY)); return; }
       setFeedRows([]);
       setFeedError(feedsErrorFor(res.status, rows));
     } catch (e) { setFeedError(String(e.message || e)); }
@@ -12007,6 +12023,7 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
           // "Askø, Lilleø" as one region name and canonicalise nothing.
           place: [cleanPlace(newFeedPlace), cleanPlace(newFeedPlace2)].filter(Boolean).join(", "),
           enabled: true,
+          ...(PAGE_ABROAD ? { country: PAGE_COUNTRY } : {}),
         }),
       });
       const body = await res.json().catch(() => null);
@@ -19356,8 +19373,54 @@ If the conversation only covers a single day or a few stops with no explicit day
     setGuideModal("preview");
   };
 
+  // ── THE PIPELINE TEST ON ANOTHER COUNTRY'S PAGE ──────────────────
+  // Oliver, 30 Sep 2026: "Random Klaipėda visit". A random visitor filled into
+  // the same form a real one uses, and the brief built by the same
+  // abroadBriefParts, so the test runs exactly the path a visitor's does. The
+  // form's state is set too, so what the preview and the build read matches
+  // what is on screen.
+  const generateRandomAbroad = () => {
+    if (guideModal === "loading") return;
+    const v = randomAbroadVisit(PAGE_COUNTRY);
+    setIntakeArrival(v.arrival); setIntakeDeparture(v.departure);
+    setIntakeTravelers(v.travelers); setIntakeFamilyMode(v.kids);
+    setAbroadStart(v.start); setIntakeStartPoint("");
+    setIntakeInterest(v.interests); setIntakeTransport(v.transport);
+    setIntakeFreeOnly(v.freeOnly); setIntakeIncludeEvents(v.events);
+    setIntakeIncludeSaved(false);
+    const counted = partyOf(v.travelers);
+    const parts = abroadBriefParts({
+      land: PAGE_LAND, arrival: v.arrival, departure: v.departure,
+      days: tripDays(v.arrival, v.departure),
+      start: v.start, startText: "",
+      travelers: v.travelers, counted: counted?.heads || null, kids: v.kids,
+      interests: v.interests, transport: v.transport,
+      freeOnly: v.freeOnly, events: v.events, saved: [],
+    });
+    if (!parts.length) return;
+    const brief = parts.join(" | ");
+    // In the words the preview's test card reads (testTravelerLine).
+    randomTestProfileRef.current = {
+      brief,
+      days: v.shape === "cruise" ? undefined : tripDays(v.arrival, v.departure),
+      arrivingOn: v.arrival.slice(0, 10),
+      who: v.travelers,
+      arrival: { cruise: "a cruise day off the ship", weekend: "a weekend in town", days: "a few days, with time for day trips" }[v.shape],
+      transport: v.transport.map(t => t.replace(/^\S+\s/, "")).join(", "),
+      interests: v.interests.map(i => i.toLowerCase()),
+    };
+    setGuideError(null);
+    setAiMessages(prev => [
+      (Array.isArray(prev) ? prev : []).find(m => m && m.role === "assistant") || GREETING,
+      { role: "user", text: [INTAKE_TURN_MARK, brief].join(" "), hidden: true },
+    ]);
+    setPendingRandomGuideMode("map");
+    setGuideModal("preview");
+  };
+
   const generateRandomGuide = () => {
     if (guideModal === "loading") return;
+    if (PAGE_ABROAD) return generateRandomAbroad();
     const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
     // seededShuffle, not sort(() => Math.random() - 0.5). A comparator that
     // answers at random leaves the front of the list near the front, so the
@@ -24300,8 +24363,9 @@ ${languageBlock()}`;
                         than a traveller feature, and next to the pipeline test
                         button for the same reason. Writes a file; no endpoint, no
                         deploy. See utils/chatReport.js for what is in it and what
-                        is deliberately left out. */}
-                    <button
+                        is deliberately left out.
+                        Not on another country's page: that page has no chat. */}
+                    {!PAGE_ABROAD && <button
                       onClick={() => {
                         const at = new Date().toISOString();
                         const report = buildChatReport({
@@ -24326,7 +24390,7 @@ ${languageBlock()}`;
                       disabled={!aiMessages.length}
                       style={{ width: "100%", background: "none", border: `1px dashed ${C.border}`, color: aiMessages.length ? C.light : C.muted, borderRadius: 10, padding: "9px 14px", fontSize: 11.5, fontWeight: 700, cursor: aiMessages.length ? "pointer" : "default", fontFamily: "'Inter', sans-serif", marginBottom: 12 }}>
                       {aiMessages.length ? `📄 Export this chat as a report (${aiMessages.length} turns)` : "📄 Export this chat — nothing said yet"}
-                    </button>
+                    </button>}
 
                     {sourcesOpen && (
                 <div style={{ background: C.surface, border: `1px dashed ${C.border}`, borderRadius: 12, padding: "14px", marginBottom: 14 }}>
@@ -26130,7 +26194,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         </div>
 
                         <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
-                          {[["published", "About my published places"], ["denmark", "Anywhere in Denmark"]].map(([v, label]) => (
+                          {[["published", "About my published places"], ["denmark", `Anywhere in ${PAGE_LAND.name}`]].map(([v, label]) => (
                             <button key={v} onClick={() => setFactSource(v)} disabled={factBusy}
                               style={{ flex: 1, background: factSource === v ? `${C.gold}1E` : "none", border: `1px solid ${factSource === v ? C.gold : C.border}`, color: factSource === v ? C.gold : C.muted, borderRadius: 8, padding: "7px 8px", fontSize: 10.5, fontWeight: 700, cursor: factBusy ? "default" : "pointer", fontFamily: "'Inter', sans-serif" }}>
                               {label}
@@ -34309,18 +34373,21 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               // more Claude correction pass if anything's flagged. Real stages,
               // not decorative text — and genuinely more of them than before,
               // which is why the wait-time note below was widened accordingly.
-              const fact = denmarkFacts[factCardIdx % denmarkFacts.length];
-              const isHistory = fact.category === "history";
-              const isFood = fact.category === "food";
-              const isAttraction = fact.category === "attractions";
+              // Another country's page starts with no facts (see liveFacts.js),
+              // so the card is left out until that country has some of its own,
+              // and the stage line below still shows.
+              const fact = denmarkFacts.length ? denmarkFacts[factCardIdx % denmarkFacts.length] : null;
+              const isHistory = fact?.category === "history";
+              const isFood = fact?.category === "food";
+              const isAttraction = fact?.category === "attractions";
               // RESTORED (Oliver, 6 Aug: "Before sonnet screwed it up, we had made
               // different loading visuals for History, Nightlife, Attractions,
               // Food, etc."). History, food and attractions survived; NIGHTLIFE
               // and NATURE had been dropped and were falling through to the plain
               // default card, so two of the five categories looked identical to
               // "no category at all".
-              const isNightlife = fact.category === "nightlife";
-              const isNature = fact.category === "nature";
+              const isNightlife = fact?.category === "nightlife";
+              const isNature = fact?.category === "nature";
               const cardStyle = isHistory
                 ? { border: "1px solid #4A3D22", background: "linear-gradient(160deg, #221B10 0%, #16110A 100%)" }
                 : isFood
@@ -34335,7 +34402,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 : { border: `1px solid ${C.border}`, background: "rgba(255,255,255,0.02)" };
               return (
                 <>
-                  <div style={{ textAlign: "left", padding: "22px 22px 26px", position: "relative", overflow: "hidden", borderRadius: 18, ...cardStyle }}>
+                  {fact && <div style={{ textAlign: "left", padding: "22px 22px 26px", position: "relative", overflow: "hidden", borderRadius: 18, ...cardStyle }}>
                     {isHistory && (
                       <div aria-hidden style={{ position: "absolute", inset: 0, opacity: 0.5, mixBlendMode: "overlay", pointerEvents: "none",
                         backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.4'/%3E%3C/svg%3E\")" }} />
@@ -34398,8 +34465,8 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         {fact.fact}
                       </div>
                     </div>
-                  </div>
-                  <div style={{ textAlign: "center", marginTop: 30 }}>
+                  </div>}
+                  <div style={{ textAlign: "center", marginTop: fact ? 30 : 0 }}>
                     <div style={{ marginBottom: 10 }}><GemlyxLoader size={40} tone="gold" ring={false} /></div>
                     <div style={{ fontSize: 18, color: C.text, fontWeight: 600, fontFamily: "'Fraunces', serif", fontStyle: "italic" }}>
                       {guideBuildStage?.label || "Drafting your guide"}
