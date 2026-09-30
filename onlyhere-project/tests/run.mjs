@@ -119,7 +119,7 @@ writeFileSync(entry, `
   export { STUDIO_VOICE } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
   export { cleanOffer, offerProblems, offerLive, offerView, hasPaidPlan, OFFER_TEXT_MAX, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE } from ${JSON.stringify(join(root, "src/utils/offer.js"))};
   export { AI_DISCLOSURE, aiDisclosure, aiDisclosureFor, disclosureLanguage, AI_CHAT_SURFACES, AI_IMAGE_NOTE, aiImageNote, inReaderLanguage } from ${JSON.stringify(join(root, "src/utils/aiDisclosure.js"))};
-  export { splitReport, sortReports, filterReports, reportAge, isHandled, unhandledCount, INBOX_SETUP_SQL, FILTERS as INBOX_FILTERS, topicLabel as inboxTopicLabel } from ${JSON.stringify(join(root, "src/utils/supportInbox.js"))};
+  export { splitReport, sortReports, filterReports, reportAge, isHandled, unhandledCount, INBOX_SETUP_SQL, FILTERS as INBOX_FILTERS, topicLabel as inboxTopicLabel, reportCountry } from ${JSON.stringify(join(root, "src/utils/supportInbox.js"))};
   export { SUPPORT_TOPICS, REPORT_TOPIC, topicIds, topicLabel, isTopic, GOOD_FAITH_STATEMENT, messagePrompt, MESSAGE_MIN, MESSAGE_MAX, NAME_MAX, looksLikeEmail, looksLikeUrl, supportProblems, problemFor, supportReference, supportPayload, supportMailto, supportReceipt, SUPPORT_TABLE, SUPPORT_SETUP_SQL, SUPPORT_EMAIL, PRIVACY_EMAIL } from ${JSON.stringify(join(root, "src/utils/support.js"))};
   export { SAFETY_CLAIM_FIELDS, claimIsSupported, unsupportedSafetyClaims, safetyClaimNote } from ${JSON.stringify(join(root, "src/utils/safetyClaims.js"))};
   export { hasEntrySources, missingSourcesNote, lastCheckedAt, lastCheckedLabel, pricedNote, pricedLine } from ${JSON.stringify(join(root, "src/utils/provenance.js"))};
@@ -294,7 +294,7 @@ writeFileSync(entry, `
   export { KLAIPEDA_STOPS, KLAIPEDA_STOPS_READ_ON } from ${JSON.stringify(join(root, "src/data/klaipedaStops.js"))};
   export { groupNav, childActive, groupActive, NAV_GROUPS } from ${JSON.stringify(join(root, "src/utils/navGroups.js"))};
   export { livePromotions, promoCard, untilLabel, PROMO_KINDS } from ${JSON.stringify(join(root, "src/utils/promotions.js"))};
-  export { abroadBriefParts, inventoryBlock, inventoryLine, forLand, landAsk, landRules, sameDayHours, startsFor, INVENTORY_CAP } from ${JSON.stringify(join(root, "src/utils/guideAbroad.js"))};
+  export { abroadBriefParts, inventoryBlock, inventoryLine, forLand, landAsk, landRules, sameDayHours, startsFor, INVENTORY_CAP, randomAbroadVisit } from ${JSON.stringify(join(root, "src/utils/guideAbroad.js"))};
   export { FROZEN_TRANSPORT, frozenFrom, frozenIn, factsLost, frozenBlock, lostNote } from ${JSON.stringify(join(root, "src/utils/frozenFacts.js"))};
   export { PARTNER_OPENER, PARTNER_INTRO, partnerSections, partnerCount } from ${JSON.stringify(join(root, "src/utils/partnerSheet.js"))};
   export { baseKey, staysIn as stayRunsIn, doorsFor, doorOn, sameBaseLine, nightsLabel } from ${JSON.stringify(join(root, "src/utils/stayDoors.js"))};
@@ -392,7 +392,7 @@ writeFileSync(entry, `
   export { denmarkClock, sunElevation, isNightThere, SUNSET_ELEVATION } from ${JSON.stringify(join(root, "src/utils/denmarkTime.js"))};
   export { weatherIcon } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { readTheDay, skyFor } from ${JSON.stringify(join(root, "src/components/WeatherHeaderStrip.jsx"))};
-  export { COUNTRY_PROFILES, DEFAULT_COUNTRY, countryProfile, rowCountry, countryFromPath, activeCountry, isInCountry, setWorkingCountry, workingCountry, workingProfile, countryParam, homePath } from ${JSON.stringify(join(root, "src/utils/countries.js"))};
+  export { COUNTRY_PROFILES, DEFAULT_COUNTRY, countryProfile, rowCountry, countryFromPath, activeCountry, isInCountry, setWorkingCountry, workingCountry, workingProfile, countryParam, homePath, countryKey } from ${JSON.stringify(join(root, "src/utils/countries.js"))};
   export { shapeForLive, madeHeading, isPublisherNote, PUBLISHER_NOTE, cleanCredit } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
   export { longestEcho, echoWords, isNameEcho, echoInDraft, describeEcho, ECHO_RUN } from ${JSON.stringify(join(root, "src/utils/echoCheck.js"))};
   export { CHOICE_LIMIT, cleanCandidates, sameSubject, sameCandidate, needsChoosing, choicesFor, describeChoosing, applyChoice, choiceNote, subjectCore, listingMatchesSubject, streetListingMatches, describeListingRefusal } from ${JSON.stringify(join(root, "src/utils/placeChoice.js"))};
@@ -6820,7 +6820,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("and the verify path derives it rather than reading the row's free text",
      /rules: researchRules\(studioType, \{ \.\.\.entry, region: regionOf\(entry\)/.test(app3));
   is("and two deliberately carry only the universal ones", (app3.match(/\$\{researchRules\(\)\}/g) || []).length, 2);
-  ok("which is where the founder's list is folded in", /return `\$\{RESEARCH_SOURCE_RULES\}\$\{both\}\$\{area\}\$\{sourceRulesBlock\(founderSources, type, where\)\}`;/.test(app3));
+  ok("which is where the founder's list is folded in", /return `\$\{RESEARCH_SOURCE_RULES\}\$\{both\}\$\{area\}\$\{sourceRulesBlock\(sourcesFor\(\), type, where\)\}`;/.test(app3)); // Batch 170: the sources for the country being researched.
   // ── AND THE AREA REACHES THE MODEL, NOT ONLY THE SOURCE LIST ─────
   // "make maps be one of the first things to be searched, so tavily/perplexity
   // will know which area to search." The source list is half of that. This is
@@ -9279,10 +9279,10 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // scoped by the SAME context, and two inline literals would agree on the day
   // they were written and drift the first time one gained a field. So the
   // assertion moves to what actually matters: one context, both callers.
-  ok("the draft pipeline actually runs them", /const searches = directSourceSearches\(founderSources, sType, sourceCtx\);/.test(app5));
+  ok("the draft pipeline actually runs them", /const searches = directSourceSearches\(sourcesFor\(\), sType, sourceCtx\);/.test(app5)); // Batch 170
   ok("built once, from the name and the research", /sourceCtx = \{\s*\n\s*name,\s*\n\s*text: context,/.test(app5));
   ok("and the overflow search is scoped by that same context",
-     /overflowSourceSearch\(founderSources, sType, sourceCtx\)/.test(app5));
+     /overflowSourceSearch\(sourcesFor\(\), sType, sourceCtx\)/.test(app5)); // Batch 170
   // ── AND HANDS OVER WHAT THE DRAFT KNOWS ABOUT WHERE IT IS ─────────
   // "So now VisitCopenhagen.dk won't talk about Aarhus?" Correct, and that is
   // the fix. The same rule also cut Dragør off from VisitCopenhagen, and Dragør
@@ -9362,7 +9362,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // cap is the interesting part: a source never chosen looked identical to one
   // searched that found nothing.
   ok("the chosen sources are journalled before the loop", /note\("Founder sources chosen", \{/.test(app5));
-  ok("naming them, and how many were dropped", /\$\{searches\.length\} of \$\{founderSources\.length\}: \$\{searches\.map\(s => s\.domain\)\.join\(", "\)\}/.test(app5));
+  ok("naming them, and how many were dropped", /\$\{searches\.length\} of \$\{sourcesFor\(\)\.length\}: \$\{searches\.map\(s => s\.domain\)\.join\(", "\)\}/.test(app5));
   ok("and saying whether a town was known to scope by", /nothing placed this draft, so every place-scoped source was left out/.test(app5));
   ok("and naming the region, which is the scope that is new", /placed\?\.region && `in \$\{placed\.region\}`/.test(app5));
   ok("each source reports its own outcome", /note\(`Founder source: \$\{domain\}`, \{/.test(app5));
@@ -22290,7 +22290,7 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   const appO = readFileSync(join(root, "src/App.jsx"), "utf8");
   const iResearch = appO.indexOf("const founderUrls = [];");
   const iSecond = appO.indexOf("danishAddressIn(context)");
-  const iChosen = appO.indexOf("const searches = directSourceSearches(founderSources, sType, sourceCtx);");
+  const iChosen = appO.indexOf("const searches = directSourceSearches(sourcesFor(), sType, sourceCtx);"); // Batch 170
   ok("the second location attempt exists", iSecond > 0);
   // AFTER the research, because that is where the address is, and BEFORE the
   // sources are chosen, because otherwise the region it finds scopes nothing.
@@ -22302,12 +22302,12 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
      /fromVenue = false;/.test(appO));
   ok("the run log names the address and how often it appeared",
      /appeared \$\{found\.mentions === 1 \? "once" : `\$\{found\.mentions\} times`\}/.test(appO));
-  ok("the overflow search is wired into the draft", /overflowSourceSearch\(founderSources, sType, sourceCtx\)/.test(appO));
+  ok("the overflow search is wired into the draft", /overflowSourceSearch\(sourcesFor\(\), sType, sourceCtx\)/.test(appO)); // Batch 170
   ok("and sends every domain in one call", /domains=\$\{encodeURIComponent\(rest\.domains\.join\(","\)\)\}/.test(appO));
   ok("it says which sources the cap would have cut",
      /one search across the \$\{rest\.covers\.length\} the four-source cap would otherwise have cut/.test(appO));
   ok("and never truncates silently", /domain variants were past Tavily's 300 limit and were not searched/.test(appO));
-  ok("the discover tab searches them too", /discoverSourceSearch\(founderSources, type, discoverCtx\)/.test(appO));
+  ok("the discover tab searches them too", /discoverSourceSearch\(sourcesFor\(\), type, discoverCtx\)/.test(appO)); // Batch 170
   ok("in one call rather than one per domain", /domains=\$\{encodeURIComponent\(discoverHunt\.domains\.join\(","\)\)\}/.test(appO));
   ok("and what it finds reaches the synthesiser", /const allText = \[combinedText, huntedText\]/.test(appO));
   ok("rather than being fetched and dropped", /\$\{allText\.slice\(0, 16000\)\}/.test(appO));
@@ -80681,6 +80681,62 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("one name everywhere: Special deals", /"nav\.promotions":\s+\{ en: "Special deals"/.test(ui));
   const page = readFileSync(join(root, "src/components/PromotionsPage.jsx"), "utf8");
   ok("the page title agrees", /title = "Special deals"/.test(page));
+}
+
+// ── Batch 170: one Studio per country ──
+{
+  is("Denmark keeps the key it always had", M.countryKey("gemlyx_run_log", "DK"), "gemlyx_run_log");
+  is("another country gets its own beside it", M.countryKey("gemlyx_run_log", "LT"), "gemlyx_run_log:LT");
+  is("an unknown code is Denmark's key", M.countryKey("gemlyx_run_log", "XX"), "gemlyx_run_log");
+  is("a queued name keeps its country", M.packQueueItem({ name: "Smiltynė", type: "attraction", country: "LT" }), { name: "Smiltynė", type: "attraction", country: "LT" });
+  is("and a Danish one stays as it was", M.packQueueItem({ name: "Ribe", type: "town" }), { name: "Ribe", type: "town" });
+  is("nonsense for a country is dropped", M.packQueueItem({ name: "Ribe", type: "town", country: "lithuania" }), { name: "Ribe", type: "town" });
+
+  const D = "---- sent by Gemlyx ----";
+  is("a report from /lithuania is Lithuanian", M.reportCountry({ message: `broken\n\n${D}\nWhat Gemlyx saw\nPage: /lithuania#tips` }), "LT");
+  is("so is one whose typed address is", M.reportCountry({ message: "x", url: "https://www.gemlyxtravel.com/lithuania/klaipeda" }), "LT");
+  is("the page Gemlyx saw beats the typed one", M.reportCountry({ message: `x\n\n${D}\nPage: /#food`, url: "https://www.gemlyxtravel.com/lithuania" }), "DK");
+  is("and a report that says nothing is Danish", M.reportCountry({ message: "x", url: "" }), "DK");
+
+  const now = new Date(2026, 9, 1, 12, 0);
+  let n = 0;
+  const seq = [0.01, 0.2, 0.4, 0.6, 0.8, 0.3, 0.7, 0.1, 0.9, 0.5];
+  const rnd = () => seq[(n++) % seq.length];
+  const v = M.randomAbroadVisit("LT", rnd, now);
+  ok("a random visit fills every field the form has", ["arrival", "departure", "travelers", "interests", "transport"].every(k => v[k] && String(v[k]).length));
+  ok("in the form's own date shape", /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(v.arrival) && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(v.departure));
+  ok("leaving after it arrives, and in the future", new Date(v.departure) > new Date(v.arrival) && new Date(v.arrival) > now);
+  const cruise = M.randomAbroadVisit("LT", () => 0.01, now);
+  is("the first shape is a cruise day off the ship", [cruise.shape, cruise.start, cruise.arrival.slice(0, 10) === cruise.departure.slice(0, 10)], ["cruise", "cruise", true]);
+  ok("on foot or by bus", cruise.transport.every(t => /foot|Bus/.test(t)));
+  ok("and its brief is built like a visitor's", M.abroadBriefParts({ land: M.countryProfile("LT"), ...cruise, startText: "" }).some(p => /cruise ship terminal/.test(p)));
+  const many = Array.from({ length: 40 }, (_, i) => M.randomAbroadVisit("LT", (() => { let k = i; return () => ((k = (k * 9301 + 49297) % 233280) / 233280); })(), now).shape);
+  ok("all three shapes come up", ["cruise", "weekend", "days"].every(x => many.includes(x)));
+
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("Studio drafts for the page's country from the start", /const \[studioCountry, setStudioCountry\] = useState\(PAGE_COUNTRY\);/.test(app));
+  ok("Manage Published shows this site's rows", /filter\(r => rowCountry\(r\?\.payload\) === PAGE_COUNTRY\);\n\s*setManageItems\(list\);/.test(app));
+  ok("so do Reports", /setReportRows\(list\.filter\(r => reportCountry\(r\) === PAGE_COUNTRY\)\);/.test(app));
+  ok("Facts, sources and groups read this country's rows",
+     /setFactSaved\(rows\.filter\(r => rowCountry\(r\) === PAGE_COUNTRY\)\)/.test(app)
+     && /setSourceRows\(rows\.filter\(r => rowCountry\(r\) === PAGE_COUNTRY\)\)/.test(app)
+     && /setFeedRows\(rows\.filter\(r => rowCountry\(r\) === PAGE_COUNTRY\)\)/.test(app));
+  ok("and a new one abroad is stamped with it", (app.match(/\.\.\.\(PAGE_ABROAD \? \{ country: PAGE_COUNTRY \} : \{\}\)/g) || []).length === 3);
+  ok("the research sources are the ones for the country being researched", !/\(founderSources, /.test(app) && /sourceRulesBlock\(sourcesFor\(\), type, where\)/.test(app));
+  ok("the chat export is not on a page with no chat", /\{!PAGE_ABROAD && <button\n\s*onClick=\{\(\) => \{\n\s*const at = new Date\(\)\.toISOString\(\);/.test(app));
+  ok("Random guide builds a visit on another country's page", /if \(PAGE_ABROAD\) return generateRandomAbroad\(\);/.test(app) && /const v = randomAbroadVisit\(PAGE_COUNTRY\);/.test(app));
+  ok("the loading card can go without a fact", /const fact = denmarkFacts\.length \? denmarkFacts\[factCardIdx % denmarkFacts\.length\] : null;/.test(app) && /\{fact && <div style=\{\{ textAlign: "left", padding: "22px 22px 26px"/.test(app));
+  ok("the fact writer asks about the page's country", /verifiable fact about \$\{PAGE_LAND\.name\} that/.test(app) && !/verifiable fact about Denmark that/.test(app));
+  ok("Scan a Source asks for the page's festivals", /Extract every distinct \$\{PAGE_LAND\.adjective \|\| "Danish"\} festival\/event/.test(app));
+
+  const facts = readFileSync(join(root, "src/utils/liveFacts.js"), "utf8");
+  ok("another country's page starts with no Danish facts", /if \(PAGE !== DEFAULT_COUNTRY\) denmarkFacts\.length = 0;/.test(facts) && /if \(rowCountry\(row\) !== PAGE\) return;/.test(facts));
+  const src = readFileSync(join(root, "src/utils/liveSources.js"), "utf8");
+  ok("sources are chosen by the country being researched", /export const sourcesFor = \(code = workingCountry\(\)\) => founderSources\.filter\(r => rowCountry\(r\) === code\);/.test(src));
+  for (const [f, key] of [["studioDraftStore.js", "gemlyx_studio_drafts"], ["runLog.js", "gemlyx_run_log"], ["chatThread.js", "gemlyx_chat_thread"], ["studioRecorder.js", "gemlyx_studio_recording"], ["pretendLocation.js", "gemlyx.pretendAt"]]) {
+    ok(`${f} files its key per country`, readFileSync(join(root, "src/utils", f), "utf8").includes(`countryKey("${key}")`));
+  }
+  is("and outside a browser the keys are Denmark's", [M.DRAFT_STORE_KEY, M.CHAT_KEY], ["gemlyx_studio_drafts", "gemlyx_chat_thread"]);
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
