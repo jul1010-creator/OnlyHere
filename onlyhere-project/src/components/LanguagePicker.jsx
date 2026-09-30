@@ -33,6 +33,14 @@ const FLAGS = {
       <rect y="9.33" width="20" height="4.67" fill="#FFCE00" />
     </>
   ),
+  // Lithuania: yellow, green, red, in thirds.
+  lt: (
+    <>
+      <rect width="20" height="4.67" fill="#FDB913" />
+      <rect y="4.67" width="20" height="4.66" fill="#006A44" />
+      <rect y="9.33" width="20" height="4.67" fill="#C1272D" />
+    </>
+  ),
   // The Union Flag, simplified to what reads at twenty pixels: the saltires
   // drawn as strokes, then the cross of St George over them.
   en: (
