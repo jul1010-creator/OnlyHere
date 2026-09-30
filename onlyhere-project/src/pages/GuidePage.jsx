@@ -97,7 +97,8 @@ import { withContext, readBrowserFacts } from "../utils/problemContext";
 import { APP_VERSION } from "../config";
 import { guideHero, heroCaption } from "../utils/guideHero";
 import { PhotoCredit } from "../components/PhotoCredit";
-import { DETOUR_PATH } from "../utils/tabUrl";
+import { DETOUR_PATH, hashForTab } from "../utils/tabUrl";
+import { countryProfile, DEFAULT_COUNTRY, homePath } from "../utils/countries";
 import { libraryRow, LIBRARY_TABLE } from "../utils/tripLibrary";
 
 // ─── GUIDE PAGE ───────────────────────────────────────────────────
@@ -250,6 +251,14 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
   };
 
   const [guide, setGuide] = useState(() => guideWithoutFiller(freshGuide) || null);
+  // ── WHICH COUNTRY THIS GUIDE IS IN ───────────────────────────────
+  // Read off the guide and never off the address: every guide lives at
+  // /guide/..., which is a Danish address, so a Klaipėda guide opened from a
+  // shared link would otherwise be drawn as a Denmark trip. generateGuide
+  // writes _country; a guide saved before it existed is Danish.
+  const guideLand = countryProfile(guide?._country || DEFAULT_COUNTRY);
+  const abroadGuide = guideLand.code !== DEFAULT_COUNTRY;
+  const backPath = abroadGuide ? `${homePath(guideLand.code)}${hashForTab("ai")}` : DETOUR_PATH;
   // The language THIS GUIDE was written in, read off the guide itself rather
   // than off the picker, and after the state that may still be loading it. A
   // guide built before __lang existed, or one whose tag nobody has a
@@ -831,7 +840,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
         {/* The chat rather than the front page: a guide that failed to load is
             a reason to build another one, and the front page is where a reader
             has to start the whole hunt again. See DETOUR_PATH in tabUrl.js. */}
-        <button onClick={() => navigate(DETOUR_PATH)} style={{ background: C.accent, color: "#fff", border: "none", borderRadius: 100, padding: "10px 20px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{uiT("guide.back", uiLang)}</button>
+        <button onClick={() => navigate(backPath)} style={{ background: C.accent, color: "#fff", border: "none", borderRadius: 100, padding: "10px 20px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{uiT("guide.back", uiLang)}</button>
       </div>
     );
   }
@@ -1143,7 +1152,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
         {/* `onBack` is the modal case, where the guide is drawn over the chat
             and the chat is still mounted behind it. On its own route there is
             nothing behind it, and the page a guide belongs to is the chat. */}
-        <button onClick={() => (onBack ? onBack() : navigate(DETOUR_PATH))}
+        <button onClick={() => (onBack ? onBack() : navigate(backPath))}
           style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "8px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>
           ‹ Back
         </button>
@@ -1305,7 +1314,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
             <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(10,15,30,0.92) 0%, rgba(10,15,30,0.45) 45%, rgba(10,15,30,0.15) 100%)" }} />
             <div style={{ position: "absolute", left: 18, right: 18, bottom: 14 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 2, textTransform: "uppercase", marginBottom: 8 }}>✦ Your Gemlyx guide</div>
-              <div style={{ fontSize: 34, fontWeight: 500, fontFamily: "'Fraunces', serif", color: "#fff", lineHeight: 1.1, maxWidth: 680, textShadow: "0 2px 18px rgba(0,0,0,0.55)" }}>{guide.title || uiT("guide.fallbackTitle", uiLang)}</div>
+              <div style={{ fontSize: 34, fontWeight: 500, fontFamily: "'Fraunces', serif", color: "#fff", lineHeight: 1.1, maxWidth: 680, textShadow: "0 2px 18px rgba(0,0,0,0.55)" }}>{guide.title || (abroadGuide ? `Your ${guideLand.name} guide` : uiT("guide.fallbackTitle", uiLang))}</div>
               {/* Said out loud. An unlabelled photograph on a page about where to
                   go is a decoration; a labelled one is information. */}
               {heroCaption(hero) && (
@@ -1325,7 +1334,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
         {!hero?.photo && (
           <>
             <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 2, textTransform: "uppercase", marginBottom: 10 }}>✦ Your Gemlyx guide</div>
-            <div style={{ fontSize: 36, fontWeight: 500, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.1, marginBottom: lightMode ? 10 : 24, maxWidth: 680 }}>{guide.title || uiT("guide.fallbackTitle", uiLang)}</div>
+            <div style={{ fontSize: 36, fontWeight: 500, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.1, marginBottom: lightMode ? 10 : 24, maxWidth: 680 }}>{guide.title || (abroadGuide ? `Your ${guideLand.name} guide` : uiT("guide.fallbackTitle", uiLang))}</div>
           </>
         )}
         {/* So the absence of maps/routes reads as the choice it was, not a bug. */}
@@ -1348,7 +1357,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
             Denmark it is a long way. */}
         {(() => {
           const character = tripCharacter(guide, shape);
-          const scale = tripScaleLine(shape);
+          const scale = tripScaleLine(shape, guideLand.name);
           if (!character && !scale) return null;
           return (
             <div style={{ marginBottom: 20, maxWidth: 640 }}>
@@ -1531,7 +1540,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
             Nothing pads it out, because a "book ahead" list that repeats itself
             is one a traveler learns to skip. */}
         {(() => {
-          const actions = bookingActions(guide, lookupRealPlace);
+          const actions = bookingActions(guide, lookupRealPlace, { land: guideLand.name });
           if (actions.length === 0) return null;
           return (
             <div style={{ background: `${C.accent}12`, border: `1px solid ${C.accent}44`, borderRadius: 16, padding: "16px 18px", marginBottom: 26, maxWidth: 640 }}>
@@ -1620,7 +1629,9 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                   has never known where anything is. Only on a trip that
                   drives: a public transport guide pays fares, not petrol, and
                   those are already their own lines. */}
-              <CostsBlock guide={guide} C={C} rowFor={lookupRealPlace} now={now}
+              {/* Its fares, meals and fuel are Danish figures in DKK, so a
+                  guide in another country goes without until it has its own. */}
+              {!abroadGuide && <CostsBlock guide={guide} C={C} rowFor={lookupRealPlace} now={now}
                 fuel={DRIVEN_MODES.has(String(guide?._mode || "").trim().toLowerCase())
                   ? fuelCost(drivingLegs(guide, legDistanceKm) || {})
                   : null}
@@ -1635,7 +1646,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                    eat applies is the reader's to pick, inside the block, so
                    the page hands over the days and the heads and nothing
                    else. See utils/mealsEstimate.js. */
-                meals={{ days: days.length, heads: (partyFrom(guide?._party) || partyOf(guide?._travelers))?.heads || 1 }} />
+                meals={{ days: days.length, heads: (partyFrom(guide?._party) || partyOf(guide?._travelers))?.heads || 1 }} />}
               {/* ── THE ONE WAY IN TO EVERY PAID DOOR ─────────────
                   Oliver, 21 Sep 2026: "Make a 'use our affiliates
                   (optional)' and make it something clickable. When you click
@@ -1892,8 +1903,8 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
             const originTown = stopTownOf(originName);
             const destTown = (day.stops || []).find(s => s.name === destName)?.town;
             const oc = preciseCoord(originName), dc = preciseCoord(destName);
-            const originText = originTown ? `${originName}, ${originTown}, Denmark` : oc ? `${oc.lat},${oc.lon}` : `${originName}, Denmark`;
-            const destText = destTown ? `${destName}, ${destTown}, Denmark` : dc ? `${dc.lat},${dc.lon}` : `${destName}, Denmark`;
+            const originText = originTown ? `${originName}, ${originTown}, ${guideLand.name}` : oc ? `${oc.lat},${oc.lon}` : `${originName}, ${guideLand.name}`;
+            const destText = destTown ? `${destName}, ${destTown}, ${guideLand.name}` : dc ? `${dc.lat},${dc.lon}` : `${destName}, ${guideLand.name}`;
             // THE MEASURED PLACES, when there are any. See measuredLeg: the
             // name stays readable and Google opens the exact place the chip's
             // number was measured to, rather than guessing a second time.
@@ -2101,6 +2112,18 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
               //
               // ARRIVE, not depart: the stop has a time on it because that is
               // when the day wants them there. See utils/rejseplanen.js.
+              // Rejseplanen is Denmark's planner. Abroad the same chip opens
+              // Google Maps on public transport for the leg instead.
+              if (abroadGuide) {
+                return (
+                  <a href={routeUrl(originName, destName, "transit")} target="_blank" rel="noreferrer"
+                    style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", background: C.bg, border: `1px solid ${C.gold}44`, borderRadius: 100, padding: "6px 12px" }}>
+                    <span style={{ fontSize: 12 }}>🚌</span>
+                    <span style={{ fontSize: 11, color: C.gold, fontWeight: 600 }}>{uiT("guide.checkTimes", uiLang)}</span>
+                    <span style={{ fontSize: 9.5, color: C.light, fontWeight: 700 }}>· Maps ↗</span>
+                  </a>
+                );
+              }
               const rpHref = journeyUrl({
                 from: originName,
                 to: destName,
@@ -3059,7 +3082,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                    than as a gap in it. */
                 <div style={{ marginTop: 18, background: C.surface, border: `1px solid ${C.gold}44`, borderRadius: 12, padding: "13px 15px" }}>
                   <div style={{ fontSize: 13.5, fontWeight: 700, color: C.text }}>✦ {addInTitle(dayNo)}</div>
-                  <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.55, margin: "3px 0 9px" }}>{ADD_IN_SUB}</div>
+                  <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.55, margin: "3px 0 9px" }}>{abroadGuide ? "Pick what it is short of. We show what is near." : ADD_IN_SUB}</div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                     {offers.map(cat => {
                       const key = `${dayIdx}:${cat.key}`;
@@ -3120,10 +3143,10 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
 
                             THE SEED NAMES THE DAY, which is the whole of his
                             "instead it's just into that specific day". */}
-                        <button onClick={() => { setChatInput(addInSeed(cat, { town, dayNo })); setChatOpen(true); }}
+                        {!abroadGuide && <button onClick={() => { setChatInput(addInSeed(cat, { town, dayNo })); setChatOpen(true); }}
                           style={{ marginTop: 8, background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 12px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                           Ask Gemlyx to add one to day {dayNo}
-                        </button>
+                        </button>}
                       </div>
                     );
                   })}
@@ -3305,9 +3328,9 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
               {/* It says "Back to chat", so it goes to the chat. navigate(-1)
                   is the browser's history, which on a guide opened from a link
                   is whatever site the reader was on before this one. */}
-              <button onClick={() => (onBack ? onBack() : navigate(DETOUR_PATH))}
+              <button onClick={() => (onBack ? onBack() : navigate(backPath))}
                 style={{ background: "none", border: "none", color: C.light, borderRadius: 100, padding: "12px 20px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
-                Back to chat
+                {abroadGuide ? "Back to planner" : "Back to chat"}
               </button>
               <button onClick={saveGuide} disabled={saving}
                 style={{ background: `linear-gradient(135deg, ${C.accent}, #C22A3C)`, color: "#fff", border: "none", borderRadius: 100, padding: "12px 24px", fontSize: 13, fontWeight: 700, cursor: saving ? "default" : "pointer", opacity: saving ? 0.7 : 1, boxShadow: "0 4px 16px rgba(226,59,78,0.3)" }}>
@@ -3335,7 +3358,9 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
           }
         `}</style>
       )}
-      {!chatOpen && (
+      {/* No Local Assist on a guide outside Denmark: Oliver, 29 Sep 2026,
+          "Leave out the Chat Assistant". */}
+      {!chatOpen && !abroadGuide && (
         <button onClick={() => setChatOpen(true)}
           className={`gxa-guide-chat-launcher${isUnsaved ? " gxa-savebar-active" : ""}`}
           style={{ position: "fixed", bottom: 20, right: 20, zIndex: 40, display: "flex", alignItems: "center", gap: 8, background: `linear-gradient(135deg, ${C.surface}, ${C.bg})`, border: `1px solid ${C.gold}55`, color: C.text, borderRadius: 100, padding: "12px 18px 12px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer", boxShadow: "0 8px 26px rgba(0,0,0,0.55)" }}>
@@ -3343,7 +3368,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
           Ask Gemlyx
         </button>
       )}
-      {chatOpen && (
+      {chatOpen && !abroadGuide && (
         <div style={{ position: "fixed", bottom: 0, right: 0, zIndex: 40, width: "100%", maxWidth: 380, height: "min(560px, 82vh)", margin: "0 0 0 auto", display: "flex", flexDirection: "column", background: C.surface, border: `1px solid ${C.border}`, borderTopLeftRadius: 18, borderTopRightRadius: 18, borderBottomLeftRadius: 0, borderBottomRightRadius: 0, boxShadow: "0 -8px 30px rgba(0,0,0,0.55)", overflow: "hidden" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>

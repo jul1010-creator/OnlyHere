@@ -1,8 +1,11 @@
+import { activeCountry, countryProfile, DEFAULT_COUNTRY } from "../utils/countries";
 import { useState } from "react";
 import { C } from "../utils/theme";
 import { readableOn } from "../utils/readableColor";
 import { tierBadge, tierOf, TIERS } from "../utils/placeThemes";
 import { shoppingTownList, shoppingForTown, shopsInPlace, shopPlaceFor, worthShowing, shopKindOf, SHOP_KINDS } from "../utils/shopping";
+// The page's country, for the intro line. See CheapGemsPage for the same.
+const LAND = countryProfile(activeCountry());
 
 // ── SHOPPING: TOWN, THEN THE STREET, THEN THE SHOPS ─────────────────
 //
@@ -91,7 +94,7 @@ export const ShoppingPage = ({ shops = [], places = [], title = "Shopping", onOp
       <div style={{ padding: 16, maxWidth: 900, margin: "0 auto", width: "100%" }}>
         <h2 style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, margin: "8px 0 10px" }}>{title}</h2>
         <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "22px 18px", maxWidth: 560, fontSize: 13, color: C.light, lineHeight: 1.7 }}>
-          Nothing published yet. What goes here is the shopping you cannot do at home: Danish labels in their own stores, second-hand and genbrug, and workshops that sell what they make.
+          {LAND.code === DEFAULT_COUNTRY ? "Nothing published yet. What goes here is the shopping you cannot do at home: Danish labels in their own stores, second-hand and genbrug, and workshops that sell what they make." : `Nothing published yet. What goes here is the shopping you cannot do at home: ${LAND.adjective} labels in their own stores, second-hand, and workshops that sell what they make.`}
         </div>
       </div>
     );
@@ -163,7 +166,7 @@ export const ShoppingPage = ({ shops = [], places = [], title = "Shopping", onOp
     <div style={{ padding: 16, maxWidth: 900, margin: "0 auto", width: "100%" }}>
       <h2 style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, margin: "8px 0 8px" }}>{title}</h2>
       <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560, marginBottom: 16 }}>
-        The shopping you cannot do at home. Danish labels in their own stores, second-hand and genbrug, and workshops that sell what they make.
+        {LAND.code === DEFAULT_COUNTRY ? "The shopping you cannot do at home. Danish labels in their own stores, second-hand and genbrug, and workshops that sell what they make." : `The shopping you cannot do at home. ${LAND.adjective} labels in their own stores, second-hand, and workshops that sell what they make.`}
       </div>
       {kinds.length > 1 && (
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>

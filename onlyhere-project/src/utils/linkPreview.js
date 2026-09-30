@@ -74,9 +74,15 @@ export const guideIdFromPath = (pathname) => {
 // shell itself could not be fetched, and it must never be what a person lands
 // on — hence the crawler gate above, and hence the middleware falling through
 // to the ordinary app on every error path rather than to this.
-export const buildPreviewHtml = ({ guide, url, image, siteName = "Gemlyx" }) => {
-  const title = shareTitle(guide);
-  const desc = metaDescription(guide);
+// ── AND AN ENTRY'S OWN TITLE, WHICH WAS BEING THROWN AWAY ────────────
+// Found 30 Sep 2026 while giving /lithuania its cards: middleware.js hands
+// every ENTRY page a title and a description ("Nyhavn, Copenhagen"), and this
+// took only { guide, url, image }, so both were dropped and every town and
+// attraction was shared as "A Denmark guide" with the guide description. A
+// given title and description now win; a guide still builds its own.
+export const buildPreviewHtml = ({ guide, url, image, siteName = "Gemlyx", title: givenTitle = "", description: givenDescription = "" }) => {
+  const title = String(givenTitle || "").trim() || shareTitle(guide);
+  const desc = String(givenDescription || "").trim() || metaDescription(guide);
   const t = escapeHtml(title), d = escapeHtml(desc), u = escapeHtml(url), i = escapeHtml(image);
   return `<!DOCTYPE html>
 <html lang="en">
@@ -111,8 +117,8 @@ export const buildPreviewHtml = ({ guide, url, image, siteName = "Gemlyx" }) => 
 // response shape means there is no way to serve somebody the wrong one. A
 // crawler reads the tags and ignores the script; a browser boots the app exactly
 // as it would have from the static file.
-export const injectMeta = (html, { guide, url, image }) => {
-  const built = buildPreviewHtml({ guide, url, image });
+export const injectMeta = (html, { guide, url, image, title: givenTitle, description: givenDescription }) => {
+  const built = buildPreviewHtml({ guide, url, image, title: givenTitle, description: givenDescription });
   const tags = built
     .split("\n")
     .filter((l) => /<meta (property="og:|name="twitter:|name="description")|<link rel="canonical"/.test(l))

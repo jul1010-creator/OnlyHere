@@ -252,11 +252,14 @@ export const stopEventWhen = (real, dayDate = null, today = new Date()) => {
 // says nothing at all when the legs were not all measurable. A confident line
 // about scale, built from the legs that happened to resolve, would understate
 // the trip in exactly the direction that misleads.
-export const tripScaleLine = (shape) => {
+// `land` is the guide's country name. The Denmark lines are claims about
+// Denmark's size, so another country gets the same measurement said plainly.
+export const tripScaleLine = (shape, land = "Denmark") => {
   const m = shape && shape.longest && shape.longest.minutes;
   if (typeof m !== "number" || m <= 0) return null;
-  if (m <= 75) return `Denmark is small. The longest single journey in this trip is ${shape.longest.text}.`;
-  if (m <= 150) return `The longest single journey here is ${shape.longest.text}, which for Denmark is a proper haul rather than a hop.`;
+  const dk = land === "Denmark";
+  if (m <= 75) return dk ? `Denmark is small. The longest single journey in this trip is ${shape.longest.text}.` : `The longest single journey in this trip is ${shape.longest.text}.`;
+  if (m <= 150) return dk ? `The longest single journey here is ${shape.longest.text}, which for Denmark is a proper haul rather than a hop.` : `The longest single journey here is ${shape.longest.text}, a proper haul rather than a hop.`;
   return `One journey here takes ${shape.longest.text}. That is most of a day, so plan around it rather than through it.`;
 };
 
@@ -324,7 +327,8 @@ export const tripCharacter = (guide, shape) => {
 // is already on sale, a ferry leg, and where you are sleeping. Everything else
 // is deliberately absent, because a "book ahead" list that pads itself out is
 // how a traveler learns to ignore it.
-export const bookingActions = (guide, lookupRealPlace) => {
+export const bookingActions = (guide, lookupRealPlace, { land = "Denmark" } = {}) => {
+  const dk = land === "Denmark";
   const out = [];
   const days = (guide && guide.days) || [];
   const seen = new Set();
@@ -368,7 +372,7 @@ export const bookingActions = (guide, lookupRealPlace) => {
       const key = `ferry-${d.day}`;
       if (!seen.has(key)) {
         seen.add(key);
-        out.push({ what: `The ferry on day ${d.day}`, why: "Danish island crossings run a handful of times a day and fill up in summer. Book the crossing, not just the bed." });
+        out.push({ what: `The ferry on day ${d.day}`, why: dk ? "Danish island crossings run a handful of times a day and fill up in summer. Book the crossing, not just the bed." : "Crossings run to a timetable and fill up in summer. Book the crossing, not just the bed." });
       }
     }
   });
@@ -388,7 +392,7 @@ export const bookingActions = (guide, lookupRealPlace) => {
     const house = houseTripOf(guide);
     out.push(house
       ? { what: "The holiday house", why: `One booking for the whole stay${house.name ? `, near ${house.name}` : ""}, through a holiday-house agency.` }
-      : { what: "Somewhere to sleep", why: "Small Danish towns have very few rooms, and the good ones go first in summer." });
+      : { what: "Somewhere to sleep", why: dk ? "Small Danish towns have very few rooms, and the good ones go first in summer." : "The good rooms go first in summer, so book the bed before the days fill up." });
   }
 
   // ── AND WHEN THE WATER IS CROSSED MORE THAN ONCE ────────────
@@ -418,7 +422,9 @@ export const bookingActions = (guide, lookupRealPlace) => {
     // useless once the days are fixed.
     out.unshift({
       what: `This trip crosses water ${ferryLegs === 2 ? "twice" : `${ferryLegs} times`}`,
-      why: "Every crossing is a timetable, and the last sailing of the day is early outside high summer. Miss one and the rest of the trip moves with it, because on most Danish islands the next chance is the next day. Check each operator's own last departure before you fix the days around it.",
+      why: dk
+        ? "Every crossing is a timetable, and the last sailing of the day is early outside high summer. Miss one and the rest of the trip moves with it, because on most Danish islands the next chance is the next day. Check each operator's own last departure before you fix the days around it."
+        : "Every crossing is a timetable, and the last sailing of the day can be early outside high summer. Miss one and the rest of the trip moves with it. Check each operator's own last departure before you fix the days around it.",
     });
   }
   return out;

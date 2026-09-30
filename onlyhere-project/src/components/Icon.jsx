@@ -33,6 +33,8 @@ const ICONS = {
   calendar: P("M5 6h14a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1z M8 3v5 M16 3v5 M4 11h16"),
   pin: P("M12 21s-7-6.1-7-11a7 7 0 0 1 14 0c0 4.9-7 11-7 11z", <circle cx="12" cy="10" r="2.6" />),
   tag: P("M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9z", <circle cx="7.5" cy="7.5" r="1.5" />),
+  // A wrapped box with a bow, for Gemlyx promotions. Same hand as the rest.
+  gift: P("M4 9h16v3H4z M5 12v8h14v-8 M12 9v11 M12 9c-1.5-3.5-5-4-5-1.8C7 8.6 9 9 12 9z M12 9c1.5-3.5 5-4 5-1.8 0 1.4-2 1.8-5 1.8z"),
   // ── AND SHOPPING IS NOT CHEAP GEMS ──────────────────────────────
   // Both pages took `tag` when Shopping went into the nav on 22 Sep 2026, so
   // two entries side by side carried the same drawing and the icon stopped

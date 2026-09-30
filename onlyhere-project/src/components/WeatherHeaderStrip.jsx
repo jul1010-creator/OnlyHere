@@ -1,3 +1,4 @@
+import { activeCountry, countryProfile } from "../utils/countries";
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { C } from "../utils/theme";
@@ -69,6 +70,13 @@ export const readTheDay = (weather, cities, { night = false } = {}) => {
   const warmest = Math.round(Math.max(...temps));
   const coldest = Math.round(Math.min(...temps));
 
+  // One city (Klaipėda) is not "most of the country": say where.
+  if (cities.length === 1 && wet === 1) {
+    const one = cities[0]?.label || "town";
+    return night
+      ? { line: `Wet in ${one} tonight.`, hint: "Tap for tomorrow's forecast.", mood: "wet" }
+      : { line: `Wet in ${one} today.`, hint: "A good day for the indoor half of a plan.", mood: "wet" };
+  }
   if (wet >= Math.ceil(cities.length / 2)) {
     return night
       ? { line: "Wet across most of the country tonight.", hint: "Tap a city for tomorrow's forecast.", mood: "wet" }
@@ -77,8 +85,8 @@ export const readTheDay = (weather, cities, { night = false } = {}) => {
   if (wet > 0) {
     const wetCity = cities.find(c => /rain|sleet|thunder/.test(String(weather[c.key]?.condition || "")));
     return night
-      ? { line: `Rain around ${wetCity?.label || "parts of Denmark"} tonight.`, hint: "Dry elsewhere. Tap a city for tomorrow's forecast.", mood: "mixed" }
-      : { line: `Rain around ${wetCity?.label || "parts of Denmark"} today.`, hint: "Dry elsewhere, so it is worth checking before you commit to a day outside.", mood: "mixed" };
+      ? { line: `Rain around ${wetCity?.label || `parts of ${countryProfile(activeCountry()).name}`} tonight.`, hint: "Dry elsewhere. Tap a city for tomorrow's forecast.", mood: "mixed" }
+      : { line: `Rain around ${wetCity?.label || `parts of ${countryProfile(activeCountry()).name}`} today.`, hint: "Dry elsewhere, so it is worth checking before you commit to a day outside.", mood: "mixed" };
   }
   if (night && clear === cities.length) {
     return { line: "A clear night across the country.", hint: "Away from the town lights, the stars are out.", mood: "clear" };
@@ -90,7 +98,7 @@ export const readTheDay = (weather, cities, { night = false } = {}) => {
     return { line: "Clear everywhere.", hint: `Bright but only ${warmest} degrees, so take a layer.`, mood: "clear" };
   }
   if (warmest - coldest >= 6) {
-    return { line: `${warmest} degrees in one corner, ${coldest} in another.`, hint: "Denmark is small but today is not uniform.", mood: "mixed" };
+    return { line: `${warmest} degrees in one corner, ${coldest} in another.`, hint: `${countryProfile(activeCountry()).name} is small but today is not uniform.`, mood: "mixed" };
   }
   return null;   // an ordinary grey day says nothing, rather than saying something empty
 };
@@ -187,7 +195,7 @@ export const DenmarkClock = ({ style }) => {
   const now = useDenmarkNow();
   const time = denmarkClock(now);
   if (!time) return null;
-  return <span style={style} aria-label={`The time in Denmark is ${time}`}>{time}</span>;
+  return <span style={style} aria-label={`The time in ${countryProfile(activeCountry()).name} is ${time}`}>{time}</span>;
 };
 
 // Portalled to document.body deliberately. This strip renders inside a

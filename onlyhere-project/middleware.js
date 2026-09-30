@@ -61,6 +61,29 @@ import { towns as hardcodedTowns } from "./src/data/towns.js";
 // and is NOT here for the same reason: it lives behind that same graph.
 import { stripDashesDeep } from "./src/utils/helpers.js";
 import { stripResearchVoice } from "./src/utils/researchWords.js";
+import { COUNTRY_PROFILES, DEFAULT_COUNTRY, rowCountry } from "./src/utils/countries.js";
+
+// ── ANOTHER COUNTRY'S ADDRESSES ─────────────────────────────────────
+// Fable's audit of the Lithuanian site, 30 Sep 2026: /lithuania links got no
+// share card and the sitemap filed Klaipėda rows under /denmark/. placeUrl.js
+// builds every path with the Danish segment on the server (there is no page
+// to read a country from here), so another country's path is that same path
+// with its own first segment, and a row is only ever served under the country
+// it belongs to.
+const DK_SLUG = COUNTRY_PROFILES[DEFAULT_COUNTRY].slug;
+const countryOfPath = (pathname) => {
+  const seg = String(pathname || "").split("/").filter(Boolean)[0] || "";
+  const hit = Object.values(COUNTRY_PROFILES).find(c => c.slug === seg.toLowerCase());
+  return hit ? hit.code : null;
+};
+const asDanishPath = (pathname, code) => code === DEFAULT_COUNTRY ? pathname : pathname.replace(new RegExp(`^/${COUNTRY_PROFILES[code].slug}`, "i"), `/${DK_SLUG}`);
+const inCountryPath = (path, code) => (!path || code === DEFAULT_COUNTRY) ? path : path.replace(new RegExp(`^/${DK_SLUG}(?=/|$)`), `/${COUNTRY_PROFILES[code].slug}`);
+const SITE_CARD = {
+  LT: {
+    title: "Gemlyx Lithuania: Klaipėda for visitors",
+    description: "Klaipėda for visitors: what is worth your hours, what is on during your dates, the bus to every place, and a plan for your visit in minutes.",
+  },
+};
 
 // Guide URLs, town pages, and the sitemap. Everything else on the site keeps
 // index.html's own card and never pays for this to run.
@@ -83,7 +106,7 @@ import { stripResearchVoice } from "./src/utils/researchWords.js";
 // contains exactly the COUNTRY placeUrl exports. Change the country and the
 // suite names this line rather than the site quietly serving nothing at the new
 // paths.
-export const config = { matcher: ["/guide/:path*", "/denmark/:path*", "/sitemap.xml"] };
+export const config = { matcher: ["/guide/:path*", "/denmark/:path*", "/lithuania", "/lithuania/:path*", "/sitemap.xml"] };
 
 // Every published town. The hardcoded array is empty since 5 Aug, when all
 // content moved to Supabase, so in practice this is entirely the live list and
@@ -124,7 +147,7 @@ const publishedEntries = async () => {
         const name = r?.payload?.name;
         if (!name || !entryUrlPath(r?.type, name)) return;
         if (!worthServing(r.payload)) return;
-        entries.push({ type: r.type, name });
+        entries.push({ type: r.type, name, country: rowCountry(r.payload) });
       });
     }
   } catch { /* a short sitemap is honest; an invented one is not */ }
@@ -162,10 +185,10 @@ const cardResponse = (html) => new Response(html, {
 // lookup and the app's own loader could each land on a different row for the
 // same slug, so the WhatsApp card would describe one version of Ribe and the
 // page it opened would render the other. Both now take the newest id.
-const findTown = async (slug) => {
-  const local = findBySlug(hardcodedTowns, slug);
+const findTown = async (slug, country = DEFAULT_COUNTRY) => {
+  const local = country === DEFAULT_COUNTRY ? findBySlug(hardcodedTowns, slug) : null;
   if (local) return local;
-  return findEntry("", slug);
+  return findEntry("", slug, country);
 };
 
 // ── AND THE SAME LOOKUP FOR EVERY OTHER KIND ────────────────────────
@@ -178,7 +201,7 @@ const findTown = async (slug) => {
 // order=id.desc for the reason above: five towns have duplicate published rows,
 // findBySlug returns the first match, and unordered this lookup and the app's own
 // loader could each land on a different row for the same slug.
-const findEntry = async (seg, slug) => {
+const findEntry = async (seg, slug, country = DEFAULT_COUNTRY) => {
   const types = seg ? typesForSeg(seg) : ["town"];
   if (!types.length) return null;
   try {
@@ -189,7 +212,7 @@ const findEntry = async (seg, slug) => {
     );
     if (!res.ok) return null;
     const rows = await res.json();
-    return findBySlug((Array.isArray(rows) ? rows : []).map(r => r?.payload).filter(Boolean), slug);
+    return findBySlug((Array.isArray(rows) ? rows : []).map(r => r?.payload).filter(Boolean).filter(p => rowCountry(p) === country), slug);
   } catch { return null; }
 };
 
@@ -207,7 +230,23 @@ export default async function middleware(request) {
     // anywhere in the app for a crawler to follow. Making the URLs exist does
     // not make them discoverable; something has to list them, and this is it.
     if (url.pathname === "/sitemap.xml") {
-      return new Response(sitemapXml(SITE_ORIGIN, await publishedEntries()), {
+      const all = await publishedEntries();
+      const home = all.filter(e => !e.country || e.country === DEFAULT_COUNTRY);
+      let xml = sitemapXml(SITE_ORIGIN, home);
+      const abroad = [];
+      for (const code of Object.keys(COUNTRY_PROFILES)) {
+        if (code === DEFAULT_COUNTRY) continue;
+        const mine = all.filter(e => e.country === code);
+        if (!mine.length) continue;
+        abroad.push(`${SITE_ORIGIN}/${COUNTRY_PROFILES[code].slug}`);
+        const seen = new Set();
+        mine.forEach(e => {
+          const p = inCountryPath(entryUrlPath(e.type, e.name), code);
+          if (p && !seen.has(p)) { seen.add(p); abroad.push(`${SITE_ORIGIN}${p}`); }
+        });
+      }
+      if (abroad.length) xml = xml.replace("</urlset>", () => `${abroad.map(u => `  <url><loc>${u}</loc></url>`).join("\n")}\n</urlset>`);
+      return new Response(xml, {
         status: 200,
         headers: { "content-type": "application/xml; charset=utf-8", "cache-control": "public, max-age=0, s-maxage=3600, stale-while-revalidate=86400" },
       });
@@ -216,6 +255,14 @@ export default async function middleware(request) {
     // A person: hand straight back to the app. This is the overwhelming
     // majority of requests and it costs one regex.
     if (!isCrawler(request.headers.get("user-agent"))) return next();
+    const pathCountry = countryOfPath(url.pathname) || DEFAULT_COUNTRY;
+    const land = COUNTRY_PROFILES[pathCountry];
+    // Another country's front page: its own card rather than Denmark's.
+    if (pathCountry !== DEFAULT_COUNTRY && /^\/[^/]+\/?$/.test(url.pathname) && SITE_CARD[pathCountry]) {
+      const shell = await fetchShell(url.origin);
+      if (!shell) return next();
+      return cardResponse(injectMeta(shell, { ...SITE_CARD[pathCountry], url: `${SITE_ORIGIN}/${land.slug}`, image: `${SITE_ORIGIN}/og-default.jpg` }));
+    }
     // ── AN ENTRY PAGE'S OWN CARD, WHATEVER KIND IT IS ─────────────────
     // Same rule as the guide branch below: an entry we cannot find gets the
     // site's card rather than a card describing a page that is not there.
@@ -225,15 +272,15 @@ export default async function middleware(request) {
     // gained an address that night would have fallen through to the site card
     // with the town branch sitting right here looking like it covered them.
     // parseEntryUrl reads both shapes and hands back which kind it is.
-    const entryRoute = parseEntryUrl(url.pathname);
+    const entryRoute = parseEntryUrl(asDanishPath(url.pathname, pathCountry));
     if (entryRoute) {
       const town = entryRoute.kind === "town"
-        ? await findTown(entryRoute.slug)
-        : await findEntry(entryRoute.seg, entryRoute.slug);
+        ? await findTown(entryRoute.slug, pathCountry)
+        : await findEntry(entryRoute.seg, entryRoute.slug, pathCountry);
       if (!town) return next();
       const shell = await fetchShell(url.origin);
       if (!shell) return next();
-      const where = [town.region, "Denmark"].filter(Boolean).join(", ");
+      const where = [town.region, land.name].filter(Boolean).join(", ");
       // The entry's own words, never a template. With nothing to say we say the
       // plain true thing rather than inventing a description for it.
       // Cleaned for the words only. The URL below still comes off the raw name,
@@ -243,7 +290,7 @@ export default async function middleware(request) {
       const desc = stripResearchVoice(
         String(words.desc || words.highlight || `${words.name} in ${where}, on Gemlyx.`).replace(/\s+/g, " ").trim(),
       );
-      const townUrl = `${SITE_ORIGIN}${entryUrlPath(entryRoute.kind === "town" ? "town" : (typesForSeg(entryRoute.seg)[0] || ""), town.name) || `/${COUNTRY}/${placeSlug(town.name)}`}`;
+      const townUrl = `${SITE_ORIGIN}${inCountryPath(entryUrlPath(entryRoute.kind === "town" ? "town" : (typesForSeg(entryRoute.seg)[0] || ""), town.name) || `/${COUNTRY}/${placeSlug(town.name)}`, pathCountry)}`;
       // A relative photo path has to become absolute: a crawler fetches the
       // image from wherever the tag says, and a bare /towns/x.jpg is nowhere.
       const townImage = /^https?:\/\//i.test(town.photo || "") ? town.photo : `${SITE_ORIGIN}${town.photo || "/og-default.jpg"}`;
@@ -253,7 +300,7 @@ export default async function middleware(request) {
       // own followed by "Denmark" answers nothing.
       const locality = entryRoute.kind === "town" ? "" : String(words.town || words.city || "").trim();
       const withMeta = injectMeta(shell, {
-        title: locality && locality !== words.name ? `${words.name}, ${locality}` : `${words.name}, Denmark`,
+        title: locality && locality !== words.name ? `${words.name}, ${locality}` : `${words.name}, ${land.name}`,
         description: desc.length > 200 ? `${desc.slice(0, 197)}...` : desc,
         url: townUrl,
         image: townImage,

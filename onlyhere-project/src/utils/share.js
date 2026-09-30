@@ -1,3 +1,4 @@
+import { countryProfile, DEFAULT_COUNTRY } from "./countries";
 // ── SENDING A TRIP TO SOMEBODY ──────────────────────────────────────
 // Oliver, 8 Aug 2026, on the competitor research: "So there is no competitor
 // where we need to 'steal' ideas?" There are four, and this is the first of
@@ -87,9 +88,12 @@ export const shareSummary = (guide) => {
   return parts.join(", ");
 };
 
+// A guide made on another country's page says so (guide._country, written by
+// generateGuide); every guide made before that is Danish.
+const guideLandName = (guide) => countryProfile(String(guide?._country || "") || DEFAULT_COUNTRY).name;
 export const shareTitle = (guide) => {
   const t = String((guide && guide.title) || "").trim();
-  return t || "A Denmark guide";
+  return t || `A ${guideLandName(guide)} guide`;
 };
 
 // What lands in the message box when the share sheet opens. One line: most
@@ -145,7 +149,9 @@ export const metaDescription = (guide) => {
   const summary = shareSummary(guide);
   const made = hasMeasuredTravel(guide)
     ? "Planned by Gemlyx, with every travel time measured rather than guessed."
-    : "Planned by Gemlyx: Denmark past the three days everybody spends in Copenhagen.";
+    : guideLandName(guide) === "Denmark"
+      ? "Planned by Gemlyx: Denmark past the three days everybody spends in Copenhagen."
+      : `Planned by Gemlyx, from the places it has checked in ${guideLandName(guide)}.`;
   return summary ? `${summary}. ${made}` : made;
 };
 

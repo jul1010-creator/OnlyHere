@@ -1,3 +1,4 @@
+import { activeCountry, countryProfile } from "../utils/countries";
 import { useState } from "react";
 import { C } from "../utils/theme";
 import { SUPABASE_URL, SUPABASE_KEY } from "../config";
@@ -95,7 +96,7 @@ export const ArticleFeedback = ({ itemType, itemName, signedIn, onNeedAccount })
             value={text}
             onChange={e => { setText(e.target.value); if (problem) setProblem(""); }}
             rows={3}
-            placeholder={open === "outdated" ? "e.g. entry is 120 DKK now, not free" : "e.g. the walking time from the station is way off"}
+            placeholder={open === "outdated" ? (countryProfile(activeCountry()).currency === "EUR" ? "e.g. entry is €8 now, not free" : "e.g. entry is 120 DKK now, not free") : "e.g. the walking time from the station is way off"}
             style={{ width: "100%", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: "9px 11px", fontSize: 13, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif", resize: "vertical", boxSizing: "border-box" }}
           />
           {problem && <div style={{ fontSize: 11, color: "#FFB347", marginTop: 7, lineHeight: 1.5 }}>{problem}</div>}

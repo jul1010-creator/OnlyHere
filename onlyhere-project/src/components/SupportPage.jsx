@@ -51,6 +51,9 @@ import { SUPABASE_URL, SUPABASE_KEY, APP_VERSION } from "../config";
 // Synchronous, for the reason in the note in the component: the form must not
 // flash a "needs an account" block at somebody who already has one.
 import { getStoredSession } from "../utils/auth";
+import { COUNTRY_PROFILES, DEFAULT_COUNTRY } from "../utils/countries";
+
+const countryFromParam = (v) => { const c = String(v || "").trim().toUpperCase(); return COUNTRY_PROFILES[c] ? c : DEFAULT_COUNTRY; };
 import { withContext, readBrowserFacts } from "../utils/problemContext";
 import { GemlyxLogo } from "./GemlyxLogo";
 import { ME_PATH } from "../utils/tabUrl";
@@ -153,7 +156,10 @@ export const SupportPage = () => {
   const reporting = form.topic === REPORT_TOPIC;
   // The one topic that needs an account. Not `reporting`: that is the legal
   // content notice, which is a different thing wearing a similar word.
-  const needsAccount = form.topic === PROBLEM_TOPIC && !signedIn;
+  // Arriving from another country's page, which asks for no account (Oliver,
+  // 29 Sep 2026, on the Klaipėda pilot). The menu adds &country=LT there.
+  const fromOpenCountry = countryFromParam(params.get("country")) !== DEFAULT_COUNTRY;
+  const needsAccount = form.topic === PROBLEM_TOPIC && !signedIn && !fromOpenCountry;
   const problems = useMemo(() => supportProblems(form), [form]);
   const fault = (f) => (tried ? problemFor(problems, f) : "");
   const set = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value }));

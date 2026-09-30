@@ -1,5 +1,5 @@
 import { TOWN_COORDS } from "../data/towns";
-import { isInCountry } from "./countries";
+import { isInCountry, activeCountry, countryProfile } from "./countries";
 // Its own file, not inlined here and not imported from eventDates.js, which
 // already imports daCompare from this one. See utils/calendarDay.js.
 import { dayStart, dayWithin, eventLastDay } from "./calendarDay";
@@ -348,7 +348,13 @@ export const weatherIcon = (code, night = false) => {
 // The box now lives with the country profiles (utils/countries.js), so a
 // second country is a second box rather than a second copy of this line. Same
 // numbers as before, so every existing caller answers exactly as it did.
-export const isInDenmark = (coords) => isInCountry(coords, "DK");
+// ── AND "DENMARK" MEANS THE PAGE'S COUNTRY, 30 SEP 2026 ─────────────
+// Every caller asks one question: is the reader standing where this site is
+// about, so "near you" and "km from you" mean something. On /lithuania a
+// visitor in Klaipėda was answered "no" and got a dead location button. The
+// name stays because twenty call sites and the suite know it by that name;
+// on the Danish page (and outside a browser) it answers exactly as before.
+export const isInDenmark = (coords) => isInCountry(coords, activeCountry());
 
 // ── "THE AVERAGE TRAVELLER DOESN'T KNOW WHAT MID-BUDGET IS IN
 //     DENMARK" ─────────────────────────────────────────────────────
@@ -546,7 +552,9 @@ export const haversineKm = (a, b) => {
 //
 // Returns "" rather than a placeholder, and every call site joins on the
 // non-empty parts, so an absent journey costs no dangling separator either.
-export const TRAVEL_ORIGIN = "Copenhagen";
+// The page country's hub: Copenhagen on the Danish site, Vilnius on
+// /lithuania. Read once at load, like the page country itself.
+export const TRAVEL_ORIGIN = countryProfile(activeCountry()).hub;
 
 // Every way a stored travelTime spells the origin it was measured from, as a
 // TRAILING clause. Exported so a test can read the same list the render does.
@@ -623,7 +631,7 @@ export const travelLabel = (userCoords, place, fallbackTravelTime, measuredFrom 
     .replace(/[\s.,;·]+$/, "").trim();
   if (!trimmed) return "";
   if (!from) return trimmed;
-  return sameName(from, TRAVEL_ORIGIN) ? `${trimmed} from CPH` : `${trimmed} from ${from}`;
+  return sameName(from, "Copenhagen") ? `${trimmed} from CPH` : `${trimmed} from ${from}`;
 };
 
 // A card subtitle is a list of things that may each be absent. Joining with a

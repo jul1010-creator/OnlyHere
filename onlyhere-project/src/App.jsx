@@ -123,7 +123,7 @@ import {
   getEnclosingJSONStringBounds, nextWeekdayTimestamp,
   getDistance, getDistanceRaw, tiltMove, tiltLeave, arrivalRow, hasArrivalField, departureParam, transitDepartureAnchor,
   daCompare, byName, seasonFit, isConfirmedUpcoming,
-  hostMatchesName, officialSiteFromCandidates, stripDashes, stripDashesDeep, storeKindOf, trimFillerForChat } from "./utils/helpers";
+  hostMatchesName, officialSiteFromCandidates, stripDashes, stripDashesDeep, storeKindOf, trimFillerForChat, TRAVEL_ORIGIN } from "./utils/helpers";
 import { checkNightTransport, geocodePlace, geocodeIsASettlement, findRealNearestStation, geocodePostcode } from "./utils/geo";
 import { runOnce } from "./utils/inFlight";
 import { Pill } from "./components/Pill";
@@ -156,6 +156,13 @@ import { LiveEventsHeaderStrip } from "./components/LiveEventsHeaderStrip";
 import { WeatherHeaderStrip, DenmarkClock } from "./components/WeatherHeaderStrip";
 import { StoreBadge } from "./components/StoreBadge";
 import { DateTimePicker } from "./components/DateTimePicker";
+import { PlanAbroadForm } from "./components/PlanAbroadForm";
+import { PromotionsPage } from "./components/PromotionsPage";
+import { livePromotions } from "./utils/promotions";
+import { groupNav, childActive, groupActive } from "./utils/navGroups";
+import { NavGroupButtons } from "./components/NavGroups";
+import { abroadBriefParts, inventoryBlock, landAsk } from "./utils/guideAbroad";
+import * as AI from "./utils/aiClient";
 import { GuidePage } from "./pages/GuidePage";
 import { askClaude, parseClaudeJSON, askPerplexity, withRetry, askOpenAI, readDatesFromImage, readPosterText, wholeSentences, citationUrls } from "./utils/aiClient";
 import { STUDIO_VOICE, slugify, J, bb, bbBullets, bbData, bulletsBlock, shapeForLive, madeHeading } from "./utils/studioContent";
@@ -165,7 +172,8 @@ import { ensureLiveContentLoaded, refreshLiveContent, applyEditedRow, removeLive
 import { isRecording, startRecording, stopRecording, record, recordedEvents, recordingText, recordingFileName, safeUrl } from "./utils/studioRecorder";
 import { ensureLiveFactsLoaded, refreshLiveFacts } from "./utils/liveFacts";
 import { founderSources, ensureSourcesLoaded, refreshSources } from "./utils/liveSources";
-import { journeyParts, journeyFigure, WAIT_INSIDE_TOTAL, NO_TRANSIT_NOTE, journeyBlock, transitProblems, absenceClaims, contradictedAbsence, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, islandLegProblems, closedButPlanned, arrivalStop, arrivalGlanceRow, vehicleMismatches, journeyCensus, censusNote } from "./utils/journey";
+import { arrivalOrBusRow } from "./utils/busStop";
+import { journeyParts, journeyFigure, WAIT_INSIDE_TOTAL, NO_TRANSIT_NOTE, journeyBlock, transitProblems, absenceClaims, contradictedAbsence, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, islandLegProblems, closedButPlanned, arrivalStop, vehicleMismatches, journeyCensus, censusNote } from "./utils/journey";
 import { correctEntry, keepMeasured, keepProse, MEASURED_FIELDS, pendingRemeasure, urlsIn, dropAppliedClaims } from "./utils/correction";
 import { branchesOf, branchCandidates, branchFromCandidate, mergeBranches, branchLabel, branchLine, coordForTown, MAX_BRANCHES } from "./utils/branches";
 import { GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, glanceFieldsFor, describeGlance, staleUncertainties, describeStale } from "./utils/glanceExtract";
@@ -275,7 +283,7 @@ import { answerLengthBlock, depthBlock, answerTokens, readAnswerLength, storeAns
 // while the route builder and the budget panel both used 60. One reader.
 import { travelModeKey, tickedTravelMode, withoutNonModes, overnightMove, dayStartsBeforeItCanArrive, MODE_DAY_KM } from "./utils/routeOrder";
 import { buildChatReport, chatReportFilename } from "./utils/chatReport";
-import { openingThread, withTestBrief, withoutTestBrief, loadThread, saveThread, clearThread } from "./utils/chatThread";
+import { openingThread, withTestBrief, withoutTestBrief, loadThread, saveThread, clearThread, GREETING } from "./utils/chatThread";
 import { downloadReport } from "./utils/previewReport";
 import { briefThemes , essentialsForTrip, essentialsBlock, reservedEssential, nightlifeWanted, nightlifeNotAsked, fitsBrief, preferenceRowState, PREF_READY, PREF_NO_ACCOUNT, eventsForYou, EVENTS_FOR_YOU_DAYS, ATTRACTION_CATEGORIES, attractionIs } from "./utils/interestFit";
 // outboundLink, and no longer partnerDisclosure or linkLabel beside it: both
@@ -391,9 +399,22 @@ const PAGE_LAND = countryProfile(PAGE_COUNTRY);
 const PAGE_ABROAD = PAGE_COUNTRY !== DEFAULT_COUNTRY;
 const HOME_PATH = homePath(PAGE_COUNTRY);
 // What is not built for another country yet stays off its pages rather than
-// answering in Danish: the trip planner and chat (Phase 3), and the Tips page,
-// which is written advice about Denmark.
-const NOT_YET_ABROAD = ["ai", "tips"];
+// answering in Danish. Nothing, since Phase 3 put the planner on them without
+// its chat (PlanAbroadForm). Tips came back 29 Sep 2026. Oliver: "Where is the tips? That navigation
+// gotta be there too.." Its Danish blocks (the Copenhagen Card pointer, "Find
+// a local", Danish weather, the Denmark FAQ answer) now follow PAGE_LAND or
+// stay on the Danish page, and its rows are whatever Tips Studio publishes
+// for that country.
+const NOT_YET_ABROAD = [];
+// ── NO ACCOUNT NEEDED ON ANOTHER COUNTRY'S PAGE ─────────────────────
+// Oliver, 29 Sep 2026: "I think if we do this Gemlyx experiment in Klaipeda,
+// then we need to make people able to use everything without account." So on
+// a Lithuanian page nothing waits behind a sign in: reviewing an article,
+// reporting a problem and a shop's Gemlyx offer are open to everybody, and the
+// prompts to sign in or make an account are not drawn. Saving places and
+// guides already works without one (on the device). Signing in stays possible
+// from the menu for anybody who wants their saves on another device.
+const OPEN_ABROAD = PAGE_ABROAD;
 
 // ── THE SAVED DRAFTS, READ ONCE ────────────────────────────────────
 // Oliver, 19 Aug 2026: "I'd actually like if we could make it possible for my
@@ -1223,6 +1244,8 @@ function GemlyxApp() {
   // full calendar adds what was imported from a town's own calendar. A country
   // with no imported calendar yet has picks only, and no tabs.
   const [eventTab, setEventTab] = useState("picks");
+  // Which menu group is open in the burger. null: the one holding the page.
+  const [menuGroupOpen, setMenuGroupOpen] = useState(null);
   // What's on for you: a day and, if the kids are coming, the family events.
   const [eventWhen, setEventWhen] = useState(null);
   const [eventKids, setEventKids] = useState(false);
@@ -1368,7 +1391,6 @@ function GemlyxApp() {
   const activeTownFilters = [townPart, townKind, townSize, townTheme, townIsland, townSearch.trim()].filter(Boolean).length;
   useEffect(() => { ensureSourcesLoaded(); }, []);
   const [craftItems, setCraftItems] = useState(craftItemsFallback);
-  const [craftLoading, setCraftLoading] = useState(true);
   const [foodTab, setFoodTab] = useState("All");
   const [foodKind, setFoodKind] = useState("All"); // "All" | "Restaurants" | "Food Streets"
   // null rather than "All", because this one is new and nothing outside the
@@ -15051,6 +15073,8 @@ ${researchRules("festival", ev)}`
   // Both go in as context the model may name from, exactly like the island
   // directory: a name on the list may be returned, a name off it may not.
   const enrichGuideDays = async (days, travelMode, mixedModes, budgetSays = "", langBlock = "", bookedNights = [], bookedName = "", stayKind = "", stayAware = null) => {
+    // The page's country, as in generateGuide. See landAsk in utils/guideAbroad.js.
+    const askClaude = landAsk(AI.askClaude, PAGE_LAND);
     setGlancePending(days.length);
     const glances = new Array(days.length).fill(null);
     const stayResolve = typeof stayAware?.resolve === "function" ? stayAware.resolve : null;
@@ -15077,7 +15101,7 @@ ${researchRules("festival", ev)}`
         let context = "";
         try {
           const nowMonth = new Date().toLocaleString("en", { month: "long" });
-          const sRes = await fetch(`/api/search?q=${encodeURIComponent(`travel between ${names.slice(0, 4).join(" and ")} Denmark train bus travel time best ${stayKind === "cheapest" ? "hostel hotel" : stayKids ? "family hotel apartment" : "hotel"} names and prices per night ${nowMonth} ${new Date().getFullYear()}`)}`);
+          const sRes = await fetch(`/api/search?q=${encodeURIComponent(`travel between ${names.slice(0, 4).join(" and ")} ${PAGE_LAND.name} train bus travel time best ${stayKind === "cheapest" ? "hostel hotel" : stayKids ? "family hotel apartment" : "hotel"} names and prices per night ${nowMonth} ${new Date().getFullYear()}`)}`);
           const sData = await sRes.json();
           context = ((sData.answer || "") + " " + (sData.results || []).map(r => r.snippet || r.content || "").filter(Boolean).slice(0, 5).join(" ")).trim();
         } catch { /* search down, Claude will fall back to safe wording */ }
@@ -16261,6 +16285,8 @@ ${houseDistanceSays(houseBaseArea, dayPoints(day, stayResolve))}` : ""}`;
     const list = savedPlaces.map(p => p.town ? `${p.name} (${p.town})` : p.name).join(", ");
     if (!list) return;
     closeEntry();
+    // No chat abroad: the planner form, with the saved places ticked.
+    if (PAGE_ABROAD) { setIntakeIncludeSaved(true); setDetourTab("sightseeing"); goTab("ai"); window.scrollTo(0, 0); return; }
     sendAI(`Plan me a trip that includes these places I've saved: ${list}. Suggest a sensible order, roughly how long I need, and one or two things worth seeing along the way.`);
     setTimeout(() => document.getElementById("ai-helper-anchor")?.scrollIntoView({ behavior: "smooth", block: "end" }), 260);
   };
@@ -16448,7 +16474,7 @@ ${houseDistanceSays(houseBaseArea, dayPoints(day, stayResolve))}` : ""}`;
       const originParam = originEnd.param, destParam = destEnd.param;
       const sentAsCoords = originEnd.fromCoords && destEnd.fromCoords;
       try {
-        const res = await fetch(`/api/directions?origin=${encodeURIComponent(originParam)}&destination=${encodeURIComponent(destParam)}&mode=${legMode}${departureParam(legMode, tripDate, dayOffset, atTime)}`);
+        const res = await fetch(`/api/directions?origin=${encodeURIComponent(originParam)}&destination=${encodeURIComponent(destParam)}&mode=${legMode}${departureParam(legMode, tripDate, dayOffset, atTime)}${countryParam(PAGE_COUNTRY)}`);
         const data = await res.json();
         if (usable(data, originCoord, destCoord, sentAsCoords)) {
           // ABSURD-WALK GUARD (Oliver's screenshots: a leg shipped as "1 hour
@@ -16684,8 +16710,8 @@ ${houseDistanceSays(houseBaseArea, dayPoints(day, stayResolve))}` : ""}`;
         // address, not just a name + town guess, so Nominatim can geocode the
         // real venue instead of landing somewhere generic nearby.
         const real = lookupRealPlace(name);
-        const query = real?.mapHint || (townByName[name] ? `${name}, ${townByName[name]}, Denmark` : `${name}, Denmark`);
-        const data = await nominatimJson(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=dk`);
+        const query = real?.mapHint || (townByName[name] ? `${name}, ${townByName[name]}, ${PAGE_LAND.name}` : `${name}, ${PAGE_LAND.name}`);
+        const data = await nominatimJson(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=${PAGE_COUNTRY.toLowerCase()}`);
         // limit=1 means we take whatever the geocoder ranked first and never
         // look at what it is. A Danish place name is not unique, and the top
         // hit is accepted here into the tier that draws a solid pin, is
@@ -16734,7 +16760,7 @@ ${houseDistanceSays(houseBaseArea, dayPoints(day, stayResolve))}` : ""}`;
     )].filter(t => t && !townKeyFor(t) && !found[t]);
     for (const town of openTowns) {
       try {
-        const data = await nominatimJson(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(`${town}, Denmark`)}&format=json&limit=1&countrycodes=dk`);
+        const data = await nominatimJson(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(`${town}, ${PAGE_LAND.name}`)}&format=json&limit=1&countrycodes=${PAGE_COUNTRY.toLowerCase()}`);
         const hit = data?.[0] ? { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) } : null;
         // No coordFitsTown, because this IS the town and there is nothing above
         // it to check against. A pair that will not parse is refused instead.
@@ -17099,7 +17125,34 @@ ${houseDistanceSays(houseBaseArea, dayPoints(day, stayResolve))}` : ""}`;
     return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
   };
   const generateGuide = async (overrideConvoText, modeOverride) => {
-    const convoText = overrideConvoText || aiMessages.slice(1).map(m => `${m.role}: ${m.text}`).join("\n");
+    // ── ON ANOTHER COUNTRY'S PAGE ─────────────────────────────────────
+    // Phase 3 of LITHUANIA_PLAN_29SEP.md. Every AI call below goes through
+    // forLand (utils/guideAbroad.js), which swaps "Denmark", "Danish" and
+    // "DKK" for the page's country and tells the model the Danish facts in the
+    // prompt are examples, not this trip. These shadow the imports for this
+    // function only, and on the Danish page they ARE the imports.
+    const askOpenAI = landAsk(AI.askOpenAI, PAGE_LAND);
+    const askClaude = landAsk(AI.askClaude, PAGE_LAND);
+    const askPerplexity = landAsk(AI.askPerplexity, PAGE_LAND);
+    // And with no chat, nothing has named any places, so the published ones
+    // are added to what the planner and the writer read as the conversation.
+    // Events only when the form asked for them, and only on the trip's days.
+    const abroadInventory = !PAGE_ABROAD ? "" : (() => {
+      const days = [];
+      const a = new Date(intakeArrival), b = new Date(intakeDeparture);
+      if (Number.isFinite(a.getTime()) && Number.isFinite(b.getTime())) {
+        for (let i = 0; i < 31; i++) { const d = dayPlus(a, i); if (d > b) break; days.push(d); }
+      }
+      const onTrip = (e) => days.length > 0 && eventOnDays(e, days);
+      return inventoryBlock({
+        Attraction: freeEntrance,
+        Workshop: craftItems,
+        Food: foodSpots,
+        Nightlife: nightlifeSpots,
+        ...(intakeIncludeEvents ? { Event: [...events, ...majorEvents, ...communityEvents, ...calendarEvents].filter(onTrip) } : {}),
+      }, PAGE_LAND);
+    })();
+    const convoText = (overrideConvoText || aiMessages.slice(1).map(m => `${m.role}: ${m.text}`).join("\n")) + abroadInventory;
     // ── AND THE ARRIVAL IS THEIRS TO STATE ──────────────────────────
     // The line that bakes _arrivalPoint onto the guide read `convoText`, which
     // is both halves of the conversation. On Oliver's Aalborg brief, 21 Aug
@@ -17914,7 +17967,7 @@ ${houseDistanceSays(houseBaseArea, dayPoints(day, stayResolve))}` : ""}`;
         const searchNames = (plannerStopNames.length > 0 ? plannerStopNames : []).slice(0, 8);
         if (searchNames.length > 0) {
           const searches = await Promise.allSettled(searchNames.map(name => {
-            const q = `"${name}" Denmark official website opening hours prices`;
+            const q = `"${name}" ${PAGE_LAND.name} official website opening hours prices`;
             return fetch(`/api/search?q=${encodeURIComponent(q)}`).then(r => r.json()).then(d => ({ name, d }));
           }));
           const chunks = [];
@@ -18561,7 +18614,9 @@ If the conversation only covers a single day or a few stops with no explicit day
         typedCountry: homeCountryIn(intakeStartPoint)?.code || "",
         locale: typeof navigator !== "undefined" ? navigator.language : "",
       });
-      const fxWanted = wantFx && wantFx !== "DKK" ? [wantFx] : [];
+      // Abroad the guide is already in euros and /api/fx converts from DKK
+      // only, so there is no line to add yet.
+      const fxWanted = !PAGE_ABROAD && wantFx && wantFx !== "DKK" ? [wantFx] : [];
       if (fxWanted.length) {
         try {
           const fxRes = await fetch(`/api/fx?to=${encodeURIComponent(fxWanted.join(","))}`);
@@ -19200,7 +19255,7 @@ If the conversation only covers a single day or a few stops with no explicit day
       }
 
       markGuideBuilt(guideStore());
-      setGuideModal({ _gid: gid, _fx: fxLine, _constraints: guideConstraints, _mode: travelMode, _onlyWalking: onlyWalking, _lightMode: mode === "plain", _travelers: travellersSaid || String(partyKnown?.value || ""), _party: partyKnown && (partyKnown.adults != null || partyKnown.kids != null || partyKnown.total != null) ? { adults: partyKnown.adults ?? null, kids: partyKnown.kids ?? null, total: partyKnown.total ?? null, hasKids: !!partyKnown.hasKids } : null, _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: dayKey(arrivalDate), /* The night before a morning flight. See utils/nightsOpen.js. */ _sleepsAfterLast: sleepsAfterLastDay(intakeArrival, intakeDeparture, parsed.days.length), _arrivalPoint: arrivalPoint(saidByTravellerForGuide, { townPoint: townPointFor }), _geo: freshGeo, _weatherFetchedAt: new Date().toISOString(), _exactDurations: exactFound, _noRouteFound: routeFailed, _testProfile: testProfile, _testPlan: testProfile ? plannerSkeleton : null, _planProblems: planProblems.length ? planProblems : null, _stay: { booked: stayKnown.stay?.value === "booked" || !!bookedName, nights: bookedNights, name: bookedName || "", /* The pick and the base, so the page offers one house and not a hotel a night. See utils/houseTrip.js. */ kind: stayForBuild || "", house: houseBaseForTrip?.name || "" }, _food: intakeFood || "", /* ── AND WHICH WAY THEY EAT, CARRIED OVER ──
+      setGuideModal({ _gid: gid, _country: PAGE_COUNTRY, _fx: fxLine, _constraints: guideConstraints, _mode: travelMode, _onlyWalking: onlyWalking, _lightMode: mode === "plain", _travelers: travellersSaid || String(partyKnown?.value || ""), _party: partyKnown && (partyKnown.adults != null || partyKnown.kids != null || partyKnown.total != null) ? { adults: partyKnown.adults ?? null, kids: partyKnown.kids ?? null, total: partyKnown.total ?? null, hasKids: !!partyKnown.hasKids } : null, _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: dayKey(arrivalDate), /* The night before a morning flight. See utils/nightsOpen.js. */ _sleepsAfterLast: sleepsAfterLastDay(intakeArrival, intakeDeparture, parsed.days.length), _arrivalPoint: arrivalPoint(saidByTravellerForGuide, { townPoint: townPointFor }), _geo: freshGeo, _weatherFetchedAt: new Date().toISOString(), _exactDurations: exactFound, _noRouteFound: routeFailed, _testProfile: testProfile, _testPlan: testProfile ? plannerSkeleton : null, _planProblems: planProblems.length ? planProblems : null, _stay: { booked: stayKnown.stay?.value === "booked" || !!bookedName, nights: bookedNights, name: bookedName || "", /* The pick and the base, so the page offers one house and not a hotel a night. See utils/houseTrip.js. */ kind: stayForBuild || "", house: houseBaseForTrip?.name || "" }, _food: intakeFood || "", /* ── AND WHICH WAY THEY EAT, CARRIED OVER ──
       Found by a review pass, 26 Sep 2026. The guide's cost block has three food
       tiers and opened on the default one whatever the traveller ticked on the
       panel, so somebody who picked Flexible saw their week priced at Cheap until
@@ -19270,6 +19325,37 @@ If the conversation only covers a single day or a few stops with no explicit day
   // seen. They say how long they have, who they are with, how they are getting
   // around, and what they like. So that is the brief now, and finding the
   // places is left to the thing being tested.
+  // ── THE ABROAD FORM GOES STRAIGHT TO THE PREVIEW ─────────────────
+  // No chat turn and no assistant reply: the form becomes the one traveller
+  // turn in the thread, marked as the trip form so readBrief reads it as the
+  // Danish form's turn is read, and the preview opens on it. The preview's
+  // confirm leads to generateGuide exactly as it does in Denmark.
+  // Saved places are kept per browser, not per country, so somebody who saved
+  // in Denmark would otherwise hand Danish places to a Klaipėda plan. The
+  // library on this page holds only this country's rows, which is the test.
+  const savedHere = PAGE_ABROAD ? savedPlaces.filter(p => lookupRealPlace(p?.name)) : savedPlaces;
+  const buildAbroad = () => {
+    if (guideModal === "loading") return;
+    const who = intakeTravelers.trim();
+    const counted = who ? partyOf(who) : null;
+    const parts = abroadBriefParts({
+      land: PAGE_LAND, arrival: intakeArrival, departure: intakeDeparture,
+      days: intakeArrival && intakeDeparture ? tripDays(intakeArrival, intakeDeparture) : null,
+      start: abroadStart, startText: intakeStartPoint,
+      travelers: who, counted: counted?.heads || null, kids: intakeFamilyMode,
+      interests: intakeInterest, transport: intakeTransport,
+      freeOnly: intakeFreeOnly, events: intakeIncludeEvents,
+      saved: intakeIncludeSaved ? savedHere : [],
+    });
+    if (!parts.length) return;
+    setGuideError(null);
+    setAiMessages(prev => [
+      (Array.isArray(prev) ? prev : []).find(m => m && m.role === "assistant") || GREETING,
+      { role: "user", text: [INTAKE_TURN_MARK, parts.join(" | ")].join(" "), hidden: true },
+    ]);
+    setGuideModal("preview");
+  };
+
   const generateRandomGuide = () => {
     if (guideModal === "loading") return;
     const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
@@ -19864,6 +19950,9 @@ If the conversation only covers a single day or a few stops with no explicit day
   const [intakePlacePref, setIntakePlacePref] = useState(null);
   const [intakeTravelers, setIntakeTravelers] = useState("");
   const [intakeIncludeSaved, setIntakeIncludeSaved] = useState(false);
+  // The abroad form's starting-point chip (ABROAD_STARTS in utils/guideAbroad).
+  // The typed half shares intakeStartPoint with the Danish form.
+  const [abroadStart, setAbroadStart] = useState("");
   // Which brief slots Gemlyx has already put a question about. Recorded from what
   // tripBrief.js told it to ask, so a question asked and not answered stops
   // blocking instead of being asked forever. See sendAI, "THE BRIEF, COMPUTED".
@@ -20839,7 +20928,9 @@ If the conversation only covers a single day or a few stops with no explicit day
   const previewWhyRunRef = useRef(0);
   useEffect(() => {
     if (guideModal !== "preview") { setPreviewWhy(null); previewWhyForRef.current = null; previewWhyRunRef.current += 1; return; }
-    const convo = aiMessages.filter(m => !m.hidden).map(m => `${m.role}: ${m.text}`).join("\n").slice(-3000);
+    // Abroad the form's hidden turn is the whole conversation (no chat), so
+    // it is kept rather than stripped.
+    const convo = aiMessages.filter(m => PAGE_ABROAD || !m.hidden).map(m => `${m.role}: ${m.text}`).join("\n").slice(-3000);
     if (!convo || previewWhyForRef.current === convo) return;
     previewWhyForRef.current = convo;
     // ── AND THE TICKS BELONG TO THIS CONVERSATION, NOT THE LAST ──
@@ -20998,7 +21089,7 @@ If the conversation only covers a single day or a few stops with no explicit day
       ? `\n\nTHIS TRIP IS ${days} ${days === 1 ? "DAY" : "DAYS"} LONG. That is what the traveller last told the form, and it beats any other length in the conversation, including one Gemlyx itself stated earlier: an intake filled in twice leaves the first echo standing and it is not a correction of anything. Never describe this trip as shorter or longer than ${days} ${days === 1 ? "day" : "days"}, and never write "for the day" or "your day" about a trip of more than one.`
       : "";
     (async () => {
-      const r = await askClaude(
+      const r = await landAsk(askClaude, PAGE_LAND)(
         `Based ONLY on this Denmark trip conversation, write 1-2 short, warm sentences in second person explaining why the route being prepared fits THIS traveler specifically. Connect it to their actual stated interests, pace, budget, and travel companions from the conversation, never generic praise, never invented places or facts. Never use em dashes or en dashes.${onScreen.length ? `\n\nTHE SCREEN THIS SENTENCE SITS ON SHOWS EXACTLY THESE PAGES AND NOTHING ELSE: ${onScreen.join(", ")}. Your sentence must be true of that list. Do not name an interest of theirs that nothing on the list serves, and do not name a place that is not on it. If what they asked for and what is on the list only partly meet, write about the part that does.${leavingNames.length ? ` THEY ARE LEAVING ${leavingNames.join(" and ")}: that is where they START, and your sentence must not promise it as somewhere the trip keeps them. Write about where they are going.` : ""}` : `\n\nTHE SCREEN THIS SENTENCE SITS ON IS EMPTY. Gemlyx holds a page for nothing they have named yet, and it says so underneath you. So write about THEM and about how the trip will be put together, and name no place at all: not a town, not an island, not a region. A sentence promising "at least one island visit" over an empty list is the single worst thing this line can do, because the list is the evidence and there is none.`}${lengthForWhy}${foodForWhy} Respond with only the sentence(s), nothing else.\n\n${languageBlock()}\n\n${convo}`,
         200
       );
@@ -21166,23 +21257,13 @@ If the conversation only covers a single day or a few stops with no explicit day
     if (savedGuides.length > 0) checkSavedGuidesWeather();
   }, []);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/craft_items?select=*&order=id`, {
-          headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }
-        });
-        const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
-          // Through the dash rule like every other row. This table is read on
-          // its own, outside liveContent, and "Bornholm Ceramics — Hjorths
-          // Fabrik" was on the live Attractions page, 21 Sep 2026.
-          setCraftItems(data.map(d => stripDashesDeep({ ...d, what: Array.isArray(d.what) ? d.what : (d.what || "").split(",").map(s => s.trim()).filter(Boolean) })));
-        }
-      } catch { /* keep fallback data */ }
-      setCraftLoading(false);
-    })();
-  }, []);
+  // ── NO MORE LEGACY WORKSHOPS ────────────────────────────
+  // Oliver, 29 Sep 2026, on Bornholm Ceramics, Moesgaard Viking Days, Sømods
+  // Bolcher and Viking Center Ribe showing on /lithuania: "these bad boys have
+  // to go. Removed in Denmark as well." They came from the old craft_items
+  // table, read on its own outside gemlyx_content, so Studio never showed
+  // them and nothing there could unpublish them. Workshops are now only the
+  // published "booking" rows liveContent hands over.
 
   // ── THE CHAT FOLLOWS ITS OWN TEXT DOWN ──────────────────
   //
@@ -21247,7 +21328,7 @@ If the conversation only covers a single day or a few stops with no explicit day
   // pages and a reader looking for one is often looking for the other. The
   // order here is also the swipe order, so a wrong position is felt as a wrong
   // gesture rather than seen as a wrong list.
-  const TAB_ORDER_ALL = ["home", "essentials", "tips", "gems", "attractions", "events", "food", "nightlife", "shopping", "visits", "islands", "ai"];
+  const TAB_ORDER_ALL = ["home", "essentials", "tips", "gems", "promotions", "attractions", "events", "food", "nightlife", "shopping", "visits", "islands", "ai"];
   // ── A PAGE WITH NOTHING ON IT IS NOT IN THE MENU ──────────────────
   // Oliver, 28 Sep 2026, fixing the navigation review: Shopping was a top
   // level page reading "Nothing published yet". It comes back by itself the
@@ -21255,6 +21336,16 @@ If the conversation only covers a single day or a few stops with no explicit day
   // there is somewhere to check a page before the first entry goes live. Only
   // decided once the content has loaded, so a slow load never hides it.
   const hideShopping = liveLoaded && !libraryFailed && !isStudio && shops.length === 0 && shopPlaces.length === 0;
+  // ── GEMLYX PROMOTIONS ─────────────────────────────────────────────
+  // Oliver, 29 Sep 2026: "I think what will sell more is the discount..
+  // should we get a 'Gemlyx promotions' navigation?" Every live offer, read
+  // off the entries themselves (utils/promotions.js), next to Cheap gems. Same
+  // rule as Shopping: out of the menu while no offer is live, except in Studio.
+  const promotions = livePromotions({
+    free: freeEntrance, craft: craftItems, food: foodSpots, nightlife: nightlifeSpots,
+    shop: shops, shopPlace: shopPlaces, event: [...events, ...majorEvents], town: towns,
+  });
+  const hidePromotions = liveLoaded && !libraryFailed && !isStudio && promotions.length === 0;
   // ── AND ON ANOTHER COUNTRY'S PAGE, ONLY WHAT IT HAS ──────────────
   // Phase 2 of LITHUANIA_PLAN_29SEP.md, the same rule as Shopping above: a
   // page with nothing on it is not in the menu. Klaipėda has no islands and,
@@ -21266,8 +21357,11 @@ If the conversation only covers a single day or a few stops with no explicit day
     essentials: essentials.length === 0,
     nightlife: nightlifeSpots.length + nightlifeStreets.length + nightlifeTowns.length === 0,
   };
-  const hideAbroad = (t) => PAGE_ABROAD && (NOT_YET_ABROAD.includes(t) || (liveLoaded && !libraryFailed && !isStudio && emptyHere[t]));
-  const TAB_ORDER = TAB_ORDER_ALL.filter(t => !(t === "shopping" && hideShopping) && !hideAbroad(t));
+  // Studio lives on the planner's page, so /lithuania#studio keeps that page
+  // in the menu for him. Oliver, 29 Sep 2026: "Where is the guide
+  // navigation? Because that's where studio should be, no?"
+  const hideAbroad = (t) => PAGE_ABROAD && ((NOT_YET_ABROAD.includes(t) && !(t === "ai" && isStudio)) || (liveLoaded && !libraryFailed && !isStudio && emptyHere[t]));
+  const TAB_ORDER = TAB_ORDER_ALL.filter(t => !(t === "shopping" && hideShopping) && !(t === "promotions" && hidePromotions) && !hideAbroad(t));
   // Single source of truth for nav labels — same order as TAB_ORDER, so swipe and nav can never drift apart again.
   // Redesign pass: emoji removed from nav — `ico` names map to the drawn icon
   // set in components/Icon.jsx, rendered next to the plain-text label.
@@ -21291,6 +21385,7 @@ If the conversation only covers a single day or a few stops with no explicit day
     // Tips, because a reader looking for one is often looking for the other,
     // which is the rule the note on TAB_ORDER gives for every neighbour.
     { id: "gems", label: uiT("nav.gems", uiLang), ico: "tag" },
+    { id: "promotions", label: uiT("nav.promotions", uiLang), ico: "gift" },
     { id: "attractions", label: uiT("nav.attractions", uiLang), ico: "ticket" },
     { id: "events", label: uiT("nav.events", uiLang), ico: "calendar" },
     { id: "food", label: uiT("nav.food", uiLang), ico: "utensils" },
@@ -21309,7 +21404,8 @@ If the conversation only covers a single day or a few stops with no explicit day
   // A link straight to the hidden Shopping page lands on Explore instead.
   useEffect(() => {
     if (hideShopping && active === "shopping") setActive("home");
-  }, [hideShopping, active]);
+    if (hidePromotions && active === "promotions") setActive("home");
+  }, [hideShopping, hidePromotions, active]);
   const pageAnim = "";
   const goTab = (id) => {
     const a = TAB_ORDER.indexOf(active), b = TAB_ORDER.indexOf(id);
@@ -22967,7 +23063,7 @@ ${languageBlock()}`;
                   stored stop was never measured, or is an hour's walk away,
                   draws nothing here. See ARRIVAL_WALK_LIMIT in journey.js. */}
               {(() => {
-                const row = arrivalGlanceRow(event, "event");
+                const row = arrivalOrBusRow(event, "event");
                 if (!row) return null;
                 return (
                   <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 11.5, color: C.light }}>
@@ -23005,6 +23101,23 @@ ${languageBlock()}`;
   // could put on the page and the source list that reached no search. Viking is
   // a kind of event, so it is a type, and the type row already exists.
   const hasFullCalendar = calendarEvents.some(e => isCurrentlyLive(e.date, e.dateEnd) || isUpcoming(e.date));
+  // ── THE MENU, GROUPED ─────────────────────────────────────────────
+  // Oliver, 30 Sep 2026: dropdowns, "Advice", "Activities", "Gems" "and so
+  // on". The pages and their order stay NAV_ITEMS; utils/navGroups.js only
+  // decides how the bar and the burger group them. Here rather than beside
+  // NAV_ITEMS because Activities needs to know whether a full calendar exists.
+  // ── THE GOLD BUTTON ON ANOTHER COUNTRY'S PAGE IS THE DEALS ──────────
+  // Oliver, 30 Sep 2026: "Maybe change the golden buzzer out with 'special
+  // deals' instead? Because right now, it's hidden." Lithuania only, where the
+  // discounts are what sells, and only while a deal is live, so the gold button
+  // never opens an empty page. The planner then moves into the menu like any
+  // other page. Denmark keeps its gold planner.
+  const featuredTab = PAGE_ABROAD && TAB_ORDER.includes("promotions") ? "promotions" : "ai";
+  const navGroups = groupNav(NAV_ITEMS.filter(item => item.id !== featuredTab), { calendar: hasFullCalendar, t: (k) => uiT(k, uiLang) });
+  const pickNav = (child) => {
+    if (child.tab === "events") setEventTab(child.sub === "calendar" ? "calendar" : "picks");
+    goTab(child.tab);
+  };
   const eventTabSource = eventTab === "calendar" && hasFullCalendar ? [...events, ...majorEvents, ...calendarEvents] : [...events, ...majorEvents];
   // isCurrentlyLive OR isUpcoming, not isUpcoming alone. isUpcoming only ever
   // reads the START, so a festival that opened yesterday and runs all week
@@ -23164,6 +23277,13 @@ ${languageBlock()}`;
   const aiHelperBlock = () => (
     <div id="ai-helper-anchor" style={{ marginTop: 8 }}>
               <div style={{ padding: "0 0 28px" }}>
+                {/* ── NO CHAT ON ANOTHER COUNTRY'S PAGE ─────────────────
+                    Oliver, 29 Sep 2026, starting Phase 3 for Lithuania: "Leave
+                    out the Chat Assistant.. I doubt anyone will use it." The
+                    form above (PlanAbroadForm) goes straight to the preview,
+                    so everything from the AI Act notice to the progress bar is
+                    the Danish page's alone. Studio below stays on both. */}
+                {!PAGE_ABROAD && (<>
                 {/* ── ARTICLE 50(1), AI ACT ────────────────────────
                     In force since 2 August 2026, no grace period. The reader
                     has to be told they are interacting with an AI system "from
@@ -24023,6 +24143,7 @@ ${languageBlock()}`;
                     Mention who's traveling: kids, budget, a car. The more Gemlyx knows, the better the plan.
                   </div>
                 )}
+                </>)}
                 {isStudio && !studioSession && studioDoorOpen && (
                   <div style={{ background: C.surface, border: `1px dashed ${C.gold}66`, borderRadius: 14, padding: "20px", marginTop: 18 }}>
                     <div style={{ fontSize: 14, fontWeight: 700, color: C.gold, fontFamily: "'Fraunces', serif", marginBottom: 4 }}>🔒 Content Studio — log in</div>
@@ -28886,9 +29007,9 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       people tend to miss it: a red button promising a plan is
                       an advert, and two date fields are a thing you are already
                       halfway through. Filling them in IS starting the plan. */}
-                  {/* The dates start the planner, which is not built for another
-                      country yet (Phase 3), so they wait with it. */}
-                  {!PAGE_ABROAD && <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center", alignItems: "flex-end", marginBottom: 18, width: "100%", maxWidth: 420 }}>
+                  {/* The dates start the planner, on every country's page since
+                      Phase 3. */}
+                  {<div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center", alignItems: "flex-end", marginBottom: 18, width: "100%", maxWidth: 420 }}>
                     {[
                       { key: "arrival", label: "Arrival", value: heroDayOf(intakeArrival), min: heroDayNow(), onPick: heroSetArrival },
                       { key: "departure", label: "Departure", value: heroDayOf(intakeDeparture), min: heroDayOf(intakeArrival) || heroDayNow(), onPick: heroSetDeparture },
@@ -28901,9 +29022,9 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       intake lives on the sightseeing row only, so a reader who
                       last looked at Road Trips would otherwise arrive at Detour
                       with their dates filled in on a row that is not showing. */}
-                  {!PAGE_ABROAD && <button onClick={() => { setDetourTab("sightseeing"); goTab("ai"); window.scrollTo(0, 0); }}
+                  {<button onClick={() => { setDetourTab("sightseeing"); goTab("ai"); window.scrollTo(0, 0); }}
                     style={{ background: `linear-gradient(135deg, ${C.accent}, #C22A3C)`, border: "none", color: "#fff", borderRadius: 100, padding: "13px 26px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", boxShadow: "0 6px 24px rgba(226,59,78,0.4)" }}>
-                    ✦ Plan my trip
+                    {PAGE_ABROAD ? "✦ Plan my visit" : "✦ Plan my trip"}
                   </button>}
                   <div style={{ marginTop: 26, color: "rgba(255,255,255,0.6)", fontSize: 12, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
                     <span>Scroll to explore</span>
@@ -29161,7 +29282,8 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                        sub: "Everything published here, newest first",
                        items: dealt([...pool.filter(withPhoto), ...pool.filter(x => !withPhoto(x))], rowCards, week * 31) }]
                   : [];
-                const shown = ranked ? rows : fallback;
+                // No "Account needed" card on a page that asks for no account.
+                const shown = (ranked ? rows : fallback).filter(r => !(OPEN_ABROAD && r.account && r.account.state === PREF_NO_ACCOUNT));
                 if (shown.length === 0) {
                   return (
                     <div style={{ padding: "22px 16px 8px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
@@ -29326,7 +29448,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   four saved things live on this device" above an empty gap.
                   Places still count toward the number, because the sentence is
                   about what is at risk and they are at risk too. */}
-              {savedGuides.length > 0 && (() => {
+              {savedGuides.length > 0 && !OPEN_ABROAD && (() => {
                 const verdict = shouldOfferAccount({
                   saveCount: savedPlaces.length + savedGuides.length,
                   signedIn: !!userSession,
@@ -29509,6 +29631,11 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               Denmark-Only Shops' like with bar streets." Town, then the street
               or centre, then the shops on it, matched by address rather than
               stored on the container. See utils/shopping.js. */}
+          {/* ── GEMLYX PROMOTIONS ── see utils/promotions.js. Open to
+              everybody on another country's page (OPEN_ABROAD), locked on the
+              Danish one exactly as the entry page locks it. */}
+          {tab === "promotions" && <PromotionsPage promos={promotions} title={uiT("nav.promotions", uiLang)}
+            paid={OPEN_ABROAD || hasPaidPlan(userProfile)} onOpen={(p) => openStopDetail(p)} />}
           {tab === "shopping" && <ShoppingPage shops={shops} places={shopPlaces} title={uiT("nav.shopping", uiLang)}
             onOpen={(row) => setShopDetail(row)} />}
           {tab === "attractions" && (() => {
@@ -29739,7 +29866,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       onSort={v => { setCraftSort(v); if (v === "near" && !isInDenmark(userCoords)) requestLocation(); }}
                     />
                     {craftSort === "near" && !isInDenmark(userCoords) && (
-                      <div style={{ fontSize: 11, color: C.muted, marginTop: -6, marginBottom: 12 }}>Works once you are in Denmark with location on. Showing recommended order for now.</div>
+                      <div style={{ fontSize: 11, color: C.muted, marginTop: -6, marginBottom: 12 }}>Works once you are in {PAGE_LAND.name} with location on. Showing recommended order for now.</div>
                     )}
                   </div>
               </div>
@@ -30905,7 +31032,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             <div className={pageAnim} style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
               <div style={{ marginBottom: 18, paddingTop: 8 }}>
                 <h2 style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, margin: "0 0 10px" }}>Islands</h2>
-                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Denmark is about four hundred islands and you can land on far fewer than that. These are the ones worth the crossing, with the operator, both ports and the sailing time checked against the company that runs the boat.</div>
+                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>{PAGE_ABROAD ? "" : "Denmark is about four hundred islands and you can land on far fewer than that. "}These are the ones worth the crossing, with the operator, both ports and the sailing time checked against the company that runs the boat.</div>
               </div>
 
               {islands.length === 0 ? (
@@ -30965,7 +31092,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px 15px", marginBottom: 14 }}>
                         {regions.length > 1 && (
                           <Row title="Where">
-                            {[{ id: null, label: "All of Denmark" }, ...regions.map(r => ({ id: r, label: r, n: nRegion(r) }))].map(k => (
+                            {[{ id: null, label: `All of ${PAGE_LAND.name}` }, ...regions.map(r => ({ id: r, label: r, n: nRegion(r) }))].map(k => (
                               <Pill key={k.label} label={k.id ? `${k.label} (${k.n})` : k.label} active={islandRegion === k.id} onClick={() => setIslandRegion(islandRegion === k.id ? null : k.id)} />
                             ))}
                           </Row>
@@ -31060,10 +31187,10 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   <span style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 1, textTransform: "uppercase" }}>Gemlyx Intelligence</span>
                 </div>
                 <h2 style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, margin: "0 0 10px" }}>Gemlyx Detour</h2>
-                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 480, margin: "0 auto" }}>Your personal Denmark guide. Tell it when you're coming and what you're into, and it plans a real route, checks live weather and events for your exact days, and steers you off the obvious path.</div>
+                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 480, margin: "0 auto" }}>Your personal {PAGE_LAND.name} guide. Tell it when you're coming and what you're into, and it plans a real route, checks live weather and events for your exact days, and steers you off the obvious path.</div>
               </div>
 
-              <div style={{ display: "flex", gap: 0, borderBottom: `1px solid ${C.border}`, marginBottom: 20 }}>
+              <div style={{ display: PAGE_ABROAD ? "none" : "flex", gap: 0, borderBottom: `1px solid ${C.border}`, marginBottom: 20 }}>
                 {/* ── AND A THIRD ROW ─────────────────────────────────
                     Oliver, 10 Sep 2026: "You have Sightseeing, Road Trip, and
                     we need a third called 'pub crawl'. That's for true
@@ -31211,7 +31338,22 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   intake and conversation would have appeared underneath it.
                   Naming the row that owns it means a fourth row cannot inherit
                   it by accident either. */}
-              <div style={{ marginBottom: 20, display: detourTab === "sightseeing" ? "block" : "none" }}>
+              {PAGE_ABROAD && (
+                <PlanAbroadForm C={C} land={PAGE_LAND} towns={towns}
+                  arrival={intakeArrival} setArrival={setIntakeArrival}
+                  departure={intakeDeparture} setDeparture={setIntakeDeparture}
+                  travelers={intakeTravelers} setTravelers={setIntakeTravelers}
+                  kids={intakeFamilyMode} setKids={setIntakeFamilyMode}
+                  start={abroadStart} setStart={setAbroadStart}
+                  startText={intakeStartPoint} setStartText={setIntakeStartPoint}
+                  interests={intakeInterest} setInterests={setIntakeInterest}
+                  transport={intakeTransport} setTransport={setIntakeTransport}
+                  freeOnly={intakeFreeOnly} setFreeOnly={setIntakeFreeOnly}
+                  events={intakeIncludeEvents} setEvents={setIntakeIncludeEvents}
+                  savedCount={savedHere.length} includeSaved={intakeIncludeSaved} setIncludeSaved={setIntakeIncludeSaved}
+                  busy={guideModal === "loading"} error={guideError || ""} onBuild={buildAbroad} />
+              )}
+              <div style={{ marginBottom: 20, display: !PAGE_ABROAD && detourTab === "sightseeing" ? "block" : "none" }}>
                 {/* Redesign pass: the intake used to be ~10 fields stacked in one long
                     wall, all visible at once. Now it's one card — dates + starting point
                     up front (the inputs that shape the plan), and everything
@@ -31831,10 +31973,14 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   Navigation review, 28 Sep 2026: tickets and the transit fine
                   live on Essentials, the Copenhagen Card and bikes on Tips, and
                   a reader on one had no way of knowing the other half existed. */}
+              {/* Abroad, only when there is an Essentials page to point at:
+                  it leaves the menu while it has no rows (emptyHere). */}
+              {!(PAGE_ABROAD && onTips && essentialsOnly(essentials).length === 0) && (
               <button data-testid="ess-tips-pointer" onClick={() => goTab(onTips ? "essentials" : "tips")}
                 style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 12, padding: "10px 14px", marginBottom: 16, cursor: "pointer", fontFamily: "'Inter', sans-serif", fontSize: 12, fontWeight: 600, color: C.gold }}>
-                {onTips ? "Tickets, money and the transit fine are on Essentials →" : "The Copenhagen Card, bikes and other extras are on Tips →"}
+                {onTips ? (PAGE_ABROAD ? "Tickets, money and transport are on Essentials →" : "Tickets, money and the transit fine are on Essentials →") : (PAGE_ABROAD ? "Extras worth knowing are on Tips →" : "The Copenhagen Card, bikes and other extras are on Tips →")}
               </button>
+              )}
 
               {/* Fine warning — always first, and only on the tab it belongs to */}
               {(onTips ? [] : essentials.filter(e => e.id === 7)).map(item => (
@@ -32122,8 +32268,10 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   It was rendering on BOTH tabs, since this fixed block sits
                   below the rows and had no onTips condition of its own. So this
                   is a move, not a copy: one guard takes it off Essentials and
-                  leaves it where it belongs. */}
-              {onTips && (
+                  leaves it where it belongs.
+
+                  Denmark only: it is advice about Danes and Copenhagen. */}
+              {onTips && !PAGE_ABROAD && (
               <div style={{ marginBottom: 20, scrollMarginTop: 90 }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>Traveling Solo?</div>
                 <div style={{ background: C.surface, borderRadius: 14, padding: "16px", border: `1px solid ${C.border}` }}>
@@ -32159,7 +32307,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 <div style={{ background: C.surface, borderRadius: 14, padding: "16px", border: `1px solid ${C.border}` }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
                     <span style={{ fontSize: 22 }}>🎒</span>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif" }}>Packing for Danish weather</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif" }}>Packing for {PAGE_LAND.adjective} weather</div>
                   </div>
                   {/* ── AND IT DOES NOT TALK THE GOODS DOWN ──────────
                       Oliver, 19 Sep 2026, reading what this line used to say,
@@ -32186,7 +32334,8 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   </ul>
                   {(() => {
                     const gear = partnerAdsGear();
-                    if (!gear) return null;
+                    // A Danish shop, so on the Danish page only.
+                    if (!gear || PAGE_ABROAD) return null;
                     const out = outboundLink(gear.url);
                     if (!out.href) return null;
                     return (
@@ -32215,7 +32364,9 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   { q: "How do I save a find?", a: "Tap the ♡ heart on any business. It gets saved to your Saved tab instantly." },
                   { q: "How do I get my shop listed?", a: "Send us a message on Instagram or email hello@gemlyxtravel.com. Every listing is hand-researched and checked against multiple sources before it goes live." },
                   { q: "Are all finds verified?", a: "Every listing is researched and checked by one person before it goes live, and nothing here is invented. Where the sources are recorded we show them on the page, including the corrections we had to make and the questions still open. Older entries were written before we started storing sources, so some show fewer than others, and we are working back through them." },
-                  { q: "Which cities are covered?", a: "All of Denmark, not just Copenhagen. Towns across Jutland, North Zealand and the islands are covered too, along with the coasts most visitors to Denmark are already heading for." },
+                  PAGE_ABROAD
+                    ? { q: "Which cities are covered?", a: `${towns.length ? towns.map(t => t.name).join(", ") : "Klaipėda"} for now, with more of ${PAGE_LAND.name} to follow. Denmark has its own guide at gemlyxtravel.com.` }
+                    : { q: "Which cities are covered?", a: "All of Denmark, not just Copenhagen. Towns across Jutland, North Zealand and the islands are covered too, along with the coasts most visitors to Denmark are already heading for." },
                 ].map((item, i) => (
                   <div key={i} style={{ background: C.surface, borderRadius: 12, padding: "12px 16px", marginBottom: 8, border: `1px solid ${C.border}` }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 4 }}>{item.q}</div>
@@ -33010,7 +33161,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   Signed in it becomes ONE control carrying their own name and
                   going straight to their page, because two controls offering to
                   start something they have already started is the whole bug. */}
-              {userSession ? (
+              {OPEN_ABROAD && !userSession ? null : userSession ? (
                 <button onClick={openAccount}
                   style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(12,11,7,0.55)", backdropFilter: "blur(8px)", border: "1px solid rgba(240,239,230,0.28)", color: "#F0EFE6", borderRadius: 100, padding: "8px 16px", fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", maxWidth: "52vw" }}>
                   <span style={{ color: "#E7C766" }}>✦</span>
@@ -33138,28 +33289,17 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               outside the strip is what makes always-visible true by
               construction rather than by guessing a breakpoint. */}
           <NavStrip C={C}>
-            {NAV_ITEMS.filter(item => item.id !== "ai").map(item => (
-              /* The page you are on is marked with a rule under it rather than a
-                 filled pill: a pill in the header reads as a button you have not
-                 pressed yet, which is the opposite of what it means. Kept at a
-                 constant 2px, transparent when inactive, so nothing shifts by a
-                 pixel as you move between pages. */
-              <button key={item.id} onClick={() => goTab(item.id)}
-                style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "none", border: "none", borderBottom: `2px solid ${active === item.id ? C.gold : "transparent"}`, color: active === item.id ? C.text : C.light, padding: "8px 10px 6px", fontSize: 13, fontWeight: active === item.id ? 700 : 500, cursor: "pointer", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>
-                {item.ico && <Ico name={item.ico} size={14} color={active === item.id ? C.gold : C.muted} />}
-                {item.label}
-              </button>
-            ))}
+            <NavGroupButtons groups={navGroups} active={active} eventTab={eventTab} onPick={pickNav} C={C} />
           </NavStrip>
           {/* Outside the strip and flexShrink: 0, so nothing can take a pixel
               off it however long the eight labels beside it get. */}
-          {!PAGE_ABROAD && <button className="gx-topnav-ai" onClick={() => goTab("ai")}
+          {<button className="gx-topnav-ai" data-testid="nav-featured" onClick={() => goTab(featuredTab)}
             /* NO `display` HERE. The .gx-topnav-ai class owns it, and an inline
                one silently beat the class for as long as this button has
                existed. Detour is not lost on a phone: it is the gradient row at
                the top of the menu's Navigate list. */
             style={{ gap: 6, background: `linear-gradient(135deg, ${C.gold}, ${C.accent})`, color: "#fff", border: "none", borderRadius: 100, padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginLeft: 8, marginRight: 4, whiteSpace: "nowrap", flexShrink: 0, boxShadow: `0 2px 10px ${C.gold}33` }}>
-            {NAV_ITEMS.find(item => item.id === "ai")?.label}
+            {NAV_ITEMS.find(item => item.id === featuredTab)?.label}
           </button>}
 
           {/* Right: the small persistent search pill (always visible, not a
@@ -33376,15 +33516,44 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 one thing. Everything BELOW this block stays at every width. */}
             <div className="gx-nav-in-menu">
             <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", padding: "8px 16px 6px" }}>{uiT("menu.navigate", uiLang)}</div>
-            {NAV_ITEMS.map((item, i) => item.id === "ai" ? (
-              <button key={item.id} onClick={() => { setShowMenu(false); goTab("ai"); }}
-                style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: `linear-gradient(135deg, ${C.gold}, ${C.accent})`, color: "#fff", border: "none", borderRadius: 10, padding: "12px 16px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginTop: 6, marginBottom: 2, boxShadow: `0 2px 10px ${C.gold}33`, animation: `fadeSlideIn 0.2s ease ${i * 0.04}s both` }}>
-                {item.label}
-              </button>
-            ) : (
-              <button key={item.id} onClick={() => { setShowMenu(false); goTab(item.id); }}
-                style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: active === item.id ? `${C.accent}22` : "transparent", color: active === item.id ? C.text : C.light, border: "none", borderRadius: 10, padding: "12px 16px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 2, animation: `fadeSlideIn 0.2s ease ${i * 0.04}s both` }}>
-                {item.ico && <Ico name={item.ico} size={15} color={active === item.id ? C.text : C.muted} />}
+            {/* The same groups as the bar along the top (utils/navGroups.js),
+                as an accordion: a group opens under itself, and the one holding
+                the page you are on starts open. */}
+            {navGroups.map((g, i) => {
+              const rowStyle = (on, indent) => ({ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: on ? `${C.accent}22` : "transparent", color: on ? C.text : C.light, border: "none", borderRadius: 10, padding: indent ? "10px 16px 10px 42px" : "12px 16px", fontSize: indent ? 13.5 : 14, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 2, animation: `fadeSlideIn 0.2s ease ${i * 0.04}s both` });
+              if (g.single) {
+                const c = g.children[0];
+                const on = childActive(c, active, eventTab);
+                return (
+                  <button key={g.id} onClick={() => { setShowMenu(false); pickNav(c); }} style={rowStyle(on, false)}>
+                    {c.ico && <Ico name={c.ico} size={15} color={on ? C.text : C.muted} />}
+                    {c.label}
+                  </button>
+                );
+              }
+              const holds = groupActive(g, active, eventTab);
+              const open = menuGroupOpen === g.id || (menuGroupOpen === null && holds);
+              return (
+                <div key={g.id}>
+                  <button data-testid={`menu-group-${g.id}`} aria-expanded={open} onClick={() => setMenuGroupOpen(open ? "" : g.id)} style={rowStyle(holds && !open, false)}>
+                    {g.ico && <Ico name={g.ico} size={15} color={holds ? C.text : C.muted} />}
+                    <span style={{ flex: 1 }}>{g.label}</span>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={C.muted} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform .15s ease" }} aria-hidden="true"><polyline points="6 9 12 15 18 9" /></svg>
+                  </button>
+                  {open && g.children.map(c => {
+                    const on = childActive(c, active, eventTab);
+                    return (
+                      <button key={c.key} onClick={() => { setShowMenu(false); pickNav(c); }} style={rowStyle(on, true)}>
+                        {c.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })}
+            {NAV_ITEMS.filter(item => item.id === featuredTab).map(item => (
+              <button key={item.id} onClick={() => { setShowMenu(false); goTab(featuredTab); }}
+                style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: `linear-gradient(135deg, ${C.gold}, ${C.accent})`, color: "#fff", border: "none", borderRadius: 10, padding: "12px 16px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginTop: 6, marginBottom: 2, boxShadow: `0 2px 10px ${C.gold}33`, animation: `fadeSlideIn 0.2s ease ${navGroups.length * 0.04}s both` }}>
                 {item.label}
               </button>
             ))}
@@ -33459,13 +33628,13 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               // inconsistency. Support is the address in the privacy policy,
               // and somebody exercising a right over their data must not have
               // to hold an account to ask. See public/privacy.html.
-              ...(userSession ? [{ id: "problem", label: uiT("menu.problem", uiLang), ico: "bulb", action: "problem" }] : []),
+              ...(userSession || OPEN_ABROAD ? [{ id: "problem", label: uiT("menu.problem", uiLang), ico: "bulb", action: "problem" }] : []),
               { id: "support", label: uiT("menu.support", uiLang), ico: "mail", action: "mail" },
             ].map((item, i) => (
               <button key={item.id}
                 onClick={() => {
                   setShowMenu(false);
-                  if (item.action === "problem") navigate(`${SUPPORT_PATH}?topic=${PROBLEM_TOPIC}`);
+                  if (item.action === "problem") navigate(`${SUPPORT_PATH}?topic=${PROBLEM_TOPIC}${countryParam(PAGE_COUNTRY)}`);
                   else if (item.action === "mail") window.open("mailto:hello@gemlyxtravel.com");
                   // handleSignOut, not a bare authSignOut: it is the one that
                   // pushes anything unsynced, releases the device copy and says
@@ -33539,7 +33708,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           live control it held, bookableOnly, already has its own pill on the
           Attractions page and is untouched. */}
 
-      <DetailPage windowed={entryWindowed} lang={uiLang} paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={eventDetail} onClose={closeEntry} kind="event" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={eventDetail && isPlaceSaved("event", eventDetail.id)} onToggleSave={eventDetail ? () => toggleSavePlace("event", eventDetail, eventDetail.town) : null} hasBeen={!!eventDetail && isBeenHere("event", eventDetail.id)} onToggleBeen={eventDetail ? () => toggleBeenHere("event", eventDetail, eventDetail.town) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
+      <DetailPage windowed={entryWindowed} lang={uiLang} paid={OPEN_ABROAD || hasPaidPlan(userProfile)} signedIn={OPEN_ABROAD || !!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={eventDetail} onClose={closeEntry} kind="event" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={eventDetail && isPlaceSaved("event", eventDetail.id)} onToggleSave={eventDetail ? () => toggleSavePlace("event", eventDetail, eventDetail.town) : null} hasBeen={!!eventDetail && isBeenHere("event", eventDetail.id)} onToggleBeen={eventDetail ? () => toggleBeenHere("event", eventDetail, eventDetail.town) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
       {/* onOpenEvent powers the new "What's on in <town>" section: tapping a
           festival closes the town page and opens that event's real entry, so the
           traveler lands on the full page with dates, tickets and directions
@@ -33549,11 +33718,11 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           town one. onOpenEvent closes this page before opening the event, which
           is the same handoff a town does, because two stacked detail views is a
           state this app has been in before and it is not recoverable by Back. */}
-      <DetailPage windowed={entryWindowed} lang={uiLang} paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={islandDetail} onClose={closeEntry} kind="island" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={islandDetail && isPlaceSaved("island", islandDetail.id)} onToggleSave={islandDetail ? () => toggleSavePlace("island", islandDetail, islandDetail.region) : null} hasBeen={!!islandDetail && isBeenHere("island", islandDetail.id)} onToggleBeen={islandDetail ? () => toggleBeenHere("island", islandDetail, islandDetail.region) : null} onOpenEvent={(e) => { setIslandDetail(null); setEventDetail(e); }} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
-      <DetailPage windowed={entryWindowed} lang={uiLang} paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={townDetail} onClose={closeEntry} kind="town" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={townDetail && isPlaceSaved("town", townDetail.id)} onToggleSave={townDetail ? () => toggleSavePlace("town", townDetail, townDetail.region) : null} hasBeen={!!townDetail && isBeenHere("town", townDetail.id)} onToggleBeen={townDetail ? () => toggleBeenHere("town", townDetail, townDetail.region) : null} onOpenEvent={(e) => { setTownDetail(null); setEventDetail(e); }} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
-      <DetailPage windowed={entryWindowed} lang={uiLang} paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={nightlifeDetail} onClose={closeEntry} kind="nightlife" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={nightlifeDetail && isPlaceSaved("nightlife", nightlifeDetail.id)} onToggleSave={nightlifeDetail ? () => toggleSavePlace("nightlife", nightlifeDetail, nightlifeDetail.location) : null} hasBeen={!!nightlifeDetail && isBeenHere("nightlife", nightlifeDetail.id)} onToggleBeen={nightlifeDetail ? () => toggleBeenHere("nightlife", nightlifeDetail, nightlifeDetail.location) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
-      <DetailPage windowed={entryWindowed} lang={uiLang} paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={shopDetail} onClose={closeEntry} kind="shop" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={shopDetail && isPlaceSaved("shop", shopDetail.id)} onToggleSave={shopDetail ? () => toggleSavePlace("shop", shopDetail, shopDetail.town || shopDetail.location) : null} hasBeen={!!shopDetail && isBeenHere("shop", shopDetail.id)} onToggleBeen={shopDetail ? () => toggleBeenHere("shop", shopDetail, shopDetail.town || shopDetail.location) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
-      <DetailPage windowed={entryWindowed} lang={uiLang} paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={freeDetail} onClose={closeEntry} kind="free" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={freeDetail && isPlaceSaved("free", freeDetail.id)} onToggleSave={freeDetail ? () => toggleSavePlace("free", freeDetail, freeDetail.city) : null} hasBeen={!!freeDetail && isBeenHere("free", freeDetail.id)} onToggleBeen={freeDetail ? () => toggleBeenHere("free", freeDetail, freeDetail.city) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
+      <DetailPage windowed={entryWindowed} lang={uiLang} paid={OPEN_ABROAD || hasPaidPlan(userProfile)} signedIn={OPEN_ABROAD || !!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={islandDetail} onClose={closeEntry} kind="island" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={islandDetail && isPlaceSaved("island", islandDetail.id)} onToggleSave={islandDetail ? () => toggleSavePlace("island", islandDetail, islandDetail.region) : null} hasBeen={!!islandDetail && isBeenHere("island", islandDetail.id)} onToggleBeen={islandDetail ? () => toggleBeenHere("island", islandDetail, islandDetail.region) : null} onOpenEvent={(e) => { setIslandDetail(null); setEventDetail(e); }} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
+      <DetailPage windowed={entryWindowed} lang={uiLang} paid={OPEN_ABROAD || hasPaidPlan(userProfile)} signedIn={OPEN_ABROAD || !!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={townDetail} onClose={closeEntry} kind="town" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={townDetail && isPlaceSaved("town", townDetail.id)} onToggleSave={townDetail ? () => toggleSavePlace("town", townDetail, townDetail.region) : null} hasBeen={!!townDetail && isBeenHere("town", townDetail.id)} onToggleBeen={townDetail ? () => toggleBeenHere("town", townDetail, townDetail.region) : null} onOpenEvent={(e) => { setTownDetail(null); setEventDetail(e); }} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
+      <DetailPage windowed={entryWindowed} lang={uiLang} paid={OPEN_ABROAD || hasPaidPlan(userProfile)} signedIn={OPEN_ABROAD || !!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={nightlifeDetail} onClose={closeEntry} kind="nightlife" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={nightlifeDetail && isPlaceSaved("nightlife", nightlifeDetail.id)} onToggleSave={nightlifeDetail ? () => toggleSavePlace("nightlife", nightlifeDetail, nightlifeDetail.location) : null} hasBeen={!!nightlifeDetail && isBeenHere("nightlife", nightlifeDetail.id)} onToggleBeen={nightlifeDetail ? () => toggleBeenHere("nightlife", nightlifeDetail, nightlifeDetail.location) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
+      <DetailPage windowed={entryWindowed} lang={uiLang} paid={OPEN_ABROAD || hasPaidPlan(userProfile)} signedIn={OPEN_ABROAD || !!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={shopDetail} onClose={closeEntry} kind="shop" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={shopDetail && isPlaceSaved("shop", shopDetail.id)} onToggleSave={shopDetail ? () => toggleSavePlace("shop", shopDetail, shopDetail.town || shopDetail.location) : null} hasBeen={!!shopDetail && isBeenHere("shop", shopDetail.id)} onToggleBeen={shopDetail ? () => toggleBeenHere("shop", shopDetail, shopDetail.town || shopDetail.location) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
+      <DetailPage windowed={entryWindowed} lang={uiLang} paid={OPEN_ABROAD || hasPaidPlan(userProfile)} signedIn={OPEN_ABROAD || !!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={freeDetail} onClose={closeEntry} kind="free" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={freeDetail && isPlaceSaved("free", freeDetail.id)} onToggleSave={freeDetail ? () => toggleSavePlace("free", freeDetail, freeDetail.city) : null} hasBeen={!!freeDetail && isBeenHere("free", freeDetail.id)} onToggleBeen={freeDetail ? () => toggleBeenHere("free", freeDetail, freeDetail.city) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
       {/* ── The assistant that follows him (Oliver, 6 Aug: "some sort of
           assistant for the admin /#studio guy? That will always be with me?
           Even when I'm on the blogs")  ────────────────────────────────
@@ -33719,7 +33888,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           onSaved={() => refreshLiveContent()} />;
       })()}
 
-      <DetailPage windowed={entryWindowed} lang={uiLang} paid={hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={foodDetail} onClose={closeEntry} kind="food" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={foodDetail && isPlaceSaved("food", foodDetail.id)} onToggleSave={foodDetail ? () => toggleSavePlace("food", foodDetail, foodDetail.location) : null} hasBeen={!!foodDetail && isBeenHere("food", foodDetail.id)} onToggleBeen={foodDetail ? () => toggleBeenHere("food", foodDetail, foodDetail.location) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
+      <DetailPage windowed={entryWindowed} lang={uiLang} paid={OPEN_ABROAD || hasPaidPlan(userProfile)} signedIn={OPEN_ABROAD || !!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={foodDetail} onClose={closeEntry} kind="food" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={foodDetail && isPlaceSaved("food", foodDetail.id)} onToggleSave={foodDetail ? () => toggleSavePlace("food", foodDetail, foodDetail.location) : null} hasBeen={!!foodDetail && isBeenHere("food", foodDetail.id)} onToggleBeen={foodDetail ? () => toggleBeenHere("food", foodDetail, foodDetail.location) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
 
       {/* Per Oliver ("get rid of the popup"): once a guide finishes building, we
           navigate straight to the full-page GuidePage instead of showing a
@@ -33782,7 +33951,8 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           // One guide a day. No question in Studio, where he tests.
           askBeforeBuild={!isStudio}
           usedToday={isStudio ? "" : usedTodayReason(todayRecord(guideStore(), copenhagenDay()))}
-          onReadyMade={() => { setGuideModal(null); navigate(LIBRARY_PATH); }}
+          // The trip library is Danish trips only, so not on another country's page.
+          onReadyMade={PAGE_ABROAD ? null : () => { setGuideModal(null); navigate(LIBRARY_PATH); }}
           intakeArrival={intakeArrival}
           intakeDeparture={intakeDeparture}
           intakeInterest={intakeInterest}
@@ -33854,7 +34024,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           // back. Opens the SAME floating Detour panel rendered just below,
           // with the question already typed, because a door that opens onto an
           // empty composer hands the work back to the traveller.
-          askGemlyx={(seed) => { if (seed) setPreviewChatInput(seed); setPreviewChatOpen(true); }}
+          askGemlyx={PAGE_ABROAD ? null : (seed) => { if (seed) setPreviewChatInput(seed); setPreviewChatOpen(true); }}
         />
       )}
       {/* ── AND THE CORNER DOOR ON EVERY OTHER PAGE ───────────────
@@ -33881,7 +34051,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           same sendAI, same grounding), not a second chat — anything asked or
           changed here is the same thing the preview was built from, and the
           preview stays open underneath the whole time. */}
-      {guideModal === "preview" && !previewChatOpen && (
+      {guideModal === "preview" && !previewChatOpen && !PAGE_ABROAD && (
         <button onClick={() => setPreviewChatOpen(true)}
           style={{ position: "fixed", bottom: 20, right: 20, zIndex: 960, display: "flex", alignItems: "center", gap: 8, background: `linear-gradient(135deg, ${C.surface}, ${C.bg})`, border: `1px solid ${C.gold}55`, color: C.text, borderRadius: 100, padding: "12px 18px 12px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer", boxShadow: "0 8px 26px rgba(0,0,0,0.55)", fontFamily: "'Inter', sans-serif" }}>
           <GemlyxMark size={20} ring={true} ringColor={C.gold} tone="gold" />
@@ -34579,7 +34749,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
 
             <AtAGlanceCard rows={[
                 { icon: "♿", label: "Accessibility", value: craftDetail.accessibility },
-              arrivalGlanceRow(craftDetail, "craft"),
+              arrivalOrBusRow(craftDetail, "craft"),
             ]} />
             {craftDetail.gemlyxFind && <GemlyxFindCard text={craftDetail.gemlyxFind} />}
 
@@ -34623,7 +34793,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     which are the fields that hold one. */}
                 <div style={{ fontSize: 13, color: C.text, lineHeight: 1.6 }}>
                   {craftDetail.nearestStation
-                    ? `Nearest public transport: ${craftDetail.nearestStation}.${craftDetail.travelTime ? ` ${craftDetail.travelTime} from Copenhagen.` : ""}`
+                    ? `Nearest public transport: ${craftDetail.nearestStation}.${craftDetail.travelTime ? ` ${craftDetail.travelTime} from ${craftDetail.__journey?.from || TRAVEL_ORIGIN}.` : ""}`
                     : "This one is awkward to reach without your own transport. Check the route before you commit to the day."}
                 </div>
               </div>

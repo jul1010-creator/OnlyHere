@@ -1,5 +1,10 @@
 import { useState } from "react";
 import { C } from "../utils/theme";
+import { activeCountry, countryProfile, DEFAULT_COUNTRY } from "../utils/countries";
+
+// The page's country. The intro is a claim about Denmark's prices, so another
+// country gets a plain line instead of a borrowed one.
+const LAND = countryProfile(activeCountry());
 import { Pill } from "./Pill";
 import { gemsView, GEM_SECTION, WHERE_LABEL, checkedLabel, isOwnSite, gemMatches, gemFilterOptions, gemWhere, GEM_CATEGORY_LABEL, AUDIENCE_LABEL } from "../utils/cheapGems";
 
@@ -108,7 +113,9 @@ export const CheapGemsPage = ({ rows = [], title = "Cheap gems", pointFor = null
       <div style={{ marginBottom: 18, paddingTop: 8 }}>
         <h2 style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, margin: "0 0 10px" }}>{title}</h2>
         <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>
-          Denmark is one of the most expensive countries to visit. If you want to avoid that, you can try out the following shops.
+          {LAND.code === DEFAULT_COUNTRY
+            ? "Denmark is one of the most expensive countries to visit. If you want to avoid that, you can try out the following shops."
+            : "Where your money goes further: the shops and places that keep a visit cheap."}
         </div>
       </div>
       {empty ? (
@@ -149,7 +156,7 @@ export const CheapGemsPage = ({ rows = [], title = "Cheap gems", pointFor = null
               <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px 15px", marginBottom: 16 }}>
                 {all.towns.length > 0 && (
                   <Row title="Where">
-                    {[{ id: "", label: "All of Denmark" }, ...all.towns.map(t => ({ id: t, label: t }))].map(o => (
+                    {[{ id: "", label: `All of ${LAND.name}` }, ...all.towns.map(t => ({ id: t, label: t }))].map(o => (
                       <Pill key={o.id || "all"} label={o.label} active={town === o.id} onClick={() => setTown(o.id)} />
                     ))}
                   </Row>
