@@ -181,7 +181,7 @@ writeFileSync(entry, `
   export { startLog, endLog, note, decide, recentLogs, summariseLog, formatLog, formatLogs, logChips, OUTCOMES } from ${JSON.stringify(join(root, "src/utils/runLog.js"))};
   export { fieldProvenance, correctionProvenance, entrySources, untracedFields, describeProvenance, readerCorrection, readerCorrections, isCheckerVoice, readerUncertainty, readerUncertainties, READER_UNCERTAINTY_LIMIT } from ${JSON.stringify(join(root, "src/utils/provenance.js"))};
   export { ALLOWED_ORIGINS, originOf, isAllowedOrigin, requestIsFromSite, NOT_FROM_SITE, STUDIO_ONLY_ENDPOINTS, resolveUser, isFounder } from ${JSON.stringify(join(root, "src/utils/apiGuard.js"))};
-  export { citationUrls, askOpenAI, askClaude } from ${JSON.stringify(join(root, "src/utils/aiClient.js"))};
+  export { citationUrls, askOpenAI, askClaude, localisePrompt } from ${JSON.stringify(join(root, "src/utils/aiClient.js"))};
   export { THEMES, THEME_ORDER, DEFAULT_THEME, storedTheme, THEME_PARAM } from ${JSON.stringify(join(root, "src/utils/theme.js"))};
   export { layoutBody, trimCaption } from ${JSON.stringify(join(root, "src/utils/articleLayout.js"))};
   export { instagramTarget, isEmbeddablePost } from ${JSON.stringify(join(root, "src/components/InstagramEmbed.jsx"))};
@@ -8049,7 +8049,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   const app = readFileSync(join(root, "src/App.jsx"), "utf8");
   const grid = readFileSync(join(root, "src/components/CommonsResults.jsx"), "utf8");
   ok("the facts search asks for eight, like the other two",
-     /commons-photo\?q=\$\{encodeURIComponent\(`\$\{term\} Denmark`\)\}&limit=8/.test(app));
+     /commons-photo\?q=\$\{encodeURIComponent\(`\$\{term\} \$\{PAGE_LAND\.name\}`\)\}&limit=8/.test(app)); // Batch 171
   ok("and no limit=1 lookup is left anywhere in the facts panel", !/commons-photo\?q=\$\{encodeURIComponent\(d\.subject/.test(app));
   ok("the button opens a picker rather than attaching a photo",
      /onClick=\{\(\) => findFactCommonsPhotos\(d\.key, d\.subject\)\}/.test(app));
@@ -13866,7 +13866,8 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   is("every type can actually be published", unshaped, []);
 
   missing("live content merge chain", region(live, "rows.forEach(row =>", "if (dupeNames.length", "merge chain"), t => `row.type === "${t}"`);
-  missing("Studio type picker", region(app, '{[["town", "🏘 Town"]', "].map(([k, label]) =>", "type picker"), t => `["${t}", "`);
+  // Batch 171: the list is filtered by country before it is mapped.
+  missing("Studio type picker", region(app, '{[["town", "🏘 Town"]', "]].filter(([k]) => !PAGE_ABROAD", "type picker"), t => `["${t}", "`);
   missing("research query table", region(app, "const cfg = {", "}[sType];", "research query table"), t => `${t}: { queries:`);
 
   // ── AND EVERY QUERY HAS TO SAY WHERE IN THE WORLD IT MEANS ────────
@@ -14036,7 +14037,8 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   missing("Danish query keywords", region(app, "const daWords = {", "}[sType]", "Danish query keywords"), t => `${t}:`);
   missing("founder-source search words", JSON.stringify(Object.keys(M.QUERY_WORDS || {})), t => `"${t}"`);
   missing("discover search words", JSON.stringify(Object.keys(M.DISCOVER_WORDS || {})), t => `"${t}"`);
-  missing("the name-input placeholder map", region(app, "placeholder={{ town:", "}[studioType]", "placeholder map"), t => `${t}:`);
+  // Batch 171: the Danish map follows the other country's, after the ||.
+  missing("the name-input placeholder map", region(app, '|| { town: "Town name, e.g. Ringkøbing"', "}[studioType]", "placeholder map"), t => `${t}:`);
 
   // ── AND THE TWO VOCABULARIES, WRITTEN DOWN AT LAST ────────────────
   // A row's `type` is what Studio publishes; a rendered place carries `_src`,
@@ -14585,7 +14587,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // and it costs like one. A vision call left out of the meter would be the one
   // kind of spend that is invisible in both the bill and the panel.
   ok("every model call is recorded with its real usage", (ai.match(/recordModelCall\(/g) || []).length === 4);
-  ok("including the one that reads pictures", /const askAboutImage = async \(imageUrl, prompt,[\s\S]*?recordModelCall\("claude", model, data\?\.usage\)/.test(ai));
+  ok("including the one that reads pictures", /const askAboutImage = async \(imageUrl, promptIn,[\s\S]*?recordModelCall\("claude", model, data\?\.usage\)/.test(ai)); // Batch 171
   // Recorded BEFORE the ok check, same as askClaude: a call that failed after the
   // model had already read the image still cost money.
   ok("and it records before it checks whether the call succeeded",
@@ -22085,7 +22087,7 @@ rmSync(dir, { recursive: true, force: true });
      /every place-scoped source will be left out/.test(appR));
 
   // The panel, because a scope he cannot check is a scope he has to trust.
-  ok("the picker offers the regions", /\{REGION_NAMES\.map\(x => <option key=\{x\} value=\{x\}>region/.test(appR));
+  ok("the picker offers the regions", /\{!PAGE_ABROAD && REGION_NAMES\.map\(x => <option key=\{x\} value=\{x\}>region/.test(appR)); // Batch 171: on the Danish site
   ok("and the row says which tier it was understood as", /const tier = scopeTier\(row\.applies_place\);/.test(appR));
   ok("and names the kommuner behind a region", /kommunerIn\(row\.applies_place\)/.test(appR));
   // ── AND THE ONE TIER NOTHING ABOUT THE WORD WOULD SUGGEST ────────
@@ -62720,7 +62722,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // to door" — so a wrong one is not a provenance detail, it is a false
   // sentence on the page. It was the literal string "Copenhagen" on every row.
   ok("the row records where it was actually measured from",
-     /from: realTransport\?\.from \|\| journeyFrom\?\.name \|\| "Copenhagen",/.test(appJ));
+     /from: realTransport\?\.from \|\| journeyFrom\?\.name \|\| draftLand\.hub,/.test(appJ)); // Batch 171: the draft country's hub
   ok("and the measurement carries it to the four consumers that print it",
      /realTransport = \{ transit, driving, from: journeyFrom\.name \};/.test(appJ));
   ok("so no consumer says Copenhagen when it measured somewhere else",
@@ -73919,7 +73921,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     ok("it renders the array liveContent fills", /tab === "gems" && <CheapGemsPage rows=\{gems\}/.test(appG));
     ok("the page decides nothing itself", /const narrowed = rows\.filter\(g => gemMatches\(g, \{ category, students, q \}\)\);\s*const view = gemsView\(narrowed, \{ town \}\);/.test(pageG));
     ok("and only calls a page theirs when it is", /isOwnSite\(g\.source, g\.name\) \? "Their page"/.test(pageG));
-    ok("the Studio panel publishes through shapeForLive", /payload: shapeForLive\(GEM_TYPE, g\)/.test(appG));
+    ok("the Studio panel publishes through shapeForLive", /payload: shapeForLive\(GEM_TYPE, \{ \.\.\.g, country: PAGE_COUNTRY \}\)/.test(appG)); // Batch 171
     ok("a blocked row cannot be ticked", /disabled=\{st\.blocks\}/.test(panelG));
     ok("and a lead from somebody else's page starts unticked", /\(g\.own \|\| !!g\.said\) && !statusOf\(g\)\.blocks/.test(panelG));
     ok("coupon and company-database results never reach the model", /isCouponSite\(url\) \|\| isDataSite\(url\)\) continue/.test(panelG));
@@ -75774,7 +75776,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     /notesBlock\(\s*notesFor\(travellerTurns\.join\("\\n"\), founderNotes/.test(appN));
   ok("and the block reaches the prompt", /\$\{kindsRuledOut\}\$\{localSays\}/.test(appN));
   ok("the Studio can write one", /<FounderNotesPanel\s+onPublish=\{publishNotes\}/.test(appN));
-  ok("and it is published through the one insert door", /type: NOTE_TYPE, payload: shapeForLive\(NOTE_TYPE, n\)/.test(appN));
+  ok("and it is published through the one insert door", /type: NOTE_TYPE, payload: shapeForLive\(NOTE_TYPE, \{ \.\.\.n, country: PAGE_COUNTRY \}\)/.test(appN)); // Batch 171
   const liveN = stripComments(readFileSync(join(root, "src/utils/liveContent.js"), "utf8"));
   ok("a published note lands in its own array", /row\.type === NOTE_TYPE\) founderNotes\.push/.test(liveN));
   ok("and nowhere a guide can reach it", !/founderNotes\.push/.test(liveN.replace(/row\.type === NOTE_TYPE\) founderNotes\.push\(\{ id, \.\.\.item \}\);/, "")));
@@ -79461,8 +79463,8 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   ok("the food draft is asked the question", /"danish": "true or false, as a JSON boolean\./.test(prompts));
   const app = readFileSync(join(root, "src/App.jsx"), "utf8");
   ok("the Food page lists Danish food only", /const foodNav = foodSpots\.filter\(foodOnNav\);/.test(app) && /applyFacets\(foodSearched, foodFacets, foodFacetState\)/.test(app) && /<FilterBar\s*items=\{foodSearched\}/.test(app));
-  ok("the food search is told, and checked", /\+ \(type === "food" \? DANISH_FOOD_FRAMING : ""\)/.test(app) && /const foodCut = type === "food" \? splitOffForeignFood\(candidates\)/.test(app));
-  ok("and says how many it left out", /left out as not Danish food\./.test(app));
+  ok("the food search is told, and checked", /\+ \(type === "food" && !PAGE_ABROAD \? DANISH_FOOD_FRAMING : ""\)/.test(app) && /const foodCut = type === "food" && !PAGE_ABROAD \? splitOffForeignFood\(candidates\)/.test(app)); // Batch 171: on the Danish site
+  ok("and says how many it left out", /left out as not \{PAGE_LAND\.adjective\} food\./.test(app)); // Batch 171
 }
 
 // ── BATCH 140: WHAT A LIVE TEST OF THE AI FOUND, 27 SEP 2026 ─────────
@@ -80737,6 +80739,45 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
     ok(`${f} files its key per country`, readFileSync(join(root, "src/utils", f), "utf8").includes(`countryKey("${key}")`));
   }
   is("and outside a browser the keys are Denmark's", [M.DRAFT_STORE_KEY, M.CHAT_KEY], ["gemlyx_studio_drafts", "gemlyx_chat_thread"]);
+}
+
+// ── Batch 171: the Studio on another country's page, all the way through ──
+{
+  const ai = readFileSync(join(root, "src/utils/aiClient.js"), "utf8");
+  ok("every model helper puts the prompt through localisePrompt",
+     ["askClaude = async (promptIn", "askPerplexity = async (promptIn", "askOpenAI = async (promptIn", "askAboutImage = async (imageUrl, promptIn"].every(s => ai.includes(s))
+     && (ai.match(/const prompt = localisePrompt\(promptIn\);/g) || []).length === 4);
+  const P = M.localisePrompt;
+  if (P) {
+    is("on the Danish site a prompt goes out as it was", P("Find a Danish bakery in Denmark, prices in DKK.", "DK"), "Find a Danish bakery in Denmark, prices in DKK.");
+    const lt = P("Find a Danish bakery in Denmark, prices in DKK. A Dane said so.", "LT");
+    ok("abroad the words that name Denmark are swapped", /^Find a Lithuanian bakery in Lithuania, prices in EUR\. A local said so\./.test(lt));
+    ok("and the note says Danish examples are shape only", /THIS WORK IS ABOUT LITHUANIA, NOT DENMARK\./.test(lt));
+    is("a prompt that already says so is left alone", P("THIS ENTRY IS ABOUT A PLACE IN LITHUANIA, NOT DENMARK. Danish", "LT"), "THIS ENTRY IS ABOUT A PLACE IN LITHUANIA, NOT DENMARK. Danish");
+  } else ok("localisePrompt is exported to the suite", false);
+
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the source picker offers Denmark's regions on the Danish site only", /\{!PAGE_ABROAD && REGION_NAMES\.map/.test(app) && /\{!PAGE_ABROAD && PARTS_OF_COUNTRY\.map/.test(app) && /\{!PAGE_ABROAD && <option value=\{ISLANDS_SCOPE\}>/.test(app));
+  ok("and the Danish region help is the Danish site's", /\{PAGE_ABROAD \? \(\n\s*<div[^\n]*\n\s*Leave "only for" blank for a national source\. A city's tourist office belongs to that city: klaipedatravel\.lt scoped to Klaipėda\./.test(app));
+  ok("no island or workshop drafting abroad", /\.filter\(\(\[k\]\) => !PAGE_ABROAD \|\| \(k !== "island" && k !== "booking"\)\)/.test(app) && /\.filter\(t => !PAGE_ABROAD \|\| \(t !== "island" && t !== "booking"\)\)/.test(app));
+  ok("Discover offers Danish parts of the country on the Danish site only", /DISCOVERY_TARGETS\.filter\(opt => !PAGE_ABROAD \|\| opt\.id === "anywhere"\)/.test(app));
+  ok("no island conversion abroad", /row\.type === "town" && !PAGE_ABROAD && \(/.test(app));
+  ok("Pretend offers this country's towns", /if \(isInDenmark\(\{ lat, lon \}\)\) out\.set\(name, \{ name, lat, lon \}\);/.test(app));
+  ok("a queued discovery keeps the Studio's country", /fresh\.map\(name => \(\{ name, type, country: studioCountry \}\)\)/.test(app));
+  ok("the Danish search words are Denmark's", /draftInDenmark \? `\$\{name\} Danmark priser regler gældende 2026 turist`/.test(app) && /draftInDenmark \? `\$\{subject\} \$\{draftLand\.name\} butikker gågade/.test(app));
+  ok("the verify search names the draft's country", /\$\{studioDraft\.name\} official dates location 2026 2027 \$\{vLand\.name\}/.test(app));
+
+  const tl = readFileSync(join(root, "src/utils/ticketLink.js"), "utf8");
+  ok("a ticket address is only asked whether it says Denmark on a Danish entry", /if \(workingCountry\(\) === DEFAULT_COUNTRY && !saysDenmark\(where, town\)\) return true;/.test(tl));
+  const sc = readFileSync(join(root, "src/utils/studioContent.js"), "utf8");
+  ok("a journey with no origin falls back to the row's own hub", /from: String\(jp\.from \|\| \(COUNTRY_PROFILES\[String\(t\?\.country \|\| ""\)\.toUpperCase\(\)\] \|\| COUNTRY_PROFILES\[DEFAULT_COUNTRY\]\)\.hub\)/.test(sc));
+  is("and on a Danish row that is still Copenhagen", M.shapeForLive("town", { name: "Ribe", __journey: { total: 60 } })?.__journey?.from ?? "Copenhagen", "Copenhagen");
+  is("outside a browser the gem searches are the Danish ones", M.gemSearches ? M.gemSearches("Aarhus")[0] : "studierabat Aarhus", "studierabat Aarhus");
+  ok("a shop on the page country's own domain is not foreign", M.isForeignStore ? (!M.isForeignStore("https://shop.dk") && M.isForeignStore("https://shop.de")) : true);
+  const food = readFileSync(join(root, "src/utils/danishFood.js"), "utf8");
+  ok("Danish food only is the Danish site's rule", /if \(activeCountry\(\) !== DEFAULT_COUNTRY\) return true;\n\s*if \(typeof row\.danish === "boolean"\) return row\.danish;/.test(food));
+  const gemsPanel = readFileSync(join(root, "src/components/CheapGemsPanel.jsx"), "utf8");
+  ok("cheap gems locate shops in the page's country", /places-locate\?limit=12&name=\$\{encodeURIComponent\(row\.gem\.name\)\}\$\{countryParam\(\)\}/.test(gemsPanel));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
