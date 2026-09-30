@@ -39,6 +39,7 @@
 // Four is deliberately the lenient direction. A row nobody has judged is not
 // proven foreign, and a Danish place wrongly hidden is a loss nobody sees.
 import { fold } from "./danishNames";
+import { activeCountry, DEFAULT_COUNTRY } from "./countries";
 
 // The published entries as they stood on 27 Sep 2026, judged one by one from
 // their own category and text with Oliver's answers on the unclear ones. Keyed
@@ -115,6 +116,10 @@ const verdictFor = (name) => {
 export const foodOnNav = (row) => {
   if (!row || !row.name) return false;
   if (!row.isFoodStreet && groceryIn(row)) return false;
+  // "Danish food only" is the Danish site's rule (Oliver, the Food page). On
+  // another country's page the row's `danish` answer is about Denmark and is
+  // false for every Klaipėda kitchen, so the rule does not apply there.
+  if (activeCountry() !== DEFAULT_COUNTRY) return true;
   if (typeof row.danish === "boolean") return row.danish;
   if (row.isFoodStreet) return true;
   const said = verdictFor(row.name);

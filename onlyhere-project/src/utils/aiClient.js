@@ -1,5 +1,38 @@
 import { recordModelCall, recordRequestCall } from "./apiCost";
 import { nominatimJson } from "./nominatim";
+import { workingCountry, countryProfile, DEFAULT_COUNTRY } from "./countries";
+
+// ── EVERY PROMPT SPEAKS ABOUT THE COUNTRY BEING WORKED ON ──────────
+// Oliver, 30 Sep 2026, of the Studio on /lithuania: "In the studio, you still
+// have these regions... Look thoroughly through". Dozens of Studio prompts
+// (discover, cheap gems, founder notes, sweeps, the fact checks, the notice
+// translator) were written for Denmark and say so. They all reach the models
+// through the helpers below, so the country is put right here once, the same
+// way guideAbroad.js's forLand does it for the guide: the words that name
+// Denmark are swapped, and a closing note says every Danish example is an
+// example of shape only. The country is workingCountry(): the draft's own
+// while a Studio draft runs, the page's otherwise. On the Danish site the
+// prompt goes out byte for byte as it was. A prompt that already says it is
+// not about Denmark (the guide's landAsk, the Studio writer's preamble) is
+// left alone, so nothing is said twice.
+export const studioLandNote = (land) => `\n\nTHIS WORK IS ABOUT ${land.name.toUpperCase()}, NOT DENMARK. The instructions above were written for Denmark and every rule in them about how to work still applies. Every Danish place, region, island, ferry, shop, transport name, price norm and Danish-language search word in them is an example of shape only and is never a fact about ${land.name}; do not look for a ${land.adjective} equivalent of it. Use ${land.name}'s own sources, in ${land.adjective} and in English. Prices are in ${land.currency}${land.currency === "EUR" ? ", written with the euro sign (€)" : ""}.`;
+
+export const localisePrompt = (prompt, code = workingCountry()) => {
+  if (typeof prompt !== "string") return prompt;
+  if (!code || code === DEFAULT_COUNTRY) return prompt;
+  if (/NOT DENMARK/.test(prompt)) return prompt;
+  const land = countryProfile(code);
+  if (land.code === DEFAULT_COUNTRY) return prompt;
+  const swapped = prompt
+    .replace(/\bDenmark's\b/g, `${land.name}'s`)
+    .replace(/\bDenmark\b/g, land.name)
+    .replace(/\bDanmark\b/g, land.name)
+    .replace(/\bDanish\b/g, land.adjective)
+    .replace(/\bDanes\b/g, "locals")
+    .replace(/\bDane\b/g, "local")
+    .replace(/\bDKK\b/g, land.currency);
+  return `${swapped}${studioLandNote(land)}`;
+};
 // Shared, parameterized copies of App.jsx's own askClaude/parseClaudeJSON — pure
 // functions (no closures over component state), pulled out so GuidePage.jsx's new
 // "Include more" / "Make it simpler" / "Gemlyx AI" help controls can call Claude the
@@ -16,7 +49,8 @@ import { nominatimJson } from "./nominatim";
 // shipped. Never re-add prefill here without verifying against the real API
 // first; this re-ask approach is plain user-messages only, so no model can
 // reject it.
-export const askClaude = async (prompt, maxTokens = 500, model = "claude-sonnet-5", expectJson = false) => {
+export const askClaude = async (promptIn, maxTokens = 500, model = "claude-sonnet-5", expectJson = false) => {
+  const prompt = localisePrompt(promptIn);
   const callOnce = async (p, budget = maxTokens) => {
     try {
       const res = await fetch("/api/anthropic", {
@@ -175,7 +209,8 @@ export const citationUrls = (result, { limit = 8 } = {}) => {
   return out.slice(0, Math.max(0, limit));
 };
 
-export const askPerplexity = async (prompt) => {
+export const askPerplexity = async (promptIn) => {
+  const prompt = localisePrompt(promptIn);
   try {
     const res = await fetch("/api/perplexity", {
       method: "POST",
@@ -239,7 +274,8 @@ export const withRetry = async (fn, isFailure, label, attempts = 3) => {
 // fails if a new askOpenAI call site appears without a human signing off on it.
 // If that test fails, do not raise its expected count to make it green. Read
 // the new call site and ask whether OpenAI is planning or writing.
-export const askOpenAI = async (prompt, maxTokens = 800) => {
+export const askOpenAI = async (promptIn, maxTokens = 800) => {
+  const prompt = localisePrompt(promptIn);
   const out = await openAIOnce(prompt, maxTokens);
   // One retry, tripled, for the same reason as askClaude above, and see the
   // comment on the empty branch for why tripled and not doubled.
@@ -385,7 +421,8 @@ export const NO_DATE_ON_IMAGE = "NONE";
 // and the failure shapes are identical and must stay identical. Splitting the
 // prompts while sharing this is the opposite of the duplicated-instrument fault
 // in this codebase: one mechanism, two deliberate questions.
-const askAboutImage = async (imageUrl, prompt, { model = "claude-sonnet-5", maxTokens = 200 } = {}) => {
+const askAboutImage = async (imageUrl, promptIn, { model = "claude-sonnet-5", maxTokens = 200 } = {}) => {
+  const prompt = localisePrompt(promptIn);
   const url = String(imageUrl || "").trim();
   // Anthropic fetches this address itself, so anything it cannot fetch is a
   // wasted call rather than a failed read.

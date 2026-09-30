@@ -151,7 +151,8 @@ export const isForeignStore = (url) => {
   if (!h) return false;
   const end = h.split(".").pop();
   if (!/^[a-z]{2}$/.test(end)) return false;
-  return end !== "dk" && !GENERIC_CC.has(end);
+  // Foreign to the page's country: .dk on the Danish site, .lt on /lithuania.
+  return end !== activeCountry().toLowerCase() && !GENERIC_CC.has(end);
 };
 
 export const isOwnSite = (url, name) => {
@@ -534,6 +535,19 @@ export const checkedLabel = (payload) => {
 // search is part of what this is competing with.
 export const gemSearches = (place = "") => {
   const p = clean(place);
+  // Another country's Studio searches in English and names that country.
+  // The Danish words below find nothing in Klaipėda.
+  const code = activeCountry();
+  if (code !== "DK") {
+    const land = countryProfile(code).name;
+    const where = p || land;
+    return [
+      `${where} student discount shops`,
+      `${where} loyalty app discount shop locals use`,
+      `${where} cheap shops save money local tips`,
+      `cheap food ${where} lunch dinner €`,
+    ];
+  }
   if (!p || /^(danmark|denmark)$/i.test(p)) {
     return [
       "studierabat butik Danmark kæde",

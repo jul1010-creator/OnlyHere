@@ -39,6 +39,7 @@ import { fold, containsName } from "./danishNames";
 import { isNeverASource } from "./sourcePolicy";
 import { MODE_DAY_KM } from "./routeOrder";
 import { hostOf } from "./pageScan";
+import { activeCountry } from "./countries";
 
 const clean = (v) => String(v == null ? "" : v).replace(/\s+/g, " ").trim();
 
@@ -596,7 +597,7 @@ export const noteSearches = (note = {}) => {
   const where = n.towns.length ? ` ${n.towns[0]}` : "";
   return [
     `${said}${where}`.slice(0, 140),
-    `${subject}${where} pris sammenligning`.slice(0, 140),
+    `${subject}${where} ${activeCountry() === "DK" ? "pris sammenligning" : "price comparison"}`.slice(0, 140),
     `${subject}${where} ${n.kind === "cost" ? "how much does it cost" : "what to expect"}`.slice(0, 140),
   ].filter(Boolean);
 };

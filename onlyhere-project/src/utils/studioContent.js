@@ -638,7 +638,8 @@ export const shapeForLive = (type, t) => {
           })).filter(a => a.name),
         })),
         drivingMins: Number.isFinite(Number(jp.drivingMins)) ? Number(jp.drivingMins) : null,
-        from: String(jp.from || "Copenhagen"),
+        // The row's own country's hub when the journey never said where it began.
+        from: String(jp.from || (COUNTRY_PROFILES[String(t?.country || "").toUpperCase()] || COUNTRY_PROFILES[DEFAULT_COUNTRY]).hub),
         at: String(jp.at || ""),
       }
     : null;

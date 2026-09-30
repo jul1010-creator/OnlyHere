@@ -43,6 +43,7 @@ import { haversineKm } from "./helpers";
 import { isSubEventListing } from "./tickets";
 import { REGION_NAMES } from "./regions";
 import { KOMMUNER, K } from "../data/kommuner";
+import { workingCountry, DEFAULT_COUNTRY } from "./countries";
 
 // ── WHICH TIQETS PAGES ARE WORTH LINKING TO ─────────────────────────
 // Their URLs end in a typed id, and the letter is the type:
@@ -679,7 +680,9 @@ export const ticketUrlSaysElsewhere = (url, town = "") => {
   // URL that names no city is untouched, exactly as before.
   if (!geo) return farFromTown(ticketmasterVenuePhrase(raw), town);
   const where = segmentPhrase(geo);
-  if (!saysDenmark(where, town)) return true;
+  // The Denmark half is a Danish entry's question. A Klaipėda entry's Tiqets
+  // page names Klaipėda in its address, which is not Denmark and not wrong.
+  if (workingCountry() === DEFAULT_COUNTRY && !saysDenmark(where, town)) return true;
   // In Denmark, and possibly ninety kilometres from the entry. See above.
   return farFromTown(where, town);
 };
