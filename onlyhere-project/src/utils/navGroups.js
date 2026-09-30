@@ -25,6 +25,10 @@ export const NAV_GROUPS = [
   { id: "gems", labelKey: "nav.group.gems", ico: "tag", tabs: [{ tab: "gems" }, { tab: "promotions" }] },
   { id: "places", labelKey: "nav.group.places", ico: "ticket", tabs: [{ tab: "attractions" }, { tab: "visits" }, { tab: "islands" }] },
   { id: "eatdrink", labelKey: "nav.group.eatdrink", ico: "utensils", tabs: [{ tab: "food" }, { tab: "nightlife" }, { tab: "shopping" }] },
+  // The planner, as an ordinary item, only where the gold button carries
+  // something else (Special deals on /lithuania). Elsewhere the caller leaves
+  // "ai" out and this group is empty, so it is not drawn.
+  { id: "plan", tabs: [{ tab: "ai" }] },
 ];
 
 // navItems: the visible NAV_ITEMS ({ id, label, ico }), already filtered to

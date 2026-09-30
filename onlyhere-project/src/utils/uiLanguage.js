@@ -85,7 +85,9 @@ export const UI_STRINGS = {
   "nav.essentials":  { en: "Essentials",      da: "Praktisk info",  de: "Praktisches" },
   "nav.tips":        { en: "Tips",            da: "Tips",           de: "Tipps" },
   "nav.gems":        { en: "Cheap gems",      da: "Billige perler", de: "Günstige Perlen" },
-  "nav.promotions":  { en: "Promotions",      da: "Tilbud",         de: "Angebote" },
+  // "Special deals", Oliver 30 Sep 2026: one name for the gold button, the
+  // page and the menu item.
+  "nav.promotions":  { en: "Special deals",   da: "Særlige tilbud", de: "Sonderangebote" },
   // The menu groups, 30 Sep 2026. See utils/navGroups.js.
   "nav.group.advice":     { en: "Advice",      da: "Råd",           de: "Ratgeber" },
   "nav.group.activities": { en: "Activities",  da: "Aktiviteter",   de: "Aktivitäten" },
