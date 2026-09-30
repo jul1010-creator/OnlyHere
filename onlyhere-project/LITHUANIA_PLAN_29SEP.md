@@ -263,3 +263,21 @@ with the changes we talked about."
   The Lithuanian loading card shows Lithuanian facts only, and none until
   there are some. SQL run in Supabase 30 Sep: a `country` column (default DK)
   on gemlyx_sources, gemlyx_feeds and gemlyx_facts.
+
+### Batch 171 (30 Sep): the Studio on /lithuania, all the way through
+- Oliver: "In the studio, you still have these regions... Look thoroughly through".
+- Every model call Studio makes goes through localisePrompt (utils/aiClient.js):
+  on another country's page, or while a draft for another country runs, the
+  words naming Denmark are swapped and a closing note says Danish examples are
+  shape only. The Danish site's prompts go out unchanged.
+- Pickers: the source "only for" list, Discover's "where to look", the draft
+  types (no Island or Workshop), Pretend's town list and the island converter
+  show Denmark's regions and islands on the Danish site only.
+- Bugs fixed: cheap gems and founder notes published without a country (they
+  would have landed on the Danish site); queued discoveries lost their
+  country; cheap gems located shops in Denmark and called .lt shops foreign;
+  a Klaipėda Tiqets link was refused as "not in Denmark"; journeys with no
+  origin said Copenhagen; the Discover food search cut non-Danish food.
+- The Food page's "Danish food only" rule applies on the Danish site only.
+- Still Danish: community-group date reading (no Lithuanian month names),
+  the affiliate sweep's ticketmaster.dk searches, the "Danish label" shop kind.
