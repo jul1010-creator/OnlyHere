@@ -1516,7 +1516,8 @@ function GemlyxApp() {
   // island reachable here at all, since TOWN_COORDS has never heard of Sejerø.
   const pretendPlaces = useMemo(() => {
     const out = new Map();
-    Object.entries(TOWN_COORDS).forEach(([name, [lat, lon]]) => out.set(name, { name, lat, lon }));
+    // The hand-checked table is Danish; on another country's page only points inside it are offered.
+    Object.entries(TOWN_COORDS).forEach(([name, [lat, lon]]) => { if (isInDenmark({ lat, lon })) out.set(name, { name, lat, lon }); });
     [...towns, ...islands, ...events, ...majorEvents, ...freeEntrance, ...foodSpots, ...nightlifeSpots].forEach(r => {
       const lat = Number(r?.__lat ?? r?.lat), lon = Number(r?.__lon ?? r?.lon);
       if (r?.name && Number.isFinite(lat) && Number.isFinite(lon) && !out.has(r.name)) out.set(r.name, { name: r.name, lat, lon });
@@ -3697,9 +3698,11 @@ function GemlyxApp() {
     if (!studioDraft || verifyLoading) return;
     setVerifyLoading(true); setVerifyError(null); setVerifyResults(null);
     try {
+      // The draft's own country, so a Klaipėda entry is not checked against Denmark.
+      const vLand = countryProfile(rowCountry(studioDraft) === DEFAULT_COUNTRY ? studioCountry : rowCountry(studioDraft));
       const queries = [
-        `${studioDraft.name} official dates location 2026 2027 Denmark`,
-        `${studioDraft.name} ticket price kr DKK venue stage names`,
+        `${studioDraft.name} official dates location 2026 2027 ${vLand.name}`,
+        vLand.code === DEFAULT_COUNTRY ? `${studioDraft.name} ticket price kr DKK venue stage names` : `${studioDraft.name} ticket price ${vLand.currency} venue stage names`,
       ];
       const allResults = [];
       for (const q of queries) {
@@ -4477,9 +4480,9 @@ Say which answer came from which source, so a fact from a vouched page and a fac
         // The second query is the only-here test asked out loud: a chain with
         // stores in twelve countries answers it in its own About page, and
         // that is the fact that decides whether the entry should exist.
-        shop: { queries: [`${name} ${draftLand.name} shop what they sell prices opening hours address`, `${name} ${draftLand.name} butik brand where else stores countries chain or one shop`, `${name} ${draftLand.name} reddit r/${draftLand.name} worth it locals shop there`, `${name} quora google reviews honest opinion overpriced`] },
-        shopPlace: { queries: [`${subject} ${draftLand.name} shopping street stores what kind of shops`, `${subject} ${draftLand.name} butikker gågade hvilke butikker åbningstider`, `${subject} ${draftLand.name} reddit honest opinion chains or independent tourist trap`, `${subject} ${draftLand.name} shopping best time busy Sunday closed`] },
-        essential: { queries: [`${name} ${draftLand.name} 2026 how it works price official`, `${name} Danmark priser regler gældende 2026 turist`, `${name} ${draftLand.name} discontinued replaced changed 2026 what to use instead`, `${name} ${draftLand.name} reddit r/${draftLand.name} tourist visitor does it work without CPR`] },
+        shop: { queries: [`${name} ${draftLand.name} shop what they sell prices opening hours address`, `${name} ${draftLand.name} ${draftInDenmark ? "butik" : "store"} brand where else stores countries chain or one shop`, `${name} ${draftLand.name} reddit r/${draftLand.name} worth it locals shop there`, `${name} quora google reviews honest opinion overpriced`] },
+        shopPlace: { queries: [`${subject} ${draftLand.name} shopping street stores what kind of shops`, (draftInDenmark ? `${subject} ${draftLand.name} butikker gågade hvilke butikker åbningstider` : `${subject} ${draftLand.name} pedestrian street which shops opening hours`), `${subject} ${draftLand.name} reddit honest opinion chains or independent tourist trap`, `${subject} ${draftLand.name} shopping best time busy Sunday closed`] },
+        essential: { queries: [`${name} ${draftLand.name} 2026 how it works price official`, (draftInDenmark ? `${name} Danmark priser regler gældende 2026 turist` : `${name} ${draftLand.name} prices rules 2026 visitor`), `${name} ${draftLand.name} discontinued replaced changed 2026 what to use instead`, `${name} ${draftLand.name} reddit r/${draftLand.name} tourist visitor does it work without CPR`] },
         booking: { queries: [`${name} ${draftLand.name} craft workshop what to expect prices booking`, `${name} ${draftLand.name} reviews how to book opening hours`, `${name} reddit r/${draftLand.name} experience worth the money`, `${name} quora google reviews honest opinion`] },
       }[sType];
       // ── ONE QUERY IN DANISH, WHERE THE NAME DIFFERS ─────────────
@@ -7767,7 +7770,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
           // streets that were never measured from there. journeyReach prints
           // this word to the reader, so a wrong one is not a provenance
           // detail — it is a false sentence on the page.
-          from: realTransport?.from || journeyFrom?.name || "Copenhagen",
+          from: realTransport?.from || journeyFrom?.name || draftLand.hub,
           // ── AND THIS STAMPED THE UTC DAY, NOT TODAY ──────────
           // `new Date().toISOString().slice(0, 10)` is the day it is in
           // Greenwich, which is not the day it is here. In Denmark every stamp
@@ -10079,7 +10082,7 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
     setFactError(null);
     setFactPhotoFinder({ key, query: term, results: null, loading: true, error: null });
     try {
-      const res = await studioFetch(`/api/commons-photo?q=${encodeURIComponent(`${term} Denmark`)}&limit=8`);
+      const res = await studioFetch(`/api/commons-photo?q=${encodeURIComponent(`${term} ${PAGE_LAND.name}`)}&limit=8`);
       const data = await res.json();
       if (data.error) { setFactPhotoFinder(f => (f?.key === key ? { ...f, loading: false, error: data.error } : f)); return; }
       setFactPhotoFinder(f => (f?.key === key
@@ -10568,7 +10571,9 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
         const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content`, {
           method: "POST",
           headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
-          body: JSON.stringify({ type: GEM_TYPE, payload: shapeForLive(GEM_TYPE, g), published: true }),
+          // The page's country goes on the row, or a gem found on /lithuania was
+          // published to the Danish site.
+          body: JSON.stringify({ type: GEM_TYPE, payload: shapeForLive(GEM_TYPE, { ...g, country: PAGE_COUNTRY }), published: true }),
         });
         if (!res.ok) return { ok: false, done, why: `${done} published, then ${res.status}: ${(await res.text()).slice(0, 160)}` };
         done += 1;
@@ -10607,7 +10612,8 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
         const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content`, {
           method: "POST",
           headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
-          body: JSON.stringify({ type: NOTE_TYPE, payload: shapeForLive(NOTE_TYPE, n), published: true }),
+          // Same as the gems: a note is about the site it was written on.
+          body: JSON.stringify({ type: NOTE_TYPE, payload: shapeForLive(NOTE_TYPE, { ...n, country: PAGE_COUNTRY }), published: true }),
         });
         if (!res.ok) return { ok: false, done, why: `${done} saved, then ${res.status}: ${(await res.text()).slice(0, 160)}` };
         done += 1;
@@ -11159,7 +11165,7 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
       const onIt = type === "shop" ? inShopPlace : onThisStreet;
       const discoverAim = framingForTarget(discoverTarget, manageItems || [], { typeLabel, town: discoverTown })
         // Food is Danish food. See utils/danishFood.js.
-        + (type === "food" ? DANISH_FOOD_FRAMING : "")
+        + (type === "food" && !PAGE_ABROAD ? DANISH_FOOD_FRAMING : "")
         // The month, appended rather than replacing: where and when are separate
         // questions and a brief can carry both.
         + framingForMonth(discoverMonth, new Date())
@@ -11258,7 +11264,7 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
       if (!allText.trim()) throw new Error("Tavily returned nothing usable for these queries");
 
       const existingList = existing.length ? existing.join("; ") : "(nothing yet)";
-      const foodOnly = type === "food" ? DANISH_FOOD_EXTRACT : "";
+      const foodOnly = type === "food" && !PAGE_ABROAD ? DANISH_FOOD_EXTRACT : "";
       const synthResult = await withRetry(
         () => askOpenAI(
           `From the raw search results below, extract real, SPECIFICALLY NAMED ${typeLabel} — real candidates worth someone researching and writing a full guide entry about next. Only include something if it is named in the search results below — never invent a plausible-sounding name. Skip anything vague or generic (a category, not a specific named place).
@@ -11300,7 +11306,8 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
       // ── AND FOOD IS DANISH FOOD, CHECKED AS WELL AS ASKED ──────
       // A name or hook that is plainly another country's cuisine is dropped,
       // counted and said under the list so it never shrinks silently. A food hall stays whatever its stalls sell.
-      const foodCut = type === "food" ? splitOffForeignFood(candidates) : { kept: candidates, dropped: [] };
+      // The Danish-food filter is about Denmark; on another country's Studio nothing is cut.
+      const foodCut = type === "food" && !PAGE_ABROAD ? splitOffForeignFood(candidates) : { kept: candidates, dropped: [] };
       candidates = foodCut.kept;
       const { kept: fresh, dropped: covered } = splitAlreadyCovered(candidates, existing);
       setDiscoverForeign(foodCut.dropped.length);
@@ -11372,7 +11379,7 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
     // bill for the same town twice.
     const already = new Set(draftQueueRef.current.map(q => `${q.type}::${q.name.toLowerCase()}`));
     const fresh = list.filter(n => !already.has(`${type}::${n.toLowerCase()}`));
-    draftQueueRef.current = [...draftQueueRef.current, ...fresh.map(name => ({ name, type }))];
+    draftQueueRef.current = [...draftQueueRef.current, ...fresh.map(name => ({ name, type, country: studioCountry }))];
     setDraftQueue([...draftQueueRef.current]);
     setDiscoverPicked([]);
     showToast(fresh.length === list.length
@@ -11885,7 +11892,7 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
 
   const addSource = async () => {
     const domain = normaliseDomain(newSourceDomain);
-    if (!domain) { setSourceError(`"${newSourceDomain.trim()}" is not a domain I can use. Paste the address of the site, like visitdenmark.dk or a link to one of its pages.`); return; }
+    if (!domain) { setSourceError(`"${newSourceDomain.trim()}" is not a domain I can use. Paste the address of the site, like ${PAGE_ABROAD ? "klaipedatravel.lt" : "visitdenmark.dk"} or a link to one of its pages.`); return; }
     // A duplicate is not an error worth a message, it is a no-op with a reason.
     // serialiseTypes on BOTH sides, so a stored "free,festival" and a freshly
     // ticked "festival,free" are recognised as the same row rather than added
@@ -24429,7 +24436,7 @@ ${languageBlock()}`;
                           {sourceProbe.state === "found" && `${sourceProbe.domain} checks out, the search reached it.`}
                           {sourceProbe.state === "failed" && `Could not check ${sourceProbe.domain} just now. It is added either way.`}
                           {sourceProbe.state === "empty" && (
-                            <>A search restricted to <b>{sourceProbe.domain}</b> came back with nothing at all. That usually means the address is not quite right: Danish tourism sites often split by language, so the Danish site may be the .dk and the English one the .com, or the other way round. Worth opening it in a tab to check. It is added either way, and every draft will tell you what it found.</>
+                            <>A search restricted to <b>{sourceProbe.domain}</b> came back with nothing at all. That usually means the address is not quite right: {PAGE_ABROAD ? `${PAGE_LAND.adjective} tourism sites often split by language, so the ${PAGE_LAND.adjective} site may be the .${PAGE_COUNTRY.toLowerCase()} and the English one the .com, or the other way round.` : "Danish tourism sites often split by language, so the Danish site may be the .dk and the English one the .com, or the other way round."} Worth opening it in a tab to check. It is added either way, and every draft will tell you what it found.</>
                           )}
                         </div>
                       )}
@@ -24490,7 +24497,7 @@ ${languageBlock()}`;
                       <div style={{ display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center" }}>
                         <input value={newSourceDomain} onChange={e => setNewSourceDomain(e.target.value)}
                           onKeyDown={e => { if (e.key === "Enter") addSource(); }}
-                          placeholder="visitdenmark.dk, or paste a link"
+                          placeholder={PAGE_ABROAD ? "klaipedatravel.lt, or paste a link" : "visitdenmark.dk, or paste a link"}
                           style={{ flex: 1, minWidth: 180, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 11px", fontSize: 11.5, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif" }} />
                         <input value={newSourceNote} onChange={e => setNewSourceNote(e.target.value)}
                           onKeyDown={e => { if (e.key === "Enter") addSource(); }}
@@ -24505,7 +24512,7 @@ ${languageBlock()}`;
                             same today and would stop behaving the same the day
                             a tenth type is added. */}
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
-                          {["", ...CONTENT_TYPES].map(t => {
+                          {["", ...CONTENT_TYPES].filter(t => !PAGE_ABROAD || (t !== "island" && t !== "booking")).map(t => {
                             const on = t === "" ? newSourceTypes.length === 0 : newSourceTypes.includes(t);
                             return (
                               <button key={t || "all"} type="button"
@@ -24518,7 +24525,7 @@ ${languageBlock()}`;
                         </div>
                         <input value={newSourcePlace} onChange={e => setNewSourcePlace(e.target.value)}
                           onKeyDown={e => { if (e.key === "Enter") addSource(); }}
-                          list="gemlyx-source-places" placeholder="only for… (Islands, a region, a town, or Jutland)"
+                          list="gemlyx-source-places" placeholder={PAGE_ABROAD ? "only for… (a town)" : "only for… (Islands, a region, a town, or Jutland)"}
                           style={{ width: 210, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 11px", fontSize: 11.5, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif" }} />
                         {/* ── REGIONS, WHICH IS THE ONE HE ASKED FOR ────────
                             Labelled in the option itself rather than left as a
@@ -24529,9 +24536,11 @@ ${languageBlock()}`;
                           {/* First in the list because it is the one tier that
                               is not a place name, so nothing about the word
                               would suggest the box accepts it. */}
-                          <option value={ISLANDS_SCOPE}>any island, whichever region it is in</option>
-                          {REGION_NAMES.map(x => <option key={x} value={x}>region · {kommunerIn(x).slice(0, 4).join(", ")}{kommunerIn(x).length > 4 ? "…" : ""}</option>)}
-                          {PARTS_OF_COUNTRY.map(x => <option key={x} value={x}>part of the country</option>)}
+                          {/* Denmark's islands, regions and parts. Another country's
+                              Studio offers its own towns only (30 Sep 2026). */}
+                          {!PAGE_ABROAD && <option value={ISLANDS_SCOPE}>any island, whichever region it is in</option>}
+                          {!PAGE_ABROAD && REGION_NAMES.map(x => <option key={x} value={x}>region · {kommunerIn(x).slice(0, 4).join(", ")}{kommunerIn(x).length > 4 ? "…" : ""}</option>)}
+                          {!PAGE_ABROAD && PARTS_OF_COUNTRY.map(x => <option key={x} value={x}>part of the country</option>)}
                           {towns.map(t => t.name).filter(Boolean).sort().map(n => <option key={n} value={n}>town</option>)}
                         </datalist>
                         <button onClick={addSource} disabled={sourceBusy || !newSourceDomain.trim()}
@@ -24539,6 +24548,11 @@ ${languageBlock()}`;
                           {sourceBusy ? "…" : "Add"}
                         </button>
                       </div>
+                      {PAGE_ABROAD ? (
+                        <div style={{ fontSize: 10.5, color: C.muted, marginTop: 8, lineHeight: 1.5 }}>
+                          Leave "only for" blank for a national source. A city's tourist office belongs to that city: klaipedatravel.lt scoped to Klaipėda.
+                        </div>
+                      ) : (<>
                       <div style={{ fontSize: 10.5, color: C.muted, marginTop: 8, lineHeight: 1.5 }}>
 A note is worth writing: "the operator's own timetable" tells the model when to reach for it, which is most of the value.
                         {" "}Leave "only for" blank for a national source. A city's tourist office belongs to that city: VisitCopenhagen on an Aarhus draft costs money on all seven research calls and invites a Copenhagen page being read as an authority on Aarhus.
@@ -24564,6 +24578,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           </div>
                         </div>
                       </details>
+                      </>)}
                       {(() => {
                         // WHAT IT COSTS, because "it's a waste of money" was the
                         // complaint and nothing was showing the running total.
@@ -24573,7 +24588,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         return (
                           <div style={{ fontSize: 10.5, color: C.muted, marginTop: 7, lineHeight: 1.5 }}>
                             A town draft anywhere carries {wide.sources} of these, about {wide.words} words, roughly {wide.perDraft} words across the seven research calls one draft makes.
-                            {narrow.sources !== wide.sources && <span> An Aarhus draft carries {narrow.sources}, because the rest are scoped elsewhere.</span>}
+                            {!PAGE_ABROAD && narrow.sources !== wide.sources && <span> An Aarhus draft carries {narrow.sources}, because the rest are scoped elsewhere.</span>}
                           </div>
                         );
                       })()}
@@ -24589,7 +24604,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 <div style={{ background: C.surface, border: "1px dashed #B39DFF66", borderRadius: 12, padding: "14px", marginBottom: 14 }}>
                   <div style={{ fontSize: 12.5, fontWeight: 700, color: "#B39DFF" }}>🧭 Pretend you are somewhere else</div>
                   <div style={{ fontSize: 11, color: C.muted, marginTop: 3, lineHeight: 1.6, marginBottom: 11 }}>
-                    Type a town or island, or paste a coordinate like 55.95, 11.15. Everything that reads where you are standing follows it: travel
+                    {PAGE_ABROAD ? "Type a town, or paste a coordinate like 55.71, 21.13." : "Type a town or island, or paste a coordinate like 55.95, 11.15."} Everything that reads where you are standing follows it: travel
                     times, nearest first, the live events strip, and the community notices. It is your browser only, nobody else sees it, and it stays
                     until you turn it off.
                   </div>
@@ -24597,7 +24612,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   <div style={{ display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center" }}>
                     <input value={pretendTyped} onChange={e => setPretendTyped(e.target.value)}
                       onKeyDown={e => { if (e.key === "Enter") applyPretend(); }}
-                      list="gemlyx-pretend-places" placeholder="Sejerø, Aarhus, 55.95, 11.15"
+                      list="gemlyx-pretend-places" placeholder={PAGE_ABROAD ? "Klaipėda, Nida, 55.71, 21.13" : "Sejerø, Aarhus, 55.95, 11.15"}
                       style={{ flex: 1, minWidth: 200, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 11px", fontSize: 11.5, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif" }} />
                     <datalist id="gemlyx-pretend-places">
                       {pretendPlaces.map(p => <option key={p.name} value={p.name} />)}
@@ -24728,7 +24743,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       <div style={{ display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center" }}>
                         <input value={newFeedUrl} onChange={e => setNewFeedUrl(e.target.value)}
                           onKeyDown={e => { if (e.key === "Enter") addFeed(); }}
-                          placeholder="facebook.com/visitsamsoe, or a group link"
+                          placeholder={PAGE_ABROAD ? "a Facebook page or group link" : "facebook.com/visitsamsoe, or a group link"}
                           style={{ flex: 1, minWidth: 200, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 11px", fontSize: 11.5, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif" }} />
                         <input value={newFeedName} onChange={e => setNewFeedName(e.target.value)}
                           onKeyDown={e => { if (e.key === "Enter") addFeed(); }}
@@ -25043,7 +25058,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               {redraftOpen && (
                       <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px", marginBottom: 16, maxHeight: 320, overflowY: "auto" }}>
                         <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.5, marginBottom: 10 }}>
-                          These towns are baked into the codebase from before Studio existed — they never went through any of the current voice rules. Tap one to research and write it fresh through today's pipeline. Once you publish the new version, manually delete the old line for it from src/data/towns.js so you don't end up with two.
+                          Tap a town to research and write it again through today's pipeline.
                         </div>
                         {towns.map(t => (
                           <div key={t.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "8px 0", borderBottom: `1px solid ${C.border}` }}>
@@ -25319,7 +25334,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                   ))}
                                   {coordProblems(row.payload, row.type).map((p, i) => (
                                     <div key={`c${i}`} style={{ fontSize: 10, color: p.severity === "critical" ? "#E57373" : "#FFB347", lineHeight: 1.5 }}>
-                                      📍 {p.kind === "outside-denmark" ? "coordinate is outside Denmark"
+                                      📍 {p.kind === "outside-denmark" ? `coordinate is outside ${PAGE_LAND.name}`
                                         : p.kind === "schema-example" ? "carries the copied example coordinate"
                                         : p.kind === "far-from-town" ? `${Math.round(p.km)} km from ${p.town}`
                                         : "no coordinate stored"}
@@ -25380,7 +25395,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                       crossing fields the town shape drops on the
                                       next publish, so the way back is a redraft
                                       rather than a button that half works. */}
-                                  {row.type === "town" && (
+                                  {row.type === "town" && !PAGE_ABROAD && (
                                     <button onClick={() => openIslandConvert(row)}
                                       style={{ background: islandConvertId === row.id ? `${C.gold}22` : "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 11px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap", cursor: "pointer" }}>
                                       ⛴ Make it an island
@@ -25543,7 +25558,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                         typed into. */}
                                     <div style={{ fontSize: 9.5, fontWeight: 700, color: C.muted, letterSpacing: 1.2, textTransform: "uppercase", margin: "14px 0 5px" }}>Where it applies</div>
                                     <input value={scopeDraft} onChange={e => setScopeDraft(e.target.value)}
-                                      placeholder="e.g. Odense, or Funen, or Ærø — empty means all of Denmark"
+                                      placeholder={PAGE_ABROAD ? `e.g. Klaipėda, empty means all of ${PAGE_LAND.name}` : "e.g. Odense, or Funen, or Ærø — empty means all of Denmark"}
                                       style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px", fontSize: 12, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif", width: "100%", boxSizing: "border-box" }} />
                                     <div style={{ fontSize: 10.5, color: C.muted, marginTop: 8, lineHeight: 1.55 }}>
                                       A place name and nothing else. A town, an island, a kommune or a part of the country: the row then shows on that town's blog page, and on every town inside a bigger area. A city's own light rail is that city; a regional bus is the island or the part of the country it serves. Leave it empty for anything that works everywhere, which is most of this list.
@@ -25642,12 +25657,12 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                       <div>
                                         <div style={{ fontSize: 9.5, fontWeight: 700, color: C.muted, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 5 }}>Inside</div>
                                         <input value={placeDraft.partOf} onChange={e => setPlaceDraft(d => ({ ...d, partOf: e.target.value }))}
-                                          placeholder="e.g. Copenhagen" style={fld} />
+                                          placeholder={PAGE_ABROAD ? "e.g. Klaipėda" : "e.g. Copenhagen"} style={fld} />
                                       </div>
                                       <div>
                                         <div style={{ fontSize: 9.5, fontWeight: 700, color: C.muted, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 5 }}>Sleep in</div>
                                         <input value={placeDraft.dayTripFrom} onChange={e => setPlaceDraft(d => ({ ...d, dayTripFrom: e.target.value }))}
-                                          placeholder="e.g. Copenhagen" style={fld} />
+                                          placeholder={PAGE_ABROAD ? "e.g. Klaipėda" : "e.g. Copenhagen"} style={fld} />
                                       </div>
                                       {/* ── THE ISLAND, BECAUSE THE MAP CANNOT SEE IT ──
                                           The kommune table places the islands that
@@ -25660,7 +25675,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                       <div>
                                         <div style={{ fontSize: 9.5, fontWeight: 700, color: C.muted, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 5 }}>Island</div>
                                         <input value={placeDraft.island} onChange={e => setPlaceDraft(d => ({ ...d, island: e.target.value }))}
-                                          placeholder="e.g. Sejerø" style={fld} />
+                                          placeholder={PAGE_ABROAD ? "e.g. Neringa" : "e.g. Sejerø"} style={fld} />
                                       </div>
                                     </div>
 
@@ -26149,7 +26164,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       ))}
                     </div>
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
-                      {[["town", "🏘 Town"], ["island", "⛴ Island"], ["festival", "🎪 Events"], ["free", "🎟 Attractions"], ["food", "🍽 Food"], ["foodStreet", "🍜 Food Street"], ["night", "🍺 Nightlife"], ["nightStreet", "🍻 Bar street"], ["nightTown", "🌃 Nightlife (Town)"], ["shop", "🛍 Shop"], ["shopPlace", "🏬 Shopping street"], ["booking", "🔨 Workshop"], ["essential", "🧭 Essential"]].map(([k, label]) => (
+                      {[["town", "🏘 Town"], ["island", "⛴ Island"], ["festival", "🎪 Events"], ["free", "🎟 Attractions"], ["food", "🍽 Food"], ["foodStreet", "🍜 Food Street"], ["night", "🍺 Nightlife"], ["nightStreet", "🍻 Bar street"], ["nightTown", "🌃 Nightlife (Town)"], ["shop", "🛍 Shop"], ["shopPlace", "🏬 Shopping street"], ["booking", "🔨 Workshop"], ["essential", "🧭 Essential"]].filter(([k]) => !PAGE_ABROAD || (k !== "island" && k !== "booking")).map(([k, label]) => (
                         <button key={k} onClick={() => { setStudioType(k); setStudioResult(null); setStudioError(null); }}
                           style={{ background: studioType === k ? C.gold : "none", border: `1px solid ${studioType === k ? C.gold : C.border}`, borderRadius: 100, padding: "6px 12px", fontSize: 11, fontWeight: 700, color: studioType === k ? "#000" : C.light, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                           {label}
@@ -26158,7 +26173,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     </div>
                     <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
                       <input value={studioTown} onChange={e => setStudioTown(e.target.value)} onKeyDown={e => e.key === "Enter" && generateArea()}
-                        placeholder={{ town: "Town name, e.g. Ringkøbing", island: "Island name, e.g. Sejerø", festival: "Festival name, e.g. Tønder Festival", free: "Place name + city, e.g. Rundetaarn Copenhagen", booking: "Workshop/craft name + city, e.g. Bornholm Ceramics Studio", food: "Place name + city, e.g. Gasoline Grill Copenhagen", foodStreet: "Market or street name + city, e.g. Reffen Copenhagen", night: "Bar name + city, e.g. Mikkeller Bar Viktoriagade", nightStreet: "Street name + city, e.g. Gothersgade Copenhagen", nightTown: "Town name, e.g. Aarhus", shop: "Shop name + city, e.g. Prag Vintage Copenhagen", shopPlace: "Street or centre + city, e.g. Jægersborggade Copenhagen", essential: "What a visitor has to sort out, e.g. Rejsebillet app or Tax-free shopping" }[studioType] || "Name"}
+                        placeholder={(PAGE_ABROAD ? { town: "Town name, e.g. Nida", festival: "Festival name, e.g. Sea Festival Klaipėda", free: "Place name + city, e.g. Klaipėda Castle Museum", booking: "Workshop or craft name + city", food: "Place name + city", foodStreet: "Market or street name + city, e.g. Klaipėda Central Market", night: "Bar name + city", nightStreet: "Street name + city, e.g. Tiltų gatvė Klaipėda", nightTown: "Town name, e.g. Palanga", shop: "Shop name + city", shopPlace: "Street or centre + city, e.g. Akropolis Klaipėda", essential: "What a visitor has to sort out, e.g. bus tickets or the Smiltynė ferry" }[studioType] : null) || { town: "Town name, e.g. Ringkøbing", island: "Island name, e.g. Sejerø", festival: "Festival name, e.g. Tønder Festival", free: "Place name + city, e.g. Rundetaarn Copenhagen", booking: "Workshop/craft name + city, e.g. Bornholm Ceramics Studio", food: "Place name + city, e.g. Gasoline Grill Copenhagen", foodStreet: "Market or street name + city, e.g. Reffen Copenhagen", night: "Bar name + city, e.g. Mikkeller Bar Viktoriagade", nightStreet: "Street name + city, e.g. Gothersgade Copenhagen", nightTown: "Town name, e.g. Aarhus", shop: "Shop name + city, e.g. Prag Vintage Copenhagen", shopPlace: "Street or centre + city, e.g. Jægersborggade Copenhagen", essential: "What a visitor has to sort out, e.g. Rejsebillet app or Tax-free shopping" }[studioType] || "Name"}
                         style={{ flex: 1, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 14px", fontSize: 13, outline: "none", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif" }} />
                       <button onClick={() => generateArea()} disabled={studioLoading}
                         style={{ background: C.gold, border: "none", borderRadius: 10, padding: "10px 16px", fontSize: 12, fontWeight: 700, color: C.onGold, cursor: "pointer", fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>
@@ -26204,7 +26219,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         <div style={{ fontSize: 10, color: C.muted, lineHeight: 1.5, marginBottom: 10 }}>
                           {factSource === "published"
                             ? "Picks one of your own published towns, festivals, food spots or attractions and researches a fact about it. Someone who reads it on the loading screen can then go and read that entry."
-                            : "Researches a fact about Denmark generally, skipping every subject already used. Good for breadth you have not published yet."}
+                            : `Researches a fact about ${PAGE_LAND.name} generally, skipping every subject already used. Good for breadth you have not published yet.`}
                         </div>
 
                         <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
@@ -26447,7 +26462,8 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         <div style={{ marginBottom: 10 }}>
                           <div style={{ fontSize: 9.5, fontWeight: 700, color: C.muted, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 7 }}>Where to look</div>
                           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
-                            {DISCOVERY_TARGETS.map(opt => {
+                            {/* Danish parts of the country; another country has "anywhere" and a town. */}
+                            {DISCOVERY_TARGETS.filter(opt => !PAGE_ABROAD || opt.id === "anywhere").map(opt => {
                               const on = discoverTarget === opt.id && !discoverTown.trim();
                               const n = counts[opt.id];
                               return (
@@ -26466,11 +26482,11 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                             })}
                           </div>
                           <input value={discoverTown} onChange={e => setDiscoverTown(e.target.value)}
-                            placeholder="Or one specific town, e.g. Odense, Ærøskøbing, Tønder"
+                            placeholder={PAGE_ABROAD ? "Or one specific town, e.g. Klaipėda, Nida, Palanga" : "Or one specific town, e.g. Odense, Ærøskøbing, Tønder"}
                             style={{ width: "100%", background: C.bg, border: `1px solid ${discoverTown.trim() ? C.gold : C.border}`, borderRadius: 8, padding: "8px 11px", fontSize: 12, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif" }} />
                           <div style={{ fontSize: 10.5, color: C.muted, marginTop: 6, lineHeight: 1.5 }}>
                             {discoverTown.trim()
-                              ? `Every query will name ${discoverTown.trim()}, in Danish too. Works for events as well as places.`
+                              ? `Every query will name ${discoverTown.trim()}, in ${PAGE_LAND.adjective} too. Works for events as well as places.`
                               : t.hint}
                           </div>
                           {/* ── OR ONE PUBLISHED BAR STREET ───────────
@@ -26511,7 +26527,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                               </div>
                               <div style={{ fontSize: 10.5, color: C.muted, marginTop: 6, lineHeight: 1.5 }}>
                                 {discoverStreet
-                                  ? `Every query will hunt for the ${studioType === "shop" ? "shops" : "bars"} standing on ${discoverStreet}, in Danish too, and anything whose address is on another street is dropped rather than offered.`
+                                  ? `Every query will hunt for the ${studioType === "shop" ? "shops" : "bars"} standing on ${discoverStreet}, in ${PAGE_LAND.adjective} too, and anything whose address is on another street is dropped rather than offered.`
                                   : `A street entry never holds a list of its ${studioType === "shop" ? "shops" : "bars"}. Each one is its own row, matched to the street by its address, so a street showing 0 needs the ${studioType === "shop" ? "shops" : "bars"} found rather than the street rewritten.`}
                               </div>
                             </div>
@@ -26545,7 +26561,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                               <div style={{ fontSize: 10.5, color: C.muted, marginTop: 6, lineHeight: 1.5 }}>
                                 {monthById(discoverMonth).month === null
                                   ? "Without a month, a search run today mostly finds the next few weeks, because that is what is current on the web."
-                                  : `Queries will name ${monthById(discoverMonth).label} ${yearForMonth(monthById(discoverMonth).month, new Date())} and its Danish name, and anything coming back with a different month of its own is dropped.`}
+                                  : `Queries will name ${monthById(discoverMonth).label} ${yearForMonth(monthById(discoverMonth).month, new Date())} and its ${PAGE_LAND.adjective} name, and anything coming back with a different month of its own is dropped.`}
                               </div>
                             </div>
                           )}
@@ -26616,7 +26632,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                             )}
                             {discoverForeign > 0 && (
                               <div style={{ fontSize: 10.5, color: C.muted, marginBottom: 5, lineHeight: 1.5 }}>
-                                {discoverForeign} more {discoverForeign === 1 ? "was" : "were"} left out as not Danish food.
+                                {discoverForeign} more {discoverForeign === 1 ? "was" : "were"} left out as not {PAGE_LAND.adjective} food.
                               </div>
                             )}
                             {discoverCovered > 0 && (
