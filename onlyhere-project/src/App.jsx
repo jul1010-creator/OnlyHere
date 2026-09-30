@@ -23106,7 +23106,14 @@ ${languageBlock()}`;
   // on". The pages and their order stay NAV_ITEMS; utils/navGroups.js only
   // decides how the bar and the burger group them. Here rather than beside
   // NAV_ITEMS because Activities needs to know whether a full calendar exists.
-  const navGroups = groupNav(NAV_ITEMS.filter(item => item.id !== "ai"), { calendar: hasFullCalendar, t: (k) => uiT(k, uiLang) });
+  // ── THE GOLD BUTTON ON ANOTHER COUNTRY'S PAGE IS THE DEALS ──────────
+  // Oliver, 30 Sep 2026: "Maybe change the golden buzzer out with 'special
+  // deals' instead? Because right now, it's hidden." Lithuania only, where the
+  // discounts are what sells, and only while a deal is live, so the gold button
+  // never opens an empty page. The planner then moves into the menu like any
+  // other page. Denmark keeps its gold planner.
+  const featuredTab = PAGE_ABROAD && TAB_ORDER.includes("promotions") ? "promotions" : "ai";
+  const navGroups = groupNav(NAV_ITEMS.filter(item => item.id !== featuredTab), { calendar: hasFullCalendar, t: (k) => uiT(k, uiLang) });
   const pickNav = (child) => {
     if (child.tab === "events") setEventTab(child.sub === "calendar" ? "calendar" : "picks");
     goTab(child.tab);
@@ -33286,13 +33293,13 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           </NavStrip>
           {/* Outside the strip and flexShrink: 0, so nothing can take a pixel
               off it however long the eight labels beside it get. */}
-          {<button className="gx-topnav-ai" onClick={() => goTab("ai")}
+          {<button className="gx-topnav-ai" data-testid="nav-featured" onClick={() => goTab(featuredTab)}
             /* NO `display` HERE. The .gx-topnav-ai class owns it, and an inline
                one silently beat the class for as long as this button has
                existed. Detour is not lost on a phone: it is the gradient row at
                the top of the menu's Navigate list. */
             style={{ gap: 6, background: `linear-gradient(135deg, ${C.gold}, ${C.accent})`, color: "#fff", border: "none", borderRadius: 100, padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginLeft: 8, marginRight: 4, whiteSpace: "nowrap", flexShrink: 0, boxShadow: `0 2px 10px ${C.gold}33` }}>
-            {NAV_ITEMS.find(item => item.id === "ai")?.label}
+            {NAV_ITEMS.find(item => item.id === featuredTab)?.label}
           </button>}
 
           {/* Right: the small persistent search pill (always visible, not a
@@ -33544,8 +33551,8 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 </div>
               );
             })}
-            {NAV_ITEMS.filter(item => item.id === "ai").map(item => (
-              <button key={item.id} onClick={() => { setShowMenu(false); goTab("ai"); }}
+            {NAV_ITEMS.filter(item => item.id === featuredTab).map(item => (
+              <button key={item.id} onClick={() => { setShowMenu(false); goTab(featuredTab); }}
                 style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: `linear-gradient(135deg, ${C.gold}, ${C.accent})`, color: "#fff", border: "none", borderRadius: 10, padding: "12px 16px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginTop: 6, marginBottom: 2, boxShadow: `0 2px 10px ${C.gold}33`, animation: `fadeSlideIn 0.2s ease ${navGroups.length * 0.04}s both` }}>
                 {item.label}
               </button>
