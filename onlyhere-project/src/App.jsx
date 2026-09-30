@@ -153,6 +153,7 @@ import { buildFoodFacets, FOOD_SORTS, byFoodPrice } from "./utils/foodStyle";
 import { DK_PATHS, dkProject } from "./data/mapShapes";
 import { PageHero } from "./components/PageHero";
 import { LiveEventsHeaderStrip } from "./components/LiveEventsHeaderStrip";
+import { groupByMonth } from "./utils/calendarMonths";
 import { WeatherHeaderStrip, DenmarkClock } from "./components/WeatherHeaderStrip";
 import { StoreBadge } from "./components/StoreBadge";
 import { DateTimePicker } from "./components/DateTimePicker";
@@ -257,7 +258,7 @@ import { FOOD_TIERS } from "./utils/mealsEstimate";
 import { weighAdd, addCaution, tripLoadBlock } from "./utils/weighAdd";
 import { isBookableTicketUrl, pickTicketUrl, describeTicketSearch, ticketQueries, ticketUrlSaysElsewhere, ticketAgentOf, reviewPastedTicketUrl, isTourUrl, typeHasAdmission, editionYearOf, TICKET_FIELD, TOUR_FIELD, isResellerUrl, wrongEdition, ticketUrlIsASubEvent } from "./utils/ticketLink";
 import { tourQuery, tourKindFor, tourTownFor, pickTourUrl, tourPhrase, tourCandidates, tourProposal, replaceTour, describeTourFindings, tourAliveVerdict, tourRemovalFor, TOUR_RESWEEP_DAYS, FOUND as TOUR_FOUND, GONE as TOUR_GONE, UNKNOWN as TOUR_UNKNOWN, ALIVE as TOUR_ALIVE } from "./utils/tourSweep";
-import { currentUiLanguage, setStoredUiLanguage, t as uiT } from "./utils/uiLanguage";
+import { countryName, currentUiLanguage, setStoredUiLanguage, t as uiT } from "./utils/uiLanguage";
 import { LanguageChoice } from "./components/LanguagePicker";
 import { NavStrip } from "./components/NavStrip";
 import { alertKey, describeWeatherChange, unseenAlerts, seenAlerts, markAlertSeen, readAlerts, markAlertsRead, unreadAlerts, tripLine, alertCountLine } from "./utils/weatherAlerts";
@@ -23183,9 +23184,20 @@ ${languageBlock()}`;
   // never opens an empty page. The planner then moves into the menu like any
   // other page. Denmark keeps its gold planner.
   const featuredTab = PAGE_ABROAD && TAB_ORDER.includes("promotions") ? "promotions" : "ai";
-  const navGroups = groupNav(NAV_ITEMS.filter(item => item.id !== featuredTab), { calendar: hasFullCalendar, t: (k) => uiT(k, uiLang) });
+  // ── ACTIVITIES: EVENTS AND CALENDAR, ALWAYS ─────────────────────────
+  // Oliver, 1 Oct 2026, of the navigation row: make it "calender" and
+  // "events", "it can also be 'activities' instead?" So Activities is a
+  // dropdown on both sites, whether or not a community calendar is loaded:
+  // Events is our picks, Calendar is everything on, in date order.
+  const navGroups = groupNav(NAV_ITEMS.filter(item => item.id !== featuredTab), { calendar: true, t: (k) => uiT(k, uiLang) });
   const pickNav = (child) => {
-    if (child.tab === "events") setEventTab(child.sub === "calendar" ? "calendar" : "picks");
+    if (child.tab === "events") {
+      const cal = child.sub === "calendar";
+      setEventTab(cal ? "calendar" : "picks");
+      setEventMonth(null); setEventType(null);
+      // A calendar reads in date order, whatever the Events view was sorted by.
+      if (cal) setEventSort("soonest");
+    }
     goTab(child.tab);
   };
   const eventTabSource = eventTab === "calendar" && hasFullCalendar ? [...events, ...majorEvents, ...calendarEvents] : [...events, ...majorEvents];
@@ -23275,7 +23287,7 @@ ${languageBlock()}`;
   // eventMonth or eventType has to change.
   const eventFacetState = { ...(eventMonth ? { month: eventMonth } : {}), ...(eventType ? { type: eventType } : {}) };
   const setEventFacets = (next) => { setEventMonth(next.month || null); setEventType(next.type || null); };
-  const EVENT_SORTS = [{ value: "soonest", label: "Date" }, { value: "az", label: "Name" }];
+  const EVENT_SORTS = [{ value: "soonest", label: uiT("sort.date", uiLang) }, { value: "az", label: uiT("sort.name", uiLang) }];
 
   // ── ONE TEST, AND applyFacets IS THE ONLY CALLER ─────────────
   // This used to re-implement both facet predicates inline, which meant the
@@ -29927,6 +29939,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       items={searched}
                       shown={filtered.length}
                       noun="places"
+                      lang={uiLang}
                       facets={useAttractionFilters ? ATTRACTION_FACETS : []}
                       state={attractionFacets}
                       onChange={next => setAttractionFacets(next)}
@@ -30128,36 +30141,34 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           {tab === "events" && (
             <div className={pageAnim} style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
               <div style={{ marginBottom: 18, paddingTop: 8 }}>
-                <h2 style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, margin: "0 0 10px" }}>Events</h2>
-                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Festivals, markets and local happenings across {PAGE_LAND.name}, all year round. From legendary stages to harbour markets nobody talks about. {PAGE_ABROAD ? "We guide you to what is worth going out for." : "We guide you to what's worth traveling for, and exactly how far it is from Copenhagen."}</div>
+                <h2 style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, margin: "0 0 10px" }}>{uiT(eventTab === "calendar" ? "nav.calendar" : "nav.events", uiLang)}</h2>
+                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>{PAGE_ABROAD ? uiT("events.introAbroad", uiLang).replace("{land}", countryName(PAGE_COUNTRY, uiLang, PAGE_LAND.name)) : uiT("events.introDenmark", uiLang)}</div>
               </div>
 
-              {hasFullCalendar && (
               <div style={{ display: "flex", gap: 0, marginBottom: 16, borderBottom: `1px solid ${C.border}` }}>
-                {[{ id: "picks", label: "Our picks", ico: "ticket" }, { id: "calendar", label: "Full calendar", ico: "calendar" }].map(t => (
-                  <button key={t.id} onClick={() => { setEventTab(t.id); setEventMonth(null); setEventType(null); }}
+                {[{ id: "picks", label: uiT("nav.events", uiLang), ico: "ticket" }, { id: "calendar", label: uiT("nav.calendar", uiLang), ico: "calendar" }].map(t => (
+                  <button key={t.id} onClick={() => { setEventTab(t.id); setEventMonth(null); setEventType(null); if (t.id === "calendar") setEventSort("soonest"); }}
                     style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 7, background: "none", border: "none", borderBottom: `2px solid ${eventTab === t.id ? C.accent : "transparent"}`, color: eventTab === t.id ? C.text : C.muted, padding: "12px 8px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                     <Ico name={t.ico} size={14} /> {t.label}
                   </button>
                 ))}
               </div>
-              )}
               {/* ── WHAT'S ON FOR YOU ────────────────────────────────
                   Oliver, 29 Sep 2026: "those events are overwhelming". A day
                   and whether the kids are coming, one tap each, above the
                   search and the filters rather than inside them. See
                   utils/eventWhen.js. */}
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: C.muted, marginRight: 2 }}>What's on for you</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: C.muted, marginRight: 2 }}>{uiT("events.whatsOn", uiLang)}</span>
                 {WHEN_CHOICES.map(w => (
                   <button key={w.id} onClick={() => setEventWhen(eventWhen === w.id ? null : w.id)} aria-pressed={eventWhen === w.id}
                     style={{ background: eventWhen === w.id ? `${C.gold}22` : "none", border: `1px solid ${eventWhen === w.id ? C.gold : C.border}`, color: eventWhen === w.id ? C.gold : C.light, borderRadius: 100, padding: "5px 12px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                    {w.label}
+                    {uiT(`events.${w.id}`, uiLang) || w.label}
                   </button>
                 ))}
                 <button onClick={() => setEventKids(!eventKids)} aria-pressed={eventKids}
                   style={{ background: eventKids ? "#64B5F622" : "none", border: `1px solid ${eventKids ? "#64B5F6" : C.border}`, color: eventKids ? "#64B5F6" : C.light, borderRadius: 100, padding: "5px 12px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                  With kids
+                  {uiT("events.withKids", uiLang)}
                 </button>
               </div>
               {eventTab === "calendar" && hasFullCalendar && (() => {
@@ -30177,6 +30188,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 searchPlaceholder={uiT("search.events", uiLang)}
                 shown={filteredEvents.length}
                 noun="events"
+                lang={uiLang}
                 facets={eventFacets}
                 state={eventFacetState}
                 onChange={setEventFacets}
@@ -30208,9 +30220,21 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               {filteredEvents.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "40px 0", color: C.muted }}>{uiT("empty.events", uiLang)}</div>
               ) : (
+                eventTab === "calendar" && eventSort === "soonest" ? (
+                  // The calendar, cut into months. See utils/calendarMonths.js.
+                  groupByMonth(filteredEvents, { lang: uiLang }).map(m => (
+                    <div key={m.key || "undated"} style={{ marginBottom: 22 }}>
+                      {m.label && <h3 style={{ fontSize: 13, fontWeight: 700, color: C.gold, letterSpacing: 1.2, textTransform: "uppercase", margin: "4px 0 12px", fontFamily: "'Inter', sans-serif" }}>{m.label}</h3>}
+                      <div className="cards-grid">
+                        {m.events.map(e => <EventCard key={e.id} event={e} />)}
+                      </div>
+                    </div>
+                  ))
+                ) : (
                 <div className="cards-grid">
                   {filteredEvents.map(e => <EventCard key={e.id} event={e} />)}
                 </div>
+                )
               )}
               {/* ── NO CONFIRMED DATE YET ────────────────────────────
                   Oliver, 5 Sep 2026: "it should be in a memory... OR we can a
@@ -30288,6 +30312,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 searchPlaceholder={uiT("search.food", uiLang)}
                 shown={filteredFood.length}
                 noun="places"
+                lang={uiLang}
                 facets={foodFacets}
                 state={foodFacetState}
                 onChange={setFoodFacets}
