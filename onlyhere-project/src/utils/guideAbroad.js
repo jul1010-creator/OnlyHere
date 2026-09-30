@@ -151,3 +151,56 @@ export const forLand = (prompt, land) => {
 export const landAsk = (fn, land) => (!land || land.code === DEFAULT_COUNTRY)
   ? fn
   : (prompt, ...rest) => fn(forLand(prompt, land), ...rest);
+
+// ── A RANDOM VISIT, FOR STUDIO'S PIPELINE TEST ─────────────────────
+// Oliver, 30 Sep 2026: the "Random guide" button on /lithuania builds a random
+// Klaipėda visit through this form instead of a Danish trip. The three shapes
+// the tourism centre sees most: a cruise day off the ship, a weekend, and a few
+// days with time for the Spit or Palanga. Values are exactly what the form
+// writes (the picker's local "YYYY-MM-DDTHH:MM"), so the brief is built by the
+// same abroadBriefParts a visitor's is. `rand` is injectable for the tests.
+const pad2 = (n) => String(n).padStart(2, "0");
+const localStamp = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+
+export const randomAbroadVisit = (code = "LT", rand = Math.random, now = new Date()) => {
+  const pick = (arr) => arr[Math.floor(rand() * arr.length) % arr.length];
+  const starts = startsFor(code);
+  const shape = pick(["cruise", "weekend", "days"]);
+  const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 14 + Math.floor(rand() * 150));
+  const at = (d, h, m = 0) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, m);
+  let arrival, departure, start;
+  if (shape === "cruise") {
+    arrival = at(day, 8 + Math.floor(rand() * 3));
+    departure = at(day, 16 + Math.floor(rand() * 3), 30);
+    start = starts.find(s => s.key === "cruise") ? "cruise" : "";
+  } else {
+    const nights = shape === "weekend" ? 2 : 3 + Math.floor(rand() * 2);
+    const back = new Date(day.getFullYear(), day.getMonth(), day.getDate() + nights);
+    arrival = at(day, 11 + Math.floor(rand() * 6));
+    departure = at(back, 10 + Math.floor(rand() * 6));
+    start = pick(starts.filter(s => s.key !== "cruise").map(s => s.key).concat(""));
+  }
+  const who = pick([
+    { travelers: "just me", kids: false },
+    { travelers: "me and my partner", kids: false },
+    { travelers: "two adults and two kids aged 7 and 10", kids: true },
+    { travelers: "three friends in our twenties", kids: false },
+    { travelers: "a retired couple", kids: false },
+  ]);
+  const interests = ABROAD_INTERESTS.filter(() => rand() < 0.5);
+  const transport = shape === "cruise"
+    ? ABROAD_TRANSPORT.filter(t => /foot|Bus/.test(t))
+    : ABROAD_TRANSPORT.filter(() => rand() < 0.5);
+  return {
+    shape,
+    arrival: localStamp(arrival),
+    departure: localStamp(departure),
+    start,
+    travelers: who.travelers,
+    kids: who.kids,
+    interests: interests.length ? interests : [pick(ABROAD_INTERESTS)],
+    transport: transport.length ? transport : [ABROAD_TRANSPORT[0]],
+    freeOnly: rand() < 0.2,
+    events: rand() < 0.6,
+  };
+};

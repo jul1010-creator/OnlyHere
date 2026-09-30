@@ -1,3 +1,4 @@
+import { countryKey } from "./countries";
 // ── WHAT THE PIPELINE ACTUALLY DID ───────────────────────────────────
 //
 // Oliver, 11 Aug 2026: "In order to finally sort out logistics, I need to be
@@ -81,7 +82,8 @@ const entry = (step, o) => ({
 let run = null;
 const finished = [];
 const MAX_KEPT = 12;
-const STORE_KEY = "gemlyx_run_log";
+// Per country: see countryKey. Denmark keeps "gemlyx_run_log".
+const STORE_KEY = countryKey("gemlyx_run_log");
 
 // ── AND THE SHELF STARTED EMPTY EVERY TIME ──────────────────────────
 //

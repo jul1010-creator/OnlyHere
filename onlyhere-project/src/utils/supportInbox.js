@@ -22,11 +22,31 @@
 // a timestamp from a row written before the column had a default.
 import { CONTEXT_DIVIDER } from "./problemContext";
 import { SUPPORT_TOPICS } from "./support";
+import { countryFromPath } from "./countries";
 
 // ── HANDLED IS A COLUMN, NOT A GUESS ────────────────────────────────
 // gemlyx_support already has `handled boolean not null default false`. It was
 // written for exactly this and nothing has ever set it.
 export const isHandled = (row) => row?.handled === true;
+
+// ── WHICH SITE A REPORT CAME FROM ───────────────────────────────────
+// Oliver, 30 Sep 2026: each Studio shows the reports sent from its own site.
+// Read from the "Page:" line Gemlyx appends below the divider (the address the
+// visitor was on when they wrote), then from the address they typed, and
+// Denmark when neither says, because that is where every report came from
+// before there was a second site.
+export const reportCountry = (row) => {
+  const msg = String(row?.message || "");
+  const at = msg.lastIndexOf(CONTEXT_DIVIDER);
+  const page = at >= 0 ? (msg.slice(at).match(/^Page: (\S+)/m) || [])[1] : "";
+  const path = (s) => {
+    const t = String(s || "").trim();
+    if (!t) return "";
+    try { return new URL(t, "https://x.invalid").pathname; } catch { return ""; }
+  };
+  return countryFromPath(path(page) || path(row?.url));
+};
+
 
 export const unhandledCount = (rows) => (Array.isArray(rows) ? rows : []).filter(r => !isHandled(r)).length;
 

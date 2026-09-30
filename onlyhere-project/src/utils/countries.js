@@ -83,6 +83,16 @@ export const activeCountry = () => (
   typeof window !== "undefined" && window.location ? countryFromPath(window.location.pathname) : DEFAULT_COUNTRY
 );
 
+// ── ONE STUDIO PER COUNTRY ──────────────────────────────────────────
+// Oliver, 30 Sep 2026, of the Studio on /lithuania: "All of this has to be
+// reset on the lithuanian studio.." Everything Studio keeps in the browser
+// (drafts, the queue, the recorder, the run log, the chat thread) is filed
+// under a key per country. Denmark keeps the key it always had, so nothing
+// saved on the Danish site is lost; another country gets its own beside it.
+export const countryKey = (base, code = activeCountry()) => (
+  code && code !== DEFAULT_COUNTRY && COUNTRY_PROFILES[code] ? `${base}:${code}` : base
+);
+
 // Is a point inside a country's box. Accepts { lat, lon } like the rest of the
 // app's coordinates.
 export const isInCountry = (coords, code = DEFAULT_COUNTRY) => {

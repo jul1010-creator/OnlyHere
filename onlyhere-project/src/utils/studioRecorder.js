@@ -1,3 +1,4 @@
+import { countryKey } from "./countries";
 // ── "SO YOU CAN SEE A FILE ABOUT HOW IT WORKED" ─────────────────────
 //
 // Oliver, 3 Sep 2026: "you can make a studio button, that records everything I
@@ -38,8 +39,9 @@
 // credential is replaced rather than trimmed, so the file says a value was
 // removed instead of quietly looking like there was none.
 
-const EVENTS_KEY = "gemlyx_studio_recording";
-const FLAG_KEY = "gemlyx_studio_recording_on";
+// Per country: see countryKey. Denmark keeps the keys it always had.
+const EVENTS_KEY = countryKey("gemlyx_studio_recording");
+const FLAG_KEY = countryKey("gemlyx_studio_recording_on");
 
 // Enough for a long session of clicking through Manage, small enough that
 // writing the whole array on every event stays cheap and localStorage stays

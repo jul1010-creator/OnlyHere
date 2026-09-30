@@ -30,11 +30,13 @@
 // constantly, in a colour that is not the brand's, with the way out on the same
 // line. A test mode you cannot see is a bug you have not found yet.
 import { isInDenmark } from "./helpers";
+import { countryKey } from "./countries";
 
 // localStorage, deliberately, so it survives the reloads he will do while
 // testing. It is per-browser and per-person and it changes nothing for any
 // reader: the worst a stranger can do by setting it is move their own map.
-export const PRETEND_KEY = "gemlyx.pretendAt";
+// Per country: see countryKey. Denmark keeps "gemlyx.pretendAt".
+export const PRETEND_KEY = countryKey("gemlyx.pretendAt");
 
 // "55.95, 11.15" as typed, in either order of separators. A coordinate is the
 // escape hatch for anywhere the library has never heard of, which for islands

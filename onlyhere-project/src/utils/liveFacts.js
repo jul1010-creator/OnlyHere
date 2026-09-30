@@ -22,6 +22,16 @@
 // module-level, there is one loader, and the in-flight promise is cached so a
 // second caller awaits the first fetch instead of racing it.
 import { denmarkFacts } from "../data/denmarkFacts";
+import { activeCountry, rowCountry, DEFAULT_COUNTRY, countryProfile } from "./countries";
+
+// ── ANOTHER COUNTRY STARTS WITH NO FACTS ───────────────────────────
+// 30 Sep 2026. The seven built-in facts are Danish, and so was every row in
+// the table before it had a country column. On /lithuania the loading card
+// showed them anyway. On another country's page the array is emptied here,
+// once, before anything is folded in, and only that country's rows go in.
+// The card itself leaves out the fact while the list is empty.
+const PAGE = activeCountry();
+if (PAGE !== DEFAULT_COUNTRY) denmarkFacts.length = 0;
 import { SUPABASE_URL, SUPABASE_KEY } from "../config";
 
 const mergedIds = new Set();   // gemlyx_facts row ids already folded in
@@ -44,6 +54,7 @@ const doLoad = async () => {
     const dupes = [];
     rows.forEach(row => {
       if (mergedIds.has(row.id)) return;
+      if (rowCountry(row) !== PAGE) return;
       const fact = String(row.fact || "").trim();
       if (!fact) return;
       const k = textKey(fact);
@@ -52,7 +63,7 @@ const doLoad = async () => {
       mergedText.add(k);
       denmarkFacts.push({
         id: `live-${row.id}`,
-        name: row.subject || "Denmark",
+        name: row.subject || countryProfile(PAGE).name,
         category: row.category || "history",
         photo: row.photo || null,
         photoPos: row.photo_pos || undefined,

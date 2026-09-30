@@ -1,3 +1,4 @@
+import { countryKey } from "./countries";
 // ── "WHEN I CLICK 'GENERATE PIPELINE' TWICE IN A ROW, THE PAGE CRASHES" ──
 //
 // Oliver, 18 Aug 2026. Reproduced exactly, as a sequence of the real state
@@ -114,7 +115,8 @@ export const threadIsSound = (messages) =>
 //
 // Widening it to localStorage is one word here, and it is his call rather than
 // one to make while he is out.
-export const CHAT_KEY = "gemlyx_chat_thread";
+// Per country: see countryKey. Denmark keeps "gemlyx_chat_thread".
+export const CHAT_KEY = countryKey("gemlyx_chat_thread");
 
 // Pure, so the suite can drive it. `streaming` is dropped on the way out: a
 // message that was mid-stream when the tab reloaded would otherwise come back

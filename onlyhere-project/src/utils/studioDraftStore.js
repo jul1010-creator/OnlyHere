@@ -1,3 +1,4 @@
+import { countryKey } from "./countries";
 // ── DRAFTS THAT SURVIVE CLOSING THE TAB ────────────────────────────
 // Oliver, 19 Aug 2026: "I'd actually like if we could make it possible for my
 // drafts not to disappear when I close the site. It's wasted money when my page
@@ -72,7 +73,8 @@
 // the panel can say the drafts were dropped and why, rather than opening on an
 // empty queue that looks like nothing was ever saved.
 
-export const DRAFT_STORE_KEY = "gemlyx_studio_drafts";
+// Per country: see countryKey. Denmark keeps "gemlyx_studio_drafts".
+export const DRAFT_STORE_KEY = countryKey("gemlyx_studio_drafts");
 
 // Bumped when the stored shape changes in a way an older reader would
 // misinterpret. A mismatch is refused, not migrated and not guessed at: a
@@ -166,7 +168,10 @@ export const packQueueItem = (q) => {
   if (!isObj(q)) return null;
   const name = typeof q.name === "string" ? q.name.trim() : "";
   if (!name || typeof q.type !== "string" || !q.type) return null;
-  return { name, type: q.type };
+  // The country goes with the name. Without it a Klaipėda name restored after
+  // a reload was researched as a Danish one.
+  const country = typeof q.country === "string" && /^[A-Z]{2}$/.test(q.country) ? q.country : null;
+  return country ? { name, type: q.type, country } : { name, type: q.type };
 };
 
 // DROPS THE OLDEST, AND SAYS HOW MANY. Not the newest: the queue appends, so the

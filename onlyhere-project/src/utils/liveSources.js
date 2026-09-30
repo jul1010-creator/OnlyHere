@@ -15,6 +15,7 @@
 // for visitors, so a list that only Studio could read would apply to half the
 // research and not the other half, which is worse than not having one.
 import { SUPABASE_URL, SUPABASE_KEY } from "../config";
+import { rowCountry, workingCountry } from "./countries";
 
 export const founderSources = [];
 let promise = null;
@@ -44,3 +45,10 @@ export const ensureSourcesLoaded = () => (promise = promise || doLoad());
 // After an edit in Studio. The loader caches, so ensureSourcesLoaded alone would
 // be a no-op here.
 export const refreshSources = () => { promise = null; return ensureSourcesLoaded(); };
+
+// ── THE SOURCES FOR THE COUNTRY BEING RESEARCHED ───────────────────
+// 30 Sep 2026. Every research prompt was handed the whole list, so a Klaipėda
+// draft was told to include visitdenmark.com. The country is asked at the
+// moment of use: a Studio draft sets its own (workingCountry), and anywhere
+// else it is the page's. A row from before the country column is Danish.
+export const sourcesFor = (code = workingCountry()) => founderSources.filter(r => rowCountry(r) === code);
