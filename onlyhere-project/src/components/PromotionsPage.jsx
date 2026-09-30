@@ -8,7 +8,7 @@ import { PhotoPlate } from "./PhotoPlate";
 import { promoCard, untilLabel } from "../utils/promotions";
 import { OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE } from "../utils/offer";
 
-export const PromotionsPage = ({ promos = [], title = "Promotions", paid = false, onOpen }) => {
+export const PromotionsPage = ({ promos = [], title = "Special deals", paid = false, onOpen }) => {
   const today = new Date();
   return (
     <div data-testid="promotions-page" style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
