@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { C } from "../utils/theme";
 import { askOpenAI } from "../utils/aiClient";
+import { countryParam, activeCountry, countryProfile } from "../utils/countries";
 import { menuImagesToRead, textHasPrice, hostOf } from "../utils/pageScan";
 import { gemSearches, gemSearchesFor, ownPagesIn, pageAsResult, GEMS_PROMPT, settleGems, gemRunNotes, gemProblems, isCouponSite, isDataSite, WHERE_LABEL, saidLine, gemsToLocate, gemBranchesFound, gemLocateNote } from "../utils/cheapGems";
 
@@ -150,7 +151,7 @@ export const CheapGemsPanel = ({ existing = [], published = [], onPublish, onLoc
   // like the brand is ticked, anything else is shown and left for him.
   const toLocate = gemsToLocate(published);
   const sweepOne = async (row) => {
-    const res = await fetch(`/api/places-locate?limit=12&name=${encodeURIComponent(row.gem.name)}`);
+    const res = await fetch(`/api/places-locate?limit=12&name=${encodeURIComponent(row.gem.name)}${countryParam()}`);
     const data = await res.json().catch(() => null);
     if (data?.error) throw new Error(String(data.error).slice(0, 120));
     const found = gemBranchesFound(row.gem, data?.candidates);
@@ -190,11 +191,11 @@ export const CheapGemsPanel = ({ existing = [], published = [], onPublish, onLoc
     <div style={box}>
       <div style={{ fontSize: 12.5, fontWeight: 700, color: C.text, marginBottom: 8 }}>Cheap gems</div>
       <div style={{ display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center" }}>
-        <input value={place} onChange={e => setPlace(e.target.value)} placeholder="Town, or empty for all of Denmark"
+        <input value={place} onChange={e => setPlace(e.target.value)} placeholder={`Town, or empty for all of ${countryProfile(activeCountry()).name}`}
           style={{ flex: "1 1 200px", minWidth: 0, background: C.surface, border: `1px solid ${C.border}`, color: C.text, borderRadius: 8, padding: "7px 10px", fontSize: 11.5, fontFamily: "'Inter', sans-serif" }} />
         <button onClick={() => find()} disabled={!!busy}
           style={{ background: C.gold, border: "none", borderRadius: 100, padding: "8px 15px", fontSize: 11.5, fontWeight: 700, color: C.onGold, cursor: busy ? "default" : "pointer", opacity: busy ? 0.5 : 1, fontFamily: "'Inter', sans-serif" }}>
-          {busy === "searching" ? "Searching…" : busy === "reading the page" ? "Reading their page…" : busy === "reading" ? "Reading…" : `Find cheap gems in ${place.trim() || "Denmark"}`}
+          {busy === "searching" ? "Searching…" : busy === "reading the page" ? "Reading their page…" : busy === "reading" ? "Reading…" : `Find cheap gems in ${place.trim() || countryProfile(activeCountry()).name}`}
         </button>
       </div>
       <div style={{ display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center", marginTop: 7 }}>

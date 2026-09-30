@@ -2,6 +2,8 @@ import { useState } from "react";
 import { C } from "../utils/theme";
 import { askOpenAI } from "../utils/aiClient";
 import { NOTE_KINDS, NOTE_KIND_LABEL, NOTE_KIND_MEANING, noteSearches, NOTE_PROMPT, settleNote, noteProblems, noteRunNotes, NOTE_LINE, noteLive, shapeNote, namesPublished } from "../utils/founderNotes";
+import { activeCountry, countryProfile } from "../utils/countries";
+const HERE = countryProfile(activeCountry());
 
 // ── TELLING GEMLYX SOMETHING IT COULD NOT LOOK UP ───────────────────
 //
@@ -140,7 +142,7 @@ export const FounderNotesPanel = ({ onPublish, onSave = null, existing = [], lib
         )}
       </div>
       <textarea value={said} onChange={e => setSaid(e.target.value)} rows={2}
-        placeholder="Both Kombardo Ekspressen and Flixbus are budget alternatives to DSB"
+        placeholder={HERE.code === "DK" ? "Both Kombardo Ekspressen and Flixbus are budget alternatives to DSB" : "The Smiltynė ferry for people runs from the Old Town, the car ferry from further south"}
         style={{ ...field, resize: "vertical" }} />
       <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginTop: 7 }}>
         {NOTE_KINDS.map(k => (
@@ -162,7 +164,7 @@ export const FounderNotesPanel = ({ onPublish, onSave = null, existing = [], lib
         <input value={about} onChange={e => setAbout(e.target.value)} style={{ ...field, flex: "1 1 200px", width: "auto" }}
           placeholder="What it is about: trains, buses, fares" />
         <input value={towns} onChange={e => setTowns(e.target.value)} style={{ ...field, flex: "1 1 140px", width: "auto" }}
-          placeholder="Towns, or empty for all of Denmark" />
+          placeholder={`Towns, or empty for all of ${HERE.name}`} />
       </div>
       <div style={{ display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap", marginTop: 9 }}>
         <button onClick={check} disabled={!!busy || !said.trim()}
