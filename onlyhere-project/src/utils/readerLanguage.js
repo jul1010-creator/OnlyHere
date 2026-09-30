@@ -41,6 +41,7 @@ const FALLBACK = {
   da: "Danish", fr: "French", es: "Spanish", it: "Italian", pl: "Polish",
   pt: "Portuguese", fi: "Finnish", zh: "Chinese", ja: "Japanese", ko: "Korean",
   ru: "Russian", ar: "Arabic", tr: "Turkish", cs: "Czech", en: "English",
+  lt: "Lithuanian", lv: "Latvian", et: "Estonian",
 };
 
 // ── THE REGION COMES OFF, THE SCRIPT STAYS ON ───────────────────────

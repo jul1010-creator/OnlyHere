@@ -44,6 +44,10 @@ export const UI_LANGUAGES = [
   { code: "en", name: "English" },
   { code: "da", name: "Dansk" },
   { code: "de", name: "Deutsch" },
+  // Oliver, 1 Oct 2026: "English, German, Lithuanian, and Danish." For the
+  // Klaipėda pilot. The column was written by Claude and waits for a native
+  // speaker's read: LITHUANIAN_CHECK_01OCT.md lists it for his friends.
+  { code: "lt", name: "Lietuvių" },
 ];
 
 export const UI_CODES = UI_LANGUAGES.map(l => l.code);
@@ -81,35 +85,35 @@ export const uiLanguageMeta = (code) => UI_LANGUAGES.find(l => l.code === String
 // published entries were fixed at once rather than needing 71 redrafts."
 export const UI_STRINGS = {
   // The pages, along the top. NAV_ITEMS in App.jsx maps its labels through t().
-  "nav.home":        { en: "Explore",         da: "Udforsk",        de: "Entdecken" },
-  "nav.essentials":  { en: "Essentials",      da: "Praktisk info",  de: "Praktisches" },
-  "nav.tips":        { en: "Tips",            da: "Tips",           de: "Tipps" },
-  "nav.gems":        { en: "Cheap gems",      da: "Billige perler", de: "Günstige Perlen" },
+  "nav.home":        { en: "Explore",         da: "Udforsk",        de: "Entdecken", lt: "Atrasti" },
+  "nav.essentials":  { en: "Essentials",      da: "Praktisk info",  de: "Praktisches", lt: "Praktinė info" },
+  "nav.tips":        { en: "Tips",            da: "Tips",           de: "Tipps", lt: "Patarimai" },
+  "nav.gems":        { en: "Cheap gems",      da: "Billige perler", de: "Günstige Perlen", lt: "Pigūs perlai" },
   // "Special deals", Oliver 30 Sep 2026: one name for the gold button, the
   // page and the menu item.
-  "nav.promotions":  { en: "Special deals",   da: "Særlige tilbud", de: "Sonderangebote" },
+  "nav.promotions":  { en: "Special deals",   da: "Særlige tilbud", de: "Sonderangebote", lt: "Specialūs pasiūlymai" },
   // The menu groups, 30 Sep 2026. See utils/navGroups.js.
-  "nav.group.advice":     { en: "Advice",      da: "Råd",           de: "Ratgeber" },
-  "nav.group.activities": { en: "Activities",  da: "Aktiviteter",   de: "Aktivitäten" },
-  "nav.group.gems":       { en: "Gems",        da: "Perler",        de: "Perlen" },
-  "nav.group.places":     { en: "Places",      da: "Steder",        de: "Orte" },
-  "nav.group.eatdrink":   { en: "Eat & drink", da: "Mad og drikke", de: "Essen und Trinken" },
-  "nav.calendar":         { en: "Calendar",    da: "Kalender",      de: "Kalender" },
+  "nav.group.advice":     { en: "Advice",      da: "Råd",           de: "Ratgeber", lt: "Naudinga žinoti" },
+  "nav.group.activities": { en: "Activities",  da: "Aktiviteter",   de: "Aktivitäten", lt: "Veikla" },
+  "nav.group.gems":       { en: "Gems",        da: "Perler",        de: "Perlen", lt: "Perlai" },
+  "nav.group.places":     { en: "Places",      da: "Steder",        de: "Orte", lt: "Vietos" },
+  "nav.group.eatdrink":   { en: "Eat & drink", da: "Mad og drikke", de: "Essen und Trinken", lt: "Maistas ir gėrimai" },
+  "nav.calendar":         { en: "Calendar",    da: "Kalender",      de: "Kalender", lt: "Kalendorius" },
   // "Attraktionen" rather than "Sehenswürdigkeiten", which is the more usual
   // German word and is eighteen characters in a horizontal bar that already
   // hides itself below 1080px. Both are correct; this one fits.
-  "nav.attractions": { en: "Attractions",     da: "Attraktioner",   de: "Attraktionen" },
-  "nav.events":      { en: "Events",          da: "Begivenheder",   de: "Veranstaltungen" },
-  "nav.food":        { en: "Food",            da: "Mad",            de: "Essen" },
-  "nav.nightlife":   { en: "Nightlife",       da: "Natteliv",       de: "Nachtleben" },
+  "nav.attractions": { en: "Attractions",     da: "Attraktioner",   de: "Attraktionen", lt: "Lankytinos vietos" },
+  "nav.events":      { en: "Events",          da: "Begivenheder",   de: "Veranstaltungen", lt: "Renginiai" },
+  "nav.food":        { en: "Food",            da: "Mad",            de: "Essen", lt: "Maistas" },
+  "nav.nightlife":   { en: "Nightlife",       da: "Natteliv",       de: "Nachtleben", lt: "Naktinis gyvenimas" },
   // Oliver, 22 Sep 2026. Danes do say "shopping", but a nav label in English
   // in the Danish column is the thing this file exists to prevent, and
   // "Butikker" is what the page is: the shops, not the activity.
-  "nav.shopping":    { en: "Shopping",        da: "Butikker",       de: "Einkaufen" },
-  "nav.visits":      { en: "Towns",           da: "Byer",           de: "Städte" },
+  "nav.shopping":    { en: "Shopping",        da: "Butikker",       de: "Einkaufen", lt: "Parduotuvės" },
+  "nav.visits":      { en: "Towns",           da: "Byer",           de: "Städte", lt: "Miestai" },
   // Øer, not Øerne. The definite form would name a specific set of islands and
   // this page is the general one.
-  "nav.islands":     { en: "Islands",         da: "Øer",            de: "Inseln" },
+  "nav.islands":     { en: "Islands",         da: "Øer",            de: "Inseln", lt: "Salos" },
   // The product name, untranslated in all three. See the note above.
   // ── "WHERE IS THE AI" ───────────────────────────────────────────
   //
@@ -131,50 +135,50 @@ export const UI_STRINGS = {
   // Detour page's own heading is "Gemlyx Detour" and is untouched. And because
   // this is no longer a proper noun, it translates, which the old value was
   // deliberately exempt from.
-  "nav.ai":          { en: "✦ Plan my trip", da: "✦ Planlæg min tur", de: "✦ Meine Reise planen" },
+  "nav.ai":          { en: "✦ Plan my trip", da: "✦ Planlæg min tur", de: "✦ Meine Reise planen", lt: "✦ Suplanuoti kelionę" },
   // The corner door on every other page, which says the verb the header's now
   // says too. Shorter, because it sits over the content rather than in a bar.
-  "nav.askLauncher": { en: "Ask Gemlyx",      da: "Spørg Gemlyx",   de: "Gemlyx fragen" },
+  "nav.askLauncher": { en: "Ask Gemlyx",      da: "Spørg Gemlyx",   de: "Gemlyx fragen", lt: "Klausti Gemlyx" },
 
   // The front-page category filter, which is a SECOND render site holding four
   // of the same words. Those four reuse the nav keys rather than getting a
   // parallel set: one word, one entry, which is the reason the catalogue is one
   // module. Only the two words the nav does not have are declared here.
-  "filter.all":   { en: "Everything", da: "Alt",         de: "Alles" },
-  "filter.craft": { en: "Workshops",  da: "Værksteder",  de: "Werkstätten" },
+  "filter.all":   { en: "Everything", da: "Alt",         de: "Alles", lt: "Viskas" },
+  "filter.craft": { en: "Workshops",  da: "Værksteder",  de: "Werkstätten", lt: "Dirbtuvės" },
 
   // The two front-page rows. "Worth the trip right now" is about the PLACE and
   // "Fitting your preferences" is about the READER, which is the first thing on
   // this page that an account visibly buys.
-  "row.yours.title":   { en: "Fitting your preferences", da: "Passer til dine interesser", de: "Passend zu deinen Interessen" },
-  "row.yours.sub":     { en: "Matched to what you told us you like", da: "Ud fra det du har fortalt os", de: "Nach dem, was du uns gesagt hast" },
-  "row.trend.title":   { en: "Worth the trip right now",  da: "Værd at rejse efter lige nu",  de: "Jetzt eine Reise wert" },
-  "row.trend.sub":     { en: "The ones we would go out of our way for", da: "Dem vi selv ville køre en omvej for", de: "Die, für die wir einen Umweg fahren würden" },
+  "row.yours.title":   { en: "Fitting your preferences", da: "Passer til dine interesser", de: "Passend zu deinen Interessen", lt: "Pagal jūsų pomėgius" },
+  "row.yours.sub":     { en: "Matched to what you told us you like", da: "Ud fra det du har fortalt os", de: "Nach dem, was du uns gesagt hast", lt: "Atrinkta pagal tai, ką mums pasakėte, kad mėgstate" },
+  "row.trend.title":   { en: "Worth the trip right now",  da: "Værd at rejse efter lige nu",  de: "Jetzt eine Reise wert", lt: "Verta kelionės dabar" },
+  "row.trend.sub":     { en: "The ones we would go out of our way for", da: "Dem vi selv ville køre en omvej for", de: "Die, für die wir einen Umweg fahren würden", lt: "Tos, dėl kurių patys pasuktume iš kelio" },
   // Two empty states, because they need different buttons. A signed-in person
   // shown "Account needed" would be a bug wearing the costume of a feature.
-  "row.needAccount.title":  { en: "Account needed",  da: "Kræver en konto",  de: "Konto erforderlich" },
-  "row.needAccount.detail": { en: "Gemlyx matches places to what you like once you have an account.", da: "Gemlyx finder steder ud fra dine interesser, når du har en konto.", de: "Mit einem Konto sucht Gemlyx Orte nach deinen Interessen aus." },
-  "row.needAccount.action": { en: "Sign in",         da: "Log ind",         de: "Anmelden" },
-  "row.needInterests.title":  { en: "Tell Gemlyx what you like", da: "Fortæl Gemlyx hvad du kan lide", de: "Sag Gemlyx, was dir gefällt" },
-  "row.needInterests.detail": { en: "Pick a few interests and this row fills itself in.", da: "Vælg et par interesser, så fylder rækken sig selv ud.", de: "Wähl ein paar Interessen, dann füllt sich diese Reihe von selbst." },
-  "row.needInterests.action": { en: "Open my profile", da: "Åbn min profil",  de: "Mein Profil öffnen" },
+  "row.needAccount.title":  { en: "Account needed",  da: "Kræver en konto",  de: "Konto erforderlich", lt: "Reikia paskyros" },
+  "row.needAccount.detail": { en: "Gemlyx matches places to what you like once you have an account.", da: "Gemlyx finder steder ud fra dine interesser, når du har en konto.", de: "Mit einem Konto sucht Gemlyx Orte nach deinen Interessen aus.", lt: "Kai turėsite paskyrą, Gemlyx atrinks vietas pagal tai, kas jums patinka." },
+  "row.needAccount.action": { en: "Sign in",         da: "Log ind",         de: "Anmelden", lt: "Prisijungti" },
+  "row.needInterests.title":  { en: "Tell Gemlyx what you like", da: "Fortæl Gemlyx hvad du kan lide", de: "Sag Gemlyx, was dir gefällt", lt: "Pasakykite Gemlyx, kas jums patinka" },
+  "row.needInterests.detail": { en: "Pick a few interests and this row fills itself in.", da: "Vælg et par interesser, så fylder rækken sig selv ud.", de: "Wähl ein paar Interessen, dann füllt sich diese Reihe von selbst.", lt: "Pasirinkite kelis pomėgius, ir ši eilutė užsipildys pati." },
+  "row.needInterests.action": { en: "Open my profile", da: "Åbn min profil",  de: "Mein Profil öffnen", lt: "Atidaryti mano profilį" },
 
   // Starting the conversation over. It needed a control the moment the thread
   // started surviving a reload: before that, closing the tab WAS the reset.
-  "chat.reset":        { en: "Start over",   da: "Start forfra",   de: "Neu anfangen" },
-  "chat.resetConfirm": { en: "Clear this conversation and start again?", da: "Ryd samtalen og start forfra?", de: "Unterhaltung löschen und neu anfangen?" },
-  "chat.resetYes":     { en: "Clear it",     da: "Ryd den",        de: "Löschen" },
-  "chat.resetNo":      { en: "Keep it",      da: "Behold den",     de: "Behalten" },
+  "chat.reset":        { en: "Start over",   da: "Start forfra",   de: "Neu anfangen", lt: "Pradėti iš naujo" },
+  "chat.resetConfirm": { en: "Clear this conversation and start again?", da: "Ryd samtalen og start forfra?", de: "Unterhaltung löschen und neu anfangen?", lt: "Išvalyti šį pokalbį ir pradėti iš naujo?" },
+  "chat.resetYes":     { en: "Clear it",     da: "Ryd den",        de: "Löschen", lt: "Išvalyti" },
+  "chat.resetNo":      { en: "Keep it",      da: "Behold den",     de: "Behalten", lt: "Palikti" },
 
   // The header chrome, which renders on every page of the site.
-  "header.search":       { en: "Search",                 da: "Søg",                    de: "Suchen" },
-  "header.back":         { en: "Back to the front page", da: "Tilbage til forsiden",   de: "Zurück zur Startseite" },
-  "header.menu":         { en: "Menu",                   da: "Menu",                   de: "Menü" },
-  "header.language":     { en: "Language",               da: "Sprog",                  de: "Sprache" },
+  "header.search":       { en: "Search",                 da: "Søg",                    de: "Suchen", lt: "Paieška" },
+  "header.back":         { en: "Back to the front page", da: "Tilbage til forsiden",   de: "Zurück zur Startseite", lt: "Atgal į pradinį puslapį" },
+  "header.menu":         { en: "Menu",                   da: "Menu",                   de: "Menü", lt: "Meniu" },
+  "header.language":     { en: "Language",               da: "Sprog",                  de: "Sprache", lt: "Kalba" },
   // The section heading above the language row in the menu, which sits right
   // beside it and was the only English word left in that panel's own chrome.
-  "header.theme":        { en: "Theme",                  da: "Tema",                   de: "Design" },
-  "header.chooseLanguage": { en: "Choose a language",    da: "Vælg sprog",             de: "Sprache wählen" },
+  "header.theme":        { en: "Theme",                  da: "Tema",                   de: "Design", lt: "Tema" },
+  "header.chooseLanguage": { en: "Choose a language",    da: "Vælg sprog",             de: "Sprache wählen", lt: "Pasirinkite kalbą" },
 
   // ── THE REST OF THE MENU, WHICH WAS HALF TRANSLATED ───────────────
   //
@@ -183,8 +187,8 @@ export const UI_STRINGS = {
   // Navigate, FAQ and Support in English with Tema underneath. Half a
   // translation reads worse than none: it looks like the language switch did
   // not work.
-  "menu.navigate": { en: "Navigate",      da: "Gå til",              de: "Navigation" },
-  "menu.saved":    { en: "Saved trips",   da: "Gemte ture",          de: "Gespeicherte Reisen" },
+  "menu.navigate": { en: "Navigate",      da: "Gå til",              de: "Navigation", lt: "Naršyti" },
+  "menu.saved":    { en: "Saved trips",   da: "Gemte ture",          de: "Gespeicherte Reisen", lt: "Išsaugotos kelionės" },
   // ── TWO ROWS CAME OUT OF THE MENU, 14 SEP 2026 ────────────────────
   //
   // FAQ opened the Essentials tab, which is already a row in Navigate directly
@@ -206,8 +210,8 @@ export const UI_STRINGS = {
   // "Ofte stillede spørgsmål" is the full Danish and it is 24 characters in a
   // 10px uppercase heading. This is the short form both languages use in
   // ordinary writing.
-  "menu.faq":      { en: "FAQ",           da: "Spørgsmål og svar",   de: "Häufige Fragen" },
-  "menu.credits":  { en: "Photo credits", da: "Fotokreditering",     de: "Bildnachweise" },
+  "menu.faq":      { en: "FAQ",           da: "Spørgsmål og svar",   de: "Häufige Fragen", lt: "DUK" },
+  "menu.credits":  { en: "Photo credits", da: "Fotokreditering",     de: "Bildnachweise", lt: "Nuotraukų autoriai" },
   // Danish borrows "support" for a paid helpdesk. This is a person answering
   // his own email, which is "hjælp".
   // ── THE BETA ROW, 15 SEP 2026 ─────────────────────────────────────
@@ -226,22 +230,22 @@ export const UI_STRINGS = {
   // something rather than a panic button for strangers.
   //
   // The word is the same in all three. Danish and German both use it.
-  "menu.problem":  { en: "Feedback", da: "Feedback", de: "Feedback" },
-  "menu.support":  { en: "Support",       da: "Hjælp",               de: "Hilfe" },
-  "menu.account":  { en: "Account",       da: "Konto",               de: "Konto" },
+  "menu.problem":  { en: "Feedback", da: "Feedback", de: "Feedback", lt: "Atsiliepimai" },
+  "menu.support":  { en: "Support",       da: "Hjælp",               de: "Hilfe", lt: "Pagalba" },
+  "menu.account":  { en: "Account",       da: "Konto",               de: "Konto", lt: "Paskyra" },
   // ── AND THE WAY BACK OUT ──────────────────────────────────────────
   //
   // Oliver, 14 Sep 2026: "I want login here." Then, a minute later: "I mean log
   // out." Signing out was a button on the account page, two screens in, which
   // is a long way to walk for the one action somebody takes when they want to
   // stop being signed in on this machine.
-  "menu.signOut":  { en: "Log out",       da: "Log ud",              de: "Abmelden" },
+  "menu.signOut":  { en: "Log out",       da: "Log ud",              de: "Abmelden", lt: "Atsijungti" },
   // Its own entry rather than reusing row.needAccount.action, which holds the
   // same word today. Not duplication for its own sake: the suite reads literal
   // keys out of App.jsx with a two-segment pattern, so a three-segment key
   // cannot be written as a literal there at all, and a template literal with
   // nothing to interpolate is worse than a row in a table.
-  "menu.signIn":   { en: "Sign in",       da: "Log ind",             de: "Anmelden" },
+  "menu.signIn":   { en: "Sign in",       da: "Log ind",             de: "Anmelden", lt: "Prisijungti" },
 
   // ── THE EMPTY STATES ──────────────────────────────────────────────
   //
@@ -253,12 +257,12 @@ export const UI_STRINGS = {
   // three-segment key gets truncated to its first two by that pattern and
   // reported missing. The existing row.needAccount.title keys escape it only
   // because they are built with a template literal.
-  "empty.filtersTitle":  { en: "Nothing matches those filters", da: "Ingen resultater med de filtre", de: "Nichts passt zu diesen Filtern" },
-  "empty.filtersDetail": { en: "Try clearing one. Denmark still has plenty to offer.", da: "Prøv at fjerne et af dem. Danmark har stadig masser at byde på.", de: "Nimm einen davon weg. Dänemark hat noch viel zu bieten." },
+  "empty.filtersTitle":  { en: "Nothing matches those filters", da: "Ingen resultater med de filtre", de: "Nichts passt zu diesen Filtern", lt: "Pagal šiuos filtrus nieko nerasta" },
+  "empty.filtersDetail": { en: "Try clearing one. Denmark still has plenty to offer.", da: "Prøv at fjerne et af dem. Danmark har stadig masser at byde på.", de: "Nimm einen davon weg. Dänemark hat noch viel zu bieten.", lt: "Pabandykite vieną iš jų išjungti. Danija dar turi daug ką pasiūlyti." },
   // The same line on another country's page, which cannot say Denmark.
-  "empty.filtersDetailAnywhere": { en: "Try clearing one. There is plenty more to find.", da: "Prøv at fjerne et af dem. Der er masser mere at finde.", de: "Nimm einen davon weg. Es gibt noch viel mehr zu entdecken." },
-  "empty.events":        { en: "No upcoming events. Try a different filter.", da: "Ingen kommende begivenheder. Prøv et andet filter.", de: "Keine anstehenden Veranstaltungen. Probier einen anderen Filter." },
-  "empty.towns":         { en: "Nothing published matches these filters yet.", da: "Der er endnu ikke udgivet noget, der passer til de filtre.", de: "Noch nichts veröffentlicht, das zu diesen Filtern passt." },
+  "empty.filtersDetailAnywhere": { en: "Try clearing one. There is plenty more to find.", da: "Prøv at fjerne et af dem. Der er masser mere at finde.", de: "Nimm einen davon weg. Es gibt noch viel mehr zu entdecken.", lt: "Pabandykite vieną iš jų išjungti. Atrasti dar yra ką." },
+  "empty.events":        { en: "No upcoming events. Try a different filter.", da: "Ingen kommende begivenheder. Prøv et andet filter.", de: "Keine anstehenden Veranstaltungen. Probier einen anderen Filter.", lt: "Artėjančių renginių nėra. Pabandykite kitą filtrą." },
+  "empty.towns":         { en: "Nothing published matches these filters yet.", da: "Der er endnu ikke udgivet noget, der passer til de filtre.", de: "Noch nichts veröffentlicht, das zu diesen Filtern passt.", lt: "Pagal šiuos filtrus kol kas nieko nepaskelbta." },
 
   // ── THE ENTRY PAGE, WHICH A DANISH READER REACHED IN ENGLISH ──────
   //
@@ -271,26 +275,26 @@ export const UI_STRINGS = {
   // article are in utils/entryWords.js instead, keyed by their English, because
   // those arrive from a published row rather than being written here. These are
   // the ones this component writes itself.
-  "glance.title":     { en: "At a Glance",     da: "Kort fortalt",        de: "Auf einen Blick" },
+  "glance.title":     { en: "At a Glance",     da: "Kort fortalt",        de: "Auf einen Blick", lt: "Trumpai" },
   // The product's own name stays, exactly as nav.ai does. "Gemlyx Find" is what
   // the badge is called in all three languages.
-  "entry.find":       { en: "Gemlyx Find",     da: "Gemlyx Find",         de: "Gemlyx Find" },
-  "entry.branches":   { en: "Where you can go", da: "Hvor du kan tage hen", de: "Wo du hingehen kannst" },
+  "entry.find":       { en: "Gemlyx Find",     da: "Gemlyx Find",         de: "Gemlyx Find", lt: "Gemlyx Find" },
+  "entry.branches":   { en: "Where you can go", da: "Hvor du kan tage hen", de: "Wo du hingehen kannst", lt: "Kur galite nueiti" },
   // ── ESSENTIALS THAT BELONG TO ONE PLACE ────────────────────────
   // Oliver, 11 Sep 2026: "essentials or tips for Odense. Could be put into the
   // Odense Blog." {town} is filled by the caller, because the town's name is a
   // proper noun and does not translate.
-  "entry.localEssentials": { en: "Sort this out in {town}", da: "Husk det her i {town}", de: "Das solltest du in {town} regeln" },
-  "entry.localEssentialsNote": { en: "Only applies here. Everything that applies all over Denmark is on the Essentials page.", da: "Gælder kun her. Alt det, der gælder i hele Danmark, står under Essentials.", de: "Gilt nur hier. Alles, was in ganz Dänemark gilt, steht auf der Essentials-Seite." },
-  "entry.liveInfo":   { en: "Check live info", da: "Tjek aktuel info",    de: "Aktuelle Infos prüfen" },
-  "entry.checking":   { en: "Checking...",     da: "Tjekker...",          de: "Wird geprüft..." },
-  "entry.website":    { en: "Visit website",   da: "Besøg hjemmesiden",   de: "Zur Website" },
-  "entry.tickets":    { en: "Book tickets",    da: "Køb billetter",       de: "Tickets buchen" },
-  "entry.directions": { en: "Get Directions",  da: "Find vej",            de: "Route anzeigen" },
+  "entry.localEssentials": { en: "Sort this out in {town}", da: "Husk det her i {town}", de: "Das solltest du in {town} regeln", lt: "Susitvarkykite tai vietoje: {town}" },
+  "entry.localEssentialsNote": { en: "Only applies here. Everything that applies all over Denmark is on the Essentials page.", da: "Gælder kun her. Alt det, der gælder i hele Danmark, står under Essentials.", de: "Gilt nur hier. Alles, was in ganz Dänemark gilt, steht auf der Essentials-Seite.", lt: "Galioja tik čia. Viskas, kas galioja visoje Danijoje, yra puslapyje „Praktinė info“." },
+  "entry.liveInfo":   { en: "Check live info", da: "Tjek aktuel info",    de: "Aktuelle Infos prüfen", lt: "Tikrinti naujausią informaciją" },
+  "entry.checking":   { en: "Checking...",     da: "Tjekker...",          de: "Wird geprüft...", lt: "Tikrinama..." },
+  "entry.website":    { en: "Visit website",   da: "Besøg hjemmesiden",   de: "Zur Website", lt: "Apsilankyti svetainėje" },
+  "entry.tickets":    { en: "Book tickets",    da: "Køb billetter",       de: "Tickets buchen", lt: "Pirkti bilietus" },
+  "entry.directions": { en: "Get Directions",  da: "Find vej",            de: "Route anzeigen", lt: "Gauti maršrutą" },
   // Two states of one button, so both are declared. Danish has no comfortable
   // one-word past tense here: "Har været her" is what a Dane would write.
-  "entry.been":       { en: "Been here",       da: "Har været her",       de: "Schon hier gewesen" },
-  "entry.beenDone":   { en: "✓ Been here",     da: "✓ Har været her",     de: "✓ Schon hier gewesen" },
+  "entry.been":       { en: "Been here",       da: "Har været her",       de: "Schon hier gewesen", lt: "Buvau čia" },
+  "entry.beenDone":   { en: "✓ Been here",     da: "✓ Har været her",     de: "✓ Schon hier gewesen", lt: "✓ Buvau čia" },
   // ── WHOSE PRICE THE NUMBER ON THE ROW IS ──────────────────────────
   //
   // Rendered by the glance card rather than by DetailPage, so it is not in the
@@ -300,7 +304,7 @@ export const UI_STRINGS = {
   //
   // "Pris fra" would read as "from 199 kr" in Danish, which is the exact
   // confusion this line exists to end. "Oplyst af" is who said it.
-  "entry.priceFrom":  { en: "Price stated by", da: "Pris oplyst af",      de: "Preis laut" },
+  "entry.priceFrom":  { en: "Price stated by", da: "Pris oplyst af",      de: "Preis laut", lt: "Kainą nurodė" },
   // ── THE LINE AT THE FOOT OF A SECTION ─────────────────────────────
   //
   // Oliver's own words, 9 Sep 2026: "Or hop onto Getyourguide and book a
@@ -317,7 +321,7 @@ export const UI_STRINGS = {
   // {merchant} is filled from partnerMerchant, off the link itself, so the
   // sentence cannot name one partner while the href points at another. His
   // cadence is untouched, which is the half worth keeping.
-  "tour.lead":        { en: "Or hop onto {merchant} and book", da: "Eller smut forbi {merchant} og book", de: "Oder schau bei {merchant} vorbei und buche" },
+  "tour.lead":        { en: "Or hop onto {merchant} and book", da: "Eller smut forbi {merchant} og book", de: "Oder schau bei {merchant} vorbei und buche", lt: "Arba užsisakykite per {merchant}" },
 
   // ── AND THE ONE PARTNER LINK THAT IS NOT AN ACTIVITY ──────────────
   //
@@ -325,8 +329,8 @@ export const UI_STRINGS = {
   // do", so it gets its own sentence rather than being dressed as a tour. It
   // shows on a Copenhagen day of a bike trip and nowhere else: see
   // bikeRentalFits, and Oliver's own choice of the day over the town page.
-  "rental.lead":      { en: "You will want a bike for this one.", da: "Du får brug for en cykel til den her.", de: "Für diesen Tag brauchst du ein Rad." },
-  "rental.link":      { en: "Rent one in Copenhagen", da: "Lej en i København", de: "Miete eines in Kopenhagen" },
+  "rental.lead":      { en: "You will want a bike for this one.", da: "Du får brug for en cykel til den her.", de: "Für diesen Tag brauchst du ein Rad.", lt: "Čia jums prireiks dviračio." },
+  "rental.link":      { en: "Rent one in Copenhagen", da: "Lej en i København", de: "Miete eines in Kopenhagen", lt: "Išsinuomoti Kopenhagoje" },
 
   // ── THE GUIDE PAGE, WHICH WAS ENGLISH UNDER A DANISH NAV ──────────
   //
@@ -339,64 +343,64 @@ export const UI_STRINGS = {
   // The counts below are split into a one and a many rather than templated,
   // because this catalogue holds no placeholders and never has: the number is
   // put in front of the phrase by the caller, in every language.
-  "guide.notFound":     { en: "Guide not found",   da: "Guiden blev ikke fundet", de: "Reiseführer nicht gefunden" },
-  "guide.loadFailed":   { en: "Something went wrong loading this guide.", da: "Noget gik galt, da guiden skulle hentes.", de: "Beim Laden dieses Reiseführers ist etwas schiefgelaufen." },
-  "guide.linkGone":     { en: "This guide link doesn't exist or was removed.", da: "Dette guidelink findes ikke eller er blevet fjernet.", de: "Dieser Link existiert nicht oder wurde entfernt." },
-  "guide.loadOffline":  { en: "Couldn't load this guide. Check your connection and try again.", da: "Guiden kunne ikke hentes. Tjek din forbindelse og prøv igen.", de: "Der Reiseführer konnte nicht geladen werden. Prüf deine Verbindung und versuch es noch einmal." },
-  "guide.back":         { en: "Back to Gemlyx",    da: "Tilbage til Gemlyx",   de: "Zurück zu Gemlyx" },
-  "guide.saveFailed":   { en: "Couldn't save this guide. Try again.", da: "Guiden kunne ikke gemmes. Prøv igen.", de: "Der Reiseführer konnte nicht gespeichert werden. Versuch es noch einmal." },
-  "guide.saveOffline":  { en: "Couldn't save this guide. Check your connection and try again.", da: "Guiden kunne ikke gemmes. Tjek din forbindelse og prøv igen.", de: "Der Reiseführer konnte nicht gespeichert werden. Prüf deine Verbindung und versuch es noch einmal." },
-  "guide.saved":        { en: "Saved. This link is your guide.", da: "Gemt. Dette link er din guide.", de: "Gespeichert. Dieser Link ist dein Reiseführer." },
-  "guide.sendIt":       { en: "Send this to whoever you're travelling with.", da: "Send det til dem, du rejser med.", de: "Schick ihn an die Leute, mit denen du reist." },
-  "guide.copyLink":     { en: "Copy link",         da: "Kopiér link",          de: "Link kopieren" },
-  "guide.copied":       { en: "✓ Copied",          da: "✓ Kopieret",           de: "✓ Kopiert" },
-  "guide.saving":       { en: "Saving…",           da: "Gemmer…",              de: "Wird gespeichert…" },
-  "guide.saveCta":      { en: "Looks good, save my guide", da: "Det ser godt ud, gem min guide", de: "Sieht gut aus, Reiseführer speichern" },
-  "guide.previewTitle": { en: "Does this look right?", da: "Ser det rigtigt ud?", de: "Sieht das richtig aus?" },
-  "guide.previewSub":   { en: "Here's everything your guide will include. Take a look, then save it to get your own link.", da: "Her er alt det, din guide kommer til at indeholde. Kig det igennem, og gem den så for at få dit eget link.", de: "Hier ist alles, was dein Reiseführer enthalten wird. Sieh es dir an und speichere ihn dann für deinen eigenen Link." },
-  "guide.fallbackTitle":{ en: "Your Denmark Guide", da: "Din guide til Danmark", de: "Dein Reiseführer für Dänemark" },
-  "guide.kmTravel":     { en: "km of travel",      da: "km rejse",             de: "km Fahrt" },
-  "guide.movingTotal":  { en: "moving in total",   da: "undervejs i alt",      de: "insgesamt unterwegs" },
-  "guide.yourRoute":    { en: "Your route:",       da: "Din rute:",            de: "Deine Route:" },
-  "guide.longestLeg":   { en: "Longest single journey:", da: "Længste enkelttur:", de: "Längste Einzelstrecke:" },
-  "guide.closePin":     { en: "Close this pin",    da: "Luk denne markør",     de: "Diese Markierung schließen" },
-  "guide.bookAhead":    { en: "Book before you go", da: "Book inden du tager af sted", de: "Vor der Reise buchen" },
-  "guide.beforeYouGo":  { en: "Before you go",     da: "Inden du tager af sted", de: "Vor der Abreise" },
-  "guide.money":        { en: "Money",             da: "Penge",                de: "Geld" },
-  "guide.gettingAround":{ en: "Getting around",    da: "Transport",            de: "Unterwegs" },
-  "guide.keepInMind":   { en: "Keep in mind",      da: "Husk på",              de: "Denk daran" },
-  "guide.weather":      { en: "Weather",           da: "Vejr",                 de: "Wetter" },
-  "guide.whereToStay":  { en: "Where to stay:",    da: "Hvor du bor:",         de: "Wo du übernachtest:" },
-  "guide.samePlace":    { en: "Same place, nothing to travel", da: "Samme sted, ingen transport", de: "Gleicher Ort, keine Fahrt" },
-  "guide.byBike":       { en: "by bike",           da: "på cykel",             de: "mit dem Rad" },
-  "guide.byCar":        { en: "by car",            da: "i bil",                de: "mit dem Auto" },
-  "guide.onFoot":       { en: "on foot",           da: "til fods",             de: "zu Fuß" },
-  "guide.byTransit":    { en: "by train/bus",      da: "med tog eller bus",    de: "mit Bahn oder Bus" },
-  "guide.shortWalk":    { en: "A short walk",      da: "En kort gåtur",        de: "Ein kurzer Weg zu Fuß" },
-  "guide.checkTimes":   { en: "Check times on Rejseplanen", da: "Tjek tider på Rejseplanen", de: "Zeiten auf Rejseplanen prüfen" },
-  "guide.checkRoute":   { en: "Check route",       da: "Tjek ruten",           de: "Route prüfen" },
-  "guide.ferryLeg":     { en: "This journey includes a ferry crossing.", da: "Denne tur indeholder en færgeoverfart.", de: "Auf dieser Strecke liegt eine Fährüberfahrt." },
-  "guide.realForecast": { en: "Real forecast for this date", da: "Rigtig prognose for denne dato", de: "Echte Vorhersage für dieses Datum" },
-  "guide.forecastMoved":{ en: "The forecast moved since you saved this.", da: "Prognosen har ændret sig, siden du gemte.", de: "Die Vorhersage hat sich geändert, seit du gespeichert hast." },
-  "guide.readMore":     { en: "Read more",         da: "Læs mere",             de: "Mehr lesen" },
-  "guide.readLess":     { en: "Less",              da: "Mindre",               de: "Weniger" },
-  "guide.changeStop":   { en: "Change this stop",  da: "Skift dette stop",     de: "Diesen Stopp ändern" },
-  "guide.askPlaceholder": { en: "Ask about this trip, or anything else…", da: "Spørg om turen, eller om noget helt andet…", de: "Frag zu dieser Reise oder zu etwas ganz anderem…" },
-  "guide.chatFailed":   { en: "Sorry, I couldn't get an answer just now, try again in a moment.", da: "Beklager, jeg kunne ikke få et svar lige nu. Prøv igen om et øjeblik.", de: "Sorry, ich habe gerade keine Antwort bekommen. Versuch es gleich noch einmal." },
-  "guide.noUpdates":    { en: "No current updates found.", da: "Ingen aktuelle opdateringer fundet.", de: "Keine aktuellen Updates gefunden." },
-  "guide.checkFailed":  { en: "Couldn't check right now. Try again in a moment.", da: "Kunne ikke tjekke lige nu. Prøv igen om et øjeblik.", de: "Konnte gerade nicht nachsehen. Versuch es gleich noch einmal." },
-  "guide.straightLine": { en: "Straight line distance, not a measured route, so treat it as the shape of the day rather than as a timetable.", da: "Afstanden er i lige linje og ikke en målt rute, så se det som dagens form frem for som en køreplan.", de: "Luftlinie statt gemessener Route, also lies es als Form des Tages und nicht als Fahrplan." },
+  "guide.notFound":     { en: "Guide not found",   da: "Guiden blev ikke fundet", de: "Reiseführer nicht gefunden", lt: "Gidas nerastas" },
+  "guide.loadFailed":   { en: "Something went wrong loading this guide.", da: "Noget gik galt, da guiden skulle hentes.", de: "Beim Laden dieses Reiseführers ist etwas schiefgelaufen.", lt: "Įkeliant šį gidą kažkas nepavyko." },
+  "guide.linkGone":     { en: "This guide link doesn't exist or was removed.", da: "Dette guidelink findes ikke eller er blevet fjernet.", de: "Dieser Link existiert nicht oder wurde entfernt.", lt: "Šios gido nuorodos nėra arba ji buvo pašalinta." },
+  "guide.loadOffline":  { en: "Couldn't load this guide. Check your connection and try again.", da: "Guiden kunne ikke hentes. Tjek din forbindelse og prøv igen.", de: "Der Reiseführer konnte nicht geladen werden. Prüf deine Verbindung und versuch es noch einmal.", lt: "Nepavyko įkelti šio gido. Patikrinkite ryšį ir bandykite dar kartą." },
+  "guide.back":         { en: "Back to Gemlyx",    da: "Tilbage til Gemlyx",   de: "Zurück zu Gemlyx", lt: "Atgal į Gemlyx" },
+  "guide.saveFailed":   { en: "Couldn't save this guide. Try again.", da: "Guiden kunne ikke gemmes. Prøv igen.", de: "Der Reiseführer konnte nicht gespeichert werden. Versuch es noch einmal.", lt: "Nepavyko išsaugoti šio gido. Bandykite dar kartą." },
+  "guide.saveOffline":  { en: "Couldn't save this guide. Check your connection and try again.", da: "Guiden kunne ikke gemmes. Tjek din forbindelse og prøv igen.", de: "Der Reiseführer konnte nicht gespeichert werden. Prüf deine Verbindung und versuch es noch einmal.", lt: "Nepavyko išsaugoti šio gido. Patikrinkite ryšį ir bandykite dar kartą." },
+  "guide.saved":        { en: "Saved. This link is your guide.", da: "Gemt. Dette link er din guide.", de: "Gespeichert. Dieser Link ist dein Reiseführer.", lt: "Išsaugota. Ši nuoroda yra jūsų gidas." },
+  "guide.sendIt":       { en: "Send this to whoever you're travelling with.", da: "Send det til dem, du rejser med.", de: "Schick ihn an die Leute, mit denen du reist.", lt: "Nusiųskite ją tiems, su kuriais keliaujate." },
+  "guide.copyLink":     { en: "Copy link",         da: "Kopiér link",          de: "Link kopieren", lt: "Kopijuoti nuorodą" },
+  "guide.copied":       { en: "✓ Copied",          da: "✓ Kopieret",           de: "✓ Kopiert", lt: "✓ Nukopijuota" },
+  "guide.saving":       { en: "Saving…",           da: "Gemmer…",              de: "Wird gespeichert…", lt: "Saugoma…" },
+  "guide.saveCta":      { en: "Looks good, save my guide", da: "Det ser godt ud, gem min guide", de: "Sieht gut aus, Reiseführer speichern", lt: "Atrodo gerai, išsaugoti mano gidą" },
+  "guide.previewTitle": { en: "Does this look right?", da: "Ser det rigtigt ud?", de: "Sieht das richtig aus?", lt: "Ar viskas teisingai?" },
+  "guide.previewSub":   { en: "Here's everything your guide will include. Take a look, then save it to get your own link.", da: "Her er alt det, din guide kommer til at indeholde. Kig det igennem, og gem den så for at få dit eget link.", de: "Hier ist alles, was dein Reiseführer enthalten wird. Sieh es dir an und speichere ihn dann für deinen eigenen Link.", lt: "Štai viskas, ką apims jūsų gidas. Peržiūrėkite ir išsaugokite, kad gautumėte savo nuorodą." },
+  "guide.fallbackTitle":{ en: "Your Denmark Guide", da: "Din guide til Danmark", de: "Dein Reiseführer für Dänemark", lt: "Jūsų Danijos gidas" },
+  "guide.kmTravel":     { en: "km of travel",      da: "km rejse",             de: "km Fahrt", lt: "km kelionės" },
+  "guide.movingTotal":  { en: "moving in total",   da: "undervejs i alt",      de: "insgesamt unterwegs", lt: "iš viso kelyje" },
+  "guide.yourRoute":    { en: "Your route:",       da: "Din rute:",            de: "Deine Route:", lt: "Jūsų maršrutas:" },
+  "guide.longestLeg":   { en: "Longest single journey:", da: "Længste enkelttur:", de: "Längste Einzelstrecke:", lt: "Ilgiausia atkarpa:" },
+  "guide.closePin":     { en: "Close this pin",    da: "Luk denne markør",     de: "Diese Markierung schließen", lt: "Uždaryti šį smeigtuką" },
+  "guide.bookAhead":    { en: "Book before you go", da: "Book inden du tager af sted", de: "Vor der Reise buchen", lt: "Užsisakykite prieš kelionę" },
+  "guide.beforeYouGo":  { en: "Before you go",     da: "Inden du tager af sted", de: "Vor der Abreise", lt: "Prieš išvykstant" },
+  "guide.money":        { en: "Money",             da: "Penge",                de: "Geld", lt: "Pinigai" },
+  "guide.gettingAround":{ en: "Getting around",    da: "Transport",            de: "Unterwegs", lt: "Kaip keliauti" },
+  "guide.keepInMind":   { en: "Keep in mind",      da: "Husk på",              de: "Denk daran", lt: "Atminkite" },
+  "guide.weather":      { en: "Weather",           da: "Vejr",                 de: "Wetter", lt: "Orai" },
+  "guide.whereToStay":  { en: "Where to stay:",    da: "Hvor du bor:",         de: "Wo du übernachtest:", lt: "Kur apsistoti:" },
+  "guide.samePlace":    { en: "Same place, nothing to travel", da: "Samme sted, ingen transport", de: "Gleicher Ort, keine Fahrt", lt: "Ta pati vieta, keliauti nereikia" },
+  "guide.byBike":       { en: "by bike",           da: "på cykel",             de: "mit dem Rad", lt: "dviračiu" },
+  "guide.byCar":        { en: "by car",            da: "i bil",                de: "mit dem Auto", lt: "automobiliu" },
+  "guide.onFoot":       { en: "on foot",           da: "til fods",             de: "zu Fuß", lt: "pėsčiomis" },
+  "guide.byTransit":    { en: "by train/bus",      da: "med tog eller bus",    de: "mit Bahn oder Bus", lt: "traukiniu / autobusu" },
+  "guide.shortWalk":    { en: "A short walk",      da: "En kort gåtur",        de: "Ein kurzer Weg zu Fuß", lt: "Trumpas pasivaikščiojimas" },
+  "guide.checkTimes":   { en: "Check times on Rejseplanen", da: "Tjek tider på Rejseplanen", de: "Zeiten auf Rejseplanen prüfen", lt: "Tikrinti laikus Rejseplanen" },
+  "guide.checkRoute":   { en: "Check route",       da: "Tjek ruten",           de: "Route prüfen", lt: "Tikrinti maršrutą" },
+  "guide.ferryLeg":     { en: "This journey includes a ferry crossing.", da: "Denne tur indeholder en færgeoverfart.", de: "Auf dieser Strecke liegt eine Fährüberfahrt.", lt: "Šioje atkarpoje yra kelionė keltu." },
+  "guide.realForecast": { en: "Real forecast for this date", da: "Rigtig prognose for denne dato", de: "Echte Vorhersage für dieses Datum", lt: "Tikra šios dienos prognozė" },
+  "guide.forecastMoved":{ en: "The forecast moved since you saved this.", da: "Prognosen har ændret sig, siden du gemte.", de: "Die Vorhersage hat sich geändert, seit du gespeichert hast.", lt: "Nuo išsaugojimo prognozė pasikeitė." },
+  "guide.readMore":     { en: "Read more",         da: "Læs mere",             de: "Mehr lesen", lt: "Skaityti daugiau" },
+  "guide.readLess":     { en: "Less",              da: "Mindre",               de: "Weniger", lt: "Mažiau" },
+  "guide.changeStop":   { en: "Change this stop",  da: "Skift dette stop",     de: "Diesen Stopp ändern", lt: "Pakeisti šį sustojimą" },
+  "guide.askPlaceholder": { en: "Ask about this trip, or anything else…", da: "Spørg om turen, eller om noget helt andet…", de: "Frag zu dieser Reise oder zu etwas ganz anderem…", lt: "Klauskite apie šią kelionę ar bet ką kita…" },
+  "guide.chatFailed":   { en: "Sorry, I couldn't get an answer just now, try again in a moment.", da: "Beklager, jeg kunne ikke få et svar lige nu. Prøv igen om et øjeblik.", de: "Sorry, ich habe gerade keine Antwort bekommen. Versuch es gleich noch einmal.", lt: "Atsiprašome, šiuo metu nepavyko gauti atsakymo, bandykite po akimirkos." },
+  "guide.noUpdates":    { en: "No current updates found.", da: "Ingen aktuelle opdateringer fundet.", de: "Keine aktuellen Updates gefunden.", lt: "Naujausių pakeitimų nerasta." },
+  "guide.checkFailed":  { en: "Couldn't check right now. Try again in a moment.", da: "Kunne ikke tjekke lige nu. Prøv igen om et øjeblik.", de: "Konnte gerade nicht nachsehen. Versuch es gleich noch einmal.", lt: "Šiuo metu nepavyko patikrinti. Bandykite po akimirkos." },
+  "guide.straightLine": { en: "Straight line distance, not a measured route, so treat it as the shape of the day rather than as a timetable.", da: "Afstanden er i lige linje og ikke en målt rute, så se det som dagens form frem for som en køreplan.", de: "Luftlinie statt gemessener Route, also lies es als Form des Tages und nicht als Fahrplan.", lt: "Atstumas tiesia linija, o ne išmatuotas maršrutas, todėl vertinkite jį kaip dienos kontūrą, o ne tvarkaraštį." },
   // ── THE COUNTERS ABOVE THE DAYS ───────────────────────────────────
   //
   // Both halves of each plural are written down rather than an -s appended in
   // code, because Danish does not add one to "stop" and German changes the
   // stem of "Stadt". The number is put in front by the caller.
-  "guide.day":          { en: "day",   da: "dag",  de: "Tag" },
-  "guide.days":         { en: "days",  da: "dage", de: "Tage" },
-  "guide.stop":         { en: "stop",  da: "stop", de: "Stopp" },
-  "guide.stops":        { en: "stops", da: "stop", de: "Stopps" },
-  "guide.town":         { en: "town",  da: "by",   de: "Stadt" },
-  "guide.towns":        { en: "towns", da: "byer", de: "Städte" },
+  "guide.day":          { en: "day",   da: "dag",  de: "Tag", lt: "diena" },
+  "guide.days":         { en: "days",  da: "dage", de: "Tage", lt: "dienos" },
+  "guide.stop":         { en: "stop",  da: "stop", de: "Stopp", lt: "sustojimas" },
+  "guide.stops":        { en: "stops", da: "stop", de: "Stopps", lt: "sustojimai" },
+  "guide.town":         { en: "town",  da: "by",   de: "Stadt", lt: "miestas" },
+  "guide.towns":        { en: "towns", da: "byer", de: "Städte", lt: "miestai" },
 
   // ── THE THREE FOOTNOTES UNDER THE MAP ─────────────────────────────
   //
@@ -409,27 +413,27 @@ export const UI_STRINGS = {
   // Both forms are real sentences in each language rather than an -s bolted on,
   // and the German ones change more than the ending: "Ein Stopp ist" against
   // "Stopps sind".
-  "guide.unplacedOne":  { en: "One stop is not on this map, because we could not place it on a coordinate:", da: "Ét stop er ikke med på kortet, fordi vi ikke kunne placere det på en koordinat:", de: "Ein Stopp ist nicht auf dieser Karte, weil wir ihn keiner Koordinate zuordnen konnten:" },
-  "guide.unplacedMany": { en: "stops are not on this map, because we could not place them on a coordinate:", da: "stop er ikke med på kortet, fordi vi ikke kunne placere dem på en koordinat:", de: "Stopps sind nicht auf dieser Karte, weil wir sie keiner Koordinate zuordnen konnten:" },
-  "guide.unplacedEndOne":  { en: "It is still in the day by day below.", da: "Det er der stadig i dag for dag herunder.", de: "Er steht trotzdem unten in der Tagesübersicht." },
-  "guide.unplacedEndMany": { en: "They are still in the day by day below.", da: "De er der stadig i dag for dag herunder.", de: "Sie stehen trotzdem unten in der Tagesübersicht." },
-  "guide.sharedPinOne":  { en: "One stop shares a pin with the stop before it, because they are the same place. That is why the highest number here is lower than the number of stops.", da: "Ét stop deler markør med stoppet før, fordi det er det samme sted. Derfor er det højeste tal her lavere end antallet af stop.", de: "Ein Stopp teilt sich eine Markierung mit dem Stopp davor, weil es derselbe Ort ist. Deshalb ist die höchste Zahl hier kleiner als die Zahl der Stopps." },
-  "guide.sharedPinMany": { en: "stops share a pin with the stop before it, because they are the same place. That is why the highest number here is lower than the number of stops.", da: "stop deler markør med stoppet før, fordi det er de samme steder. Derfor er det højeste tal her lavere end antallet af stop.", de: "Stopps teilen sich eine Markierung mit dem Stopp davor, weil es dieselben Orte sind. Deshalb ist die höchste Zahl hier kleiner als die Zahl der Stopps." },
-  "guide.approxOne":  { en: "One pin is approximate:", da: "Én markør er omtrentlig:", de: "Eine Markierung ist ungefähr:" },
-  "guide.approxMany": { en: "pins are approximate:", da: "markører er omtrentlige:", de: "Markierungen sind ungefähr:" },
-  "guide.approxEndOne":  { en: "We could not place it exactly, so it sits at the middle of the town rather than at the door. The dashed outline on the map marks it.", da: "Vi kunne ikke placere den præcist, så den sidder midt i byen i stedet for ved døren. Den stiplede kant på kortet viser den.", de: "Wir konnten sie nicht genau setzen, also sitzt sie in der Mitte der Stadt statt an der Tür. Der gestrichelte Rand auf der Karte zeigt sie." },
-  "guide.approxEndMany": { en: "We could not place them exactly, so they sit at the middle of the town rather than at the door. The dashed outline on the map marks them.", da: "Vi kunne ikke placere dem præcist, så de sidder midt i byen i stedet for ved døren. Den stiplede kant på kortet viser dem.", de: "Wir konnten sie nicht genau setzen, also sitzen sie in der Mitte der Stadt statt an der Tür. Der gestrichelte Rand auf der Karte zeigt sie." },
+  "guide.unplacedOne":  { en: "One stop is not on this map, because we could not place it on a coordinate:", da: "Ét stop er ikke med på kortet, fordi vi ikke kunne placere det på en koordinat:", de: "Ein Stopp ist nicht auf dieser Karte, weil wir ihn keiner Koordinate zuordnen konnten:", lt: "Vieno sustojimo šiame žemėlapyje nėra, nes negalėjome nustatyti jo koordinačių:" },
+  "guide.unplacedMany": { en: "stops are not on this map, because we could not place them on a coordinate:", da: "stop er ikke med på kortet, fordi vi ikke kunne placere dem på en koordinat:", de: "Stopps sind nicht auf dieser Karte, weil wir sie keiner Koordinate zuordnen konnten:", lt: "sustojimų šiame žemėlapyje nėra, nes negalėjome nustatyti jų koordinačių:" },
+  "guide.unplacedEndOne":  { en: "It is still in the day by day below.", da: "Det er der stadig i dag for dag herunder.", de: "Er steht trotzdem unten in der Tagesübersicht.", lt: "Jis vis tiek yra dienos plane žemiau." },
+  "guide.unplacedEndMany": { en: "They are still in the day by day below.", da: "De er der stadig i dag for dag herunder.", de: "Sie stehen trotzdem unten in der Tagesübersicht.", lt: "Jie vis tiek yra dienos plane žemiau." },
+  "guide.sharedPinOne":  { en: "One stop shares a pin with the stop before it, because they are the same place. That is why the highest number here is lower than the number of stops.", da: "Ét stop deler markør med stoppet før, fordi det er det samme sted. Derfor er det højeste tal her lavere end antallet af stop.", de: "Ein Stopp teilt sich eine Markierung mit dem Stopp davor, weil es derselbe Ort ist. Deshalb ist die höchste Zahl hier kleiner als die Zahl der Stopps.", lt: "Vienas sustojimas turi bendrą smeigtuką su prieš jį esančiu, nes tai ta pati vieta. Todėl didžiausias numeris čia mažesnis nei sustojimų skaičius." },
+  "guide.sharedPinMany": { en: "stops share a pin with the stop before it, because they are the same place. That is why the highest number here is lower than the number of stops.", da: "stop deler markør med stoppet før, fordi det er de samme steder. Derfor er det højeste tal her lavere end antallet af stop.", de: "Stopps teilen sich eine Markierung mit dem Stopp davor, weil es dieselben Orte sind. Deshalb ist die höchste Zahl hier kleiner als die Zahl der Stopps.", lt: "sustojimai turi bendrą smeigtuką su prieš juos esančiais, nes tai ta pati vieta. Todėl didžiausias numeris čia mažesnis nei sustojimų skaičius." },
+  "guide.approxOne":  { en: "One pin is approximate:", da: "Én markør er omtrentlig:", de: "Eine Markierung ist ungefähr:", lt: "Vienas smeigtukas apytikslis:" },
+  "guide.approxMany": { en: "pins are approximate:", da: "markører er omtrentlige:", de: "Markierungen sind ungefähr:", lt: "smeigtukai apytiksliai:" },
+  "guide.approxEndOne":  { en: "We could not place it exactly, so it sits at the middle of the town rather than at the door. The dashed outline on the map marks it.", da: "Vi kunne ikke placere den præcist, så den sidder midt i byen i stedet for ved døren. Den stiplede kant på kortet viser den.", de: "Wir konnten sie nicht genau setzen, also sitzt sie in der Mitte der Stadt statt an der Tür. Der gestrichelte Rand auf der Karte zeigt sie.", lt: "Negalėjome jo nustatyti tiksliai, todėl jis yra miesto centre, o ne prie durų. Žemėlapyje jį žymi punktyrinis kontūras." },
+  "guide.approxEndMany": { en: "We could not place them exactly, so they sit at the middle of the town rather than at the door. The dashed outline on the map marks them.", da: "Vi kunne ikke placere dem præcist, så de sidder midt i byen i stedet for ved døren. Den stiplede kant på kortet viser dem.", de: "Wir konnten sie nicht genau setzen, also sitzen sie in der Mitte der Stadt statt an der Tür. Der gestrichelte Rand auf der Karte zeigt sie.", lt: "Negalėjome jų nustatyti tiksliai, todėl jie yra miesto centre, o ne prie durų. Žemėlapyje juos žymi punktyrinis kontūras." },
   // ── AND THE CURRENCY NOTE ─────────────────────────────────────────
   //
   // Three numbers in one sentence, so it is assembled from four pieces around
   // them. "Kroner" is left as the label in all three: it is what the currency
   // is called, and the German column says Kronen because that is what a German
   // reader calls it.
-  "guide.kroner":       { en: "Kroner",  da: "Kroner",  de: "Kronen" },
+  "guide.kroner":       { en: "Kroner",  da: "Kroner",  de: "Kronen", lt: "Kronos" },
   // Oliver, 26 Sep 2026: "just tell the user what the rate is in their own
   // currency." The whole line is now "100 DKK is about 13.38 EUR."
-  "guide.isAbout":      { en: "is about", da: "er cirka", de: "sind etwa" },
-  "guide.freeTime":     { en: "Free time", da: "Fri tid", de: "Freizeit" },
+  "guide.isAbout":      { en: "is about", da: "er cirka", de: "sind etwa", lt: "yra apie" },
+  "guide.freeTime":     { en: "Free time", da: "Fri tid", de: "Freizeit", lt: "Laisvas laikas" },
 
   // ── THE SENTENCE UNDER EVERY PAID LINK ────────────────────────────
   //
@@ -454,10 +458,10 @@ export const UI_STRINGS = {
   // convinient and often offer extra packages or refund deals.'" "Booking"
   // rather than "ordering tickets", because the same sentence sits under an
   // audio walk, a tour and a bike rental. The commission is still said.
-  "affiliate.disclosure": { en: "We recommend booking through our partners because it is more convenient, and they often offer extra packages or refund deals. Gemlyx may earn a small commission when you do.", da: "Vi anbefaler at booke gennem vores partnere, fordi det er nemmere, og de tilbyder ofte ekstra pakker eller refusion. Gemlyx kan få en lille kommission, når du gør det.", de: "Wir empfehlen, über unsere Partner zu buchen, weil es bequemer ist und sie oft Zusatzpakete oder Erstattungen anbieten. Gemlyx kann dabei eine kleine Provision erhalten." },
+  "affiliate.disclosure": { en: "We recommend booking through our partners because it is more convenient, and they often offer extra packages or refund deals. Gemlyx may earn a small commission when you do.", da: "Vi anbefaler at booke gennem vores partnere, fordi det er nemmere, og de tilbyder ofte ekstra pakker eller refusion. Gemlyx kan få en lille kommission, når du gør det.", de: "Wir empfehlen, über unsere Partner zu buchen, weil es bequemer ist und sie oft Zusatzpakete oder Erstattungen anbieten. Gemlyx kann dabei eine kleine Provision erhalten.", lt: "Rekomenduojame užsisakyti per mūsų partnerius, nes tai patogiau, o jie dažnai siūlo papildomų paketų ar pinigų grąžinimo sąlygų. Tokiu atveju Gemlyx gali gauti nedidelį komisinį mokestį." },
   // The commission alone, for under a line that has already said why to pick
   // the partner, so a reader is not told "we recommend" twice in a row.
-  "affiliate.commission": { en: "Gemlyx may earn a small commission when you book through this link.", da: "Gemlyx kan få en lille kommission, når du booker gennem dette link.", de: "Gemlyx kann eine kleine Provision erhalten, wenn du über diesen Link buchst." },
+  "affiliate.commission": { en: "Gemlyx may earn a small commission when you book through this link.", da: "Gemlyx kan få en lille kommission, når du booker gennem dette link.", de: "Gemlyx kann eine kleine Provision erhalten, wenn du über diesen Link buchst.", lt: "Užsisakius per šią nuorodą, Gemlyx gali gauti nedidelį komisinį mokestį." },
 
   // ── THE SCREEN A DANE MEETS WHEN THEY TRY TO KEEP A GUIDE ─────────
   //
@@ -473,70 +477,70 @@ export const UI_STRINGS = {
   // "Still needed" field names come from ProfileQuestions, which is its own
   // screen and its own pass. Both are named in the handoff rather than left to
   // be discovered.
-  "auth.signIn":        { en: "Sign in",            da: "Log ind",              de: "Anmelden" },
-  "auth.createAccount": { en: "Create account",     da: "Opret konto",          de: "Konto erstellen" },
-  "auth.sendReset":     { en: "Send reset link",    da: "Send nulstillingslink", de: "Link zum Zurücksetzen senden" },
-  "auth.setNewPass":    { en: "Set new password",   da: "Vælg ny adgangskode",  de: "Neues Passwort setzen" },
-  "auth.chooseNewPass": { en: "Choose a new password", da: "Vælg en ny adgangskode", de: "Wähl ein neues Passwort" },
-  "auth.resetPassword": { en: "Reset password",     da: "Nulstil adgangskode",  de: "Passwort zurücksetzen" },
-  "auth.keepGuide":     { en: "Keep this guide",    da: "Gem denne guide",      de: "Diesen Reiseführer behalten" },
-  "auth.signInKeep":    { en: "Sign in to keep it", da: "Log ind for at gemme den", de: "Anmelden, um ihn zu behalten" },
-  "auth.reviewArticle": { en: "Review this article", da: "Anmeld denne artikel", de: "Diesen Artikel bewerten" },
-  "auth.signInReview":  { en: "Sign in to review it", da: "Log ind for at anmelde den", de: "Anmelden, um zu bewerten" },
-  "auth.createAnAccount": { en: "Create an account", da: "Opret en konto",      de: "Ein Konto erstellen" },
+  "auth.signIn":        { en: "Sign in",            da: "Log ind",              de: "Anmelden", lt: "Prisijungti" },
+  "auth.createAccount": { en: "Create account",     da: "Opret konto",          de: "Konto erstellen", lt: "Sukurti paskyrą" },
+  "auth.sendReset":     { en: "Send reset link",    da: "Send nulstillingslink", de: "Link zum Zurücksetzen senden", lt: "Siųsti atkūrimo nuorodą" },
+  "auth.setNewPass":    { en: "Set new password",   da: "Vælg ny adgangskode",  de: "Neues Passwort setzen", lt: "Nustatyti naują slaptažodį" },
+  "auth.chooseNewPass": { en: "Choose a new password", da: "Vælg en ny adgangskode", de: "Wähl ein neues Passwort", lt: "Pasirinkite naują slaptažodį" },
+  "auth.resetPassword": { en: "Reset password",     da: "Nulstil adgangskode",  de: "Passwort zurücksetzen", lt: "Atkurti slaptažodį" },
+  "auth.keepGuide":     { en: "Keep this guide",    da: "Gem denne guide",      de: "Diesen Reiseführer behalten", lt: "Išsaugoti šį gidą" },
+  "auth.signInKeep":    { en: "Sign in to keep it", da: "Log ind for at gemme den", de: "Anmelden, um ihn zu behalten", lt: "Prisijunkite, kad jį išsaugotumėte" },
+  "auth.reviewArticle": { en: "Review this article", da: "Anmeld denne artikel", de: "Diesen Artikel bewerten", lt: "Įvertinti šį straipsnį" },
+  "auth.signInReview":  { en: "Sign in to review it", da: "Log ind for at anmelde den", de: "Anmelden, um zu bewerten", lt: "Prisijunkite, kad jį įvertintumėte" },
+  "auth.createAnAccount": { en: "Create an account", da: "Opret en konto",      de: "Ein Konto erstellen", lt: "Sukurti paskyrą" },
   // ── WHY YOU ARE BEING ASKED, WHICH IS NOT THE SAME EVERY TIME ─────
   //
   // The review line carried an em dash until this pass, in copy a reader meets,
   // which is the one thing his rule forbids outright. It came out as a comma
   // and an "and", and none of the three languages has one.
-  "auth.whyGuide":      { en: "The guide itself is free and yours to read right now. An account is what keeps it, on this phone and every other one.", da: "Selve guiden er gratis og din at læse med det samme. En konto er det, der gemmer den, på denne telefon og alle andre.", de: "Der Reiseführer selbst ist kostenlos und du kannst ihn sofort lesen. Ein Konto ist das, was ihn behält, auf diesem Handy und auf jedem anderen." },
-  "auth.whyReview":     { en: "Reviews of our writing need an account, so we know a real person is behind each one. Reporting something out of date needs nothing at all, and that button is right there for everybody.", da: "Anmeldelser af det, vi skriver, kræver en konto, så vi ved, at der er et rigtigt menneske bag hver enkelt. At melde noget forældet kræver ingenting, og den knap står der til alle.", de: "Bewertungen unserer Texte brauchen ein Konto, damit wir wissen, dass hinter jeder ein echter Mensch steht. Etwas als veraltet zu melden braucht gar nichts, und der Knopf steht für alle da." },
-  "auth.whyDefault":    { en: "An account keeps your saved places and guides on every device instead of just this one.", da: "En konto gemmer dine steder og guider på alle dine enheder i stedet for kun denne.", de: "Ein Konto behält deine gespeicherten Orte und Reiseführer auf allen Geräten statt nur auf diesem." },
-  "auth.newpassLead":   { en: "Type it twice and you are back in. This link works once, so if it fails, ask for a new one.", da: "Skriv den to gange, så er du inde igen. Linket virker én gang, så bed om et nyt, hvis det ikke går.", de: "Gib es zweimal ein und du bist wieder drin. Der Link funktioniert einmal, frag also nach einem neuen, wenn es nicht klappt." },
+  "auth.whyGuide":      { en: "The guide itself is free and yours to read right now. An account is what keeps it, on this phone and every other one.", da: "Selve guiden er gratis og din at læse med det samme. En konto er det, der gemmer den, på denne telefon og alle andre.", de: "Der Reiseführer selbst ist kostenlos und du kannst ihn sofort lesen. Ein Konto ist das, was ihn behält, auf diesem Handy und auf jedem anderen.", lt: "Pats gidas nemokamas ir jau dabar jūsų. Paskyra jį išsaugo šiame telefone ir visuose kituose." },
+  "auth.whyReview":     { en: "Reviews of our writing need an account, so we know a real person is behind each one. Reporting something out of date needs nothing at all, and that button is right there for everybody.", da: "Anmeldelser af det, vi skriver, kræver en konto, så vi ved, at der er et rigtigt menneske bag hver enkelt. At melde noget forældet kræver ingenting, og den knap står der til alle.", de: "Bewertungen unserer Texte brauchen ein Konto, damit wir wissen, dass hinter jeder ein echter Mensch steht. Etwas als veraltet zu melden braucht gar nichts, und der Knopf steht für alle da.", lt: "Mūsų tekstų vertinimams reikia paskyros, kad žinotume, jog už kiekvieno stovi tikras žmogus. Pranešti apie pasenusią informaciją galima be jokios paskyros, ir tas mygtukas prieinamas visiems." },
+  "auth.whyDefault":    { en: "An account keeps your saved places and guides on every device instead of just this one.", da: "En konto gemmer dine steder og guider på alle dine enheder i stedet for kun denne.", de: "Ein Konto behält deine gespeicherten Orte und Reiseführer auf allen Geräten statt nur auf diesem.", lt: "Paskyra išsaugo jūsų vietas ir gidus visuose įrenginiuose, ne tik šiame." },
+  "auth.newpassLead":   { en: "Type it twice and you are back in. This link works once, so if it fails, ask for a new one.", da: "Skriv den to gange, så er du inde igen. Linket virker én gang, så bed om et nyt, hvis det ikke går.", de: "Gib es zweimal ein und du bist wieder drin. Der Link funktioniert einmal, frag also nach einem neuen, wenn es nicht klappt.", lt: "Įveskite jį du kartus, ir vėl būsite prisijungę. Ši nuoroda veikia vieną kartą, todėl jei nepavyks, paprašykite naujos." },
   // The count goes in FRONT of these, which is why the sentence starts at the
   // noun. Both halves written out: Danish does not add an s to ting and German
   // changes the adjective as well as the noun.
-  "auth.savedOne":      { en: "saved item on this device will come with you.", da: "gemt ting på denne enhed følger med.", de: "gespeicherter Eintrag auf diesem Gerät kommt mit." },
-  "auth.savedMany":     { en: "saved items on this device will come with you.", da: "gemte ting på denne enhed følger med.", de: "gespeicherte Einträge auf diesem Gerät kommen mit." },
+  "auth.savedOne":      { en: "saved item on this device will come with you.", da: "gemt ting på denne enhed følger med.", de: "gespeicherter Eintrag auf diesem Gerät kommt mit.", lt: "šiame įrenginyje išsaugotas elementas keliaus kartu su jumis." },
+  "auth.savedMany":     { en: "saved items on this device will come with you.", da: "gemte ting på denne enhed følger med.", de: "gespeicherte Einträge auf diesem Gerät kommen mit.", lt: "šiame įrenginyje išsaugoti elementai keliaus kartu su jumis." },
   // ── THE SCREEN THAT ENDS, AND THE ADDRESS ON IT ───────────────────
-  "auth.checkEmail":    { en: "Check your email",   da: "Tjek din mail",        de: "Sieh in deine Mails" },
-  "auth.linkOnWay":     { en: "A confirmation link is on its way to", da: "Et bekræftelseslink er på vej til", de: "Ein Bestätigungslink ist unterwegs an" },
+  "auth.checkEmail":    { en: "Check your email",   da: "Tjek din mail",        de: "Sieh in deine Mails", lt: "Patikrinkite el. paštą" },
+  "auth.linkOnWay":     { en: "A confirmation link is on its way to", da: "Et bekræftelseslink er på vej til", de: "Ein Bestätigungslink ist unterwegs an", lt: "Patvirtinimo nuoroda išsiųsta adresu" },
   // 27 Sep 2026: a friend's landed in junk. Marking it "not spam" is the one
   // thing a reader can do that teaches their mail provider to trust the next.
-  "auth.openIt":        { en: "Open it and you are in. It can take a minute or two, and it does sometimes land in spam or junk. If it does, mark it as not spam so the next one reaches your inbox.", da: "Åbn det, så er du inde. Der kan gå et minut eller to, og det ender nogle gange i spam eller uønsket post. Gør det, så markér det som ikke spam, så det næste lander i din indbakke.", de: "Öffne ihn und du bist drin. Es kann ein oder zwei Minuten dauern, und manchmal landet er im Spam. Dann markiere ihn als kein Spam, damit der nächste im Posteingang ankommt." },
+  "auth.openIt":        { en: "Open it and you are in. It can take a minute or two, and it does sometimes land in spam or junk. If it does, mark it as not spam so the next one reaches your inbox.", da: "Åbn det, så er du inde. Der kan gå et minut eller to, og det ender nogle gange i spam eller uønsket post. Gør det, så markér det som ikke spam, så det næste lander i din indbakke.", de: "Öffne ihn und du bist drin. Es kann ein oder zwei Minuten dauern, und manchmal landet er im Spam. Dann markiere ihn als kein Spam, damit der nächste im Posteingang ankommt.", lt: "Atidarykite ją, ir būsite prisijungę. Tai gali užtrukti minutę ar dvi, o kartais laiškas patenka į šlamšto aplanką. Jei taip nutiktų, pažymėkite jį kaip ne šlamštą, kad kitas pasiektų jūsų gautuosius." },
   // Reworded 15 Sep 2026. It used to say "confirm in this same browser and they
   // come with you", which was an honest description of a limitation and also an
   // instruction most people cannot follow: the mail opens where the mail opens.
   // The answers now travel with the account, so the sentence no longer has to
   // ask anything of them. See signupCarry in utils/profile.js.
-  "auth.sameBrowser":   { en: "The answers you just gave are saved. Open the link from anywhere, on any device.", da: "De svar, du lige har givet, er gemt. Åbn linket hvor som helst, på enhver enhed.", de: "Die Antworten, die du gerade gegeben hast, sind gespeichert. Öffne den Link wo du willst, auf jedem Gerät." },
+  "auth.sameBrowser":   { en: "The answers you just gave are saved. Open the link from anywhere, on any device.", da: "De svar, du lige har givet, er gemt. Åbn linket hvor som helst, på enhver enhed.", de: "Die Antworten, die du gerade gegeben hast, sind gespeichert. Öffne den Link wo du willst, auf jedem Gerät.", lt: "Jūsų ką tik pateikti atsakymai išsaugoti. Nuorodą galite atidaryti bet kur, bet kuriame įrenginyje." },
   // ── AND THE ONE THING THEY WERE WAITING TO BE TOLD ────────────────
   // Oliver, 15 Sep 2026: "It should just send you back to the site saying 'mail
   // confirmed!'" Shown as a toast on the return, not a screen: the address is
   // confirmed, they are signed in, and the right place for them is the site.
-  "auth.mailConfirmed": { en: "Mail confirmed. You are signed in.", da: "Mail bekræftet. Du er logget ind.", de: "E-Mail bestätigt. Du bist angemeldet." },
-  "auth.sending":       { en: "Sending…",           da: "Sender…",              de: "Wird gesendet…" },
-  "auth.sendAgain":     { en: "Send it again",      da: "Send igen",            de: "Nochmal senden" },
-  "auth.sendAgainIn":   { en: "Send it again in",   da: "Send igen om",         de: "Nochmal senden in" },
-  "auth.wrongAddress":  { en: "Wrong address? Go back", da: "Forkert adresse? Gå tilbage", de: "Falsche Adresse? Zurück" },
-  "auth.sentAgain":     { en: "Sent again. Check your spam folder too.", da: "Sendt igen. Tjek også din spammappe.", de: "Nochmal gesendet. Sieh auch im Spam nach." },
+  "auth.mailConfirmed": { en: "Mail confirmed. You are signed in.", da: "Mail bekræftet. Du er logget ind.", de: "E-Mail bestätigt. Du bist angemeldet.", lt: "El. paštas patvirtintas. Esate prisijungę." },
+  "auth.sending":       { en: "Sending…",           da: "Sender…",              de: "Wird gesendet…", lt: "Siunčiama…" },
+  "auth.sendAgain":     { en: "Send it again",      da: "Send igen",            de: "Nochmal senden", lt: "Siųsti dar kartą" },
+  "auth.sendAgainIn":   { en: "Send it again in",   da: "Send igen om",         de: "Nochmal senden in", lt: "Siųsti dar kartą po" },
+  "auth.wrongAddress":  { en: "Wrong address? Go back", da: "Forkert adresse? Gå tilbage", de: "Falsche Adresse? Zurück", lt: "Neteisingas adresas? Grįžti atgal" },
+  "auth.sentAgain":     { en: "Sent again. Check your spam folder too.", da: "Sendt igen. Tjek også din spammappe.", de: "Nochmal gesendet. Sieh auch im Spam nach.", lt: "Išsiųsta dar kartą. Patikrinkite ir šlamšto aplanką." },
   // ── THE FORM ──────────────────────────────────────────────────────
-  "auth.email":         { en: "Email",              da: "Mail",                 de: "E-Mail" },
-  "auth.password":      { en: "Password",           da: "Adgangskode",          de: "Passwort" },
-  "auth.newPassword":   { en: "New password",       da: "Ny adgangskode",       de: "Neues Passwort" },
-  "auth.atLeastSix":    { en: "at least 6 characters", da: "mindst 6 tegn",     de: "mindestens 6 Zeichen" },
-  "auth.confirmPassword": { en: "Confirm password", da: "Bekræft adgangskode",  de: "Passwort bestätigen" },
-  "auth.typeItAgain":   { en: "Type it again",      da: "Skriv den igen",       de: "Nochmal eingeben" },
-  "auth.noMatchYet":    { en: "These do not match yet.", da: "De to er ikke ens endnu.", de: "Die beiden stimmen noch nicht überein." },
-  "auth.working":       { en: "Working…",           da: "Arbejder…",            de: "Wird bearbeitet…" },
-  "auth.close":         { en: "Close",              da: "Luk",                  de: "Schließen" },
+  "auth.email":         { en: "Email",              da: "Mail",                 de: "E-Mail", lt: "El. paštas" },
+  "auth.password":      { en: "Password",           da: "Adgangskode",          de: "Passwort", lt: "Slaptažodis" },
+  "auth.newPassword":   { en: "New password",       da: "Ny adgangskode",       de: "Neues Passwort", lt: "Naujas slaptažodis" },
+  "auth.atLeastSix":    { en: "at least 6 characters", da: "mindst 6 tegn",     de: "mindestens 6 Zeichen", lt: "bent 6 simboliai" },
+  "auth.confirmPassword": { en: "Confirm password", da: "Bekræft adgangskode",  de: "Passwort bestätigen", lt: "Pakartokite slaptažodį" },
+  "auth.typeItAgain":   { en: "Type it again",      da: "Skriv den igen",       de: "Nochmal eingeben", lt: "Įveskite dar kartą" },
+  "auth.noMatchYet":    { en: "These do not match yet.", da: "De to er ikke ens endnu.", de: "Die beiden stimmen noch nicht überein.", lt: "Kol kas nesutampa." },
+  "auth.working":       { en: "Working…",           da: "Arbejder…",            de: "Wird bearbeitet…", lt: "Vykdoma…" },
+  "auth.close":         { en: "Close",              da: "Luk",                  de: "Schließen", lt: "Uždaryti" },
   // ── WHAT IT SAYS WHEN SOMETHING IS WRONG ──────────────────────────
-  "auth.needSix":       { en: "Passwords need at least 6 characters.", da: "Adgangskoden skal være på mindst 6 tegn.", de: "Das Passwort braucht mindestens 6 Zeichen." },
-  "auth.noMatch":       { en: "The two passwords do not match.", da: "De to adgangskoder er ikke ens.", de: "Die beiden Passwörter stimmen nicht überein." },
-  "auth.enterEmail":    { en: "Enter your email.",  da: "Skriv din mail.",      de: "Gib deine E-Mail ein." },
-  "auth.passChanged":   { en: "Password changed. You are signed in.", da: "Adgangskoden er skiftet. Du er logget ind.", de: "Passwort geändert. Du bist angemeldet." },
-  "auth.resetSent":     { en: "If that email has an account, a reset link is on its way.", da: "Hvis der er en konto på den mail, er et nulstillingslink på vej.", de: "Wenn es zu dieser Adresse ein Konto gibt, ist ein Link unterwegs." },
-  "auth.noSession":     { en: "That sign in did not come back with a session. Try again in a moment.", da: "Det login kom ikke tilbage med en session. Prøv igen om et øjeblik.", de: "Diese Anmeldung kam ohne Sitzung zurück. Versuch es gleich noch einmal." },
+  "auth.needSix":       { en: "Passwords need at least 6 characters.", da: "Adgangskoden skal være på mindst 6 tegn.", de: "Das Passwort braucht mindestens 6 Zeichen.", lt: "Slaptažodį turi sudaryti bent 6 simboliai." },
+  "auth.noMatch":       { en: "The two passwords do not match.", da: "De to adgangskoder er ikke ens.", de: "Die beiden Passwörter stimmen nicht überein.", lt: "Slaptažodžiai nesutampa." },
+  "auth.enterEmail":    { en: "Enter your email.",  da: "Skriv din mail.",      de: "Gib deine E-Mail ein.", lt: "Įveskite el. pašto adresą." },
+  "auth.passChanged":   { en: "Password changed. You are signed in.", da: "Adgangskoden er skiftet. Du er logget ind.", de: "Passwort geändert. Du bist angemeldet.", lt: "Slaptažodis pakeistas. Esate prisijungę." },
+  "auth.resetSent":     { en: "If that email has an account, a reset link is on its way.", da: "Hvis der er en konto på den mail, er et nulstillingslink på vej.", de: "Wenn es zu dieser Adresse ein Konto gibt, ist ein Link unterwegs.", lt: "Jei šiuo adresu yra paskyra, atkūrimo nuoroda jau siunčiama." },
+  "auth.noSession":     { en: "That sign in did not come back with a session. Try again in a moment.", da: "Det login kom ikke tilbage med en session. Prøv igen om et øjeblik.", de: "Diese Anmeldung kam ohne Sitzung zurück. Versuch es gleich noch einmal.", lt: "Prisijungiant nepavyko sukurti sesijos. Bandykite po akimirkos." },
   // ── WHAT A FAILED SIGN IN ACTUALLY SAYS ───────────────────────────
   //
   // Oliver, 14 Sep 2026: "logging into an account that doesn't exist, just
@@ -553,32 +557,32 @@ export const UI_STRINGS = {
   // the form to find out who has an account here. Naming only the first would
   // be a guess; naming only the second would give that away. So it says both,
   // and points at the two doors out.
-  "auth.badLogin":      { en: "That email and password do not match an account. Check the password, or use Forgot password. If you have not made an account yet, sign up below.", da: "Den mail og adgangskode passer ikke til en konto. Tjek adgangskoden, eller brug Glemt adgangskode. Har du ikke oprettet en konto endnu, så opret dig nedenfor.", de: "Diese E-Mail und dieses Passwort gehören zu keinem Konto. Prüf das Passwort oder nutze Passwort vergessen. Wenn du noch kein Konto hast, registrier dich unten." },
+  "auth.badLogin":      { en: "That email and password do not match an account. Check the password, or use Forgot password. If you have not made an account yet, sign up below.", da: "Den mail og adgangskode passer ikke til en konto. Tjek adgangskoden, eller brug Glemt adgangskode. Har du ikke oprettet en konto endnu, så opret dig nedenfor.", de: "Diese E-Mail und dieses Passwort gehören zu keinem Konto. Prüf das Passwort oder nutze Passwort vergessen. Wenn du noch kein Konto hast, registrier dich unten.", lt: "Šis el. paštas ir slaptažodis neatitinka jokios paskyros. Patikrinkite slaptažodį arba spauskite „Pamiršau slaptažodį“. Jei paskyros dar neturite, užsiregistruokite žemiau." },
   // ── AND WHAT LOGGING OUT ASKS FIRST ───────────────────────────────
   //
   // "Log out needs a 'Are you sure you want to log out?'" It does, and the
   // reason is one he himself created an hour earlier: signing out now clears
   // the saves off this device. That is right, and it is a surprise, so the
   // question is followed by the fact rather than asked on its own.
-  "auth.confirmOut":    { en: "Are you sure you want to log out? Your saved places and guides stay in your account and come back when you sign in, and they are taken off this device.", da: "Er du sikker på, at du vil logge ud? Dine gemte steder og guider bliver i din konto og kommer tilbage, når du logger ind, og de fjernes fra denne enhed.", de: "Willst du dich wirklich abmelden? Deine gespeicherten Orte und Reisen bleiben in deinem Konto und sind nach der nächsten Anmeldung wieder da, und sie werden von diesem Gerät entfernt." },
+  "auth.confirmOut":    { en: "Are you sure you want to log out? Your saved places and guides stay in your account and come back when you sign in, and they are taken off this device.", da: "Er du sikker på, at du vil logge ud? Dine gemte steder og guider bliver i din konto og kommer tilbage, når du logger ind, og de fjernes fra denne enhed.", de: "Willst du dich wirklich abmelden? Deine gespeicherten Orte und Reisen bleiben in deinem Konto und sind nach der nächsten Anmeldung wieder da, und sie werden von diesem Gerät entfernt.", lt: "Ar tikrai norite atsijungti? Jūsų išsaugotos vietos ir gidai lieka paskyroje ir sugrįš, kai prisijungsite, o iš šio įrenginio jie pašalinami." },
   // ── AND THE TWO THAT ASK BEFORE SOMETHING CANNOT BE UNDONE ────────
   //
   // Both were window.confirm until 14 Sep, so the delete question had never
   // been translated at all: it was an English sentence typed into App.jsx, on a
   // screen whose every other word comes from this file. A Dane reading Konto in
   // the menu met a paragraph of English at the one moment it mattered most.
-  "auth.confirmDelete": { en: "Delete your Gemlyx account? Your saved places, your guides, your details and your login all go, on this device and in your account, and this cannot be undone.", da: "Vil du slette din Gemlyx-konto? Dine gemte steder, dine guider, dine oplysninger og dit login forsvinder alle sammen, både på denne enhed og i din konto, og det kan ikke fortrydes.", de: "Dein Gemlyx-Konto löschen? Deine gespeicherten Orte, deine Reisen, deine Angaben und dein Login verschwinden alle, auf diesem Gerät und in deinem Konto, und das lässt sich nicht rückgängig machen." },
-  "auth.deleteYes":     { en: "Delete account",  da: "Slet konto",           de: "Konto löschen" },
-  "auth.cancel":        { en: "Cancel",          da: "Fortryd",              de: "Abbrechen" },
+  "auth.confirmDelete": { en: "Delete your Gemlyx account? Your saved places, your guides, your details and your login all go, on this device and in your account, and this cannot be undone.", da: "Vil du slette din Gemlyx-konto? Dine gemte steder, dine guider, dine oplysninger og dit login forsvinder alle sammen, både på denne enhed og i din konto, og det kan ikke fortrydes.", de: "Dein Gemlyx-Konto löschen? Deine gespeicherten Orte, deine Reisen, deine Angaben und dein Login verschwinden alle, auf diesem Gerät und in deinem Konto, und das lässt sich nicht rückgängig machen.", lt: "Ištrinti jūsų Gemlyx paskyrą? Jūsų išsaugotos vietos, gidai, duomenys ir prisijungimas bus pašalinti šiame įrenginyje ir paskyroje, ir to nebus galima atšaukti." },
+  "auth.deleteYes":     { en: "Delete account",  da: "Slet konto",           de: "Konto löschen", lt: "Ištrinti paskyrą" },
+  "auth.cancel":        { en: "Cancel",          da: "Fortryd",              de: "Abbrechen", lt: "Atšaukti" },
   // ── THE QUESTION ON THE WAY OUT ───────────────────────────────────
   // Oliver, 15 Sep 2026: "there should be a 'Why do you want to delete your
   // account?'" Asked on the confirm itself rather than as a step in front of
   // it, and the second line is the part that keeps it honest. See
   // components/DeleteAccountSheet.jsx.
-  "auth.whyLeaving":    { en: "Why do you want to delete your account?", da: "Hvorfor vil du slette din konto?", de: "Warum möchtest du dein Konto löschen?" },
-  "auth.whyOptional":   { en: "Optional, and sent without your name on it. Delete works either way.", da: "Valgfrit, og sendes uden dit navn på. Sletningen sker uanset hvad.", de: "Freiwillig, und ohne deinen Namen gesendet. Das Löschen passiert so oder so." },
-  "auth.whyPlaceholder":{ en: "Anything you want to add", da: "Noget du vil tilføje", de: "Möchtest du etwas hinzufügen" },
-  "auth.confirmFirst":  { en: "This account still needs its email confirmed. Open the link we sent, or send it again below.", da: "Kontoen mangler stadig at få bekræftet mailen. Åbn linket, vi sendte, eller send det igen nedenfor.", de: "Für dieses Konto fehlt noch die Bestätigung der E-Mail. Öffne den Link, den wir geschickt haben, oder sende ihn unten erneut." },
+  "auth.whyLeaving":    { en: "Why do you want to delete your account?", da: "Hvorfor vil du slette din konto?", de: "Warum möchtest du dein Konto löschen?", lt: "Kodėl norite ištrinti paskyrą?" },
+  "auth.whyOptional":   { en: "Optional, and sent without your name on it. Delete works either way.", da: "Valgfrit, og sendes uden dit navn på. Sletningen sker uanset hvad.", de: "Freiwillig, und ohne deinen Namen gesendet. Das Löschen passiert so oder so.", lt: "Neprivaloma, siunčiama be jūsų vardo. Ištrinti galėsite bet kuriuo atveju." },
+  "auth.whyPlaceholder":{ en: "Anything you want to add", da: "Noget du vil tilføje", de: "Möchtest du etwas hinzufügen", lt: "Ką norėtumėte pridurti" },
+  "auth.confirmFirst":  { en: "This account still needs its email confirmed. Open the link we sent, or send it again below.", da: "Kontoen mangler stadig at få bekræftet mailen. Åbn linket, vi sendte, eller send det igen nedenfor.", de: "Für dieses Konto fehlt noch die Bestätigung der E-Mail. Öffne den Link, den wir geschickt haben, oder sende ihn unten erneut.", lt: "Šios paskyros el. paštas dar nepatvirtintas. Atidarykite mūsų atsiųstą nuorodą arba išsiųskite ją dar kartą žemiau." },
   // ── WRITTEN TO BE TRUE EVEN IF THE DETECTION IS WRONG ─────────────
   //
   // The first version ended "so no new one was made", and that clause is the
@@ -596,24 +600,24 @@ export const UI_STRINGS = {
   // confirmation and shows them the inbox screen. So the worst case is one
   // confusing sentence on the way to the right place, not a signup they cannot
   // complete.
-  "auth.alreadyHave":   { en: "That address already has an account. Sign in below, or use Forgot password if you cannot remember it.", da: "Der er allerede en konto på den adresse. Log ind nedenfor, eller brug Glemt adgangskode, hvis du ikke kan huske den.", de: "Zu dieser Adresse gibt es schon ein Konto. Melde dich unten an oder nutze Passwort vergessen, wenn du es nicht mehr weißt." },
-  "auth.stillNeeded":   { en: "Still needed:",      da: "Mangler stadig:",      de: "Fehlt noch:" },
+  "auth.alreadyHave":   { en: "That address already has an account. Sign in below, or use Forgot password if you cannot remember it.", da: "Der er allerede en konto på den adresse. Log ind nedenfor, eller brug Glemt adgangskode, hvis du ikke kan huske den.", de: "Zu dieser Adresse gibt es schon ein Konto. Melde dich unten an oder nutze Passwort vergessen, wenn du es nicht mehr weißt.", lt: "Šiuo adresu paskyra jau yra. Prisijunkite žemiau arba spauskite „Pamiršau slaptažodį“, jei jo neprisimenate." },
+  "auth.stillNeeded":   { en: "Still needed:",      da: "Mangler stadig:",      de: "Fehlt noch:", lt: "Dar trūksta:" },
   // The age sits between these two, so both halves are written out and the
   // number is put between them by the caller.
-  "auth.ageLead":       { en: "You have to be at least", da: "Du skal være mindst", de: "Du musst mindestens" },
-  "auth.ageTail":       { en: "to make an account.", da: "år for at oprette en konto.", de: "sein, um ein Konto zu erstellen." },
+  "auth.ageLead":       { en: "You have to be at least", da: "Du skal være mindst", de: "Du musst mindestens", lt: "Kad susikurtumėte paskyrą, jums turi būti bent" },
+  "auth.ageTail":       { en: "to make an account.", da: "år for at oprette en konto.", de: "sein, um ein Konto zu erstellen.", lt: "metų." },
   // ── THE SMALL PRINT, WHICH IS THE PART THAT HAS TO BE READABLE ────
-  "auth.iAccept":       { en: "I accept the",      da: "Jeg accepterer",      de: "Ich akzeptiere die" },
-  "auth.mustAccept":    { en: "Tick the box to accept the Terms of Service and the Privacy Policy.", da: "Sæt flueben for at acceptere servicevilkårene og privatlivspolitikken.", de: "Setze das Häkchen, um die Nutzungsbedingungen und die Datenschutzerklärung zu akzeptieren." },
-  "auth.terms":         { en: "Terms of Service",   da: "Servicevilkår",        de: "Nutzungsbedingungen" },
-  "auth.andThe":        { en: "and the",            da: "og vores",             de: "und unsere" },
-  "auth.privacy":       { en: "Privacy Policy",     da: "Privatlivspolitik",    de: "Datenschutzerklärung" },
-  "auth.newUser":       { en: "New User? Sign up here!", da: "Ny bruger? Opret dig her!", de: "Neu hier? Registrier dich!" },
-  "auth.haveOne":       { en: "I already have one", da: "Jeg har allerede en",  de: "Ich habe schon eins" },
-  "auth.forgot":        { en: "Forgot password",    da: "Glemt adgangskode",    de: "Passwort vergessen" },
-  "auth.freeAccount":   { en: "A free account saves your guide and nothing more. Keeping it live as your trip approaches, new events worth rerouting for, help while you are there, that is the paid side, and it is not switched on yet.", da: "En gratis konto gemmer din guide og ikke mere end det. At holde den opdateret frem mod turen, nye begivenheder det er værd at lægge om for, hjælp mens du er her, det er den betalte del, og den er ikke tændt endnu.", de: "Ein kostenloses Konto speichert deinen Reiseführer und sonst nichts. Ihn aktuell zu halten, während die Reise näher rückt, neue Veranstaltungen, für die sich ein Umweg lohnt, Hilfe vor Ort, das ist der bezahlte Teil, und der ist noch nicht eingeschaltet." },
-  "auth.storeLead":     { en: "We store your email, what you fill in here, and your saved list. Gemlyx also notices which kinds of trip you build, so the next guide lands closer. No tracking, no marketing email, nothing sold. You can delete your account and everything in it from this menu at any time, and the", da: "Vi gemmer din mail, det du udfylder her, og din liste over gemte steder. Gemlyx lægger også mærke til, hvilke slags ture du bygger, så den næste guide rammer tættere på. Ingen sporing, ingen reklamemails, intet bliver solgt. Du kan slette din konto og alt i den fra denne menu når som helst, og", de: "Wir speichern deine E-Mail, was du hier ausfüllst, und deine gespeicherte Liste. Gemlyx merkt sich auch, welche Art von Reisen du planst, damit der nächste Reiseführer näher trifft. Kein Tracking, keine Werbemails, nichts wird verkauft. Du kannst dein Konto und alles darin jederzeit aus diesem Menü löschen, und die" },
-  "auth.storeTail":     { en: "is the long version.", da: "er den lange udgave.", de: "ist die lange Fassung." },
+  "auth.iAccept":       { en: "I accept the",      da: "Jeg accepterer",      de: "Ich akzeptiere die", lt: "Sutinku:" },
+  "auth.mustAccept":    { en: "Tick the box to accept the Terms of Service and the Privacy Policy.", da: "Sæt flueben for at acceptere servicevilkårene og privatlivspolitikken.", de: "Setze das Häkchen, um die Nutzungsbedingungen und die Datenschutzerklärung zu akzeptieren.", lt: "Pažymėkite langelį, kad sutiktumėte su Paslaugų teikimo sąlygomis ir Privatumo politika." },
+  "auth.terms":         { en: "Terms of Service",   da: "Servicevilkår",        de: "Nutzungsbedingungen", lt: "Paslaugų teikimo sąlygos" },
+  "auth.andThe":        { en: "and the",            da: "og vores",             de: "und unsere", lt: "ir" },
+  "auth.privacy":       { en: "Privacy Policy",     da: "Privatlivspolitik",    de: "Datenschutzerklärung", lt: "Privatumo politika" },
+  "auth.newUser":       { en: "New User? Sign up here!", da: "Ny bruger? Opret dig her!", de: "Neu hier? Registrier dich!", lt: "Naujas naudotojas? Užsiregistruokite čia!" },
+  "auth.haveOne":       { en: "I already have one", da: "Jeg har allerede en",  de: "Ich habe schon eins", lt: "Aš jau turiu paskyrą" },
+  "auth.forgot":        { en: "Forgot password",    da: "Glemt adgangskode",    de: "Passwort vergessen", lt: "Pamiršau slaptažodį" },
+  "auth.freeAccount":   { en: "A free account saves your guide and nothing more. Keeping it live as your trip approaches, new events worth rerouting for, help while you are there, that is the paid side, and it is not switched on yet.", da: "En gratis konto gemmer din guide og ikke mere end det. At holde den opdateret frem mod turen, nye begivenheder det er værd at lægge om for, hjælp mens du er her, det er den betalte del, og den er ikke tændt endnu.", de: "Ein kostenloses Konto speichert deinen Reiseführer und sonst nichts. Ihn aktuell zu halten, während die Reise näher rückt, neue Veranstaltungen, für die sich ein Umweg lohnt, Hilfe vor Ort, das ist der bezahlte Teil, und der ist noch nicht eingeschaltet.", lt: "Nemokama paskyra išsaugo jūsų gidą ir nieko daugiau. Gido atnaujinimas artėjant kelionei, nauji renginiai, dėl kurių verta pakeisti maršrutą, pagalba vietoje: tai mokama dalis, ir ji dar neįjungta." },
+  "auth.storeLead":     { en: "We store your email, what you fill in here, and your saved list. Gemlyx also notices which kinds of trip you build, so the next guide lands closer. No tracking, no marketing email, nothing sold. You can delete your account and everything in it from this menu at any time, and the", da: "Vi gemmer din mail, det du udfylder her, og din liste over gemte steder. Gemlyx lægger også mærke til, hvilke slags ture du bygger, så den næste guide rammer tættere på. Ingen sporing, ingen reklamemails, intet bliver solgt. Du kan slette din konto og alt i den fra denne menu når som helst, og", de: "Wir speichern deine E-Mail, was du hier ausfüllst, und deine gespeicherte Liste. Gemlyx merkt sich auch, welche Art von Reisen du planst, damit der nächste Reiseführer näher trifft. Kein Tracking, keine Werbemails, nichts wird verkauft. Du kannst dein Konto und alles darin jederzeit aus diesem Menü löschen, und die", lt: "Saugome jūsų el. paštą, tai, ką čia įvedate, ir jūsų išsaugotų vietų sąrašą. Gemlyx taip pat pastebi, kokias keliones kuriate, kad kitas gidas būtų taiklesnis. Jokio sekimo, jokių reklaminių laiškų, niekas neparduodama. Paskyrą ir viską joje galite bet kada ištrinti per šį meniu, o" },
+  "auth.storeTail":     { en: "is the long version.", da: "er den lange udgave.", de: "ist die lange Fassung.", lt: "pateikia išsamią versiją." },
 
   // ── WHAT A PIN ON THE MAP IS BEST FOR ─────────────────────────────
   //
@@ -640,8 +644,8 @@ export const UI_STRINGS = {
   // Stecknadel/Marker) with no agreed one. Saying what to tap ON is what the
   // sentence is for, and a reader looking at a map with dots on it does not
   // need the dot named.
-  "map.tapOne":      { en: "Where these are. Tap a pin to see it.", da: "Hvor de ligger. Tryk på en af dem for at se stedet.", de: "Wo sie liegen. Tippe auf einen Punkt, um ihn zu sehen." },
-  "map.tapTheOne":   { en: "Tap the pin to see it.", da: "Tryk for at se stedet.", de: "Tippe auf den Punkt, um ihn zu sehen." },
+  "map.tapOne":      { en: "Where these are. Tap a pin to see it.", da: "Hvor de ligger. Tryk på en af dem for at se stedet.", de: "Wo sie liegen. Tippe auf einen Punkt, um ihn zu sehen.", lt: "Štai kur jos yra. Palieskite smeigtuką, kad pamatytumėte." },
+  "map.tapTheOne":   { en: "Tap the pin to see it.", da: "Tryk for at se stedet.", de: "Tippe auf den Punkt, um ihn zu sehen.", lt: "Palieskite smeigtuką, kad pamatytumėte." },
 
   // ── AND THE ONES THAT ARE NOT ON IT ───────────────────────────────
   //
@@ -651,8 +655,8 @@ export const UI_STRINGS = {
   // same place but not the noun or the verb, so the sentence has to be one
   // string per language rather than fragments glued together at the render
   // site. tests/run.mjs asserts every column keeps the token.
-  "map.offMapOne":   { en: "{n} earlier place is off this map.", da: "{n} tidligere sted ligger uden for kortet.", de: "{n} früherer Ort liegt außerhalb dieser Karte." },
-  "map.offMapMany":  { en: "{n} earlier places are off this map.", da: "{n} tidligere steder ligger uden for kortet.", de: "{n} frühere Orte liegen außerhalb dieser Karte." },
+  "map.offMapOne":   { en: "{n} earlier place is off this map.", da: "{n} tidligere sted ligger uden for kortet.", de: "{n} früherer Ort liegt außerhalb dieser Karte.", lt: "{n} ankstesnė vieta nepateko į šį žemėlapį." },
+  "map.offMapMany":  { en: "{n} earlier places are off this map.", da: "{n} tidligere steder ligger uden for kortet.", de: "{n} frühere Orte liegen außerhalb dieser Karte.", lt: "{n} ankstesnės vietos nepateko į šį žemėlapį." },
 
   // ── "IS THIS INTERESTING?" ON A PIN, AND THE ROW UNDER THE MAP ───
   //
@@ -667,32 +671,58 @@ export const UI_STRINGS = {
   // about a label and a control being the whole of a form field, applied to a
   // question: "Yes" and "No" need the line above them to mean anything, and
   // these two do not. The question line goes with them.
-  "card.add":         { en: "Add to trip", da: "Tilføj til turen", de: "Zur Reise hinzufügen" },
-  "card.notFor":      { en: "Not interested", da: "Ikke interesseret", de: "Kein Interesse" },
+  "card.add":         { en: "Add to trip", da: "Tilføj til turen", de: "Zur Reise hinzufügen", lt: "Įtraukti į kelionę" },
+  "card.notFor":      { en: "Not interested", da: "Ikke interesseret", de: "Kein Interesse", lt: "Nedomina" },
   // The state a Yes leaves behind, and a button: pressing it takes the place
   // out again, which is what the chip beside the preview does with "Added".
-  "card.added":       { en: "Added", da: "Tilføjet", de: "Hinzugefügt" },
+  "card.added":       { en: "Added", da: "Tilføjet", de: "Hinzugefügt", lt: "Įtraukta" },
   // The row under the map naming what a No took off it, each name a button
   // that puts the pin back. A place silently dropped is indistinguishable from
   // a place Gemlyx does not have, which is Layla's whole problem.
-  "map.leftOut":      { en: "Left out:", da: "Udeladt:", de: "Weggelassen:" },
+  "map.leftOut":      { en: "Left out:", da: "Udeladt:", de: "Weggelassen:", lt: "Neįtraukta:" },
   // ── THE PHONE ASKS FOR THE MAP RATHER THAN BEING GIVEN IT ──────────
   // Oliver, 19 Sep 2026: "on phone, we gotta have a 'show map' button." A
   // fifth of a small screen taken by something nobody asked for is the reason
   // the map was kept off phones at all until 13 Sep; a button is the version
   // that costs one line until somebody wants it.
-  "map.show":         { en: "Show map", da: "Vis kort", de: "Karte zeigen" },
-  "map.hide":         { en: "Hide map", da: "Skjul kort", de: "Karte ausblenden" },
+  "map.show":         { en: "Show map", da: "Vis kort", de: "Karte zeigen", lt: "Rodyti žemėlapį" },
+  "map.hide":         { en: "Hide map", da: "Skjul kort", de: "Karte ausblenden", lt: "Slėpti žemėlapį" },
 
   // The two search boxes that are not the header's. header.search covers that
   // one already, and these say what they search rather than repeating "Søg".
-  "search.attractions": { en: "Search attractions", da: "Søg i attraktioner", de: "Attraktionen suchen" },
-  "search.events":      { en: "Search events", da: "Søg i begivenheder", de: "Veranstaltungen suchen" },
-  "search.food":        { en: "Search food", da: "Søg i mad", de: "Essen suchen" },
-  "search.towns":       { en: "Search a town, a region, anything…", da: "Søg efter en by, en landsdel, hvad som helst…", de: "Suche eine Stadt, eine Region, irgendetwas…" },
+  "search.attractions": { en: "Search attractions", da: "Søg i attraktioner", de: "Attraktionen suchen", lt: "Ieškoti lankytinų vietų" },
+  "search.events":      { en: "Search events", da: "Søg i begivenheder", de: "Veranstaltungen suchen", lt: "Ieškoti renginių" },
+  "search.food":        { en: "Search food", da: "Søg i mad", de: "Essen suchen", lt: "Ieškoti maisto" },
+  "search.towns":       { en: "Search a town, a region, anything…", da: "Søg efter en by, en landsdel, hvad som helst…", de: "Suche eine Stadt, eine Region, irgendetwas…", lt: "Ieškokite miesto, regiono ar bet ko…" },
+  // The list controls and the Events page's own words, 1 Oct 2026, when the
+  // Events page became Activities with Events and Calendar. {n} is the count
+  // shown and {total} the count before the filters.
+  "list.filters":   { en: "Filters", da: "Filtre", de: "Filter", lt: "Filtrai" },
+  "list.sortBy":    { en: "Sort by:", da: "Sortér efter:", de: "Sortieren nach:", lt: "Rūšiuoti pagal:" },
+  "list.clearAll":  { en: "Clear all", da: "Ryd alle", de: "Alle entfernen", lt: "Išvalyti viską" },
+  "list.count":     { en: "{n} shown", da: "Viser {n}", de: "{n} angezeigt", lt: "Rodoma: {n}" },
+  "list.countOf":   { en: "{n} of {total} shown", da: "Viser {n} af {total}", de: "{n} von {total} angezeigt", lt: "Rodoma: {n} iš {total}" },
+  "sort.date":      { en: "Date", da: "Dato", de: "Datum", lt: "Data" },
+  "sort.name":      { en: "Name", da: "Navn", de: "Name", lt: "Pavadinimas" },
+  "events.whatsOn": { en: "What's on for you", da: "Hvad sker der for dig", de: "Was für dich los ist", lt: "Kas vyksta jums" },
+  "events.today":   { en: "Today", da: "I dag", de: "Heute", lt: "Šiandien" },
+  "events.tomorrow": { en: "Tomorrow", da: "I morgen", de: "Morgen", lt: "Rytoj" },
+  "events.weekend": { en: "This weekend", da: "I weekenden", de: "Dieses Wochenende", lt: "Šį savaitgalį" },
+  "events.week":    { en: "Next 7 days", da: "De næste 7 dage", de: "Die nächsten 7 Tage", lt: "Artimiausios 7 dienos" },
+  "events.withKids": { en: "With kids", da: "Med børn", de: "Mit Kindern", lt: "Su vaikais" },
+  "events.introAbroad": { en: "Festivals, markets and local happenings across {land}, all year round. From legendary stages to harbour markets nobody talks about. We guide you to what is worth going out for.", da: "Festivaler, markeder og lokale begivenheder i hele {land}, hele året. Fra legendariske scener til havnemarkeder, ingen taler om. Vi viser dig, hvad der er værd at tage ud til.", de: "Festivals, Märkte und lokale Veranstaltungen in ganz {land}, das ganze Jahr über. Von legendären Bühnen bis zu Hafenmärkten, von denen niemand spricht. Wir zeigen dir, wofür es sich lohnt, rauszugehen.", lt: "{land}: festivaliai, turgūs ir vietiniai renginiai ištisus metus. Nuo legendinių scenų iki uosto turgelių, apie kuriuos niekas nekalba. Parodome, kur verta nueiti." },
+  "events.introDenmark": { en: "Festivals, markets and local happenings across Denmark, all year round. From legendary stages to harbour markets nobody talks about. We guide you to what's worth traveling for, and exactly how far it is from Copenhagen.", da: "Festivaler, markeder og lokale begivenheder i hele Danmark, hele året. Fra legendariske scener til havnemarkeder, ingen taler om. Vi viser dig, hvad der er værd at rejse efter, og præcis hvor langt der er fra København.", de: "Festivals, Märkte und lokale Veranstaltungen in ganz Dänemark, das ganze Jahr über. Von legendären Bühnen bis zu Hafenmärkten, von denen niemand spricht. Wir zeigen dir, wofür sich die Reise lohnt, und genau, wie weit es von Kopenhagen ist.", lt: "Festivaliai, turgūs ir vietiniai renginiai visoje Danijoje, ištisus metus. Nuo legendinių scenų iki uosto turgelių, apie kuriuos niekas nekalba. Parodome, į ką verta nuvykti ir kiek tiksliai tai nutolę nuo Kopenhagos." },
 };
 
 export const UI_KEYS = Object.keys(UI_STRINGS);
+
+// A country's name in the reader's language ("Litauen", "Lietuva"), for a
+// sentence that names the page's country. The fallback is the English name the
+// page already carries, for a browser without Intl.DisplayNames.
+export const countryName = (code, lang = DEFAULT_UI_LANGUAGE, fallback = "") => {
+  try { return new Intl.DisplayNames([String(lang || DEFAULT_UI_LANGUAGE)], { type: "region" }).of(String(code || "").toUpperCase()) || fallback; }
+  catch { return fallback; }
+};
 
 // ── READING ONE ─────────────────────────────────────────────────────
 //
