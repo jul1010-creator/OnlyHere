@@ -1,4 +1,4 @@
--- ── GEMLYX SECURITY LOCKDOWN, 30 SEP 2026 ──────────────────────────
+-- ── GEMLYX SECURITY LOCKDOWN, 30 SEP 2026 (revised 1 OCT) ──────────
 -- After Fable's audit. Safe to run more than once. Supabase runs this as one
 -- transaction, so it either all applies or none of it does.
 -- Tables that do not exist are skipped, never an error.
@@ -19,6 +19,8 @@ returns text language plpgsql security definer set search_path = public, pg_temp
 declare i integer; used integer;
 begin
   perform pg_advisory_xact_lock(hashtext('gemlyx_take_guide:' || p_day::text));
+  -- Counts older than 30 days go, as the privacy policy says (1 Oct 2026).
+  delete from gemlyx_guide_allowance where day < p_day - 30;
   for i in 1 .. coalesce(array_length(p_keys, 1), 0) loop
     used := null;
     select n into used from gemlyx_guide_allowance where day = p_day and key = p_keys[i];
@@ -103,10 +105,31 @@ begin
       execute format('drop policy %I on public.gemlyx_guides', pol.policyname);
     end loop;
     alter table public.gemlyx_guides enable row level security;
-    create policy "guides are readable by link" on public.gemlyx_guides for select using (true);
+    -- Read by its link only, through gemlyx_guide(id) below. A select rule
+    -- for everybody let anyone list every guide ever saved.
+    create policy "founder reads guides" on public.gemlyx_guides for select to authenticated using (public.is_founder());
     create policy "guides are saved in the app's shape" on public.gemlyx_guides for insert to anon, authenticated
       with check (id ~ '^[a-z0-9]{6,24}$' and pg_column_size(payload) < 800000);
     create policy "founder removes guides" on public.gemlyx_guides for delete to authenticated using (public.is_founder());
+  end if;
+end $$;
+
+-- 3b. One guide by its link. The app and the link previews read a guide
+--     here and only here; holding the id is the only way in.
+do $$
+begin
+  if to_regclass('public.gemlyx_guides') is not null then
+    execute $f$
+      create or replace function public.gemlyx_guide(p_id text) returns jsonb
+      language sql stable security definer set search_path = public, pg_temp as $q$
+        select payload from public.gemlyx_guides where id = p_id limit 1;
+      $q$
+    $f$;
+    revoke all on function public.gemlyx_guide(text) from public;
+    grant execute on function public.gemlyx_guide(text) to anon, authenticated;
+    -- The chat that built each guide was saved inside it until tonight. It is
+    -- never read from a saved link, so it comes out of every row.
+    update public.gemlyx_guides set payload = payload - '_convoText' where payload ? '_convoText';
   end if;
 end $$;
 
