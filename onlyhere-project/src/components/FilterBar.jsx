@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { C } from "../utils/theme";
+import { t as uiT } from "../utils/uiLanguage";
 import { facetCounts, appliedChips, activeFacetCount, clearFacet, clearAllFacets, toggleFacetValue, isOptionOn } from "../utils/listControls";
 
 // ── "THE FILTER GOTTA BE MADE LIKE THIS FILTER ON MAGASIN" ───────────
@@ -107,6 +108,10 @@ export const FilterBar = ({
   search = null,
   onSearch = null,
   searchPlaceholder = "Search",
+  // The reader's interface language. English keeps the noun ("12 events"),
+  // which the other languages cannot share without a plural of their own, so
+  // they say how many are shown instead.
+  lang = "en",
 }) => {
   const [openKey, setOpenKey] = useState(null);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -132,7 +137,7 @@ export const FilterBar = ({
         {facets.length > 0 && (
           <button onClick={() => setPanelOpen(o => !o)} aria-expanded={panelOpen}
             style={{ background: panelOpen || active ? `${C.gold}1a` : "none", border: `1px solid ${active ? C.gold : C.border}`, color: active ? C.gold : C.light, borderRadius: 100, padding: "9px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer", flexShrink: 0, fontFamily: "'Inter', sans-serif" }}>
-            Filters{active ? ` · ${active}` : ""}
+            {uiT("list.filters", lang)}{active ? ` · ${active}` : ""}
           </button>
         )}
       </div>
@@ -174,7 +179,9 @@ export const FilterBar = ({
           sits among the filters teaches people it removes things. */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginTop: 12 }}>
         <div style={{ fontSize: 12.5, color: C.muted }}>
-          {shown === items.length
+          {lang !== "en"
+            ? uiT(shown === items.length ? "list.count" : "list.countOf", lang).replace("{n}", shown).replace("{total}", items.length)
+            : shown === items.length
             ? `${shown} ${shown === 1 ? noun.replace(/s$/, "") : noun}`
             : `${shown} of ${items.length} ${noun}`}
         </div>
@@ -183,7 +190,7 @@ export const FilterBar = ({
             <button onClick={() => setOpenKey(openKey === "__sort" ? null : "__sort")}
               aria-expanded={openKey === "__sort"}
               style={{ ...btn, padding: "7px 11px", background: "transparent", border: "none", color: C.text }}>
-              <span style={{ color: C.muted, fontWeight: 500 }}>Sort by:</span> {sortLabel}
+              <span style={{ color: C.muted, fontWeight: 500 }}>{uiT("list.sortBy", lang)}</span> {sortLabel}
               <span style={{ fontSize: 9, opacity: 0.8 }}>{openKey === "__sort" ? "▲" : "▼"}</span>
             </button>
             {openKey === "__sort" && (
@@ -221,7 +228,7 @@ export const FilterBar = ({
           {chips.length > 1 && (
             <button onClick={() => onChange(clearAllFacets(facets, state))}
               style={{ ...btn, padding: "5px 4px", background: "none", border: "none", color: C.muted, fontSize: 11.5, textDecoration: "underline" }}>
-              Clear all
+              {uiT("list.clearAll", lang)}
             </button>
           )}
         </div>

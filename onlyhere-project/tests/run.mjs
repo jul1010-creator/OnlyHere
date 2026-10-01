@@ -293,6 +293,7 @@ writeFileSync(entry, `
   export { nearestBusStop, busStopRow, linesPhrase, arrivalOrBusRow, BUS_STOP_MAX_M } from ${JSON.stringify(join(root, "src/utils/busStop.js"))};
   export { KLAIPEDA_STOPS, KLAIPEDA_STOPS_READ_ON } from ${JSON.stringify(join(root, "src/data/klaipedaStops.js"))};
   export { groupNav, childActive, groupActive, NAV_GROUPS } from ${JSON.stringify(join(root, "src/utils/navGroups.js"))};
+  export { groupByMonth, monthLabel } from ${JSON.stringify(join(root, "src/utils/calendarMonths.js"))};
   export { livePromotions, promoCard, untilLabel, PROMO_KINDS } from ${JSON.stringify(join(root, "src/utils/promotions.js"))};
   export { abroadBriefParts, inventoryBlock, inventoryLine, forLand, landAsk, landRules, sameDayHours, startsFor, INVENTORY_CAP, randomAbroadVisit } from ${JSON.stringify(join(root, "src/utils/guideAbroad.js"))};
   export { FROZEN_TRANSPORT, frozenFrom, frozenIn, factsLost, frozenBlock, lostNote } from ${JSON.stringify(join(root, "src/utils/frozenFacts.js"))};
@@ -412,7 +413,7 @@ writeFileSync(entry, `
   export { preferenceRowState, PREF_NO_ACCOUNT, PREF_NO_INTERESTS, PREF_READY, eventsForYou, EVENTS_FOR_YOU_MAX, attractionIs, ATTRACTION_CATEGORIES } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
   export { savableThread, restorableThread, saveThread, loadThread, clearThread, CHAT_KEY, MAX_SAVED_MESSAGES } from ${JSON.stringify(join(root, "src/utils/chatThread.js"))};
   export { affiliateRoster, payingCount, AFFILIATES_PATH, partnerAdsPendingRow } from ${JSON.stringify(join(root, "src/utils/affiliateRoster.js"))};
-  export { UI_LANGUAGES, UI_CODES, UI_STRINGS, UI_KEYS, UI_LANGUAGE_KEY, DEFAULT_UI_LANGUAGE, t, resolveUiLanguage, isUiLanguage, uiLanguageMeta, storedUiLanguage, setStoredUiLanguage, currentUiLanguage } from ${JSON.stringify(join(root, "src/utils/uiLanguage.js"))};
+  export { countryName, UI_LANGUAGES, UI_CODES, UI_STRINGS, UI_KEYS, UI_LANGUAGE_KEY, DEFAULT_UI_LANGUAGE, t, resolveUiLanguage, isUiLanguage, uiLanguageMeta, storedUiLanguage, setStoredUiLanguage, currentUiLanguage } from ${JSON.stringify(join(root, "src/utils/uiLanguage.js"))};
   export { ENTRY_WORDS, ENTRY_HEADINGS, ARRIVAL_LABELS, GLANCE_LABELS, KIND_LABELS, entryWord, BOOK_LABELS, bookLabel, TOUR_PHRASE_WORDS } from ${JSON.stringify(join(root, "src/utils/entryWords.js"))};
   export { tourQuery, tourUrlIsAboutTown, pickTourUrl, tourPhrase, tourKindFor, tourTownFor, tourCandidates, tourProposal, replaceTour, describeTourFindings, guideTours, tourNamesExcluded, tourAliveVerdict, tourRemovalFor, TOUR_RESWEEP_DAYS, FOUND as TOUR_FOUND, NOTHING as TOUR_NOTHING, FAILED as TOUR_FAILED, ALIVE as TOUR_ALIVE, GONE as TOUR_GONE, UNKNOWN as TOUR_UNKNOWN } from ${JSON.stringify(join(root, "src/utils/tourSweep.js"))};
   export { datesFromListings, cityRankOf, cityWanted, CITY_MATCH, CITY_UNKNOWN, CITY_DIFFERENT } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
@@ -8655,9 +8656,9 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // own pair: a superlative next to an adjective. Both say what it is ordered BY.
   // The labels moved into EVENT_SORTS when the row became a Sort by dropdown,
   // and the prefix now carries the "by" that the pill labels used to.
-  ok("the sort says what it orders by", /\{ value: "soonest", label: "Date" \}/.test(app8) && /\{ value: "az", label: "Name" \}/.test(app8));
+  ok("the sort says what it orders by", /\{ value: "soonest", label: uiT\("sort\.date", uiLang\) \}/.test(app8) && /\{ value: "az", label: uiT\("sort\.name", uiLang\) \}/.test(app8) && M.t("sort.date") === "Date" && M.t("sort.name") === "Name");
   ok("and the awkward one is gone", !/label: "Soonest"/.test(app8) && !/label="Soonest"/.test(app8));
-  ok("with the prefix that makes it a sentence", /Sort by:/.test(fbar));
+  ok("with the prefix that makes it a sentence", /uiT\("list\.sortBy", lang\)/.test(fbar) && M.t("list.sortBy") === "Sort by:");
 
   // ── AND A SORT IS NOT A FILTER ───────────────────────────────────
   // listControls.js says this in its own words on clearAllFacets, and the old
@@ -8667,7 +8668,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // earlier space-between seven thousand characters away, on an option row, and
   // passed for a reason that had nothing to do with the sort.
   ok("the sort sits opposite the count, not among the filters",
-     /shown === items\.length[\s\S]{0,900}Sort by:/.test(fbar));
+     /shown === items\.length[\s\S]{0,900}uiT\("list\.sortBy", lang\)/.test(fbar));
   ok("and clearing the filters leaves it alone", /clearAllFacets\(facets, state\)/.test(fbar));
 
   // ── WHAT IS APPLIED, WHERE IT CAN BE READ AND REMOVED ────────────
@@ -43611,8 +43612,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("the facet row was found", /<Chip/.test(filterRow));
     ok("and no sort control is drawn in it", !/__sort/.test(filterRow));
     ok("the sort is below the count instead",
-       code.indexOf("Sort by:") > countAt);
-    ok("and a reader is told it sorts", /Sort by:/.test(code));
+       code.indexOf('uiT("list.sortBy", lang)') > countAt);
+    ok("and a reader is told it sorts", /uiT\("list\.sortBy", lang\)/.test(code) && /"list\.sortBy":\s*\{ en: "Sort by:"/.test(readFileSync(join(root, "src/utils/uiLanguage.js"), "utf8")));
   }
   // ── HALF THE LIBRARY COULD NEVER REACH THE FRONT PAGE ────────────
   // Oliver, 19 Aug 2026, with the Food chip selected and the page reading
@@ -48997,8 +48998,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // language on the way in without one on the way out goes red.
   {
     const langs = Object.keys(AI_DISCLOSURE).sort();
-    is("the disclosure covers the six languages the intake reads, plus both Chinese scripts",
-       langs, ["da", "de", "en", "nl", "no", "sv", "zh", "zh-hans", "zh-hant"]);
+    is("the disclosure covers the six languages the intake reads, both Chinese scripts, and every interface language",
+       langs, ["da", "de", "en", "lt", "nl", "no", "sv", "zh", "zh-hans", "zh-hant"]);
     ok("every one of them is a real sentence", langs.every(l => AI_DISCLOSURE[l].trim().length > 8));
     ok("an unknown language still gets told, in English", aiDisclosure("qq") === AI_DISCLOSURE.en);
     ok("and so does a missing one", aiDisclosure(null) === AI_DISCLOSURE.en);
@@ -64544,9 +64545,9 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     if (typeof v !== "string" || !v.trim()) missing.push(`${key}.${code}`);
   }
   is("every catalogue key has a string in every declared language", missing.join(", "), "");
-  ok("...and there is something to check", UI_KEYS.length > 10 && UI_LANGUAGES.length === 3);
+  ok("...and there is something to check", UI_KEYS.length > 10 && UI_LANGUAGES.length === 4);
   is("English is the source language and is first", UI_LANGUAGES[0].code, "en");
-  is("the three are English, Danish and German", UI_CODES.join(","), "en,da,de");
+  is("the four are English, Danish, German and Lithuanian", UI_CODES.join(","), "en,da,de,lt");
   ok("every language names itself in its own words",
      UI_LANGUAGES.every(l => l.name) && uiLanguageMeta("da").name === "Dansk");
   // ── AND THE FLAG IS DRAWN, NOT TYPED, 5 SEP ───────────────────
@@ -79281,7 +79282,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
      && /!samePlace\(prevLast\.name, firstHere\.name\) && !looseStop\(prevLast\) && !looseStop\(firstHere\)\)/.test(app));
   ok("and geocodes none", /d\.stops\.filter\(s => !looseStop\(s\)\)\.map\(s => s\.name\)/.test(app));
   const ui = readFileSync(join(root, "src/utils/uiLanguage.js"), "utf8");
-  ok("free time is said in all three languages", /"guide\.freeTime":\s*\{ en: "Free time", da: "Fri tid", de: "Freizeit" \}/.test(ui));
+  ok("free time is said in every language", /"guide\.freeTime":\s*\{ en: "Free time", da: "Fri tid", de: "Freizeit", lt: "Laisvas laikas" \}/.test(ui));
 }
 
 // ── THE KIDS LOVE THE ZOO ───────────────────────────────────────────
@@ -80522,10 +80523,11 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const app = readFileSync(join(root, "src/App.jsx"), "utf8");
   const calReaders = app.split("\n").filter(l => /calendarEvents/.test(l) && !/^\s*\/\//.test(l));
   ok("the only readers are the Events page's two lines and the credit", calReaders.every(l => /hasFullCalendar = calendarEvents|\.\.\.calendarEvents\]|calendarEvents\.map\(e => domainOf|import \{ communityEvents, calendarEvents \}/.test(l)) && calReaders.length === 5); // Batch 164: the fifth is the planner's inventory, events on the trip's days
-  ok("Major and Local are no longer tabs", !/\{ id: "local", label: "Local", ico: "town" \}/.test(app) && /\{ id: "picks", label: "Our picks", ico: "ticket" \}, \{ id: "calendar", label: "Full calendar", ico: "calendar" \}/.test(app));
-  ok("and the tabs only show when a full calendar exists", /\{hasFullCalendar && \(\s*\n\s*<div style=\{\{ display: "flex", gap: 0, marginBottom: 16/.test(app));
+  ok("Major and Local are no longer tabs", !/\{ id: "local", label: "Local", ico: "town" \}/.test(app) && /\{ id: "picks", label: uiT\("nav\.events", uiLang\), ico: "ticket" \}, \{ id: "calendar", label: uiT\("nav\.calendar", uiLang\), ico: "calendar" \}/.test(app));
+  // Batch 173, Oliver 1 Oct 2026: Events and Calendar on both sites, always.
+  ok("and the tabs show on both sites, calendar feed or not", !/\{hasFullCalendar && \(\s*\n\s*<div style=\{\{ display: "flex", gap: 0, marginBottom: 16/.test(app) && /\n              <div style=\{\{ display: "flex", gap: 0, marginBottom: 16/.test(app));
   ok("Major is a badge now", /event\.__scale === "Major" && <span[^>]*>Worth travelling for<\/span>/.test(app));
-  ok("what's on for you filters by day and by kids", /\.filter\(e => !whenDays \|\| eventOnDays\(e, whenDays\)\)/.test(app) && /\.filter\(e => !eventKids \|\| hasEventType\(e, "family"\)\)/.test(app) && /What's on for you/.test(app));
+  ok("what's on for you filters by day and by kids", /\.filter\(e => !whenDays \|\| eventOnDays\(e, whenDays\)\)/.test(app) && /\.filter\(e => !eventKids \|\| hasEventType\(e, "family"\)\)/.test(app) && /uiT\("events\.whatsOn", uiLang\)/.test(app));
   ok("a calendar row opens the calendar it came from", /if \(!listed\) \{ setEventDetail\(event\); return; \}/.test(app));
   ok("Studio can add rows to the full calendar, in a country", /const \[calTarget, setCalTarget\] = useState\("community"\);/.test(app) && /type: calTarget === "calendar" \? typeWordFor\(`\$\{r\.name\} \$\{r\.desc \|\| ""\}`\) : "Community",/.test(app) && /\.\.\.\(studioCountry !== DEFAULT_COUNTRY \? \{ country: studioCountry \} : \{\}\),/.test(app));
 }
@@ -80778,6 +80780,40 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("Danish food only is the Danish site's rule", /if \(activeCountry\(\) !== DEFAULT_COUNTRY\) return true;\n\s*if \(typeof row\.danish === "boolean"\) return row\.danish;/.test(food));
   const gemsPanel = readFileSync(join(root, "src/components/CheapGemsPanel.jsx"), "utf8");
   ok("cheap gems locate shops in the page's country", /places-locate\?limit=12&name=\$\{encodeURIComponent\(row\.gem\.name\)\}\$\{countryParam\(\)\}/.test(gemsPanel));
+}
+
+// ── Batch 173: Activities, with Events and Calendar ──
+{
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("Activities is a dropdown on both sites", /groupNav\(NAV_ITEMS\.filter\(item => item\.id !== featuredTab\), \{ calendar: true, t:/.test(app));
+  ok("the page is headed by the view it shows", /\{uiT\(eventTab === "calendar" \? "nav\.calendar" : "nav\.events", uiLang\)\}<\/h2>/.test(app));
+  ok("opening the calendar sorts by date", /if \(cal\) setEventSort\("soonest"\);/.test(app));
+  ok("and the calendar is cut into months", /eventTab === "calendar" && eventSort === "soonest" \? \(/.test(app) && /groupByMonth\(filteredEvents, \{ lang: uiLang \}\)/.test(app));
+  const now = new Date(2026, 9, 1);
+  const g = M.groupByMonth([{ id: 1, date: "2026-09-20" }, { id: 2, date: "2026-10-05" }, { id: 3, date: "2026-12-01" }, { id: 4, date: "" }, { id: 5, date: "2026-10-30" }], { now, lang: "en" });
+  is("months in order, running events under this month, undated last", g.map(m => [m.key, m.events.map(e => e.id)]), [["2026-10", [1, 2, 5]], ["2026-12", [3]], ["", [4]]]);
+  is("an English month", g[0].label, "October 2026");
+  // Lithuanian, the fourth interface language, 1 Oct 2026.
+  ok("Lithuanian is offered, under its own name", M.uiLanguageMeta("lt").name === "Lietuvių");
+  ok("every interface string has a Lithuanian line", M.UI_KEYS.every(k => (M.UI_STRINGS[k].lt || "").trim().length > 0));
+  is("a Lithuanian phone gets Lithuanian", M.resolveUiLanguage(null, "lt-LT"), "lt");
+  is("and a stored English choice still wins", M.resolveUiLanguage("en", "lt-LT"), "en");
+  const ew = readFileSync(join(root, "src/utils/entryWords.js"), "utf8");
+  ok("every entry word has a Lithuanian line", Object.values(M.ENTRY_WORDS).every(v => (v.lt || "").trim().length > 0) && M.entryWord("Castle", "lt") === "Pilis" && /lt: "/.test(ew));
+  const pick = readFileSync(join(root, "src/components/LanguagePicker.jsx"), "utf8");
+  ok("the Lithuanian flag is drawn, yellow over green over red", /lt: \(\s*<>\s*<rect width="20" height="4\.67" fill="#FDB913" \/>\s*<rect y="4\.67" width="20" height="4\.66" fill="#006A44" \/>\s*<rect y="9\.33" width="20" height="4\.67" fill="#C1272D" \/>/.test(pick));
+  const rl = readFileSync(join(root, "src/utils/readerLanguage.js"), "utf8");
+  ok("and a model is told to answer in Lithuanian by name", /lt: "Lithuanian"/.test(rl));
+  const lines = Object.values(M.UI_STRINGS).map(r => r.lt).join("\n");
+  ok("no dash in the Lithuanian copy", !/[\u2013\u2014]/.test(lines) && !/ - /.test(lines));
+  ok("the placeholders survive translation", M.UI_KEYS.every(k => ((M.UI_STRINGS[k].en.match(/\{\w+\}/g) || []).join() === ((M.UI_STRINGS[k].lt || "").match(/\{\w+\}/g) || []).join())));
+  const fb = readFileSync(join(root, "src/components/FilterBar.jsx"), "utf8");
+  ok("the list controls speak the reader's language", /uiT\("list\.filters", lang\)/.test(fb) && /uiT\("list\.sortBy", lang\)/.test(fb) && /uiT\("list\.clearAll", lang\)/.test(fb));
+  ok("every list on the site passes the language", app.split("<FilterBar").slice(1).every(chunk => /^[^>]*?lang=\{uiLang\}/s.test(chunk.slice(0, 400))) && app.split("<FilterBar").length === 4);
+  ok("and the Events page says its own words", /uiT\(`events\.\$\{w\.id\}`, uiLang\)/.test(app) && /uiT\("events\.withKids", uiLang\)/.test(app) && /uiT\("events\.introAbroad", uiLang\)\.replace\("\{land\}", countryName\(PAGE_COUNTRY, uiLang, PAGE_LAND\.name\)\)/.test(app));
+  is("a country is named in the reader's language", ["en", "da", "de", "lt"].map(l => M.countryName("LT", l, "Lithuania")), ["Lithuania", "Litauen", "Litauen", "Lietuva"]);
+  ok("a when chip has a word in every language", ["today", "tomorrow", "weekend", "week"].every(id => ["en", "da", "de", "lt"].every(l => M.t(`events.${id}`, l))));
+  ok("and the month in every language the site speaks", ["da", "de", "lt"].every(l => M.monthLabel(new Date(2026, 9, 1), l).length > 4 && M.monthLabel(new Date(2026, 9, 1), l) !== "October 2026"));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
