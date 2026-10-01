@@ -117,7 +117,7 @@ writeFileSync(entry, `
   export { literalRenderings, literalNote, looksLikeAName, FALSE_FRIENDS, FALSE_FRIEND_RULE, NAME_RULE } from ${JSON.stringify(join(root, "src/utils/literalDanish.js"))};
   export { licenseUrl, creditIsRequired } from ${JSON.stringify(join(root, "src/utils/imageCredits.js"))};
   export { STUDIO_VOICE } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
-  export { cleanOffer, offerProblems, offerLive, offerView, hasPaidPlan, OFFER_TEXT_MAX, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE } from ${JSON.stringify(join(root, "src/utils/offer.js"))};
+  export { cleanOffer, offerProblems, offerLive, offerView, offerTiming, offerWindow, offerHoursLabel, cleanClock, placeClock, OFFER_WEEK, hasPaidPlan, OFFER_TEXT_MAX, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE } from ${JSON.stringify(join(root, "src/utils/offer.js"))};
   export { AI_DISCLOSURE, aiDisclosure, aiDisclosureFor, disclosureLanguage, AI_CHAT_SURFACES, AI_IMAGE_NOTE, aiImageNote, inReaderLanguage } from ${JSON.stringify(join(root, "src/utils/aiDisclosure.js"))};
   export { splitReport, sortReports, filterReports, reportAge, isHandled, unhandledCount, INBOX_SETUP_SQL, FILTERS as INBOX_FILTERS, topicLabel as inboxTopicLabel, reportCountry } from ${JSON.stringify(join(root, "src/utils/supportInbox.js"))};
   export { SUPPORT_TOPICS, REPORT_TOPIC, topicIds, topicLabel, isTopic, GOOD_FAITH_STATEMENT, messagePrompt, MESSAGE_MIN, MESSAGE_MAX, NAME_MAX, looksLikeEmail, looksLikeUrl, supportProblems, problemFor, supportReference, supportPayload, supportMailto, supportReceipt, SUPPORT_TABLE, SUPPORT_SETUP_SQL, SUPPORT_EMAIL, PRIVACY_EMAIL } from ${JSON.stringify(join(root, "src/utils/support.js"))};
@@ -295,7 +295,7 @@ writeFileSync(entry, `
   export { groupNav, childActive, groupActive, NAV_GROUPS } from ${JSON.stringify(join(root, "src/utils/navGroups.js"))};
   export { groupByMonth, monthLabel } from ${JSON.stringify(join(root, "src/utils/calendarMonths.js"))};
   export { SCAN_KINDS, scanKindOf, scanPrompt } from ${JSON.stringify(join(root, "src/utils/scanKinds.js"))};
-  export { livePromotions, promoCard, untilLabel, PROMO_KINDS } from ${JSON.stringify(join(root, "src/utils/promotions.js"))};
+  export { livePromotions, promoCard, untilLabel, PROMO_KINDS, zoneOf } from ${JSON.stringify(join(root, "src/utils/promotions.js"))};
   export { abroadBriefParts, inventoryBlock, inventoryLine, forLand, landAsk, landRules, sameDayHours, startsFor, INVENTORY_CAP, randomAbroadVisit } from ${JSON.stringify(join(root, "src/utils/guideAbroad.js"))};
   export { FROZEN_TRANSPORT, frozenFrom, frozenIn, factsLost, frozenBlock, lostNote } from ${JSON.stringify(join(root, "src/utils/frozenFacts.js"))};
   export { PARTNER_OPENER, PARTNER_INTRO, partnerSections, partnerCount } from ${JSON.stringify(join(root, "src/utils/partnerSheet.js"))};
@@ -80634,7 +80634,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const app = readFileSync(join(root, "src/App.jsx"), "utf8");
   ok("the page reads the entries, not a list of its own", /const promotions = livePromotions\(\{/.test(app));
   ok("out of the menu while nothing is on", /const hidePromotions = liveLoaded && !libraryFailed && !isStudio && promotions\.length === 0;/.test(app));
-  ok("open abroad, locked like the entry page in Denmark", /tab === "promotions" && <PromotionsPage promos=\{promotions\}[^\n]*\n\s*paid=\{OPEN_ABROAD \|\| hasPaidPlan\(userProfile\)\} onOpen=\{\(p\) => openStopDetail\(p\)\}/.test(app));
+  ok("open abroad, locked like the entry page in Denmark", /tab === "promotions" && <PromotionsPage promos=\{promotions\}[^\n]*\n\s*paid=\{OPEN_ABROAD \|\| hasPaidPlan\(userProfile\)\} lang=\{uiLang\} onOpen=\{\(p\) => openStopDetail\(p\)\}/.test(app));
   const page = readFileSync(join(root, "src/components/PromotionsPage.jsx"), "utf8");
   ok("no dash in the page's copy", !/[\u2013\u2014]/.test(page.replace(/\/\/.*$/gm, "")));
 }
@@ -80834,6 +80834,58 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const appS = readFileSync(join(root, "src/App.jsx"), "utf8");
   ok("a tapped name drafts as the kind scanned", /setStudioType\(scanKindOf\(scanKind\)\.id\); setStudioTown\(it\.name\);/.test(appS));
   ok("and Queue all puts every name in the queue, as that kind, in the Studio's country", /Queue all \{scanResults\.length\}/.test(appS) && /fresh\.map\(name => \(\{ name, type, country: studioCountry \}\)\)/.test(appS));
+  // "why does it all say free?" (Oliver, 2 Oct 2026). "free" is the Studio's old
+  // name for Attractions, from when the list was free entrances only.
+  ok("the queue names an attraction an attraction, not 'free'", /\(\{entryKindLabel\(it\.type, it\.type\)\.toLowerCase\(\)\}/.test(appS) && !/\(\{it\.type\}\{it\.country/.test(appS));
+  ok("search calls it an attraction too", !/_kindLabel: "Free entry"/.test(appS));
+  ok("and research no longer searches every museum for free entry", !/\$\{name\} free entry what makes it special/.test(appS) && /\$\{name\} entry price tickets what makes it special/.test(appS));
+}
+
+// ── Batch 178: offer hours ──
+// Oliver, 2 Oct 2026: "at 13.00 tuesday, where they get no customers, say
+// 'from 13.00-16.00' we offer a full meal + free soda on chosen meals."
+{
+  const lunch = { text: "Full meal and a free soda", until: "2026-12-31", days: [2], from: "13.00", to: "16" };
+  const tue1330 = new Date("2026-10-06T10:30:00Z"), tue1100 = new Date("2026-10-06T08:00:00Z"), tue1630 = new Date("2026-10-06T13:30:00Z"), wed1330 = new Date("2026-10-07T10:30:00Z");
+  const LT = "Europe/Vilnius";
+  is("the times are read the way he writes them and stored one way", [M.cleanClock("13.00"), M.cleanClock("16"), M.cleanClock("9:30"), M.cleanClock("25:00"), M.cleanClock("noon")], ["13:00", "16:00", "09:30", "", ""]);
+  is("the stored offer keeps its window", M.cleanOffer(lunch), { text: "Full meal and a free soda", until: "2026-12-31", days: [2], from: "13:00", to: "16:00" });
+  is("and an offer with no window keeps the shape it always had", M.cleanOffer({ text: "x", until: "2026-12-31" }), { text: "x", until: "2026-12-31" });
+  is("Tuesday 13:30 in Klaipėda is on now", M.offerTiming(lunch, { now: tue1330, zone: LT }), "now");
+  is("11:00 is later today", M.offerTiming(lunch, { now: tue1100, zone: LT }), "later");
+  is("16:30 is over for today", M.offerTiming(lunch, { now: tue1630, zone: LT }), "off");
+  is("and Wednesday is not its day", M.offerTiming(lunch, { now: wed1330, zone: LT }), "off");
+  is("the clock is the place's: 13:30 in Klaipėda is 12:30 in Copenhagen, before the window", M.offerTiming(lunch, { now: tue1330, zone: "Europe/Copenhagen" }), "later");
+  is("no window is on whenever its dates are", M.offerTiming({ text: "x", until: "2026-12-31" }, { now: wed1330, zone: LT }), "always");
+  is("past its end date the window does not matter", M.offerTiming({ ...lunch, until: "2026-01-01" }, { now: tue1330, zone: LT }), "ended");
+  is("said on the badge", [
+    M.offerHoursLabel(lunch, { timing: "now" }), M.offerHoursLabel(lunch, { timing: "later" }), M.offerHoursLabel(lunch, { timing: "off" }),
+    M.offerHoursLabel({ ...lunch, days: [2, 4] }, { timing: "off" }), M.offerHoursLabel({ ...lunch, days: [] }, { timing: "off" }), M.offerHoursLabel({ text: "x", until: "2026-12-31" }, { timing: "always" }),
+  ], ["On now until 16:00", "Today 13:00-16:00", "Tuesdays 13:00-16:00", "Tue, Thu 13:00-16:00", "Every day 13:00-16:00", ""]);
+  is("in Danish with his full stop", M.offerHoursLabel(lunch, { timing: "now", lang: "da" }), "Gælder nu til 16.00");
+  ok("and in Lithuanian", M.offerHoursLabel(lunch, { timing: "now", lang: "lt" }) === "Galioja dabar iki 16:00" && /16:00$/.test(M.offerHoursLabel(lunch, { timing: "off", lang: "lt" })));
+  ok("both times or neither", M.offerProblems({ ...lunch, to: "" }).some(p => /both a start and an end/.test(p)));
+  ok("a time it cannot read is named", M.offerProblems({ ...lunch, from: "lunch" }).some(p => /"lunch" is not a time/.test(p)));
+  ok("the end comes after the start", M.offerProblems({ ...lunch, from: "16:00", to: "13:00" }).some(p => /after the start/.test(p)));
+  is("a good window has nothing to say", M.offerProblems(lunch), []);
+  const view = M.offerView(lunch, { paid: true, today: tue1330, zone: LT });
+  ok("the entry page is told when it runs, and the lock rule is untouched", view.show && view.timing === "now" && view.window?.to === "16:00" && M.offerView(lunch, { paid: false, today: tue1330, zone: LT }).locked);
+  is("a Lithuanian row runs on Vilnius time", M.zoneOf({ country: "LT" }), "Europe/Vilnius");
+  const pools = { food: [
+    { id: 1, name: "Later", country: "LT", __offer: { text: "a", until: "2026-12-31", from: "15:00", to: "17:00" } },
+    { id: 2, name: "Now", country: "LT", __offer: { text: "b", until: "2026-12-31", days: [2], from: "13:00", to: "16:00" } },
+    { id: 3, name: "Wednesday", country: "LT", __offer: { text: "c", until: "2026-10-10", days: [3] } },
+    { id: 4, name: "All day", country: "LT", __offer: { text: "d", until: "2026-12-31" } },
+  ] };
+  is("the list puts what is on now first", M.livePromotions(pools, tue1330).map(p => p.name), ["Now", "All day", "Later", "Wednesday"]);
+  const card = M.promoCard(M.livePromotions(pools, tue1330)[0], { paid: true, today: tue1330 });
+  ok("and the card carries the badge", card.timing === "now" && card.hours === "On now until 16:00");
+  const appH = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the Studio picks the days and the hours and publishes them", /OFFER_WEEK\.map\(d => \{/.test(appH) && /setStudioOfferFrom\(e\.target\.value\)/.test(appH) && /setStudioOfferTo\(e\.target\.value\)/.test(appH) && /const offerFromFields = cleanOffer\(studioOfferFields\);/.test(appH));
+  ok("and opening a published row brings its hours back", /setStudioOfferDays\(Array\.isArray\(row\.payload\?\.__offer\?\.days\)/.test(appH) && /setStudioOfferFrom\(row\.payload\?\.__offer\?\.from \|\| ""\);/.test(appH));
+  const dpH = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
+  ok("the entry page reads the place's clock", /offerView\(item\.__offer, \{ paid, zone: countryProfile\(rowCountry\(item\)\)\.zone \}\)/.test(dpH) && /data-testid="offer-hours"/.test(dpH));
+  ok("and so does the Special deals page", /promoCard\(p, \{ paid, today, lang \}\)/.test(readFileSync(join(root, "src/components/PromotionsPage.jsx"), "utf8")));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
