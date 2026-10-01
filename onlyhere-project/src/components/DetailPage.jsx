@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { activeCountry, countryProfile, DEFAULT_COUNTRY } from "../utils/countries";
+import { activeCountry, countryProfile, rowCountry, DEFAULT_COUNTRY } from "../utils/countries";
 import { C } from "../utils/theme";
 import { getEventDate, travelLabel, isUpcoming, isCurrentlyLive, arrivalRow, externalHref, hasFinished, TRAVEL_ORIGIN } from "../utils/helpers";
 import { byEventDate } from "../utils/eventDates";
@@ -26,7 +26,7 @@ import { ticketmasterUrl, ticketDisclosure, tiqetsUrl, tiqetsDisclosure, affilia
 import { isTiqetsProductUrl, ticketAgentOf, isBookableTicketUrl, isTourUrl, sameShop, priceSourceHost, isResellerUrl } from "../utils/ticketLink";
 import { cleanTicketOffer, offerIsTheDoor, ticketOfferLine, partnerReason, partnerPitchFits, officialSiteLabel, agentName, OFFER_AGENTS } from "../utils/ticketOffer";
 import { branchPoints, branchesOf, hasBranches, branchLine, branchLabel } from "../utils/branches";
-import { offerView, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE } from "../utils/offer";
+import { offerView, offerHoursLabel, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE } from "../utils/offer";
 import { saveLabel, saveHint, planFromSavedLabel } from "../utils/savedTrip";
 import { HowWeKnow } from "./HowWeKnow";
 import { SocialSection } from "./SocialSection";
@@ -1517,13 +1517,20 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
             same question with the money running the other way, since Gemlyx may
             have paid the shop to put the offer there. */}
         {(() => {
-          const view = offerView(item.__offer, { paid });
+          // The offer's hours run on the place's clock, not the reader's.
+          const view = offerView(item.__offer, { paid, zone: countryProfile(rowCountry(item)).zone });
           if (!view.show) return null;
+          const hours = offerHoursLabel(item.__offer, { timing: view.timing, lang });
           return (
             <div style={{ background: `${C.gold}14`, border: `1px solid ${C.gold}55`, borderRadius: 12, padding: "12px 14px", marginBottom: 10 }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: C.gold, letterSpacing: 0.4, marginBottom: view.locked ? 3 : 5 }}>
                 ◈ {OFFER_LOCKED_LABEL}
               </div>
+              {hours && (
+                <div data-testid="offer-hours" style={{ display: "inline-block", fontSize: 11, fontWeight: 700, borderRadius: 100, padding: "3px 9px", marginBottom: 6, ...(view.timing === "now" ? { background: C.gold, color: C.onGold } : { border: `1px solid ${C.border}`, color: C.light }) }}>
+                  {view.timing === "now" ? "● " : ""}{hours}
+                </div>
+              )}
               <div style={{ fontSize: view.locked ? 12 : 13, color: view.locked ? C.muted : C.text, lineHeight: 1.55 }}>
                 {view.locked ? OFFER_LOCKED_NOTE : view.text}
               </div>
