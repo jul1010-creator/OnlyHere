@@ -294,6 +294,7 @@ writeFileSync(entry, `
   export { KLAIPEDA_STOPS, KLAIPEDA_STOPS_READ_ON } from ${JSON.stringify(join(root, "src/data/klaipedaStops.js"))};
   export { groupNav, childActive, groupActive, NAV_GROUPS } from ${JSON.stringify(join(root, "src/utils/navGroups.js"))};
   export { groupByMonth, monthLabel } from ${JSON.stringify(join(root, "src/utils/calendarMonths.js"))};
+  export { SCAN_KINDS, scanKindOf, scanPrompt } from ${JSON.stringify(join(root, "src/utils/scanKinds.js"))};
   export { livePromotions, promoCard, untilLabel, PROMO_KINDS } from ${JSON.stringify(join(root, "src/utils/promotions.js"))};
   export { abroadBriefParts, inventoryBlock, inventoryLine, forLand, landAsk, landRules, sameDayHours, startsFor, INVENTORY_CAP, randomAbroadVisit } from ${JSON.stringify(join(root, "src/utils/guideAbroad.js"))};
   export { FROZEN_TRANSPORT, frozenFrom, frozenIn, factsLost, frozenBlock, lostNote } from ${JSON.stringify(join(root, "src/utils/frozenFacts.js"))};
@@ -80731,7 +80732,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("Random guide builds a visit on another country's page", /if \(PAGE_ABROAD\) return generateRandomAbroad\(\);/.test(app) && /const v = randomAbroadVisit\(PAGE_COUNTRY\);/.test(app));
   ok("the loading card can go without a fact", /const fact = denmarkFacts\.length \? denmarkFacts\[factCardIdx % denmarkFacts\.length\] : null;/.test(app) && /\{fact && <div style=\{\{ textAlign: "left", padding: "22px 22px 26px"/.test(app));
   ok("the fact writer asks about the page's country", /verifiable fact about \$\{PAGE_LAND\.name\} that/.test(app) && !/verifiable fact about Denmark that/.test(app));
-  ok("Scan a Source asks for the page's festivals", /Extract every distinct \$\{PAGE_LAND\.adjective \|\| "Danish"\} festival\/event/.test(app));
+  ok("Scan a Source asks in the page's country", /scanPrompt\(scanKind, PAGE_LAND\.adjective \|\| "Danish"\)/.test(app));
 
   const facts = readFileSync(join(root, "src/utils/liveFacts.js"), "utf8");
   ok("another country's page starts with no Danish facts", /if \(PAGE !== DEFAULT_COUNTRY\) denmarkFacts\.length = 0;/.test(facts) && /if \(rowCountry\(row\) !== PAGE\) return;/.test(facts));
@@ -80823,6 +80824,16 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("and Explore is never one of them", !/\bhome: /.test(app.slice(app.indexOf("const emptyHere = {"), app.indexOf("const hideAbroad"))));
   ok("and the front page's dates and planner button go with the planner", /\{TAB_ORDER\.includes\("ai"\) && <div style=\{\{ display: "flex", gap: 10/.test(app) && /\{TAB_ORDER\.includes\("ai"\) && <button onClick=\{\(\) => \{ setDetourTab\("sightseeing"\)/.test(app));
   ok("the gold button goes with its page", /\{NAV_ITEMS\.some\(item => item\.id === featuredTab\) && <button className="gx-topnav-ai" data-testid="nav-featured"/.test(app));
+}
+
+// ── Batch 177: Scan a Source reads more than events ──
+{
+  is("Scan a Source reads events, places to see, food and towns", M.SCAN_KINDS.map(k => k.id), ["festival", "free", "food", "town"]);
+  ok("each asks for its own kind, in the page's country, and drops the tagline", /Lithuanian place to see/.test(M.scanPrompt("free", "Lithuanian")) && /drop the tagline/.test(M.scanPrompt("free", "Lithuanian")) && /"dates"/.test(M.scanPrompt("festival")) && !/"dates"/.test(M.scanPrompt("food")));
+  ok("an unknown kind reads as events, as before", M.scanKindOf("moon").id === "festival");
+  const appS = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("a tapped name drafts as the kind scanned", /setStudioType\(scanKindOf\(scanKind\)\.id\); setStudioTown\(it\.name\);/.test(appS));
+  ok("and Queue all puts every name in the queue, as that kind, in the Studio's country", /Queue all \{scanResults\.length\}/.test(appS) && /fresh\.map\(name => \(\{ name, type, country: studioCountry \}\)\)/.test(appS));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
