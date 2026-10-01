@@ -80488,7 +80488,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const app = readFileSync(join(root, "src/App.jsx"), "utf8");
   ok("the page's country is read once, at load", /const PAGE_COUNTRY = activeCountry\(\);/.test(app) && /const HOME_PATH = homePath\(PAGE_COUNTRY\);/.test(app));
   // Batch 164: the planner and Tips are on it now; the chat is still not.
-  ok("the chat stays off a Lithuanian page, the planner and Tips do not", /const NOT_YET_ABROAD = \[\];/.test(app) && /if \(PAGE_ABROAD\) return null;\s*\n\s*return <AskGemlyx/.test(app) && /\{<button className="gx-topnav-ai"/.test(app) && /\{!PAGE_ABROAD && \(<>/.test(app));
+  ok("the chat stays off a Lithuanian page, the planner and Tips do not", /const NOT_YET_ABROAD = \[\];/.test(app) && /if \(PAGE_ABROAD\) return null;\s*\n\s*return <AskGemlyx/.test(app) && /\{NAV_ITEMS\.some\(item => item\.id === featuredTab\) && <button className="gx-topnav-ai"/.test(app) && /\{!PAGE_ABROAD && \(<>/.test(app));
   // Batch 162: and Studio, which lives on the planner's page, stays reachable at /lithuania#studio.
   ok("an empty page leaves a Lithuanian menu by itself, and Studio keeps its page", /const hideAbroad = \(t\) => PAGE_ABROAD && \(\(NOT_YET_ABROAD\.includes\(t\) && !\(t === "ai" && isStudio\)\) \|\| \(liveLoaded && !libraryFailed && !isStudio && emptyHere\[t\]\)\);/.test(app));
   ok("the Danish video and photo stay on Danish pages", /\{!videoError && !PAGE_ABROAD && \(/.test(app) && /background: PAGE_ABROAD \? "linear-gradient/.test(app));
@@ -80522,7 +80522,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("and lives in its own list, read by nothing but the Events page", /if \(scale === "Calendar"\) return calendarEvents;/.test(live) && /FESTIVAL_SCALES = \["Major", "Local", "Community", "Calendar"\]/.test(live));
   const app = readFileSync(join(root, "src/App.jsx"), "utf8");
   const calReaders = app.split("\n").filter(l => /calendarEvents/.test(l) && !/^\s*\/\//.test(l));
-  ok("the only readers are the Events page's two lines and the credit", calReaders.every(l => /hasFullCalendar = calendarEvents|\.\.\.calendarEvents\]|calendarEvents\.map\(e => domainOf|import \{ communityEvents, calendarEvents \}/.test(l)) && calReaders.length === 5); // Batch 164: the fifth is the planner's inventory, events on the trip's days
+  ok("the only readers are the Events page's two lines and the credit", calReaders.every(l => /hasFullCalendar = calendarEvents|\.\.\.calendarEvents\]|calendarEvents\.map\(e => domainOf|import \{ communityEvents, calendarEvents \}/.test(l)) && calReaders.length === 6); // Batch 164: the fifth is the planner's inventory, events on the trip's days. Batch 176: the sixth is whether a Lithuanian Events page has anything to show
   ok("Major and Local are no longer tabs", !/\{ id: "local", label: "Local", ico: "town" \}/.test(app) && /\{ id: "picks", label: uiT\("nav\.events", uiLang\), ico: "ticket" \}, \{ id: "calendar", label: uiT\("nav\.calendar", uiLang\), ico: "calendar" \}/.test(app));
   // Batch 173, Oliver 1 Oct 2026: Events and Calendar on both sites, always.
   ok("and the tabs show on both sites, calendar feed or not", !/\{hasFullCalendar && \(\s*\n\s*<div style=\{\{ display: "flex", gap: 0, marginBottom: 16/.test(app) && /\n              <div style=\{\{ display: "flex", gap: 0, marginBottom: 16/.test(app));
@@ -80814,6 +80814,14 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   is("a country is named in the reader's language", ["en", "da", "de", "lt"].map(l => M.countryName("LT", l, "Lithuania")), ["Lithuania", "Litauen", "Litauen", "Lietuva"]);
   ok("a when chip has a word in every language", ["today", "tomorrow", "weekend", "week"].every(id => ["en", "da", "de", "lt"].every(l => M.t(`events.${id}`, l))));
   ok("and the month in every language the site speaks", ["da", "de", "lt"].every(l => M.monthLabel(new Date(2026, 9, 1), l).length > 4 && M.monthLabel(new Date(2026, 9, 1), l) !== "October 2026"));
+}
+
+// ── Batch 176: every Lithuanian page waits for its first row ──
+{
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("every Lithuanian page waits for data, the planner for places", ["tips: hereCount(tipsOnly(essentials)) === 0,", "attractions: hereCount(freeEntrance) + hereCount(craftItems) === 0,", "food: hereCount(foodSpots) === 0,", "visits: hereCount(towns) === 0,", "ai: hereCount(freeEntrance) + hereCount(foodSpots) + hereCount(craftItems) === 0,"].every(line => app.includes(line)) && /events: !\[\.\.\.events, \.\.\.majorEvents, \.\.\.calendarEvents\]\.some\(e => rowCountry\(e\) === PAGE_COUNTRY/.test(app) && /const hereCount = \(rows\) => /.test(app));
+  ok("and Explore is never one of them", !/\bhome: /.test(app.slice(app.indexOf("const emptyHere = {"), app.indexOf("const hideAbroad"))));
+  ok("the gold button goes with its page", /\{NAV_ITEMS\.some\(item => item\.id === featuredTab\) && <button className="gx-topnav-ai" data-testid="nav-featured"/.test(app));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
