@@ -153,6 +153,7 @@ import { buildFoodFacets, FOOD_SORTS, byFoodPrice } from "./utils/foodStyle";
 import { DK_PATHS, dkProject } from "./data/mapShapes";
 import { PageHero } from "./components/PageHero";
 import { LiveEventsHeaderStrip } from "./components/LiveEventsHeaderStrip";
+import { SCAN_KINDS, scanKindOf, scanPrompt } from "./utils/scanKinds";
 import { groupByMonth } from "./utils/calendarMonths";
 import { WeatherHeaderStrip, DenmarkClock } from "./components/WeatherHeaderStrip";
 import { StoreBadge } from "./components/StoreBadge";
@@ -3904,6 +3905,9 @@ Say which answer came from which source, so a fact from a vouched page and a fac
   const [scanError, setScanError] = useState(null);
   const [scanResults, setScanResults] = useState(null); // [{name, town, dates}] — new only
   const [scanHint, setScanHint] = useState(null); // {town, dates} carried from the tapped scan chip, so real facts already found aren't thrown away
+  // What kind of listing the page is: events, places to see, food or towns
+  // (utils/scanKinds.js). Oliver, 1 Oct 2026.
+  const [scanKind, setScanKind] = useState("festival");
 
   const scanSource = async () => {
     const url = scanUrl.trim();
@@ -3929,7 +3933,7 @@ Say which answer came from which source, so a fact from a vouched page and a fac
           model: "gpt-5.6-sol",
           response_format: { type: "json_object" },
           messages: [
-            { role: "system", content: `Extract every distinct ${PAGE_LAND.adjective || "Danish"} festival/event mentioned in this page text into strict JSON: {"items": [{"name": "exact name as written", "town": "town/city if given, else empty string", "dates": "date range as written, else empty string"}]}. Only include items present in the text — never invent, never guess at ones you think might exist. If the same festival appears twice (e.g. a duplicate listing), include it once. This is a discovery list only, not final content — the founder will individually research and verify each one before anything is published.` },
+            { role: "system", content: scanPrompt(scanKind, PAGE_LAND.adjective || "Danish") },
             { role: "user", content: pageData.text },
           ],
           // max_tokens -> max_completion_tokens: "gpt-5.6-sol" REJECTS max_tokens
@@ -3953,7 +3957,7 @@ Say which answer came from which source, so a fact from a vouched page and a fac
       const items = Array.isArray(parsed.items) ? parsed.items : [];
 
       // Dedupe against everything Gemlyx already has (case-insensitive substring match)
-      const known = [...towns, ...majorEvents, ...events, ...freeEntrance, ...foodSpots, ...nightlifeSpots]
+      const known = [...towns, ...majorEvents, ...events, ...freeEntrance, ...foodSpots, ...nightlifeSpots, ...craftItems, ...draftQueueRef.current]
         .map(x => (x.name || "").toLowerCase());
       const fresh = items.filter(it => it.name && !known.some(k => k.includes(it.name.toLowerCase()) || it.name.toLowerCase().includes(k)));
 
@@ -26018,7 +26022,15 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
 
                     <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, padding: "14px", marginBottom: 16 }}>
                       <div style={{ fontSize: 12, fontWeight: 700, color: C.text, marginBottom: 3 }}>🔗 Scan a Source</div>
-                      <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginBottom: 10 }}>Paste a listing page (e.g. a festival calendar) — pulls out names not already in Gemlyx. Doesn't write anything or publish — just gives you a queue to tap through below.</div>
+                      <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginBottom: 10 }}>Paste a listing page, say what it lists, and it pulls out the names not already in Gemlyx. Nothing is written or published: tap a name to draft it, or queue them all.</div>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+                        {SCAN_KINDS.map(k => (
+                          <button key={k.id} onClick={() => { setScanKind(k.id); setScanResults(null); }} aria-pressed={scanKind === k.id}
+                            style={{ background: scanKind === k.id ? `${C.gold}22` : "none", border: `1px solid ${scanKind === k.id ? C.gold : C.border}`, color: scanKind === k.id ? C.gold : C.light, borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                            {k.label}
+                          </button>
+                        ))}
+                      </div>
                       <div style={{ display: "flex", gap: 8 }}>
                         <input value={scanUrl} onChange={e => setScanUrl(e.target.value)} onKeyDown={e => e.key === "Enter" && scanSource()}
                           placeholder="https://..."
@@ -26032,10 +26044,24 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       {scanResults && scanResults.length === 0 && <div style={{ fontSize: 11.5, color: C.muted, marginTop: 8 }}>Nothing new found — Gemlyx already has everything this page mentions.</div>}
                       {scanResults && scanResults.length > 0 && (
                         <div style={{ marginTop: 10 }}>
-                          <div style={{ fontSize: 10.5, color: C.muted, marginBottom: 8 }}>{scanResults.length} new — tap one to start drafting it:</div>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+                            <div style={{ fontSize: 10.5, color: C.muted }}>{scanResults.length} new · tap one to draft it now</div>
+                            <button onClick={() => {
+                              const type = scanKindOf(scanKind).id;
+                              const already = new Set(draftQueueRef.current.map(q => `${q.type}::${q.name.toLowerCase()}`));
+                              const fresh = scanResults.map(it => it.name).filter(n => n && !already.has(`${type}::${n.toLowerCase()}`));
+                              draftQueueRef.current = [...draftQueueRef.current, ...fresh.map(name => ({ name, type, country: studioCountry }))];
+                              setDraftQueue([...draftQueueRef.current]);
+                              setScanResults([]);
+                              showToast(`${fresh.length} added to the queue · press Start drafting`, 2800);
+                            }}
+                              style={{ background: C.gold, border: "none", borderRadius: 100, padding: "6px 12px", fontSize: 11, fontWeight: 700, color: C.onGold, cursor: "pointer" }}>
+                              Queue all {scanResults.length}
+                            </button>
+                          </div>
                           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                             {scanResults.map((it, i) => (
-                              <button key={i} onClick={() => { setStudioType("festival"); setStudioTown(it.name); setScanHint({ town: it.town, dates: it.dates }); setStudioResult(null); setStudioError(null); setScanResults(prev => prev.filter((_, j) => j !== i)); }}
+                              <button key={i} onClick={() => { setStudioType(scanKindOf(scanKind).id); setStudioTown(it.name); setScanHint({ town: it.town, dates: it.dates || "" }); setStudioResult(null); setStudioError(null); setScanResults(prev => prev.filter((_, j) => j !== i)); }}
                                 title={[it.town, it.dates].filter(Boolean).join(" · ")}
                                 style={{ background: C.surface, border: `1px solid ${C.gold}44`, borderRadius: 100, padding: "6px 12px", fontSize: 11.5, color: C.text, cursor: "pointer" }}>
                                 {it.name}{it.town ? ` · ${it.town}` : ""}
