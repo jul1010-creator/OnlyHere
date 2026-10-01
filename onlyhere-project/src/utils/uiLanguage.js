@@ -702,6 +702,11 @@ export const UI_STRINGS = {
   "list.clearAll":  { en: "Clear all", da: "Ryd alle", de: "Alle entfernen", lt: "Išvalyti viską" },
   "list.count":     { en: "{n} shown", da: "Viser {n}", de: "{n} angezeigt", lt: "Rodoma: {n}" },
   "list.countOf":   { en: "{n} of {total} shown", da: "Viser {n} af {total}", de: "{n} von {total} angezeigt", lt: "Rodoma: {n} iš {total}" },
+  // Offer hours, 2 Oct 2026. {time} is a clock time, {range} two of them.
+  "offer.onNowUntil": { en: "On now until {time}", da: "Gælder nu til {time}", de: "Jetzt bis {time}", lt: "Galioja dabar iki {time}" },
+  "offer.onToday":    { en: "On today", da: "Gælder i dag", de: "Heute gültig", lt: "Galioja šiandien" },
+  "offer.todayAt":    { en: "Today {range}", da: "I dag {range}", de: "Heute {range}", lt: "Šiandien {range}" },
+  "offer.everyDay":   { en: "Every day", da: "Hver dag", de: "Täglich", lt: "Kasdien" },
   "sort.date":      { en: "Date", da: "Dato", de: "Datum", lt: "Data" },
   "sort.name":      { en: "Name", da: "Navn", de: "Name", lt: "Pavadinimas" },
   "events.whatsOn": { en: "What's on for you", da: "Hvad sker der for dig", de: "Was für dich los ist", lt: "Kas vyksta jums" },

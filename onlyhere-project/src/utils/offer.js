@@ -39,6 +39,7 @@
 import { dayStart, dayEnd } from "./calendarDay";
 import { stripDashes } from "./helpers";
 import { PAID_PLANS_LIVE } from "../config";
+import { t as uiT } from "./uiLanguage";
 
 const clean = (v) => stripDashes(String(v ?? "").replace(/\s+/g, " ").trim());
 
@@ -73,12 +74,90 @@ export const hasPaidPlan = (profile) => {
 // Two fields and no more. A counter belongs here eventually, per his "10 left,
 // 9 left, 8 left", and it is deliberately absent until something can count:
 // a number nothing decrements is a lie that ticks.
+//
+// Plus, since 2 Oct 2026, an optional window inside those dates (see OFFER
+// HOURS below): `days` and `from`/`to`, stored only when set, so every offer
+// written before then keeps its exact shape.
 export const cleanOffer = (raw) => {
   if (!raw || typeof raw !== "object") return null;
   const text = clean(raw.text).slice(0, OFFER_TEXT_MAX);
   const until = clean(raw.until);
   if (!text && !until) return null;
-  return { text, until };
+  const days = cleanDays(raw.days);
+  const from = clean(raw.from), to = clean(raw.to);
+  return {
+    text, until,
+    ...(days.length ? { days } : {}),
+    ...(from || to ? { from: cleanClock(from) || from, to: cleanClock(to) || to } : {}),
+  };
+};
+
+// ── OFFER HOURS ─────────────────────────────────────────────────────
+//
+// Oliver, 2 Oct 2026: "businesses could, let's say at 13.00 tuesday, where
+// they get no customers, say 'from 13.00-16.00' we offer a full meal + free
+// soda on chosen meals."
+//
+// So an offer can run in a window: on some weekdays, between two clock times,
+// inside its dates. Nothing set means all day, every day, as before.
+//
+// THE CLOCK IS THE PLACE'S, NOT THE READER'S. A cruise passenger's phone may
+// still be on ship time or home time, and "until 16:00" means 16:00 at the
+// counter in Klaipėda. Callers pass the zone of the row's country.
+//
+// Days use Date.getDay numbering (0 is Sunday), Monday first in the Studio.
+export const OFFER_WEEK = [1, 2, 3, 4, 5, 6, 0];
+
+const cleanDays = (v) => [...new Set((Array.isArray(v) ? v : [])
+  .map(Number).filter(n => Number.isInteger(n) && n >= 0 && n <= 6))]
+  .sort((a, b) => OFFER_WEEK.indexOf(a) - OFFER_WEEK.indexOf(b));
+
+// "13", "13.00", "13:00" and "9:30" all read; anything else is "".
+export const cleanClock = (v) => {
+  const m = /^([01]?\d|2[0-3])(?:[:.]([0-5]\d))?$/.exec(String(v ?? "").trim());
+  return m ? `${m[1].padStart(2, "0")}:${m[2] || "00"}` : "";
+};
+const minutesOf = (hhmm) => { const c = cleanClock(hhmm); return c ? Number(c.slice(0, 2)) * 60 + Number(c.slice(3)) : null; };
+
+// The weekday and minute of the day at the place. Falls back to the device
+// clock only where Intl cannot do zones, which no current browser lacks.
+const WD = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+export const placeClock = (now = new Date(), zone = "") => {
+  try {
+    const parts = new Intl.DateTimeFormat("en-GB", { timeZone: zone || undefined, weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(now);
+    const get = (type) => parts.find(p => p.type === type)?.value;
+    const day = WD[get("weekday")];
+    const minutes = Number(get("hour")) * 60 + Number(get("minute"));
+    if (day !== undefined && Number.isFinite(minutes)) return { day, minutes };
+  } catch { /* fall through */ }
+  return { day: now.getDay(), minutes: now.getHours() * 60 + now.getMinutes() };
+};
+
+// The window, or null for an all day, every day offer.
+export const offerWindow = (offer) => {
+  const o = cleanOffer(offer);
+  if (!o) return null;
+  const from = minutesOf(o.from), to = minutesOf(o.to);
+  const hours = from !== null && to !== null && to > from;
+  if (!o.days?.length && !hours) return null;
+  return { days: o.days || [], from: hours ? cleanClock(o.from) : "", to: hours ? cleanClock(o.to) : "", fromMin: hours ? from : 0, toMin: hours ? to : 24 * 60 };
+};
+
+// Where an offer stands right now, at the place:
+//   "always"  no window, so on whenever its dates are
+//   "now"     inside its window
+//   "later"   on today, but not yet
+//   "off"     not today, or already over for today
+// An offer outside its dates is "ended", whatever its window says.
+export const offerTiming = (offer, { now = new Date(), zone = "" } = {}) => {
+  if (!offerLive(offer, now)) return "ended";
+  const w = offerWindow(offer);
+  if (!w) return "always";
+  const { day, minutes } = placeClock(now, zone);
+  if (w.days.length && !w.days.includes(day)) return "off";
+  if (minutes < w.fromMin) return "later";
+  if (minutes >= w.toMin) return "off";
+  return "now";
 };
 
 // ── WHY IT WILL NOT RENDER, IN WORDS, IN THE STUDIO ─────────────────
@@ -92,6 +171,14 @@ export const offerProblems = (offer) => {
   if (!o.until) out.push("The offer has no end date, so it will not render. An offer with no end is a promise nobody is going to remember to take down: give it a date, even a far one, and it becomes a review rather than a leak.");
   else if (!dayEnd(o.until)) out.push(`"${o.until}" is not a date this can read. Use YYYY-MM-DD.`);
   else if (!offerLive(o)) out.push(`This offer ended on ${o.until}, so it is already invisible on the page. Change the date or clear the field.`);
+  // The hours. Both or neither, each one a time, and the end after the start.
+  // A window past midnight is two offers' worth of argument at the counter, so
+  // it is refused rather than guessed at.
+  const hasFrom = !!String(o.from || "").trim(), hasTo = !!String(o.to || "").trim();
+  if (hasFrom !== hasTo) out.push("Give the offer both a start and an end time, or leave both empty for all day.");
+  if (hasFrom && !cleanClock(o.from)) out.push(`"${o.from}" is not a time this can read. Use 13:00.`);
+  if (hasTo && !cleanClock(o.to)) out.push(`"${o.to}" is not a time this can read. Use 16:00.`);
+  if (cleanClock(o.from) && cleanClock(o.to) && minutesOf(o.to) <= minutesOf(o.from)) out.push("The end time has to be after the start time, on the same day.");
   if (o.text && o.text.length >= OFFER_TEXT_MAX) out.push(`The text is at the ${OFFER_TEXT_MAX} character limit and may have been cut. Say the one thing they get, and leave the conditions to the counter.`);
   return out;
 };
@@ -107,6 +194,31 @@ export const offerLive = (offer, today = new Date()) => {
   return !!end && !!now && end.getTime() >= now.getTime();
 };
 
+// ── AND IN WORDS ────────────────────────────────────────────────────
+// "On now until 16:00", "Today 13:00-16:00", or the schedule when it is not
+// today: "Tuesdays 13:00-16:00", "Tue, Thu 13:00-16:00", "Every day 13:00-16:00".
+// "" for an offer with no window, which says nothing it did not say before.
+// Danish writes the clock with a full stop, 13.00, the way he wrote it.
+const DAY_LOCALES = { en: "en-GB", da: "da-DK", de: "de-DE", lt: "lt-LT" };
+const DAY_FALLBACK = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const clockIn = (hhmm, lang) => (lang === "da" ? hhmm.replace(":", ".") : hhmm);
+const dayName = (d, lang, style) => {
+  try { return new Intl.DateTimeFormat(DAY_LOCALES[lang] || "en-GB", { weekday: style, timeZone: "UTC" }).format(new Date(Date.UTC(2026, 0, 4 + d))); }
+  catch { return DAY_FALLBACK[d]; }
+};
+const capital = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+export const offerHoursLabel = (offer, { timing = "", lang = "en" } = {}) => {
+  const w = offerWindow(offer);
+  if (!w) return "";
+  const range = w.from ? `${clockIn(w.from, lang)}-${clockIn(w.to, lang)}` : "";
+  if (timing === "now") return w.from ? uiT("offer.onNowUntil", lang).replace("{time}", clockIn(w.to, lang)) : uiT("offer.onToday", lang);
+  if (timing === "later") return uiT("offer.todayAt", lang).replace("{range}", range);
+  const days = w.days.length === 0 || w.days.length === 7 ? uiT("offer.everyDay", lang)
+    : w.days.length === 1 ? (lang === "en" ? `${dayName(w.days[0], "en", "long")}s` : capital(dayName(w.days[0], lang, "long")))
+    : w.days.map(d => dayName(d, lang, "short")).join(", ");
+  return [days, range].filter(Boolean).join(" ");
+};
+
 // ── WHAT A GIVEN READER SEES ────────────────────────────────────────
 //
 // Returned as a decision rather than made in the render, so the rule can be
@@ -118,11 +230,16 @@ export const offerLive = (offer, today = new Date()) => {
 // offer exists here, over an offer that has finished, is an advertisement for
 // something that is gone, and it would be shown to exactly the people being
 // asked to pay for access to it.
-export const offerView = (offer, { paid = false, today = new Date() } = {}) => {
-  if (!offerLive(offer, today)) return { show: false, locked: false, text: "", until: "" };
+//
+// `timing` and `window` ride along for the hours (see OFFER HOURS): the badge
+// says "On now until 16:00" or when it runs, and the lock rule is untouched.
+export const offerView = (offer, { paid = false, today = new Date(), zone = "" } = {}) => {
+  if (!offerLive(offer, today)) return { show: false, locked: false, text: "", until: "", timing: "ended", window: null };
   const o = cleanOffer(offer);
-  if (!paid) return { show: true, locked: true, text: "", until: o.until };
-  return { show: true, locked: false, text: o.text, until: o.until };
+  const timing = offerTiming(o, { now: today, zone });
+  const win = offerWindow(o);
+  if (!paid) return { show: true, locked: true, text: "", until: o.until, timing, window: win };
+  return { show: true, locked: false, text: o.text, until: o.until, timing, window: win };
 };
 
 // What the locked state says. Names the thing and the condition, and promises

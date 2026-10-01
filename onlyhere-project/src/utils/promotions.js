@@ -13,7 +13,8 @@
 // pages draw, through the same offerLive, so the list and the entry cannot
 // disagree about whether an offer is on, and an ended offer drops off both on
 // the same day without anybody touching the page.
-import { cleanOffer, offerLive, offerView } from "./offer";
+import { cleanOffer, offerLive, offerView, offerTiming, offerHoursLabel } from "./offer";
+import { countryProfile, rowCountry } from "./countries";
 import { dayEnd } from "./calendarDay";
 
 // Which pools to read and what each is called on a card. The keys are the
@@ -28,6 +29,9 @@ export const PROMO_KINDS = {
   event: "Event",
   town: "Town",
 };
+
+// The clock an offer runs on is the place's (see OFFER HOURS in offer.js).
+export const zoneOf = (row) => countryProfile(rowCountry(row)).zone;
 
 const whereOf = (row) => String(row?.town || row?.city || row?.location || row?.region || "").trim();
 
@@ -47,20 +51,27 @@ export const livePromotions = (pools = {}, today = new Date()) => {
       out.push({ ...row, _src: src, _where: whereOf(row), _offer: cleanOffer(row.__offer) });
     }
   }
+  // On now first, then on later today, then the rest, and within each the
+  // one ending soonest. A lunch offer running this minute is the one worth
+  // reading to somebody standing in the street with three hours.
+  const RANK = { now: 0, always: 1, later: 2, off: 3 };
+  const rankOf = (p) => RANK[offerTiming(p._offer, { now: today, zone: zoneOf(p) })] ?? 4;
   const endOf = (p) => dayEnd(p._offer.until)?.getTime() ?? Infinity;
-  return out.sort((a, b) => endOf(a) - endOf(b) || String(a.name).localeCompare(String(b.name)));
+  return out.sort((a, b) => rankOf(a) - rankOf(b) || endOf(a) - endOf(b) || String(a.name).localeCompare(String(b.name)));
 };
 
 // What one card says, through offerView so the locked rule is the entry
 // page's rule and not a second copy of it.
-export const promoCard = (promo, { paid = false, today = new Date() } = {}) => {
-  const view = offerView(promo?.__offer, { paid, today });
+export const promoCard = (promo, { paid = false, today = new Date(), lang = "en" } = {}) => {
+  const view = offerView(promo?.__offer, { paid, today, zone: zoneOf(promo) });
   return {
     kind: PROMO_KINDS[promo?._src] || "",
     where: promo?._where || "",
     locked: view.locked,
     text: view.text,
     until: view.until,
+    timing: view.timing,
+    hours: offerHoursLabel(promo?.__offer, { timing: view.timing, lang }),
   };
 };
 
