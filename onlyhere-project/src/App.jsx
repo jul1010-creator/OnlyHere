@@ -29117,7 +29117,9 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       halfway through. Filling them in IS starting the plan. */}
                   {/* The dates start the planner, on every country's page since
                       Phase 3. */}
-                  {<div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center", alignItems: "flex-end", marginBottom: 18, width: "100%", maxWidth: 420 }}>
+                  {/* And only while the planner is in the menu: on a page abroad
+                      it waits for places to plan from (emptyHere). */}
+                  {TAB_ORDER.includes("ai") && <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center", alignItems: "flex-end", marginBottom: 18, width: "100%", maxWidth: 420 }}>
                     {[
                       { key: "arrival", label: "Arrival", value: heroDayOf(intakeArrival), min: heroDayNow(), onPick: heroSetArrival },
                       { key: "departure", label: "Departure", value: heroDayOf(intakeDeparture), min: heroDayOf(intakeArrival) || heroDayNow(), onPick: heroSetDeparture },
@@ -29130,7 +29132,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       intake lives on the sightseeing row only, so a reader who
                       last looked at Road Trips would otherwise arrive at Detour
                       with their dates filled in on a row that is not showing. */}
-                  {<button onClick={() => { setDetourTab("sightseeing"); goTab("ai"); window.scrollTo(0, 0); }}
+                  {TAB_ORDER.includes("ai") && <button onClick={() => { setDetourTab("sightseeing"); goTab("ai"); window.scrollTo(0, 0); }}
                     style={{ background: `linear-gradient(135deg, ${C.accent}, #C22A3C)`, border: "none", color: "#fff", borderRadius: 100, padding: "13px 26px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", boxShadow: "0 6px 24px rgba(226,59,78,0.4)" }}>
                     {PAGE_ABROAD ? "✦ Plan my visit" : "✦ Plan my trip"}
                   </button>}
