@@ -80821,6 +80821,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const app = readFileSync(join(root, "src/App.jsx"), "utf8");
   ok("every Lithuanian page waits for data, the planner for places", ["tips: hereCount(tipsOnly(essentials)) === 0,", "attractions: hereCount(freeEntrance) + hereCount(craftItems) === 0,", "food: hereCount(foodSpots) === 0,", "visits: hereCount(towns) === 0,", "ai: hereCount(freeEntrance) + hereCount(foodSpots) + hereCount(craftItems) === 0,"].every(line => app.includes(line)) && /events: !\[\.\.\.events, \.\.\.majorEvents, \.\.\.calendarEvents\]\.some\(e => rowCountry\(e\) === PAGE_COUNTRY/.test(app) && /const hereCount = \(rows\) => /.test(app));
   ok("and Explore is never one of them", !/\bhome: /.test(app.slice(app.indexOf("const emptyHere = {"), app.indexOf("const hideAbroad"))));
+  ok("and the front page's dates and planner button go with the planner", /\{TAB_ORDER\.includes\("ai"\) && <div style=\{\{ display: "flex", gap: 10/.test(app) && /\{TAB_ORDER\.includes\("ai"\) && <button onClick=\{\(\) => \{ setDetourTab\("sightseeing"\)/.test(app));
   ok("the gold button goes with its page", /\{NAV_ITEMS\.some\(item => item\.id === featuredTab\) && <button className="gx-topnav-ai" data-testid="nav-featured"/.test(app));
 }
 
