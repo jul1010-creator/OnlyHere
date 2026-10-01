@@ -61,7 +61,7 @@ import { discoveryFraming, framingForTarget, coverageByTarget, DISCOVERY_TARGETS
 import { swipeAxis, dragOffset, swipeTarget } from "./utils/swipe";
 import { placeSlug, townPath, findBySlug, COUNTRY, kindForSeg, entryUrlPath, isEntryUrl, entryPathForKind, parseEntryUrl } from "./utils/placeUrl";
 import { startRun, endRun, summarise, averageFor, describe, describeAverage, recentRuns, installFetchMeter } from "./utils/apiCost";
-import { cleanOffer, offerProblems, offerView, hasPaidPlan, OFFER_TEXT_MAX, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE } from "./utils/offer";
+import { cleanOffer, offerProblems, offerView, offerHoursLabel, OFFER_WEEK, hasPaidPlan, OFFER_TEXT_MAX, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE } from "./utils/offer";
 import { aiDisclosureFor, aiImageNoteFor } from "./utils/aiDisclosure";
 // The app's one reader of how many people are coming. It already refuses a
 // number that is not a headcount ("2 weeks with friends" is not two people) and
@@ -2796,6 +2796,9 @@ function GemlyxApp() {
     setStudioPhotoName(payload.photo ? String(payload.photo).split("/").pop() : `${slugify(payload.name)}.jpg`);
     setStudioOfferText(payload.__offer?.text || "");
     setStudioOfferUntil(payload.__offer?.until || "");
+    setStudioOfferDays(Array.isArray(payload.__offer?.days) ? payload.__offer.days : []);
+    setStudioOfferFrom(payload.__offer?.from || "");
+    setStudioOfferTo(payload.__offer?.to || "");
     setDraftPasteError("");
     // The two bugs this function was carrying, studioFrozenGeo inheriting the
     // previous run's coordinate ("Stored at 0.000, 0.000") and editingId
@@ -2821,6 +2824,9 @@ function GemlyxApp() {
     // carries rather than an empty box that would clear it on save.
     setStudioOfferText(row.payload?.__offer?.text || "");
     setStudioOfferUntil(row.payload?.__offer?.until || "");
+    setStudioOfferDays(Array.isArray(row.payload?.__offer?.days) ? row.payload.__offer.days : []);
+    setStudioOfferFrom(row.payload?.__offer?.from || "");
+    setStudioOfferTo(row.payload?.__offer?.to || "");
     const reelBlock = row.payload?.blogBody?.find(b => b.type === "instagram") || null;
     setStudioInstagramUrl(reelBlock?.url || "");
     // Read through the same gate the page reads, so what the tick says here is
@@ -3980,6 +3986,11 @@ Say which answer came from which source, so a fact from a vouched page and a fac
   // why the date is required rather than optional.
   const [studioOfferText, setStudioOfferText] = useState("");
   const [studioOfferUntil, setStudioOfferUntil] = useState("");
+  // Offer hours (utils/offer.js, OFFER HOURS): weekdays and a clock window.
+  const [studioOfferDays, setStudioOfferDays] = useState([]);
+  const [studioOfferFrom, setStudioOfferFrom] = useState("");
+  const [studioOfferTo, setStudioOfferTo] = useState("");
+  const studioOfferFields = { text: studioOfferText, until: studioOfferUntil, days: studioOfferDays, from: studioOfferFrom, to: studioOfferTo };
   const [studioInstagramUrl, setStudioInstagramUrl] = useState("");
   // ── AND WHETHER THAT REEL MAY BE SHOWN ──────────────────────────
   //
@@ -4472,7 +4483,7 @@ Say which answer came from which source, so a fact from a vouched page and a fac
         // island pages leave out and the one that ruins a February day trip.
         island: { queries: [`${name} ø ${draftLand.name} færge overfart sejlplan operatør havn priser`, `${name} island ${draftLand.name} ferry from which port crossing time car booking`, `${name} ${draftLand.name} island what to do cycling harbours how long to stay`, `${name} ø vinter færge afgange reddit r/${draftLand.name} worth it`] },
         festival: { queries: [`${name} festival ${draftLand.name} 2026 dates tickets prices lineup official website`, `${name} festival ${draftLand.name} atmosphere who goes accommodation nearest station`, `${name} reddit r/${draftLand.name} experience worth it crowds queue`, `${name} quora google reviews honest opinion worth it`] },
-        free: { queries: [`${name} free entry what makes it special history opening hours`, `${name} ${draftLand.name} visitor tips things to know best time to visit`, `${name} ${draftLand.name} getting there how to reach`, `${name} reddit r/${draftLand.name} hidden gem overrated worth it`, `${name} quora google reviews honest opinion overrated`] },
+        free: { queries: [`${name} entry price tickets what makes it special history opening hours`, `${name} ${draftLand.name} visitor tips things to know best time to visit`, `${name} ${draftLand.name} getting there how to reach`, `${name} reddit r/${draftLand.name} hidden gem overrated worth it`, `${name} quora google reviews honest opinion overrated`] },
         food: { queries: [`${name} ${draftLand.name} what to order menu prices history`, `${name} ${draftLand.name} best time to visit busy hours local tips address`, `${name} reddit r/${draftLand.name} r/food worth it locals think`, `${name} quora google reviews honest opinion`] },
         foodStreet: { queries: [`${subject} ${draftLand.name} food street market vendors stalls what's there`, `${subject} ${draftLand.name} food market opening hours best time to visit how to get there`, `${subject} reddit r/${draftLand.name} r/food worth it locals think`, `${subject} ${draftLand.name} quora google reviews honest opinion`] },
         night: { queries: [`${name} ${draftLand.name} bar club atmosphere crowd prices reviews`, `${name} ${draftLand.name} opening hours when busy entry local tips address`, `${name} reddit r/${draftLand.name} vibe crowd locals tourists`, `${name} quora google reviews honest opinion`] },
@@ -14199,7 +14210,7 @@ ${researchRules("festival", ev)}`
       // keeps the standing rule from PASS 45: what you review is what you
       // publish, and a field on screen that the save ignores is the thing that
       // rule exists to stop.
-      const offerFromFields = cleanOffer({ text: studioOfferText, until: studioOfferUntil });
+      const offerFromFields = cleanOffer(studioOfferFields);
       const offerFaults = offerProblems(offerFromFields);
       if (offerFaults.length) {
         setPublishStatus(null);
@@ -21810,7 +21821,7 @@ If the conversation only covers a single day or a few stops with no explicit day
       ...[...events, ...majorEvents, ...vikingEvents].map(p => ({ ...p, _src: "event", _kindLabel: "Event", _where: p.town })),
       ...foodSpots.map(p => ({ ...p, _src: "food", _kindLabel: "Food", _where: p.location || p.city })),
       ...nightlifeSpots.map(p => ({ ...p, _src: "nightlife", _kindLabel: "Nightlife", _where: p.location || p.city })),
-      ...freeEntrance.map(p => ({ ...p, _src: "free", _kindLabel: "Free entry", _where: p.city })),
+      ...freeEntrance.map(p => ({ ...p, _src: "free", _kindLabel: entryKindLabel("free", "Attraction"), _where: p.city })),
       ...craftItems.map(p => ({ ...p, _src: "craft", _kindLabel: "Workshop", _where: p.location })),
     ];
     const hit = (p) => [p.name, p._where, p.tag, p.type, p.region].some(f => String(f || "").toLowerCase().includes(q));
@@ -26443,7 +26454,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         </div>
                         {draftQueue.map((it, i) => (
                           <div key={`q${i}`} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: C.muted, marginBottom: 4 }}>
-                            <span style={{ flex: 1, minWidth: 0 }}>◌ {it.name} <span style={{ fontSize: 10.5 }}>({it.type}{it.country && it.country !== DEFAULT_COUNTRY ? `, ${countryProfile(it.country).name}` : ""})</span></span>
+                            <span style={{ flex: 1, minWidth: 0 }}>◌ {it.name} <span style={{ fontSize: 10.5 }}>({entryKindLabel(it.type, it.type).toLowerCase()}{it.country && it.country !== DEFAULT_COUNTRY ? `, ${countryProfile(it.country).name}` : ""})</span></span>
                             <button onClick={() => cancelQueued(i)} title={`Remove ${it.name} from the queue`}
                               style={{ background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 100, width: 20, height: 20, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, cursor: "pointer", fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>
                               ✕
@@ -28916,8 +28927,36 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         <input value={studioOfferUntil} onChange={e => setStudioOfferUntil(e.target.value)}
                           placeholder="2026-12-31"
                           style={{ width: "100%", border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 12px", fontSize: 12, outline: "none", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif" }} />
+                        {/* Offer hours, Oliver 2 Oct 2026: "from 13.00-16.00 we
+                            offer a full meal + free soda". No day picked and no
+                            times means all day, every day, as before. The clock
+                            is the place's own (utils/offer.js). */}
+                        <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, margin: "8px 0 5px" }}>ONLY ON THESE DAYS</div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 8 }}>
+                          {OFFER_WEEK.map(d => {
+                            const on = studioOfferDays.includes(d);
+                            return (
+                              <button key={d} type="button" data-testid={`offer-day-${d}`}
+                                onClick={() => setStudioOfferDays(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d])}
+                                style={{ background: on ? C.gold : "none", color: on ? C.onGold : C.muted, border: `1px solid ${on ? C.gold : C.border}`, borderRadius: 100, padding: "3px 10px", fontSize: 10.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d]}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, marginBottom: 5 }}>ONLY BETWEEN</div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <input value={studioOfferFrom} onChange={e => setStudioOfferFrom(e.target.value)} placeholder="13:00" data-testid="offer-from"
+                            style={{ width: 90, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 12px", fontSize: 12, outline: "none", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif" }} />
+                          <span style={{ fontSize: 12, color: C.muted }}>and</span>
+                          <input value={studioOfferTo} onChange={e => setStudioOfferTo(e.target.value)} placeholder="16:00" data-testid="offer-to"
+                            style={{ width: 90, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 12px", fontSize: 12, outline: "none", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif" }} />
+                          {offerHoursLabel(studioOfferFields, {}) && (
+                            <span style={{ fontSize: 11, color: C.gold, fontWeight: 700 }}>{offerHoursLabel(studioOfferFields, {})}</span>
+                          )}
+                        </div>
                         {(() => {
-                          const faults = offerProblems({ text: studioOfferText, until: studioOfferUntil });
+                          const faults = offerProblems(studioOfferFields);
                           if (!faults.length) return null;
                           return (
                             <div style={{ fontSize: 10.5, color: "#FFB347", lineHeight: 1.55, marginTop: 6 }}>
@@ -28930,7 +28969,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                             this he would fill both boxes, publish, open the page and see
                             a badge with no offer under it, and reasonably conclude it was
                             broken. */}
-                        {!PAID_PLANS_LIVE && offerProblems({ text: studioOfferText, until: studioOfferUntil }).length === 0 && studioOfferText.trim() && (
+                        {!PAID_PLANS_LIVE && offerProblems(studioOfferFields).length === 0 && studioOfferText.trim() && (
                           <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.55, marginTop: 6 }}>
                             Paid plans are switched off, so this renders as "{OFFER_LOCKED_LABEL}. {OFFER_LOCKED_NOTE}" and nobody is shown the offer itself. Flip PAID_PLANS_LIVE in config.js when plans exist.
                           </div>
@@ -29771,7 +29810,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               everybody on another country's page (OPEN_ABROAD), locked on the
               Danish one exactly as the entry page locks it. */}
           {tab === "promotions" && <PromotionsPage promos={promotions} title={uiT("nav.promotions", uiLang)}
-            paid={OPEN_ABROAD || hasPaidPlan(userProfile)} onOpen={(p) => openStopDetail(p)} />}
+            paid={OPEN_ABROAD || hasPaidPlan(userProfile)} lang={uiLang} onOpen={(p) => openStopDetail(p)} />}
           {tab === "shopping" && <ShoppingPage shops={shops} places={shopPlaces} title={uiT("nav.shopping", uiLang)}
             onOpen={(row) => setShopDetail(row)} />}
           {tab === "attractions" && (() => {
