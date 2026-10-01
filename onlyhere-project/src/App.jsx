@@ -21422,11 +21422,27 @@ If the conversation only covers a single day or a few stops with no explicit day
   // page with nothing on it is not in the menu. Klaipėda has no islands and,
   // until entries are drafted, no nightlife or cheap gems, so those come back
   // by themselves as the first one publishes. NOT_YET_ABROAD is never shown.
+  const hereCount = (rows) => (Array.isArray(rows) ? rows : []).filter(r => rowCountry(r) === PAGE_COUNTRY).length;
   const emptyHere = {
     islands: islands.length === 0,
     gems: gems.length === 0,
     essentials: essentials.length === 0,
     nightlife: nightlifeSpots.length + nightlifeStreets.length + nightlifeTowns.length === 0,
+    // ── EVERY PAGE, UNTIL SOMETHING IS ON IT ──────────────────────────
+    // Oliver, 1 Oct 2026: "make every navigation invisible until data starts
+    // being put in." So each page abroad waits for its first published row,
+    // and comes back by itself when one lands. The planner waits for places
+    // to plan from, because a guide with nothing in the database behind it is
+    // the model's memory, which is where wrong hours come from. Explore always
+    // stays. Studio still sees everything (hideAbroad).
+    // Counted as this country's rows, so a Danish fallback list can never keep
+    // a Lithuanian page open.
+    tips: hereCount(tipsOnly(essentials)) === 0,
+    attractions: hereCount(freeEntrance) + hereCount(craftItems) === 0,
+    events: ![...events, ...majorEvents, ...calendarEvents].some(e => rowCountry(e) === PAGE_COUNTRY && (isCurrentlyLive(e.date, e.dateEnd) || isUpcoming(e.date))),
+    food: hereCount(foodSpots) === 0,
+    visits: hereCount(towns) === 0,
+    ai: hereCount(freeEntrance) + hereCount(foodSpots) + hereCount(craftItems) === 0,
   };
   // Studio lives on the planner's page, so /lithuania#studio keeps that page
   // in the menu for him. Oliver, 29 Sep 2026: "Where is the guide
@@ -33398,7 +33414,9 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           </NavStrip>
           {/* Outside the strip and flexShrink: 0, so nothing can take a pixel
               off it however long the eight labels beside it get. */}
-          {<button className="gx-topnav-ai" data-testid="nav-featured" onClick={() => goTab(featuredTab)}
+          {/* Not drawn when its page is hidden: an empty gold pill abroad
+              before anything is published (emptyHere). */}
+          {NAV_ITEMS.some(item => item.id === featuredTab) && <button className="gx-topnav-ai" data-testid="nav-featured" onClick={() => goTab(featuredTab)}
             /* NO `display` HERE. The .gx-topnav-ai class owns it, and an inline
                one silently beat the class for as long as this button has
                existed. Detour is not lost on a phone: it is the gradient row at
