@@ -29289,7 +29289,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // meant finding the close button, and there was nothing to click OFF onto.
   {
     const code = stripComments(detail);
-    ok("the page takes a windowed prop", /windowed = false \}\) =>/.test(code));
+    ok("the page takes a windowed prop", /windowed = false(, sample = "")? \}\) =>/.test(code));
     // THE CLOSE IS ON THE BACKDROP AND NOT ON THE PANEL. onClick fires for
     // clicks on children too, so without the target check every press inside
     // the page would close the page.
@@ -80937,7 +80937,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("the walkable centre is Theatre Square where it is, with the terminal inside it", Math.abs(M.WK.WALKABLE_CENTRES.LT[0].lat - 55.7078) < 0.001 && !!M.WK.centreOf("LT", start));
   const api = readFileSync(join(root, "api/plan-now.js"), "utf8");
   ok("the route is cached for its half hour and only then", /"public, s-maxage=1800, stale-while-revalidate=120"/.test(api) && /slotAccepted\(String\(q\.slot \|\| ""\), now\)/.test(api));
-  ok("the model only orders, and the rules decide", /scheduleWalk\(order, candidates, ctx\)/.test(api) && /if \(!walk\) walk = scheduleWalk\(ruleOrder\(candidates, ctx\), candidates, ctx\);/.test(api));
+  ok("the model only orders, and the rules decide", /scheduleWalk\(withMustSee\(order, candidates, ctx\), candidates, ctx\)/.test(api) && /if \(!walk\) walk = scheduleWalk\(withMustSee\(ruleOrder\(candidates, ctx\), candidates, ctx\), candidates, ctx\);/.test(api));
   // The first deploy failed to start: config.js reads import.meta, and Vercel
   // loads a route as CommonJS. No route may import it.
   ok("no route imports the browser's config", readdirSync(join(root, "api")).filter(f => f.endsWith(".js")).every(f => !/from "\.\.\/src\/config\.js"/.test(readFileSync(join(root, "api", f), "utf8"))));
@@ -81066,6 +81066,55 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const shown = JSON.stringify([X.EXAMPLE_PARTNERS, X.EXAMPLE_WALKS, X.EXAMPLE_GUIDES, X.GUIDE_LABELS]) + pageX.replace(/\/\/.*$/gm, "");
   ok("no dashes and none of his banned words on it", !/[—–]| - /.test(shown) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(shown));
   ok("the walk on the examples page is the live walk's own drawing", /export const WalkView = /.test(readFileSync(join(root, "src/components/NowPlanner.jsx"), "utf8")) && /<WalkView walk=\{walk\}/.test(readFileSync(join(root, "src/components/NowPlanner.jsx"), "utf8")));
+}
+
+// ── Batch 184: pages in a window, the reader's own walk, two ways round ──
+// Oliver, 2 Oct 2026: "The listings should maybe open a tiny window of their
+// page?", "If we make a time for how long we want to be each place, then make
+// able to remove one from their listing. And also, perhaps include the 'cannot
+// miss out on' feature", and of the QR codes "Can you imagine 30 people use
+// on, and they walk on top of oneanother".
+{
+  const N = M.NP, X = M.KEX;
+  const T = N.NOW_STARTS.LT.terminal;
+  const row = (id, name, lat, lon, extra = {}) => ({ id, type: "free", payload: { name, country: "LT", __lat: lat, __lon: lon, ...extra } });
+  const MON_FRI = ["Monday: 10:00 to 18:00", "Tuesday: 10:00 to 18:00", "Wednesday: 10:00 to 18:00", "Thursday: 10:00 to 18:00", "Friday: 10:00 to 18:00", "Saturday: Closed", "Sunday: Closed"];
+  const cands = N.nowCandidates([
+    row(1, "Square", 55.7078, 21.1316),
+    row(2, "Castle museum", 55.7059, 21.1289, { tier: "Can't Miss Out", __hours: { hours: MON_FRI } }),
+    row(3, "Ship", 55.7103, 21.1349),
+  ], { country: "LT", zone: "Europe/Vilnius", now: new Date("2026-10-13T07:30:00Z") });
+  const ctx = { country: "LT", start: T, startClock: { day: 2, minutes: 630 }, budget: 180, margin: 30 };
+  const order = N.withMustSee([{ id: "free:1" }, { id: "free:3" }], cands, ctx);
+  ok("a Can't Miss Out place the order left out is put in, where it adds least walking", order.length === 3 && order.some(o => o.id === "free:2") && N.scheduleWalk(order, cands, ctx).stops.some(s => s.id === "free:2" && s.tier === "Can't Miss Out"));
+  ok("and the model is told to keep them", /Can't Miss Out belongs in the walk/.test(N.planPrompt(cands, { ...ctx, lang: "en" })));
+  ok("a closed one is still left out, and the page can say when it opens", !N.scheduleWalk(order, cands, { ...ctx, startClock: { day: 6, minutes: 660 } }).stops.some(s => s.id === "free:2") && JSON.stringify(N.nextOpen(MON_FRI, { day: 6, minutes: 660 })) === JSON.stringify({ day: 1, minutes: 600 }));
+  const walk = N.scheduleWalk(order, cands, ctx);
+  const alt = N.reversedWalk(walk, cands, ctx);
+  ok("the second way round has the same places in the opposite order", alt && alt.stops.map(s => s.id).join() === [...walk.stops].reverse().map(s => s.id).join());
+  const withPlaces = { ...walk, places: N.placesOf(walk, cands) };
+  const cut = N.replanWalk(withPlaces, { removed: [walk.stops[0].id] }, ctx);
+  ok("taking a stop out runs the walk again, and everything after it comes earlier", cut.stops.length === walk.stops.length - 1 && cut.stops[0].arrive < walk.stops[1].arrive);
+  const longer = N.replanWalk(withPlaces, { stays: { [walk.stops[0].id]: walk.stops[0].stay + N.STAY_STEP } }, ctx);
+  ok("a longer stay moves the rest later by the same", longer.stops[1].arrive === walk.stops[1].arrive + N.STAY_STEP);
+  ok("and longer is not offered when it would push a stop out", !N.canStayLonger(withPlaces, { stays: { [walk.stops[0].id]: 120 } }, walk.stops[0].id, ctx));
+  const api = readFileSync(join(root, "api/plan-now.js"), "utf8");
+  ok("the route sends both ways round and what a phone needs to change the walk", /const alt = reversedWalk\(walk, candidates, ctx\);/.test(api) && /places: placesOf\(walk, candidates\), clock: startClock, budget,/.test(api) && (api.match(/withMustSee\(/g) || []).length === 2);
+  const np = readFileSync(join(root, "src/components/NowPlanner.jsx"), "utf8");
+  ok("each phone keeps one way round", /const walk = side === "1" && got\.alt \? \{ \.\.\.got, \.\.\.got\.alt \} : got;/.test(np) && /<EditableWalk walk=\{walk\}/.test(np));
+  const dp = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
+  ok("a sample page has no live check, no feedback and no reviews", /\{!sample && <button onClick=\{\(\) => checkLiveInfo\(item\)\}/.test(dp) && /\{!sample && <ArticleFeedback /.test(dp) && /\{!sample && <ReviewsSection /.test(dp));
+  const ids = new Set();
+  X.EXAMPLE_WALKS.forEach(e => { const r = X.runExample(e); [r.walk, r.alt].filter(Boolean).forEach(w => w.stops.forEach(s => ids.add(s.id))); r.left.forEach(l => ids.add(l.id)); });
+  X.EXAMPLE_PARTNERS.forEach(p => ids.add(`${p.type}:${p.key}`));
+  X.EXAMPLE_GUIDES.forEach(g => ids.add(g.page));
+  ok("every listing on the examples page opens a page", [...ids].every(id => X.pageFor(id)?.item?.name));
+  ok("Klaipėda and the four guide cards read in all four languages, every sentence", ["town", "free:castle", "free:clock", "free:sculpture", "food:fish"].every(id => { const it = X.pageFor(id).item; const pr = M.TR.proseOf(it); return ["lt", "de", "da"].every(l => { const loc = M.TR.localizedEntry(it, l); const lp = M.TR.proseOf(loc); return Object.keys(pr).every(k => lp[k] !== pr[k]); }); }));
+  ok("the castle is Can't Miss Out, and on a winter Saturday the page says it opens Monday", X.runExample(X.EXAMPLE_WALKS.find(e => e.id === "saturday")).left.some(l => l.mustSee && /Opens Monday 10:00/.test(l.reason)));
+  const pageX = readFileSync(join(root, "src/pages/KlaipedaExamples.jsx"), "utf8");
+  ok("the window is the app's own entry page, marked as an example", /<DetailPage windowed item=\{open\.item\}/.test(pageX) && /sample=\{isExamplePartner\(open\.id\) \? L\.madeUp : L\.page\}/.test(pageX));
+  const shownX = JSON.stringify(Object.values(X.EXAMPLE_PAGES).map(p => p.item)) + JSON.stringify(X.GUIDE_LABELS);
+  ok("no dashes and none of his banned words in the pages either", !/[—–]| - /.test(shownX) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(shownX));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
