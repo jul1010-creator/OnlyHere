@@ -21,7 +21,7 @@ import { placeClock } from "../src/utils/offerClock.js";
 import {
   NOW_STARTS, NOW_HOURS, NOW_LANGS, SHIP_MARGIN, slotAccepted, slotOf, slotDate,
   nowCandidates, scheduleWalk, ruleOrder, planPrompt, readOrder, goodWalk,
-  withMustSee, reversedWalk, placesOf,
+  withMustSee, reversedWalk, placesOf, STROLL, strollCandidates,
 } from "../src/utils/nowPlanner.js";
 
 const json = (res, status, body, cache = "no-store") => {
@@ -38,14 +38,22 @@ const weatherAt = async (p) => {
   try {
     const r = await fetch(`https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=${p.lat.toFixed(3)}&lon=${p.lon.toFixed(3)}`,
       { headers: { "User-Agent": "Gemlyx/1.0 (gemlyxtravel.com)" }, signal: AbortSignal.timeout(2500) });
-    if (!r.ok) return { wet: false, temp: null };
+    if (!r.ok) return { wet: false, snow: false, wind: 0, temp: null };
     const j = await r.json();
     const next = (j?.properties?.timeseries || []).slice(0, 3);
     const rain = next.reduce((n, t) => n + (Number(t?.data?.next_1_hours?.details?.precipitation_amount) || 0), 0);
     const symbol = String(next[0]?.data?.next_1_hours?.summary?.symbol_code || "");
     const temp = Number(next[0]?.data?.instant?.details?.air_temperature);
-    return { wet: rain >= 0.5 || /rain|sleet|snow/.test(symbol), temp: Number.isFinite(temp) ? temp : null };
-  } catch { return { wet: false, temp: null }; }
+    // The strongest wind of the next three hours, in metres a second, so a
+    // gale forecast for the middle of the walk counts.
+    const wind = Math.max(0, ...next.map(t => Number(t?.data?.instant?.details?.wind_speed) || 0));
+    return {
+      wet: rain >= 0.5 || /rain|sleet|snow/.test(symbol),
+      snow: /snow|sleet/.test(symbol),
+      wind: Math.round(wind),
+      temp: Number.isFinite(temp) ? temp : null,
+    };
+  } catch { return { wet: false, snow: false, wind: 0, temp: null }; }
 };
 
 // NOT FROM src/config.js. That file reads import.meta for the browser build,
@@ -99,7 +107,10 @@ export default async function handler(req, res) {
   const hours = /^[0-9]$/.test(String(q.h || "")) ? Number(q.h) : NaN;
   const lang = NOW_LANGS.includes(String(q.lang)) ? String(q.lang) : "";
   const now = new Date();
-  if (keys !== "c,from,h,lang,slot") return json(res, 400, { error: "Unexpected query." });
+  // The Old Town walk adds one key with one value, so it is one more spelling
+  // per walk and no more.
+  const style = q.style === STROLL ? STROLL : "";
+  if (keys !== (style ? "c,from,h,lang,slot,style" : "c,from,h,lang,slot")) return json(res, 400, { error: "Unexpected query." });
   if (!start || !NOW_HOURS.includes(hours) || !lang) return json(res, 400, { error: "Unknown start, length or language." });
   if (!slotAccepted(String(q.slot || ""), now)) return json(res, 409, { error: "Stale half hour.", slot: slotOf(now) });
 
@@ -114,8 +125,9 @@ export default async function handler(req, res) {
   catch { return json(res, 503, { error: "Could not read the places just now." }); }
 
   const weather = await weatherAt(start);
-  const candidates = nowCandidates(rows, { country, zone, now: at });
-  const ctx = { country, start, startClock, budget, margin, wet: weather.wet, temp: weather.temp, lang };
+  const all = nowCandidates(rows, { country, zone, now: at });
+  const candidates = style ? strollCandidates(all, country) : all;
+  const ctx = { country, start, startClock, budget, margin, wet: weather.wet, temp: weather.temp, weather, style, lang };
 
   let walk = null, made = "rules";
   if (candidates.length && startClock.minutes >= AI_FROM && startClock.minutes < AI_TO) {
@@ -129,7 +141,7 @@ export default async function handler(req, res) {
   const alt = reversedWalk(walk, candidates, ctx);
 
   return json(res, 200, {
-    slot: q.slot, country, from: start.id, hours, lang, made,
+    slot: q.slot, country, from: start.id, hours, lang, made, style,
     start: { name: start.name, lat: start.lat, lon: start.lon, ship: !!start.ship },
     weather, margin, ...walk,
     alt: alt ? { stops: alt.stops, back: alt.back, deadline: alt.deadline } : null,
