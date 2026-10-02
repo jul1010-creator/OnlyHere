@@ -14,10 +14,18 @@
 // EVERY FACT HERE CAME OFF A PAGE, and the page is on the stop as `source`.
 // Hours and prices were read on 29 Sep 2026 from each place's own website,
 // or from klaipedatravel.lt where the place has none. Where the two
-// disagreed, the place's own site won: klaipedatravel.lt gives the castle
-// museum's summer as Wednesday to Sunday, the museum itself says Tuesday to
-// Sunday. Walking times are estimates and are the first thing the local
-// check should correct.
+// disagreed, the place's own site won. Walking times are estimates and are
+// the first thing the local check should correct.
+//
+// ── THE ROMAN NUMERALS, READ ONE DAY OFF ────────────────────────────
+// Oliver, 3 Oct 2026: "Castle museum is closed monday you know". It is. The
+// museum writes its days in Roman numerals, and in Lithuania I is Monday:
+// "II-VI" in winter is Tuesday to Saturday and "III-VII" in summer is
+// Wednesday to Sunday. The first reading, on 29 Sep, had each one a day
+// early (Monday to Friday, Tuesday to Sunday), which put the castle open on
+// winter Mondays and shut on winter Saturdays, the opposite of the truth on
+// both. klaipedatravel.lt's Wednesday to Sunday for the summer was right all
+// along. Read again off mlimuziejus.lt on 3 Oct 2026, for all three museums.
 
 // Moved on 29 Sep 2026 from /lithuania/klaipeda, which is now Klaipėda's real
 // town page (Phase 2 of LITHUANIA_PLAN_29SEP.md). A literal path, so it wins
@@ -32,8 +40,8 @@ export const CHECKED_ON = "2026-09-29";
 // wins, and one with no window is the rest of the year.
 const LM_MUSEUMS = {
   seasons: [
-    { from: "06-15", to: "09-16", days: { 2: "10:00", 3: "10:00", 4: "10:00", 5: "10:00", 6: "10:00", 0: "10:00" }, close: "18:00" },
-    { days: { 1: "10:00", 2: "10:00", 3: "10:00", 4: "10:00", 5: "10:00" }, close: "18:00" },
+    { from: "06-15", to: "09-16", days: { 3: "10:00", 4: "10:00", 5: "10:00", 6: "10:00", 0: "10:00" }, close: "18:00" },
+    { days: { 2: "10:00", 3: "10:00", 4: "10:00", 5: "10:00", 6: "10:00" }, close: "18:00" },
   ],
   lastEntry: "Last tickets 17:30",
   holidays: true,

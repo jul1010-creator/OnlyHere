@@ -32,7 +32,9 @@ const lines = (spans) => WEEK_NAMES.map((d, i) => spans[i] ? `${d}: ${spans[i][0
 const every = (from, to) => ({ 0: [from, to], 1: [from, to], 2: [from, to], 3: [from, to], 4: [from, to], 5: [from, to], 6: [from, to] });
 
 // Winter hours, from 17 September, the season these examples fall in.
-const LM_WINTER = lines({ 1: ["10:00", "18:00"], 2: ["10:00", "18:00"], 3: ["10:00", "18:00"], 4: ["10:00", "18:00"], 5: ["10:00", "18:00"] });
+// Tuesday to Saturday: the museum's "II-VI", where I is Monday. See the
+// note on the Roman numerals in data/klaipedaDemo.js.
+const LM_WINTER = lines({ 2: ["10:00", "18:00"], 3: ["10:00", "18:00"], 4: ["10:00", "18:00"], 5: ["10:00", "18:00"], 6: ["10:00", "18:00"] });
 const CLOCK = lines({ 2: ["10:00", "18:00"], 3: ["10:00", "18:00"], 4: ["12:00", "20:00"], 5: ["10:00", "18:00"], 6: ["10:00", "18:00"], 0: ["10:00", "16:00"] });
 
 // An offer runs until a date, like one set in the Studio.
@@ -161,7 +163,6 @@ export const EXAMPLE_WALKS = [
       { id: "free:ghost", stay: 15, why: "Worth the rain for a few minutes. He looks better wet." },
       { id: "free:theatre", stay: 15, why: "Ännchen of Tharau, quickly, under an umbrella." },
       { id: "food:tea", stay: 40, why: "Somewhere warm while the worst of the shower passes." },
-      { id: "free:history", stay: 45, why: "The story of Lithuania Minor, from when Klaipėda was Memel." },
       { id: "free:post", stay: 20, why: "Write home from a dry table." },
       { id: "free:clock", stay: 60, why: "Clocks from the Renaissance on, and the best room in town for a wet afternoon." },
       { id: "free:meridianas", stay: 15, why: "The town's ship, moored on the Danė." },
@@ -191,6 +192,27 @@ export const EXAMPLE_WALKS = [
       { id: "free:ghost", stay: 15, why: "He is at his best after dark." },
       { id: "food:beer", stay: 60, why: "Three local breweries in one sitting." },
       { id: "booking:jazz", stay: 120, why: "A brick cellar, and the band starts at 20:00." },
+    ],
+  },
+  {
+    // Oliver, 3 Oct 2026: "Castle museum is closed monday you know..
+    // friday is definetely the lively part of the week where one can grab a
+    // beer, but monday is literally dead silent". The same morning off the
+    // ship as Tuesday's, on the day the museums are shut: the rules leave them
+    // out and say when they open, and the walk is made of what is open.
+    id: "monday", chip: "A quiet Monday",
+    title: "A quiet Monday, four hours",
+    moment: "Monday 10:30, dry",
+    at: "2026-10-12T10:30", from: "terminal", hours: 4, wet: false,
+    order: [
+      { id: "free:ghost", stay: 15, why: "Five minutes from the gangway, rising out of the old castle harbour." },
+      { id: "free:castle", stay: 40, why: "The model of the old town in here makes the streets outside easier to read." },
+      { id: "free:theatre", stay: 15, why: "Ännchen of Tharau in the middle. Scan the sign and she tells her story." },
+      { id: "free:post", stay: 20, why: "Write one home and they post it." },
+      { id: "food:fish", stay: 45, why: "Fish smoked that morning, on Fishermen's Street." },
+      { id: "free:clock", stay: 45, why: "Clocks from the Renaissance on, in a villa across the river." },
+      { id: "free:sculpture", stay: 25, why: "116 sculptures in what was the town's cemetery until 1959." },
+      { id: "free:meridianas", stay: 15, why: "The town's ship, best seen from the bridge." },
     ],
   },
   {
@@ -552,7 +574,7 @@ export const EXAMPLE_PAGES = {
       body: [
         ["h", "Being There"],
         ["p", "The museum stands where the castle stood, at the edge of the Old Town beside the old castle harbour."],
-        ["p", "From mid September to mid June it opens Monday to Friday, 10:00 to 18:00, and is closed at weekends. In summer it opens Tuesday to Sunday instead. Last tickets at 17:30."],
+        ["p", "From mid September to mid June it opens Tuesday to Saturday, 10:00 to 18:00, and is closed on Sundays and Mondays. In summer it opens Wednesday to Sunday instead. Last tickets at 17:30."],
         ["h", "Things to Know"],
         ["b", ["The Black Ghost sculpture rises out of the castle harbour a few minutes' walk away."]],
       ],
@@ -561,19 +583,19 @@ export const EXAMPLE_PAGES = {
       lt: { ...fromGuide("castle", "lt"), ticketsGlance: "Suaugusiesiems 6 €, studentams, moksleiviams ir senjorams 3 €", extraCosts: "Bendras bilietas su Mažosios Lietuvos istorijos muziejumi ir Kalvystės muziejumi suaugusiesiems 9 €",
         body: [null,
           ["p", "Muziejus stovi ten, kur stovėjo pilis, senamiesčio pakraštyje prie senojo pilies uosto."],
-          ["p", "Nuo rugsėjo vidurio iki birželio vidurio muziejus atviras darbo dienomis nuo 10:00 iki 18:00, o savaitgaliais uždarytas. Vasarą jis dirba nuo antradienio iki sekmadienio. Paskutiniai bilietai parduodami 17:30."],
+          ["p", "Nuo rugsėjo vidurio iki birželio vidurio muziejus dirba nuo antradienio iki šeštadienio, nuo 10:00 iki 18:00, o sekmadieniais ir pirmadieniais uždarytas. Vasarą jis dirba nuo trečiadienio iki sekmadienio. Paskutiniai bilietai parduodami 17:30."],
           null,
           ["b", ["Skulptūra „Juodasis vaiduoklis“ kyla iš pilies uosto vandens, vos kelios minutės pėsčiomis nuo čia."]]] },
       de: { ...fromGuide("castle", "de"), ticketsGlance: "Erwachsene 6 €, Studierende, Schüler und Senioren 3 €", extraCosts: "Kombiticket mit dem Geschichtsmuseum Kleinlitauens und dem Schmiedemuseum, 9 € für Erwachsene",
         body: [null,
           ["p", "Das Museum steht dort, wo die Burg stand, am Rand der Altstadt neben dem alten Burghafen."],
-          ["p", "Von Mitte September bis Mitte Juni ist es montags bis freitags von 10:00 bis 18:00 geöffnet und am Wochenende geschlossen. Im Sommer öffnet es stattdessen dienstags bis sonntags. Die letzten Tickets gibt es um 17:30."],
+          ["p", "Von Mitte September bis Mitte Juni ist es dienstags bis samstags von 10:00 bis 18:00 geöffnet, sonntags und montags geschlossen. Im Sommer öffnet es stattdessen mittwochs bis sonntags. Die letzten Tickets gibt es um 17:30."],
           null,
           ["b", ["Die Skulptur des Schwarzen Geistes ragt ein paar Gehminuten entfernt aus dem Burghafen."]]] },
       da: { ...fromGuide("castle", "da"), ticketsGlance: "Voksne 6 €, studerende, elever og pensionister 3 €", extraCosts: "Samlet billet med museet for Lille Litauens historie og smedemuseet, 9 € for voksne",
         body: [null,
           ["p", "Museet ligger, hvor borgen lå, i udkanten af den gamle bydel ved den gamle borghavn."],
-          ["p", "Fra midten af september til midten af juni har det åbent mandag til fredag fra 10:00 til 18:00 og er lukket i weekenden. Om sommeren har det i stedet åbent tirsdag til søndag. Sidste billetter sælges 17:30."],
+          ["p", "Fra midten af september til midten af juni har det åbent tirsdag til lørdag fra 10:00 til 18:00 og er lukket søndag og mandag. Om sommeren har det i stedet åbent onsdag til søndag. Sidste billetter sælges 17:30."],
           null,
           ["b", ["Skulpturen Det Sorte Spøgelse rejser sig op af borghavnen få minutters gang derfra."]]] },
     },
@@ -648,7 +670,7 @@ export const EXAMPLE_PAGES = {
       desc: "The story of Lithuania Minor, the Lithuanian part of old Prussia that Klaipėda, then called Memel, belonged to.",
       ticketsGlance: "Adults €4, students, pupils and seniors €2",
       extraCosts: "Combined ticket with the Castle Museum and the Blacksmith's Museum, €9 for adults",
-      body: [["h", "Being There"], ["p", "Same hours as the Castle Museum: from mid September to mid June, Monday to Friday 10:00 to 18:00, closed at weekends. Last tickets at 17:30."]],
+      body: [["h", "Being There"], ["p", "Same hours as the Castle Museum: from mid September to mid June, Tuesday to Saturday 10:00 to 18:00, closed on Sundays and Mondays. Last tickets at 17:30."]],
     },
     tr: {
       "lt": {
@@ -659,7 +681,7 @@ export const EXAMPLE_PAGES = {
           null,
           [
             "p",
-            "Darbo laikas toks pat kaip Pilies muziejaus: nuo rugsėjo vidurio iki birželio vidurio darbo dienomis nuo 10:00 iki 18:00, savaitgaliais uždaryta. Paskutiniai bilietai parduodami 17:30."
+            "Darbo laikas toks pat kaip Pilies muziejaus: nuo rugsėjo vidurio iki birželio vidurio nuo antradienio iki šeštadienio, nuo 10:00 iki 18:00, sekmadieniais ir pirmadieniais uždaryta. Paskutiniai bilietai parduodami 17:30."
           ]
         ]
       },
@@ -671,7 +693,7 @@ export const EXAMPLE_PAGES = {
           null,
           [
             "p",
-            "Gleiche Zeiten wie das Burgmuseum: von Mitte September bis Mitte Juni montags bis freitags von 10:00 bis 18:00, am Wochenende geschlossen. Die letzten Tickets gibt es um 17:30."
+            "Gleiche Zeiten wie das Burgmuseum: von Mitte September bis Mitte Juni dienstags bis samstags von 10:00 bis 18:00, sonntags und montags geschlossen. Die letzten Tickets gibt es um 17:30."
           ]
         ]
       },
@@ -683,7 +705,7 @@ export const EXAMPLE_PAGES = {
           null,
           [
             "p",
-            "Samme åbningstider som borgmuseet: fra midten af september til midten af juni mandag til fredag fra 10:00 til 18:00, lukket i weekenden. Sidste billetter sælges 17:30."
+            "Samme åbningstider som borgmuseet: fra midten af september til midten af juni tirsdag til lørdag fra 10:00 til 18:00, lukket søndag og mandag. Sidste billetter sælges 17:30."
           ]
         ]
       }
