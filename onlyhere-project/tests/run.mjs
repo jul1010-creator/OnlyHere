@@ -80966,5 +80966,32 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("the log no longer says Denmark about Lithuania", !/which corner of Denmark this is",/.test(appSrc) && /which corner of \$\{draftLand\.name\} this is/.test(appSrc));
 }
 
+// ── Batch 181: what the review of the last day's work found ──
+// Oliver, 2 Oct 2026: "Remember to also look at bug fixes, so looking through
+// all the work that has been done."
+{
+  const N = M.NP;
+  is("Google's once-written meridiem is read for the whole range", [
+    N.windowsFor(["Monday: 11:00 AM – 2:30 PM, 5:00 – 10:00 PM"], 1), N.windowsFor(["Monday: 1:00 – 5:00 PM"], 1),
+    N.windowsFor(["Monday: 11:00 – 2:30 PM"], 1), N.windowsFor(["Monday: 6:00 PM – 2:00 AM"], 1), N.windowsFor(["Monday: 10:00 – 18:00"], 1),
+  ], [[[660, 870], [1020, 1320]], [[780, 1020]], [[660, 870]], [[1080, 1560]], [[600, 1080]]]);
+  ok("so a dinner-only kitchen is shut at ten in the morning", N.openBetween(["Monday: 5:00 – 10:00 PM"], 1, 600, 660) === false);
+  const sea = { lat: 55.7178, lon: 21.0989 }, oldFerry = { lat: 55.7058, lon: 21.1129 }, terminal = N.NOW_STARTS.LT.terminal, castle = { lat: 55.7056, lon: 21.1290 };
+  ok("across the strait is not in the walkable centre", M.WK.acrossWater("LT", sea) && M.WK.acrossWater("LT", oldFerry) && !M.WK.acrossWater("LT", terminal) && !M.WK.acrossWater("LT", castle) && M.WK.centreOf("LT", sea) === null && !!M.WK.centreOf("LT", castle));
+  ok("and the walk leaves it out rather than walking there", N.nowCandidates([{ id: 9, type: "free", payload: { name: "Sea Museum", country: "LT", __lat: sea.lat, __lon: sea.lon } }], { country: "LT", zone: "Europe/Vilnius", now: new Date("2026-10-06T08:30:00Z") }).length === 0);
+  is("a number range keeps its hyphen whatever the model wrote", [N.stripDashes("Open 10 - 18 most days"), N.stripDashes("Open 10–18"), N.stripDashes("Quiet — mostly")], ["Open 10-18 most days", "Open 10-18", "Quiet, mostly"]);
+  const cands = N.nowCandidates([{ id: 3, type: "food", payload: { name: "Late lunch", country: "LT", __lat: 55.7101, __lon: 21.1340, __hours: { hours: ["Tuesday: 08:00 – 23:00"] }, __offer: { text: "Soda", until: "2026-12-31", from: "13:00", to: "16:00" } } }], { country: "LT", zone: "Europe/Vilnius", now: new Date("2026-10-06T12:00:00Z") });
+  const w = N.scheduleWalk([{ id: "food:3" }], cands, { country: "LT", start: terminal, startClock: { day: 2, minutes: 15 * 60 + 15 }, budget: 240, margin: 30 });
+  ok("a deal is not shown as on for a visit that can begin as it ends", w.stops[0] && w.stops[0].deal === null);
+  const api = readFileSync(join(root, "api/plan-now.js"), "utf8");
+  ok("the walk route answers one spelling of each request only", /if \(keys !== "c,from,h,lang,slot"\) return json\(res, 400/.test(api) && /Object\.prototype\.hasOwnProperty\.call\(starts, String\(q\.from \|\| ""\)\)/.test(api) && /\/\^\[0-9\]\$\/\.test\(String\(q\.h \|\| ""\)\)/.test(api));
+  const np = readFileSync(join(root, "src/components/NowPlanner.jsx"), "utf8");
+  ok("an answer for an older choice is dropped", /if \(asked\.current !== mine\) return;/.test(np));
+  const store = readFileSync(join(root, "src/utils/studioDraftStore.js"), "utf8");
+  const appR = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("a reload keeps the offer and its hours", /offerText: typeof e\.offerText === "string"/.test(store) && /offerDays: Array\.isArray\(e\.offerDays\)/.test(store) && /if \(saved\.offerFrom\) setStudioOfferFrom\(saved\.offerFrom\);/.test(appR) && /offerDays: studioOfferDays,/.test(appR));
+  ok("a Lithuanian square ends in a letter \\b cannot see", /\(\?<!\\p\{L\}\)\(park\|parkas/.test(appR) && new RegExp("(?<!\\p{L})(aikštė|gatvė)(?!\\p{L})", "iu").test("Atgimimo aikštė"));
+}
+
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
 if (failed) { fails.forEach(f => console.log("  FAIL " + f + "\n")); process.exit(1); }
