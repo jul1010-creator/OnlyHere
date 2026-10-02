@@ -26,6 +26,66 @@ const readerLang = () => {
   return resolveUiLanguage(stored, typeof navigator !== "undefined" ? navigator.language : "");
 };
 
+// The walk itself, drawn from what the route answers with. Also used by the
+// examples page (pages/KlaipedaExamples.jsx), which runs the same rules on
+// made-up partners, and passes `tag` to mark them as made up.
+export const WalkView = ({ walk, madeAt, lang, country = "LT", tag = null }) => {
+  const app = rideApp(country);
+  return (
+    <div data-testid="now-walk" style={{ marginTop: 16 }}>
+      {walk.weather?.wet && <div style={{ fontSize: 12, color: C.muted, marginBottom: 10 }}>{uiT("now.wet", lang)}</div>}
+      {walk.stops.length === 0 ? (
+        <div style={{ fontSize: 13, color: C.muted }}>{uiT("now.empty", lang)}</div>
+      ) : (
+        <>
+          <div style={{ fontSize: 12, color: C.muted, marginBottom: 8 }}>
+            {clock(madeAt, lang)} · {uiT("now.start", lang)}: {walk.start.name}
+          </div>
+          {walk.stops.map(s => (
+            <div key={s.id}>
+              <div style={{ fontSize: 11.5, color: C.muted, padding: "6px 0 6px 12px", borderLeft: `1px solid ${C.gold}55`, marginLeft: 4 }}>
+                {s.ride && app
+                  ? <a href={app.url} target="_blank" rel="noopener noreferrer" style={{ color: C.gold, textDecoration: "none", fontWeight: 700 }}>{fill(uiT("now.ride", lang), { app: app.name, n: s.leg })} ↗</a>
+                  : fill(uiT("now.walk", lang), { n: s.leg })}
+              </div>
+              <div data-testid="now-stop" style={{ display: "flex", gap: 12, padding: "8px 0" }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: C.gold, minWidth: 44 }}>{clock(madeAt + s.arrive, lang)}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 15, fontWeight: 600, fontFamily: "'Fraunces', serif" }}>
+                    {s.name}
+                    {tag && tag(s) && <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, color: C.muted, border: `1px solid ${C.border}`, borderRadius: 100, padding: "2px 7px", fontFamily: "'Inter', sans-serif", verticalAlign: "middle" }}>{tag(s)}</span>}
+                  </div>
+                  <div style={{ fontSize: 11.5, color: C.muted, marginTop: 2 }}>{fill(uiT("now.stay", lang), { n: s.stay })}</div>
+                  {s.deal && (
+                    <div style={{ display: "inline-block", marginTop: 6, fontSize: 11.5, fontWeight: 700, borderRadius: 100, padding: "3px 10px", background: C.gold, color: C.onGold }}>
+                      ● {uiT("now.partner", lang)}: {s.deal.text}{s.deal.to ? ` · ${fill(uiT("offer.onNowUntil", lang), { time: clock(Number(s.deal.to.slice(0, 2)) * 60 + Number(s.deal.to.slice(3)), lang) })}` : ""}
+                    </div>
+                  )}
+                  {s.why && <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.5, marginTop: 6 }}>{s.why}</div>}
+                </div>
+              </div>
+            </div>
+          ))}
+          <div style={{ fontSize: 11.5, color: C.muted, padding: "6px 0 6px 12px", borderLeft: `1px solid ${C.gold}55`, marginLeft: 4 }}>
+            {walk.back.ride && app
+              ? <a href={app.url} target="_blank" rel="noopener noreferrer" style={{ color: C.gold, textDecoration: "none", fontWeight: 700 }}>{fill(uiT("now.ride", lang), { app: app.name, n: walk.back.leg })} ↗</a>
+              : fill(uiT("now.walk", lang), { n: walk.back.leg })}
+          </div>
+          <div data-testid="now-back" style={{ fontSize: 13, fontWeight: 700, color: C.text, padding: "8px 0 4px" }}>
+            {walk.start.ship
+              ? fill(uiT("now.backShip", lang), { time: clock(madeAt + walk.back.at, lang), n: Math.max(walk.margin, walk.deadline + walk.margin - walk.back.at) })
+              : fill(uiT("now.backCentre", lang), { time: clock(madeAt + walk.back.at, lang) })}
+          </div>
+          <a href={walkMapsUrl(walk.start, walk.stops)} target="_blank" rel="noopener noreferrer"
+            style={{ display: "block", textAlign: "center", marginTop: 12, border: `1px solid ${C.border}`, borderRadius: 12, padding: "11px", fontSize: 13, fontWeight: 700, color: C.light, textDecoration: "none" }}>
+            {uiT("now.route", lang)} ↗
+          </a>
+        </>
+      )}
+    </div>
+  );
+};
+
 export const NowPlanner = ({ country = "LT", lang: langProp = "", defaultFrom = "" }) => {
   const lang = langProp || readerLang();
   const starts = NOW_STARTS[country] || {};
@@ -69,7 +129,6 @@ export const NowPlanner = ({ country = "LT", lang: langProp = "", defaultFrom = 
     fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif",
   });
   const { walk, madeAt } = state;
-  const app = rideApp(country);
 
   return (
     <div data-testid="now-planner" style={{ background: C.surface, border: `1px solid ${C.gold}55`, borderRadius: 16, padding: "16px 16px 18px", marginBottom: 28 }}>
@@ -99,56 +158,7 @@ export const NowPlanner = ({ country = "LT", lang: langProp = "", defaultFrom = 
 
       {state.error && <div style={{ fontSize: 12.5, color: "#FFB347", marginTop: 12 }}>{state.error}</div>}
 
-      {walk && (
-        <div data-testid="now-walk" style={{ marginTop: 16 }}>
-          {walk.weather?.wet && <div style={{ fontSize: 12, color: C.muted, marginBottom: 10 }}>{uiT("now.wet", lang)}</div>}
-          {walk.stops.length === 0 ? (
-            <div style={{ fontSize: 13, color: C.muted }}>{uiT("now.empty", lang)}</div>
-          ) : (
-            <>
-              <div style={{ fontSize: 12, color: C.muted, marginBottom: 8 }}>
-                {clock(madeAt, lang)} · {uiT("now.start", lang)}: {walk.start.name}
-              </div>
-              {walk.stops.map(s => (
-                <div key={s.id}>
-                  <div style={{ fontSize: 11.5, color: C.muted, padding: "6px 0 6px 12px", borderLeft: `1px solid ${C.gold}55`, marginLeft: 4 }}>
-                    {s.ride && app
-                      ? <a href={app.url} target="_blank" rel="noopener noreferrer" style={{ color: C.gold, textDecoration: "none", fontWeight: 700 }}>{fill(uiT("now.ride", lang), { app: app.name, n: s.leg })} ↗</a>
-                      : fill(uiT("now.walk", lang), { n: s.leg })}
-                  </div>
-                  <div data-testid="now-stop" style={{ display: "flex", gap: 12, padding: "8px 0" }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: C.gold, minWidth: 44 }}>{clock(madeAt + s.arrive, lang)}</div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 15, fontWeight: 600, fontFamily: "'Fraunces', serif" }}>{s.name}</div>
-                      <div style={{ fontSize: 11.5, color: C.muted, marginTop: 2 }}>{fill(uiT("now.stay", lang), { n: s.stay })}</div>
-                      {s.deal && (
-                        <div style={{ display: "inline-block", marginTop: 6, fontSize: 11.5, fontWeight: 700, borderRadius: 100, padding: "3px 10px", background: C.gold, color: C.onGold }}>
-                          ● {uiT("now.partner", lang)}: {s.deal.text}{s.deal.to ? ` · ${fill(uiT("offer.onNowUntil", lang), { time: clock(Number(s.deal.to.slice(0, 2)) * 60 + Number(s.deal.to.slice(3)), lang) })}` : ""}
-                        </div>
-                      )}
-                      {s.why && <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.5, marginTop: 6 }}>{s.why}</div>}
-                    </div>
-                  </div>
-                </div>
-              ))}
-              <div style={{ fontSize: 11.5, color: C.muted, padding: "6px 0 6px 12px", borderLeft: `1px solid ${C.gold}55`, marginLeft: 4 }}>
-                {walk.back.ride && app
-                  ? <a href={app.url} target="_blank" rel="noopener noreferrer" style={{ color: C.gold, textDecoration: "none", fontWeight: 700 }}>{fill(uiT("now.ride", lang), { app: app.name, n: walk.back.leg })} ↗</a>
-                  : fill(uiT("now.walk", lang), { n: walk.back.leg })}
-              </div>
-              <div data-testid="now-back" style={{ fontSize: 13, fontWeight: 700, color: C.text, padding: "8px 0 4px" }}>
-                {walk.start.ship
-                  ? fill(uiT("now.backShip", lang), { time: clock(madeAt + walk.back.at, lang), n: Math.max(walk.margin, walk.deadline + walk.margin - walk.back.at) })
-                  : fill(uiT("now.backCentre", lang), { time: clock(madeAt + walk.back.at, lang) })}
-              </div>
-              <a href={walkMapsUrl(walk.start, walk.stops)} target="_blank" rel="noopener noreferrer"
-                style={{ display: "block", textAlign: "center", marginTop: 12, border: `1px solid ${C.border}`, borderRadius: 12, padding: "11px", fontSize: 13, fontWeight: 700, color: C.light, textDecoration: "none" }}>
-                {uiT("now.route", lang)} ↗
-              </a>
-            </>
-          )}
-        </div>
-      )}
+      {walk && <WalkView walk={walk} madeAt={madeAt} lang={lang} country={country} />}
     </div>
   );
 };
