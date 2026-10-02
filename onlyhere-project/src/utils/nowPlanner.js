@@ -15,7 +15,7 @@
 // IMPORTS ONLY FILES THAT IMPORT NOTHING, with their .js extension, because
 // api/plan-now.js loads this on the server, where Node cannot follow the
 // extensionless imports the rest of src/ uses.
-import { kmApart, offTownWalk, WALK_RULES } from "./walkable.js";
+import { kmApart, offTownWalk, acrossWater, WALK_RULES } from "./walkable.js";
 import { RIDE_APPS } from "./rideHail.js";
 import { COUNTRY_PROFILES } from "./countries.js";
 import { dayStart } from "./calendarDay.js";
@@ -88,9 +88,19 @@ export const windowsFor = (lines, day) => {
   if (!line) return null;
   const rest = line.replace(/^[^:]*:/, "");
   if (/open 24 hours/i.test(rest)) return [[0, 24 * 60]];
-  const times = [...rest.matchAll(/(\d{1,2})(?::(\d{2}))?\s*([ap]\.?m\.?)?/gi)]
-    .filter(t => t[2] !== undefined || t[3])
-    .map(t => toMin(t[1], t[2], t[3]));
+  const raw = [...rest.matchAll(/(\d{1,2})(?::(\d{2}))?\s*([ap]\.?m\.?)?/gi)]
+    .filter(t => t[2] !== undefined || t[3]);
+  // Google writes the meridiem once for a range inside one half of the day:
+  // "5:00 – 10:00 PM" is 17:00 to 22:00. A start with none takes its end's,
+  // unless that would put the start after the end ("11:00 – 2:30 PM").
+  const times = raw.map((t, i) => {
+    let ampm = t[3];
+    if (!ampm && i % 2 === 0 && raw[i + 1]?.[3]) {
+      const end = toMin(raw[i + 1][1], raw[i + 1][2], raw[i + 1][3]);
+      ampm = toMin(t[1], t[2], raw[i + 1][3]) <= end ? raw[i + 1][3] : "am";
+    }
+    return toMin(t[1], t[2], ampm);
+  });
   if (!times.length) return /closed|lukket|uždaryta/i.test(rest) ? [] : null;
   if (times.length % 2) return null;
   const out = [];
@@ -144,6 +154,9 @@ export const nowCandidates = (rows, { country = "LT", zone = "", now = new Date(
     if (String(p.country || "DK").toUpperCase() !== country) continue;
     const at = pointOf(p);
     if (!at) continue;
+    // Across the strait needs the ferry, which a walk made for a few hours does
+    // not plan around yet.
+    if (acrossWater(country, at)) continue;
     if (kind === "Event") {
       const a = dayStart(p.date), b = dayStart(p.dateEnd || p.date);
       const iso = (d) => d && `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -206,7 +219,7 @@ export const scheduleWalk = (order, candidates, ctx) => {
         timing = timingAt(w, clockAt(arrive));
       }
       dealNow = timing === "now" || timing === "always";
-      if (dealNow && w && startClock.minutes + arrive + SPREAD > w.toMin) dealNow = false;
+      if (dealNow && w && startClock.minutes + arrive + SPREAD >= w.toMin) dealNow = false;
     }
     const leave = arrive + stay;
     // Open for the whole visit, for a walker leaving at the start or the end
@@ -302,7 +315,7 @@ export const readOrder = (text) => {
 // No dashes from any model, his standing rule: a dash between words becomes a
 // comma, and one inside a number range stays.
 export const stripDashes = (v) => String(v || "")
-  .replace(/(\d)\s*[–—]\s*(\d)/g, "$1-$2")
+  .replace(/(\d)\s*[–—-]\s*(\d)/g, "$1-$2")
   .replace(/\s*[—–]\s*/g, ", ")
   .replace(/\s+-\s+/g, ", ")
   .replace(/,\s*,/g, ",")

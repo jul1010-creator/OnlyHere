@@ -40,9 +40,25 @@ const point = (p) => {
   return Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon } : null;
 };
 
+// ── AND ACROSS THE WATER IS NOT IN TOWN ─────────────────────────────
+// The circle around Theatre Square also covers Smiltynė, across the strait on
+// the Curonian Spit, where the Sea Museum is. Two kilometres as the crow
+// flies and a ferry in between: nobody walks there and no Bolt drives there
+// without the car ferry. Found in review on 2 Oct 2026. The strait runs from
+// about 21.116 east at the old ferry to about 21.103 at its mouth.
+export const ACROSS_WATER = {
+  LT: (p) => p.lat > 55.55 && p.lat < 55.727 && p.lon < 21.116 - (p.lat - 55.705) * 0.6,
+};
+export const acrossWater = (code, p) => {
+  const pt = point(p);
+  const test = ACROSS_WATER[String(code || "").toUpperCase()];
+  return !!(pt && test && test(pt));
+};
+
 export const centreOf = (code, p) => {
   const pt = point(p);
   if (!pt) return null;
+  if (acrossWater(code, pt)) return null;
   return (WALKABLE_CENTRES[String(code || "").toUpperCase()] || []).find(c => kmApart(c, pt) <= c.km) || null;
 };
 
