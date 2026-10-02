@@ -21,7 +21,7 @@
 // hour, a price for a thing they already do, a service a visitor needs. No
 // percentage off everything.
 
-import { NOW_STARTS, SHIP_MARGIN, MUST_SEE, nowCandidates, scheduleWalk, windowsFor, withMustSee, nextOpen, reversedWalk, placesOf } from "../utils/nowPlanner";
+import { NOW_STARTS, SHIP_MARGIN, MUST_SEE, STROLL, nowCandidates, scheduleWalk, windowsFor, withMustSee, nextOpen, reversedWalk, placesOf, strollCandidates, weatherRules } from "../utils/nowPlanner";
 import { fingerprint, proseOf } from "../utils/entryTranslate";
 
 export const KLAIPEDA_EXAMPLES_PATH = "/lithuania/examples";
@@ -112,9 +112,10 @@ const REAL = [
   { key: "castle", type: "free", name: "Castle Museum", lat: 55.70592, lon: 21.12891, hours: LM_WINTER, tier: "Can't Miss Out" },
   { key: "history", type: "free", name: "History Museum of Lithuania Minor", lat: 55.70734, lon: 21.13471, hours: LM_WINTER, tier: "Worth Considering" },
   { key: "clock", type: "free", name: "Clock and Watch Museum", lat: 55.71221, lon: 21.13416, hours: CLOCK, tier: "Highly Recommended" },
-  { key: "ghost", type: "free", name: "The Black Ghost", lat: 55.70660, lon: 21.12682, tier: "Highly Recommended" },
+  { key: "ghost", type: "free", name: "The Black Ghost", lat: 55.70660, lon: 21.12682, tier: "Highly Recommended", desc: "A dark figure rising out of the water of the old castle harbour." },
   { key: "theatre", type: "free", name: "Theatre Square", lat: 55.70780, lon: 21.13163, tier: "Can't Miss Out" },
-  { key: "meridianas", type: "free", name: "Meridianas", lat: 55.71034, lon: 21.13491, tier: "Highly Recommended" },
+  { key: "meridianas", type: "free", name: "Meridianas", lat: 55.71034, lon: 21.13491, tier: "Highly Recommended", desc: "The sailing ship moored by Biržos Bridge." },
+  { key: "friedrich", type: "free", name: "Friedrich Passage", lat: 55.70699, lon: 21.13789, tier: "Worth Considering", desc: "A lane of cafés and restaurants off Tiltų street." },
   { key: "sculpture", type: "free", name: "Sculpture Park", lat: 55.71690, lon: 21.14016, tier: "Highly Recommended" },
   { key: "dane", type: "free", name: "Danė Square", lat: 55.71149, lon: 21.13744, tier: "Worth Considering" },
 ];
@@ -122,7 +123,7 @@ const REAL = [
 // The rows as gemlyx_content would return them, so the planner reads these
 // exactly as it reads published places.
 export const exampleRows = () => [
-  ...REAL.map(p => ({ id: p.key, type: p.type, payload: { name: p.name, country: "LT", __lat: p.lat, __lon: p.lon, tier: p.tier, ...(p.hours ? { __hours: { hours: p.hours } } : {}) } })),
+  ...REAL.map(p => ({ id: p.key, type: p.type, payload: { name: p.name, country: "LT", __lat: p.lat, __lon: p.lon, tier: p.tier, ...(p.desc ? { desc: p.desc } : {}), ...(p.hours ? { __hours: { hours: p.hours } } : {}) } })),
   ...EXAMPLE_PARTNERS.filter(p => p.inWalks !== false).map(p => ({
     id: p.key, type: p.type,
     payload: { name: p.name, country: "LT", __lat: p.lat, __lon: p.lon, __hours: { hours: p.hours }, __offer: { ...p.offer, until: UNTIL } },
@@ -137,7 +138,7 @@ export const isExamplePartner = (id) => EXAMPLE_PARTNERS.some(p => id === `${p.t
 // would write; everything else on the card is worked out by the rules.
 export const EXAMPLE_WALKS = [
   {
-    id: "tuesday",
+    id: "tuesday", chip: "Off the ship",
     title: "Off the ship, four hours",
     moment: "Tuesday 10:30, dry",
     at: "2026-10-13T10:30", from: "terminal", hours: 4, wet: false,
@@ -151,7 +152,7 @@ export const EXAMPLE_WALKS = [
     ],
   },
   {
-    id: "saturday",
+    id: "saturday", chip: "Wet Saturday",
     title: "A wet Saturday, six hours",
     moment: "Saturday 11:00, raining",
     at: "2026-10-17T11:00", from: "terminal", hours: 6, wet: true,
@@ -169,7 +170,7 @@ export const EXAMPLE_WALKS = [
     ],
   },
   {
-    id: "thursday",
+    id: "thursday", chip: "From the centre",
     title: "From the tourist centre, two hours",
     moment: "Thursday 14:00, dry",
     at: "2026-10-15T14:00", from: "centre", hours: 2, wet: false,
@@ -181,7 +182,7 @@ export const EXAMPLE_WALKS = [
     ],
   },
   {
-    id: "friday",
+    id: "friday", chip: "Friday evening",
     title: "A Friday evening, four hours",
     moment: "Friday 17:00, dry",
     at: "2026-10-16T17:00", from: "centre", hours: 4, wet: false,
@@ -192,6 +193,59 @@ export const EXAMPLE_WALKS = [
       { id: "booking:jazz", stay: 120, why: "A brick cellar, and the band starts at 20:00." },
     ],
   },
+  {
+    // Oliver, 2 Oct 2026: "Shall there also be a 'walk around in old town'?"
+    id: "oldtown", chip: "Old Town only",
+    title: "Just the Old Town, two hours",
+    moment: "Sunday 11:00, dry",
+    at: "2026-10-18T11:00", from: "centre", hours: 2, wet: false, style: STROLL,
+    order: [
+      { id: "food:bakery", stay: 20, why: "A coffee to carry, a few doors up the street." },
+      { id: "free:theatre", stay: 15, why: "Ännchen of Tharau in the middle of the square." },
+      { id: "free:post", stay: 15, why: "Write one home and they post it." },
+      { id: "booking:amber", stay: 20, why: "Look in at the bench where the amber is polished." },
+      { id: "free:friedrich", stay: 15, why: "The lane of cafés off Tiltų street, for later." },
+      { id: "free:meridianas", stay: 15, why: "The town's ship on the Danė, to finish." },
+    ],
+  },
+];
+
+// ── ONE MORNING, FOUR KINDS OF WEATHER ──────────────────────────────
+// Oliver, 2 Oct 2026: "this is how it transforms during snow", "during rain",
+// "when very windy". The same Tuesday morning off the ship, in each. The order
+// is what the model writes once it is told the weather; the rules in
+// weatherRules (utils/nowPlanner.js) then shorten, slow and leave out on their
+// own, and the page lists what they did.
+const TUESDAY = { at: "2026-10-13T10:30", from: "terminal", hours: 4 };
+export const WEATHER_WALKS = [
+  { ...TUESDAY, id: "dry", label: "Dry", title: "A dry morning", moment: "Tuesday 10:30, dry, 11 °C", weather: { wet: false, snow: false, wind: 4 },
+    order: EXAMPLE_WALKS[0].order },
+  { ...TUESDAY, id: "rain", label: "Rain", title: "Rain all morning", moment: "Tuesday 10:30, rain, 9 °C", weather: { wet: true, snow: false, wind: 6 },
+    order: [
+      { id: "free:castle", stay: 40, why: "Indoors first, while it is at its heaviest." },
+      { id: "free:history", stay: 45, why: "Next door and dry: the story of Memel and Lithuania Minor." },
+      { id: "booking:amber", stay: 25, why: "Twenty minutes at a warm bench with a piece of amber." },
+      { id: "free:theatre", stay: 15, why: "Ännchen of Tharau, quickly, under an umbrella." },
+      { id: "food:fish", stay: 45, why: "Lunch somewhere warm, on the way back to the ship." },
+    ] },
+  { ...TUESDAY, id: "snow", label: "Snow", title: "Snow on the ground", moment: "Tuesday 10:30, snow, minus 3 °C", weather: { wet: true, snow: true, wind: 5 },
+    order: [
+      { id: "free:ghost", stay: 15, why: "Snow on the dark water of the castle harbour, for a few minutes." },
+      { id: "free:castle", stay: 45, why: "Inside and warm, with the town model to read." },
+      { id: "free:history", stay: 45, why: "Next door, without going far on the ice." },
+      { id: "free:theatre", stay: 20, why: "Ännchen of Tharau with snow on her shoulders." },
+      { id: "food:fish", stay: 45, why: "Hot soup and smoked fish before the walk back." },
+    ] },
+  { ...TUESDAY, id: "storm", label: "Storm wind", title: "A storm off the Baltic", moment: "Tuesday 10:30, wind 17 m/s, 8 °C", weather: { wet: false, snow: false, wind: 17 },
+    order: [
+      { id: "free:ghost", stay: 15, why: "Rising out of the castle harbour." },
+      { id: "free:castle", stay: 40, why: "Out of the wind, with the town model to read." },
+      { id: "free:history", stay: 45, why: "Next door, still out of the wind." },
+      { id: "booking:amber", stay: 25, why: "Twenty minutes at the bench with a piece of amber." },
+      { id: "free:theatre", stay: 15, why: "Sheltered by the theatre and the houses around it." },
+      { id: "food:fish", stay: 40, why: "Lunch on Fishermen's Street." },
+      { id: "free:meridianas", stay: 15, why: "The town's ship on the Danė." },
+    ] },
 ];
 
 // ── GUIDES IN FOUR LANGUAGES ────────────────────────────────────────
@@ -347,10 +401,13 @@ export const runExample = (ex) => {
   const startClock = exampleClock(ex.at);
   // Klaipėda is three hours ahead of UTC until the last Sunday of October.
   const now = new Date(`${ex.at}:00+03:00`);
-  const candidates = nowCandidates(exampleRows(), { country: "LT", zone: "Europe/Vilnius", now });
+  const all = nowCandidates(exampleRows(), { country: "LT", zone: "Europe/Vilnius", now });
+  const style = ex.style || "";
+  const candidates = style ? strollCandidates(all, "LT") : all;
+  const weather = ex.weather || { wet: !!ex.wet, snow: false, wind: 0 };
   const budget = ex.hours * 60;
   const margin = start.ship ? SHIP_MARGIN : 0;
-  const ctx = { country: "LT", start, startClock, budget, margin };
+  const ctx = { country: "LT", start, startClock, budget, margin, weather, style };
   // The order as the route makes it: the model's, then every Can't Miss Out
   // place it left out put in where it costs least.
   const order = withMustSee(ex.order, candidates, ctx);
@@ -364,14 +421,16 @@ export const runExample = (ex) => {
     const next = shut ? nextOpen(c.hours, startClock) : null;
     const hhmm = (m) => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
     const closes = Array.isArray(today) && today.length ? Math.max(...today.map(([, b]) => b)) : null;
-    const reason = shut
+    const blown = weatherRules(weather).dropExposed && c?.exposed && !c?.indoor;
+    const reason = blown ? "Out on open water, in a storm wind"
+      : shut
       ? `Closed on ${DAY_OF[startClock.day]} at this time of year${next ? `. Opens ${DAY_NAME[next.day]} ${hhmm(next.minutes)}` : ""}`
       : closes !== null && closes < startClock.minutes + budget
         ? `Closes at ${hhmm(closes)} today, before there is time for it`
         : "Left out to keep time for the way back";
     return { id: o.id, name: c?.name || o.id, mustSee: c?.tier === MUST_SEE, reason };
   });
-  const base = { start: { name: start.name, lat: start.lat, lon: start.lon, ship: !!start.ship }, weather: { wet: !!ex.wet }, margin, clock: startClock, budget, places: placesOf(made, candidates) };
+  const base = { start: { name: start.name, lat: start.lat, lon: start.lon, ship: !!start.ship }, weather, style, margin, clock: startClock, budget, places: placesOf(made, candidates) };
   return {
     walk: { ...base, ...made },
     alt: alt ? { ...base, ...alt } : null,
@@ -612,6 +671,15 @@ export const EXAMPLE_PAGES = {
         ["h", "Things to Know"],
         ["b", ["She is one of the talking sculptures: scan the QR code on the sign next to her and she tells her story."]],
       ],
+    },
+  }),
+  "free:friedrich": page({
+    kind: "free",
+    row: { id: "x-friedrich", name: "Friedrich Passage", city: "Klaipėda", type: "Lane", emoji: "🍽️", __lat: 55.70699, __lon: 21.13789, mapHint: "Friedricho pasažas, Tiltų g. 26A, Klaipėda", __sources: ["https://www.mzirafos.lt/vieta/friedricho-pasazas/"] },
+    en: {
+      desc: "A lane of cafés and restaurants off Tiltų street, the easiest place in the Old Town to sit down for a proper meal.",
+      ticketsGlance: "Free to walk through",
+      body: [["h", "Things to Know"], ["b", ["Each restaurant keeps its own hours.", "Lithuanian dishes worth trying: cepelinai, the big potato dumplings, and šaltibarščiai, cold pink beetroot soup, when it is warm."]]],
     },
   }),
   "free:meridianas": page({
