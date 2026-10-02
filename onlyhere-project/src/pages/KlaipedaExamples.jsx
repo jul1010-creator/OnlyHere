@@ -13,7 +13,7 @@ import { C } from "../utils/theme";
 import { GemlyxLogo } from "../components/GemlyxLogo";
 import { EditableWalk } from "../components/NowPlanner";
 import { DetailPage } from "../components/DetailPage";
-import { MUST_SEE, weatherChanges } from "../utils/nowPlanner";
+import { MUST_SEE, weatherChanges, openBetween } from "../utils/nowPlanner";
 import { entryWord } from "../utils/entryWords";
 import { offerHoursLabel } from "../utils/offer";
 import { windowOf, timingAt, cleanDays, cleanClock } from "../utils/offerClock";
@@ -40,7 +40,7 @@ const Lead = ({ children }) => (
   <p style={{ fontSize: 13.5, lineHeight: 1.65, color: C.light, margin: "0 0 16px" }}>{children}</p>
 );
 
-const TIMING_TEXT = { now: "On at this moment", always: "On at this moment", later: "Later that day", off: "Not that day" };
+const TIMING_TEXT = { now: "On at this moment", always: "On at this moment", later: "Later that day", off: "Not that day", shut: "Closed at this moment" };
 
 export const KlaipedaExamples = () => {
   const [walkId, setWalkId] = useState(EXAMPLE_WALKS[0].id);
@@ -189,7 +189,12 @@ export const KlaipedaExamples = () => {
         <div style={{ fontSize: 12, color: C.muted, marginBottom: 10 }}>Shown as they stand on {momentLabel}, the moment of the walk above.</div>
         <div style={{ display: "grid", gap: 10, marginBottom: 40 }}>
           {EXAMPLE_PARTNERS.map(p => {
-            const timing = timingAt(windowOf({ days: cleanDays(p.offer.days), from: cleanClock(p.offer.from), to: cleanClock(p.offer.to) }), run.startClock);
+            // An offer is only on while the door is open: an all-day offer at a
+            // workshop that has closed for the day is not on. Found in review,
+            // 2 Oct 2026.
+            const inWindow = timingAt(windowOf({ days: cleanDays(p.offer.days), from: cleanClock(p.offer.from), to: cleanClock(p.offer.to) }), run.startClock);
+            const doorShut = (inWindow === "now" || inWindow === "always") && openBetween(p.hours, run.startClock.day, run.startClock.minutes, run.startClock.minutes + 1) === false;
+            const timing = doorShut ? "shut" : inWindow;
             const set = offerHoursLabel({ ...p.offer, until: "2027-12-31" }, { lang: "en" }) || "Whenever they are open";
             const on = timing === "now" || timing === "always";
             return (
