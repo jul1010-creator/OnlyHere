@@ -189,7 +189,7 @@ import { parsePretend, readPretend, writePretend, pretendBanner } from "./utils/
 import { cleanNotice, noticesNearby, noticeIsCurrent, noticeTitle, noticeWhen, readDismissed, writeDismissed, NOTICE_RADIUS_KM } from "./utils/nearbyNotices";
 import { sourceRulesBlock, directSourceSearches, overflowSourceSearch, discoverSourceSearch, discoverSourceNote, normaliseDomain, cleanNote, cleanPlace, blockCost, scopeTier, parseTypes, serialiseTypes, PARTS_OF_COUNTRY, ISLANDS_SCOPE, CONTENT_TYPES, TYPE_LABEL, srcForType, SRC_FOR_TYPE, PLACE_SOURCES, ESSENTIAL_CATEGORIES, sourceIsAboutPlace, nameIsDistinctive, isNeverOwnSite, isNeverASource } from "./utils/sourcePolicy";
 import { REGION_NAMES, regionAt, regionOf, kommuneNameAt, describeRegion, kommunerIn, danishAddressIn } from "./utils/regions";
-import { otherNameFor, variantsOf, containsName, samePlaceName, distinctiveWords } from "./utils/danishNames";
+import { otherNameFor, variantsOf, containsName, samePlaceName, distinctiveWords, fold } from "./utils/danishNames";
 import { listingMatchesSubject, describeListingRefusal } from "./utils/placeChoice";
 import { hashForTab, tabForHash, ownsTheAddress } from "./utils/tabUrl";
 import { venueVerdict, venueVia, describeVenue, VENUE_MAX_KM } from "./utils/venueMatch";
@@ -4113,6 +4113,11 @@ Say which answer came from which source, so a fact from a vouched page and a fac
   // right and stays right. It kept only a sentence, so the second attempt could
   // not ask the different question a venue deserves. See utils/venueMatch.js.
   let refusedListing = null;
+  // The name of a refused listing that the research then confirmed (the venue
+  // step below). Google's hours listing under that same name is the same place,
+  // so it is not refused a second time: "Sąjūdžio parkas" confirmed by nine
+  // mentions in the research is Sąjūdis Park's listing, hours and all.
+  let venueByResearch = "";
     // ── WHERE IT IS, BEFORE ANYTHING IS SEARCHED ──────────────────────
     //
     // Oliver, 13 Aug 2026: "So when doing research, make maps be one of the
@@ -4360,7 +4365,7 @@ Say which answer came from which source, so a fact from a vouched page and a fac
       }
       note("Where this place is", {
         provider: coords ? (via.startsWith("Google") ? "google" : "fetch") : "fetch",
-        detail: "run BEFORE the research, so the searches and the founder sources know which corner of Denmark this is",
+        detail: `run BEFORE the research, so the searches and the founder sources know which corner of ${draftLand.name} this is`,
         outcome: placed ? "ok" : "empty",
         got: placed
           ? `${placed.lat.toFixed(4)}, ${placed.lon.toFixed(4)} via ${via}, ${describeRegion(placed.lat, placed.lon, precise)}`
@@ -4527,7 +4532,20 @@ Say which answer came from which source, so a fact from a vouched page and a fac
         shopPlace: "butikker gågade butikscenter åbningstider",
         booking: "værksted booking priser åbningstider",
       }[sType] || "praktisk information åbningstider";
-      const allQueries = [...cfg.queries, ...plannedQueries, ...(daName ? [`${daName} ${daWords}`] : [])];
+      // ── AND ABROAD, EVERY QUERY SAYS WHERE ──────────────────────────
+      // Four Klaipėda runs on 2 Oct 2026 read pages about parks in Detroit,
+      // Wichita and Los Angeles, because "Sąjūdis Park entry price tickets"
+      // says nothing about Lithuania and a search engine fills the gap with
+      // America. Outside Denmark a query without the town or the country gets
+      // both, and the place's own Lithuanian name, once Google has given it,
+      // gets a query of its own, which is how the Lithuanian pages are reached.
+      const whereWords = [draftTown, draftLand.name].filter(Boolean);
+      const saysWhere = (q) => whereWords.some(w => fold(q).includes(fold(w)));
+      const abroadQueries = draftInDenmark ? [] : [
+        ...(placesName && fold(placesName) !== fold(name) ? [`${placesName} ${draftTown || draftLand.name}`] : []),
+      ];
+      const scopeQuery = (q) => (draftInDenmark || saysWhere(q) ? q : `${q} ${whereWords.join(" ")}`);
+      const allQueries = [...cfg.queries.map(scopeQuery), ...plannedQueries.map(scopeQuery), ...abroadQueries, ...(daName ? [`${daName} ${daWords}`] : [])];
       let context = "";
       let candidateUrls = [];
       // ── WHAT EACH CANDIDATE PAGE SAYS IT IS ───────────────────────
@@ -4911,6 +4929,7 @@ Say which answer came from which source, so a fact from a vouched page and a fac
             // every later check looking for the hall instead of the fair. The
             // town is taken, because that is the thing the draft was missing.
             if (refusedListing.town && !draftTown) draftTown = refusedListing.town;
+            venueByResearch = refusedListing.name;
           }
           note("Where this place is, the venue", {
             provider: "google",
@@ -5047,7 +5066,7 @@ Say which answer came from which source, so a fact from a vouched page and a fac
               ? `${found.address} appeared ${found.mentions === 1 ? "once" : `${found.mentions} times`} in the research, giving ${placed.lat.toFixed(4)}, ${placed.lon.toFixed(4)}, ${describeRegion(placed.lat, placed.lon, placed.precise)}`
               : found
                 ? `found "${found.address}" in the research but nothing geocoded from it`
-                : "no Danish postal address anywhere in the research, so this draft stays unplaced",
+                : draftInDenmark ? "no Danish postal address anywhere in the research, so this draft stays unplaced" : `the postal address tier is Danish only, so outside Denmark this draft stays unplaced`,
             why: placed ? "" : "Without a coordinate there is no region, no nearest stop, and no place-scoped source.",
             used: !!placed,
           });
@@ -6054,7 +6073,8 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
           // verified hours. And the types most likely to be refused here, the
           // areas and the events, are exactly the ones that now get the dedicated
           // official-site search above, so the two cover each other.
-          if (!listingMatchesSubject(name, draftTown, hoursData.name, { theNameIsAStreet: NAME_IS_A_STREET.includes(sType) })) {
+          const confirmedVenue = !!venueByResearch && !NAME_IS_A_STREET.includes(sType) && fold(String(hoursData.name || "").trim()) === fold(venueByResearch);
+          if (!confirmedVenue && !listingMatchesSubject(name, draftTown, hoursData.name, { theNameIsAStreet: NAME_IS_A_STREET.includes(sType) })) {
             note("Opening hours and address", {
               provider: "google", detail: "Places Text Search for the business listing",
               outcome: "empty", used: false,
@@ -6810,7 +6830,14 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
           // its answer, thirteen hundred lines down, were two hand-written
           // lists of the same idea and only one of them existed.
           const HUNTS_FOR_A_PRICE = TYPES_WITH_A_DOOR.filter(t => t !== "booking");
-          const needHunt = HUNTS_FOR_A_PRICE.includes(sType) && !pricesAdmission(priced);
+          // Not for an open space abroad. Four Klaipėda runs on 2 Oct 2026 sent
+          // the ticket agent after a park or a square, and it came back with a
+          // festival in the Netherlands and a park in Michigan. Nobody sells a
+          // ticket to Danė Square. Denmark keeps the hunt as it was, because
+          // there a word like "park" also names places that do charge.
+          const OPEN_SPACE = /\b(park|parkas|square|skveras|aikštė|aikste|beach|paplūdimys|papludimys|promenade|krantinė|quay|dune|kopa|street|gatvė)\b/i;
+          const openSpaceAbroad = !draftInDenmark && OPEN_SPACE.test(`${name} ${placesName || ""}`) && !/muziej|museum|zoo|aquarium|delfinarium|dolphin/i.test(`${name} ${placesName || ""}`);
+          const needHunt = HUNTS_FOR_A_PRICE.includes(sType) && !pricesAdmission(priced) && !openSpaceAbroad;
           if (needHunt) {
             try {
               // sType, so an attraction is asked about its own billetter page
@@ -7848,7 +7875,10 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
       if (glanceFields.length && rawResearch) {
         try {
           setStudioStage({ label: "Reading the At a Glance values out of the research", percent: 88 });
-          const gRes = await askOpenAI(GLANCE_EXTRACT_PROMPT(name, sType, glanceFields, rawResearch), 1200);
+          // Low effort and room to answer in one go: the 2 Oct 2026 runs spent
+          // 57 to 262 seconds here, thinking about a lookup and then running
+          // out of room and being asked again.
+          const gRes = await askOpenAI(GLANCE_EXTRACT_PROMPT(name, sType, glanceFields, rawResearch), 4000, { effort: "low" });
           const gRead = gRes?.error ? { ok: false, values: {}, why: gRes.error } : readGlanceExtract(gRes?.text, glanceFields);
           if (gRead.ok) {
             // The fifth argument is the pages this run actually OPENED, kept apart
