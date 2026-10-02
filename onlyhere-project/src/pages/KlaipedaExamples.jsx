@@ -11,12 +11,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { C } from "../utils/theme";
 import { GemlyxLogo } from "../components/GemlyxLogo";
-import { WalkView } from "../components/NowPlanner";
+import { EditableWalk } from "../components/NowPlanner";
+import { DetailPage } from "../components/DetailPage";
+import { MUST_SEE } from "../utils/nowPlanner";
+import { entryWord } from "../utils/entryWords";
 import { offerHoursLabel } from "../utils/offer";
 import { windowOf, timingAt, cleanDays, cleanClock } from "../utils/offerClock";
 import {
   EXAMPLE_WALKS, EXAMPLE_PARTNERS, EXAMPLE_GUIDES, GUIDE_LANGS, GUIDE_LANG_NAMES, GUIDE_LABELS, PARTNER_WEEK,
-  runExample, isExamplePartner,
+  runExample, isExamplePartner, pageFor,
 } from "../data/klaipedaExamples";
 
 const WARN = "#FFB347";
@@ -44,6 +47,13 @@ export const KlaipedaExamples = () => {
   const [lang, setLang] = useState("en");
   const ex = EXAMPLE_WALKS.find(w => w.id === walkId) || EXAMPLE_WALKS[0];
   const run = useMemo(() => runExample(ex), [ex]);
+  // Which of the two ways round is shown. See reversedWalk in utils/nowPlanner.js.
+  const [way, setWay] = useState("a");
+  useEffect(() => { setWay("a"); }, [walkId]);
+  const shownWalk = way === "b" && run.alt ? run.alt : run.walk;
+  // The page a listing opens, in the window. See EXAMPLE_PAGES.
+  const [open, setOpen] = useState(null);
+  const openPage = (id) => { const p = pageFor(id); if (p) setOpen({ id, ...p }); };
 
   useEffect(() => {
     const prevTitle = document.title;
@@ -93,7 +103,7 @@ export const KlaipedaExamples = () => {
 
         {/* ── WALKS ───────────────────────────────────────────── */}
         <H2>A walk for the time they have</H2>
-        <Lead>A visitor scans the QR code at the terminal or the tourist centre and taps how long they have. Gemlyx makes one walk from what is open then, shows the offers that are on then, and gets them back in time.</Lead>
+        <Lead>A visitor scans the QR code at the terminal or the tourist centre and taps how long they have. Gemlyx makes one walk from what is open then, shows the offers that are on then, and gets them back in time. Places rated Can't Miss Out go in whenever they are open. Each phone gets one of two ways round, so a full ship splits in half instead of moving as one crowd.</Lead>
 
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }} role="tablist" aria-label="Example walks">
           {EXAMPLE_WALKS.map(w => (
@@ -106,14 +116,26 @@ export const KlaipedaExamples = () => {
         <div style={{ ...card, border: `1px solid ${C.gold}55`, borderRadius: 16, padding: "16px 16px 18px", marginBottom: 12 }}>
           <div style={{ fontSize: 20, fontWeight: 600, fontFamily: "'Fraunces', serif" }}>{ex.title}</div>
           <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>{ex.moment}</div>
-          <WalkView walk={run.walk} madeAt={run.startClock.minutes} lang="en" country="LT" tag={(s) => isExamplePartner(s.id) ? "Example" : null} />
+          {run.alt && (
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 12 }} role="tablist" aria-label="Way round">
+              {[["a", "Route A"], ["b", "Route B"]].map(([k, label]) => (
+                <button key={k} role="tab" aria-selected={way === k} onClick={() => setWay(k)} data-testid={`example-way-${k}`}
+                  style={{ ...pill(way === k), padding: "5px 12px", fontSize: 11.5 }}>{label}</button>
+              ))}
+            </div>
+          )}
+          <EditableWalk walk={shownWalk} madeAt={run.startClock.minutes} lang="en" country="LT" tag={(s) => isExamplePartner(s.id) ? "Example" : null} onOpen={(s) => openPage(s.id)} />
           {run.left.length > 0 && (
             <div data-testid="example-left" style={{ borderTop: `1px solid ${C.border}`, marginTop: 14, paddingTop: 12 }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 6 }}>Left out of this walk</div>
               {run.left.map(l => (
                 <div key={l.id} style={{ display: "flex", gap: 8, alignItems: "baseline", fontSize: 12.5, lineHeight: 1.55, marginBottom: 4 }}>
                   <span style={{ width: 6, height: 6, borderRadius: 6, background: WARN, flexShrink: 0, transform: "translateY(-1px)" }} />
-                  <span><span style={{ fontWeight: 700, color: C.text }}>{l.name}</span> <span style={{ color: WARN }}>{l.reason}</span></span>
+                  <span>
+                    <button onClick={() => openPage(l.id)} style={{ background: "none", border: "none", padding: 0, font: "inherit", fontWeight: 700, color: C.text, cursor: "pointer", borderBottom: `1px dotted ${C.muted}` }}>{l.name}</button>
+                    {l.mustSee && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: C.onGold, background: C.gold, borderRadius: 100, padding: "1px 7px", whiteSpace: "nowrap" }}>⭐ {entryWord(MUST_SEE, "en")}</span>}
+                    {" "}<span style={{ color: WARN }}>{l.reason}</span>
+                  </span>
                 </div>
               ))}
             </div>
@@ -134,7 +156,7 @@ export const KlaipedaExamples = () => {
             const set = offerHoursLabel({ ...p.offer, until: "2027-12-31" }, { lang: "en" }) || "Whenever they are open";
             const on = timing === "now" || timing === "always";
             return (
-              <div key={p.key} data-testid="example-offer" style={card}>
+              <div key={p.key} data-testid="example-offer" role="button" tabIndex={0} onClick={() => openPage(`${p.type}:${p.key}`)} onKeyDown={(e) => { if (e.key === "Enter") openPage(`${p.type}:${p.key}`); }} style={{ ...card, cursor: "pointer" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                   <span style={{ fontSize: 15.5, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.gold }}>{p.name}</span>
                   <Tag>Example</Tag>
@@ -168,7 +190,7 @@ export const KlaipedaExamples = () => {
 
         <div style={{ display: "grid", gap: 12, marginBottom: 40 }}>
           {EXAMPLE_GUIDES.map(g => (
-            <div key={g.id} data-testid="example-guide" style={{ ...card, padding: "15px 16px" }}>
+            <div key={g.id} data-testid="example-guide" role="button" tabIndex={0} onClick={() => openPage(g.page)} onKeyDown={(e) => { if (e.key === "Enter") openPage(g.page); }} style={{ ...card, padding: "15px 16px", cursor: "pointer" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 <span style={{ fontSize: 18, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.gold, lineHeight: 1.25 }}>{g.name}</span>
                 {g.partner && <Tag>{L.example}</Tag>}
@@ -190,6 +212,7 @@ export const KlaipedaExamples = () => {
                   <div style={{ fontSize: 13, lineHeight: 1.6, color: C.light }}>{g.tip[lang]}</div>
                 </div>
               )}
+              <div style={{ fontSize: 12, fontWeight: 700, color: C.gold, marginTop: 12 }}>{L.open} ›</div>
             </div>
           ))}
         </div>
@@ -230,6 +253,11 @@ export const KlaipedaExamples = () => {
             </div>
           ))}
         </div>
+
+        {open && (
+          <DetailPage windowed item={open.item} kind={open.kind} onClose={() => setOpen(null)} lang={lang} paid
+            sample={isExamplePartner(open.id) ? L.madeUp : L.page} />
+        )}
 
         <div style={{ fontSize: 11.5, lineHeight: 1.7, color: C.muted, borderTop: `1px solid ${C.border}`, paddingTop: 16 }}>
           Museum hours and prices were checked on 29 September 2026 against each museum's own website. Coordinates are from OpenStreetMap. The businesses, offers, ship days and numbers on this page are examples.
