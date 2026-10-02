@@ -81166,5 +81166,29 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("the Old Town example stays inside the Old Town, with no museum", old.walk.stops.length >= 4 && old.walk.stops.every(s => N.inOldTown("LT", s) && s.kind !== "Museum"));
 }
 
+// ── Batch 186: a review of 183 to 185, and every real place in four languages ──
+// Oliver went to the gym, 2 Oct 2026, asking "anything you want to work on
+// while I go?"; these are what a read of the day's work found.
+{
+  const N = M.NP, X = M.KEX;
+  const T = N.NOW_STARTS.LT.terminal;
+  const cands = N.nowCandidates([
+    { id: 1, type: "free", payload: { name: "Square", country: "LT", __lat: 55.7078, __lon: 21.1316 } },
+    { id: 2, type: "free", payload: { name: "Old square", country: "LT", __lat: 55.7080, __lon: 21.1330, desc: "A quiet square. A few minutes from the harbour." } },
+  ], { country: "LT", zone: "Europe/Vilnius", now: new Date("2026-10-13T07:30:00Z") });
+  const ctx = { country: "LT", start: T, startClock: { day: 2, minutes: 630 }, budget: 180, margin: 30, weather: { wet: true } };
+  const walk = { ...N.scheduleWalk([{ id: "free:1", stay: 30 }], cands, ctx), places: N.placesOf(N.scheduleWalk([{ id: "free:1" }], cands, ctx), cands) };
+  ok("in rain, + is not offered on an outdoor stop held at its 15 minutes, since it would do nothing", !N.canStayLonger(walk, {}, "free:1", ctx) && N.canStayLonger(walk, {}, "free:1", { ...ctx, weather: {} }));
+  ok("a place that only mentions the harbour further down is not out on the water", cands.find(c => c.id === "free:2").exposed === false);
+  ok("the model writes each line about the place, since half walk it the other way", /half the visitors walk it the other way round/.test(N.planPrompt(cands, { ...ctx, lang: "en" })));
+  const np = readFileSync(join(root, "src/components/NowPlanner.jsx"), "utf8");
+  ok("taking out every stop still leaves the way to put them back", np.indexOf('data-testid="now-taken-out"') > np.indexOf('{uiT("now.route", lang)} ↗'));
+  const twoWays = X.EXAMPLE_WALKS.filter(e => X.runExample(e).alt);
+  ok("no example line that reads wrong the other way round", twoWays.length >= 3 && twoWays.every(e => e.order.every(o => !/\b(first|to finish|way back|for later|last look)\b/i.test(o.why || ""))));
+  ok("every real place's page reads in four languages", Object.entries(X.EXAMPLE_PAGES).filter(([id]) => !X.isExamplePartner(id)).every(([, p]) => ["lt", "de", "da"].every(l => !!p.item.__i18n?.[l] && M.TR.localizedEntry(p.item, l).desc !== p.item.desc)));
+  const pageX = readFileSync(join(root, "src/pages/KlaipedaExamples.jsx"), "utf8");
+  ok("an all day offer at a door that has closed is not shown as on", /const timing = doorShut \? "shut" : inWindow;/.test(pageX) && /shut: "Closed at this moment"/.test(pageX));
+}
+
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
 if (failed) { fails.forEach(f => console.log("  FAIL " + f + "\n")); process.exit(1); }
