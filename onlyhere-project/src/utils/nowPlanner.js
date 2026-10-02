@@ -126,6 +126,29 @@ const INDOOR = /museum|muziejus|gallery|galerija|church|bažnyčia|cathedral|aqu
 // Square is a square.
 const OUTDOOR = /square|aikštė|park|parkas|beach|paplūdimys|dune|kopa|promenade|quay|krantinė|street|gatvė|sculpture|skulptūr|monument|paminklas|viewpoint/i;
 
+// Out on open water, where a storm wind is felt first: the harbour, the quays,
+// the bridges, the beach. Read off the name and the description.
+const EXPOSED = /harbou?r|uostas|quay|krantin|beach|paplūdim|pier|molas|bridge|tiltas|seafront|waterfront|lagoon|marios|spit|nerija/i;
+
+// ── THE OLD TOWN ────────────────────────────────────────────────────
+// Oliver, 2 Oct 2026: "Shall there also be a 'walk around in old town'?" A
+// box around Klaipėda's Old Town as OpenStreetMap draws it, between the Danė,
+// the castle and the old harbour, read on 2 Oct 2026. Generous by a street on
+// each side, so a café on the edge is not left out by a few metres.
+export const OLD_TOWN = {
+  LT: { s: 55.7035, n: 55.7108, w: 21.1255, e: 21.1415 },
+};
+export const inOldTown = (country, p) => {
+  const b = OLD_TOWN[String(country || "").toUpperCase()];
+  return !!b && !!p && p.lat >= b.s && p.lat <= b.n && p.lon >= b.w && p.lon <= b.e;
+};
+// The Old Town walk takes the places inside the box, no museums, and short
+// stops: a walk to look around, not a walk to go inside.
+export const STROLL = "oldtown";
+export const STROLL_STAY = 20;
+export const strollCandidates = (candidates, country) =>
+  candidates.filter(c => inOldTown(country, c) && c.kind !== "Museum");
+
 const pointOf = (p) => {
   const lat = Number(p?.__lat ?? p?.lat), lon = Number(p?.__lon ?? p?.lon);
   return Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon } : null;
@@ -171,6 +194,7 @@ export const nowCandidates = (rows, { country = "LT", zone = "", now = new Date(
       lat: at.lat, lon: at.lon,
       tier: p.tier || "",
       indoor: kind === "Food" || kind === "Workshop" || (INDOOR.test(text) && !OUTDOOR.test(p.name)),
+      exposed: EXPOSED.test(`${p.name} ${p.desc || p.description || ""}`),
       hours: Array.isArray(p.__hours?.hours) ? p.__hours.hours : null,
       offer: offerOf(p.__offer, today),
       about: words(p.desc || p.description || p.popularityTag || "", 160),
@@ -178,6 +202,37 @@ export const nowCandidates = (rows, { country = "LT", zone = "", now = new Date(
     });
   }
   return out;
+};
+
+// ── WHAT THE WEATHER CHANGES ────────────────────────────────────────
+// Oliver, 2 Oct 2026, asking to see "how it transforms during snow", "during
+// rain", "when very windy". The model is told the weather and picks for it,
+// and these rules then hold whatever it picked:
+//   rain   every stop outdoors is kept short
+//   snow   the same, and walking takes longer, on slush and ice
+//   storm  a place out on open water is left out altogether
+// `weather` is { wet, snow, wind } as api/plan-now.js reads it from MET Norway,
+// wind in metres a second. 14 m/s is a near gale on the Beaufort scale: the
+// point where walking out along a quay stops being pleasant.
+export const STORM_WIND = 14;
+export const weatherRules = (weather = {}) => {
+  const snow = !!weather.snow;
+  const wet = snow || !!weather.wet;
+  const storm = Number(weather.wind) >= STORM_WIND;
+  return {
+    walk: snow ? 1.3 : storm ? 1.1 : 1,
+    outdoorMax: wet ? 15 : storm ? 20 : 0,
+    dropExposed: storm,
+  };
+};
+// The same rules in words, for a page that shows what changed.
+export const weatherChanges = (weather = {}) => {
+  const r = weatherRules(weather);
+  return [
+    r.walk > 1 ? `Walking takes ${Math.round((r.walk - 1) * 100)}% longer` : "",
+    r.outdoorMax ? `Outdoor stops kept to ${r.outdoorMax} minutes` : "",
+    r.dropExposed ? "Places out on open water left out" : "",
+  ].filter(Boolean);
 };
 
 // ── PUTTING A WALK TOGETHER ─────────────────────────────────────────
@@ -199,22 +254,26 @@ export const nowCandidates = (rows, { country = "LT", zone = "", now = new Date(
 const SPREAD = SLOT_MINUTES;
 
 export const scheduleWalk = (order, candidates, ctx) => {
-  const { country = "LT", start, startClock, budget, margin = 0 } = ctx;
+  const { country = "LT", start, startClock, budget, margin = 0, weather = null, style = "" } = ctx;
+  const rules = weatherRules(weather || { wet: ctx.wet });
   const byId = new Map(candidates.map(c => [c.id, c]));
   const deadline = budget - margin;
   const stops = [];
   let here = start, t = 0, foods = 0;
   const legOf = (a, b) => {
     const far = offTownWalk({ country, from: a, to: b });
-    return far ? { minutes: rideMinutes(a, b), ride: true } : { minutes: walkMinutes(a, b), ride: false };
+    return far ? { minutes: rideMinutes(a, b), ride: true } : { minutes: Math.round(walkMinutes(a, b) * rules.walk), ride: false };
   };
   for (const pick of Array.isArray(order) ? order : []) {
     const c = byId.get(pick?.id);
     if (!c || stops.some(s => s.id === c.id)) continue;
     if (c.kind === "Food" && foods >= Math.max(1, Math.floor(budget / 180))) continue;
+    if (rules.dropExposed && c.exposed && !c.indoor) continue;
     const leg = legOf(here, c);
     const arrive = t + leg.minutes;
-    const stay = Math.min(120, Math.max(15, Math.round(Number(pick.stay) || c.stay)));
+    let stay = Math.min(120, Math.max(15, Math.round(Number(pick.stay) || c.stay)));
+    if (rules.outdoorMax && !c.indoor) stay = Math.min(stay, rules.outdoorMax);
+    if (style === STROLL) stay = Math.min(stay, STROLL_STAY);
     // The deal shows only when it is on for the whole of the visit's start,
     // for a walker leaving at either end of the half hour.
     let dealNow = false;
@@ -257,7 +316,9 @@ export const scheduleWalk = (order, candidates, ctx) => {
 // not survive scheduleWalk. Best first: the tier, indoors when
 // it is wet, and lunch when the walk crosses it, weighed against the walk.
 export const ruleOrder = (candidates, ctx) => {
-  const { start, startClock, budget, wet = false } = ctx;
+  const { start, startClock, budget } = ctx;
+  const wet = !!(ctx.wet || ctx.weather?.wet || ctx.weather?.snow);
+  const storm = weatherRules(ctx.weather || {}).dropExposed;
   const lunch = startClock.minutes < 14 * 60 + 30 && startClock.minutes + budget > 11 * 60 + 30;
   const left = [...candidates];
   const order = [];
@@ -267,6 +328,7 @@ export const ruleOrder = (candidates, ctx) => {
     for (const c of left) {
       const score = (TIER_SCORE[c.tier] || 0) + (wet && c.indoor ? 2 : 0) + (wet && !c.indoor ? -1 : 0)
         + (c.kind === "Food" ? (lunch && !order.some(o => o.kind === "Food") ? 3 : -3) : 0)
+        + (storm && c.exposed && !c.indoor ? -5 : 0)
         - walkMinutes(here, c) / 8;
       if (score > bestScore) { bestScore = score; best = c; }
     }
@@ -282,13 +344,17 @@ const LANG_NAMES = { en: "English", da: "Danish", de: "German", lt: "Lithuanian"
 const HHMM = (m) => `${String(Math.floor(((m % 1440) + 1440) % 1440 / 60)).padStart(2, "0")}:${String(((m % 60) + 60) % 60).padStart(2, "0")}`;
 
 export const planPrompt = (candidates, ctx) => {
-  const { country = "LT", start, startClock, budget, margin = 0, wet = false, temp = null, lang = "en" } = ctx;
+  const { country = "LT", start, startClock, budget, margin = 0, temp = null, lang = "en", style = "" } = ctx;
+  const w = ctx.weather || { wet: ctx.wet };
+  const sky = w.snow ? "snowing, so favour places indoors, keep outdoor stops short and expect slow walking"
+    : w.wet ? "wet, so favour places indoors" : "dry";
+  const gale = Number(w.wind) >= STORM_WIND ? ", and a storm wind, so keep away from the harbour, the quays and anywhere out on open water" : "";
   const list = candidates.slice(0, 40).map(c => {
     const far = offTownWalk({ country, from: start, to: c }) ? " | OUTSIDE THE WALKABLE CENTRE, needs a Bolt" : ` | ${walkMinutes(start, c)} min walk from the start`;
-    return `${c.id} | ${c.name} | ${c.kind}${c.tier ? ` | ${c.tier}` : ""}${c.indoor ? " | indoors" : ""}${far}${c.about ? ` | ${c.about}` : ""}`;
+    return `${c.id} | ${c.name} | ${c.kind}${c.tier ? ` | ${c.tier}` : ""}${c.indoor ? " | indoors" : ""}${c.exposed && !c.indoor ? " | out on open water" : ""}${far}${c.about ? ` | ${c.about}` : ""}`;
   }).join("\n");
   return `You plan one walk for a visitor in ${COUNTRY_PROFILES[country]?.name || country} who has ${budget} minutes, starting now at ${HHMM(startClock.minutes)} local time from ${start.name}${margin ? `, and who must be back there ${margin} minutes before their time is up (they are off a cruise ship)` : ""}.
-Weather now: ${wet ? "wet, so favour places indoors" : "dry"}${temp !== null ? `, ${Math.round(temp)} °C` : ""}.
+Weather now: ${sky}${gale}${temp !== null ? `, ${Math.round(temp)} °C` : ""}.${style === STROLL ? "\nThe visitor wants an easy walk around the Old Town: streets, squares, the river and somewhere to sit, no museums, short stops." : ""}
 
 PLACES YOU MAY USE, and no others. Use the id exactly as written:
 ${list}
@@ -417,5 +483,5 @@ export const canStayLonger = (walk, edits, id, ctx) => {
 // rules read it.
 export const placesOf = (walk, candidates) => {
   const ids = new Set((walk?.stops || []).map(s => s.id));
-  return candidates.filter(c => ids.has(c.id)).map(c => ({ id: c.id, name: c.name, kind: c.kind, lat: c.lat, lon: c.lon, tier: c.tier, hours: c.hours, offer: c.offer, stay: c.stay }));
+  return candidates.filter(c => ids.has(c.id)).map(c => ({ id: c.id, name: c.name, kind: c.kind, lat: c.lat, lon: c.lon, tier: c.tier, indoor: c.indoor, exposed: c.exposed, hours: c.hours, offer: c.offer, stay: c.stay }));
 };
