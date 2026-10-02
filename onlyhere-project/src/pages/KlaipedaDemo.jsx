@@ -17,6 +17,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { C } from "../utils/theme";
 import { GemlyxLogo } from "../components/GemlyxLogo";
+import { NowPlanner } from "../components/NowPlanner";
 import {
   PLACES, TRIPS, LOCAL_TIPS, CHECKED_ON,
   openOn, dayName, nextWeekday, todayInKlaipeda, stopTime, mapsSearchUrl, mapsRouteUrl,
@@ -151,6 +152,10 @@ export const KlaipedaDemo = () => {
         <p style={{ fontSize: 13, lineHeight: 1.65, color: C.muted, margin: "0 0 26px" }}>
           Two ready-made trips you can follow on foot. Gemlyx is opening Lithuania, starting here.
         </p>
+
+        {/* The walk made for this moment (components/NowPlanner.jsx). The QR at
+            the terminal carries ?from=terminal, the one at the centre ?from=centre. */}
+        <NowPlanner country="LT" defaultFrom={typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("from") || "" : ""} />
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 22 }} role="tablist" aria-label="Trips">
           {TRIPS.map(t => (
