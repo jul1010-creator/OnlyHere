@@ -80339,7 +80339,12 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
     M.klpOpenOn(castle, d(2026, 10, 5)).open,  // Monday in winter
     M.klpOpenOn(castle, d(2026, 9, 16)).open,  // last summer day, a Wednesday
     M.klpOpenOn(castle, d(2026, 9, 19)).open,  // first winter Saturday
-  ], [false, true, false, true, true, false]);
+    M.klpOpenOn(castle, d(2026, 7, 7)).open,   // Tuesday in summer
+  ], [false, true, false, false, true, true, false]);
+  // Oliver, 3 Oct 2026: "Castle museum is closed monday you know". The
+  // museum's "II-VI" is Tuesday to Saturday, since in Lithuania I is Monday;
+  // the first reading had every day one early.
+  is("and Monday is shut in winter, as the museum's own II-VI says", M.klpOpenOn(castle, d(2026, 10, 5)).text, "Closed on Mondays at this time of year");
   is("and says why in words", M.klpOpenOn(castle, d(2026, 10, 4)).text, "Closed on Sundays at this time of year");
   is("the clock museum's Thursday is late and its Monday is shut", [M.klpOpenOn(clock, d(2026, 10, 1)).text, M.klpOpenOn(clock, d(2026, 10, 5)).text], ["Open 12:00 to 20:00", "Closed on Mondays"]);
   is("a lane of restaurants is never called open or closed", M.klpOpenOn(M.KLP_PLACES.friedrich.hours, d(2026, 10, 5)).open, null);
@@ -81056,7 +81061,9 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("no partner is pointed at a real door: a street, never a house number", X.EXAMPLE_PARTNERS.every(p => /^[^\d]+ g\.$/.test(p.street)));
   const runs = Object.fromEntries(X.EXAMPLE_WALKS.map(e => [e.id, X.runExample(e)]));
   ok("every example walk is made by the live rules, with three stops or more and home in time", Object.values(runs).every(r => r.walk.stops.length >= 3 && r.walk.back.at <= r.walk.deadline));
-  ok("the wet Saturday leaves the castle out, because it is closed on Saturdays after mid September", runs.saturday.left.some(l => l.name === "Castle Museum" && /Closed on Saturdays/.test(l.reason)) && !runs.saturday.walk.stops.some(s => s.name === "Castle Museum"));
+  // Corrected 3 Oct 2026: the castle is open on winter Saturdays and shut on
+  // Mondays. See the note on the Roman numerals in data/klaipedaDemo.js.
+  ok("a quiet Monday leaves the castle out, because it is closed on Mondays after mid September", X.runExample(X.EXAMPLE_WALKS.find(e => e.id === "monday")).left.some(l => l.name === "Castle Museum" && /Closed on Mondays/.test(l.reason)) && runs.saturday.walk.stops.some(s => s.name === "Castle Museum"));
   const fishOn = (r) => r.walk.stops.find(s => s.id === "food:fish");
   ok("the same lunch offer shows on a Tuesday and not on a Saturday, as it was set", fishOn(runs.tuesday)?.deal?.to === "15:00" && fishOn(runs.saturday) && fishOn(runs.saturday).deal === null);
   ok("the coffee refill shows in its quiet hour", runs.thursday.walk.stops[0]?.id === "food:bakery" && !!runs.thursday.walk.stops[0].deal);
@@ -81110,7 +81117,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   X.EXAMPLE_GUIDES.forEach(g => ids.add(g.page));
   ok("every listing on the examples page opens a page", [...ids].every(id => X.pageFor(id)?.item?.name));
   ok("Klaipėda and the four guide cards read in all four languages, every sentence", ["town", "free:castle", "free:clock", "free:sculpture", "food:fish"].every(id => { const it = X.pageFor(id).item; const pr = M.TR.proseOf(it); return ["lt", "de", "da"].every(l => { const loc = M.TR.localizedEntry(it, l); const lp = M.TR.proseOf(loc); return Object.keys(pr).every(k => lp[k] !== pr[k]); }); }));
-  ok("the castle is Can't Miss Out, and on a winter Saturday the page says it opens Monday", X.runExample(X.EXAMPLE_WALKS.find(e => e.id === "saturday")).left.some(l => l.mustSee && /Opens Monday 10:00/.test(l.reason)));
+  ok("the castle is Can't Miss Out, and on a winter Monday the page says it opens Tuesday", X.runExample(X.EXAMPLE_WALKS.find(e => e.id === "monday")).left.some(l => l.mustSee && /Opens Tuesday 10:00/.test(l.reason)));
   const pageX = readFileSync(join(root, "src/pages/KlaipedaExamples.jsx"), "utf8");
   ok("the window is the app's own entry page, marked as an example", /<DetailPage windowed item=\{open\.item\}/.test(pageX) && /sample=\{isExamplePartner\(open\.id\) \? L\.madeUp : L\.page\}/.test(pageX));
   const shownX = JSON.stringify(Object.values(X.EXAMPLE_PAGES).map(p => p.item)) + JSON.stringify(X.GUIDE_LABELS);
@@ -81188,6 +81195,25 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("every real place's page reads in four languages", Object.entries(X.EXAMPLE_PAGES).filter(([id]) => !X.isExamplePartner(id)).every(([, p]) => ["lt", "de", "da"].every(l => !!p.item.__i18n?.[l] && M.TR.localizedEntry(p.item, l).desc !== p.item.desc)));
   const pageX = readFileSync(join(root, "src/pages/KlaipedaExamples.jsx"), "utf8");
   ok("an all day offer at a door that has closed is not shown as on", /const timing = doorShut \? "shut" : inWindow;/.test(pageX) && /shut: "Closed at this moment"/.test(pageX));
+}
+
+// ── Batch 187: the museums' days, read again ──
+// Oliver, 3 Oct 2026: "Is it also programmed to be aware of closing days?
+// Castle museum is closed monday you know.. friday is definetely the lively
+// part of the week where one can grab a beer, but monday is literally dead
+// silent".
+{
+  const X = M.KEX, N = M.NP;
+  const castle = X.pageFor("free:castle").item;
+  const day = (ex) => X.runExample(X.EXAMPLE_WALKS.find(e => e.id === ex));
+  const mon = day("monday");
+  ok("on a Monday the walk is made of what is open: no museum, and lunch still in it", mon.walk.stops.length >= 4 && !mon.walk.stops.some(s => /Museum/.test(s.name)) && mon.walk.stops.some(s => s.id === "food:fish"));
+  ok("and both museums it left out say when they open", ["Castle Museum", "Clock and Watch Museum"].every(n => mon.left.some(l => l.name === n && /Closed on Mondays at this time of year\. Opens Tuesday 10:00/.test(l.reason))));
+  const sat = day("saturday");
+  ok("on a winter Saturday the castle is open and in the walk, and so is lunch", sat.walk.stops.some(s => s.name === "Castle Museum") && sat.walk.stops.some(s => s.id === "food:fish"));
+  ok("the castle's own page says Tuesday to Saturday in every language", /Tuesday to Saturday/.test(castle.blogBody.map(b => b.content || "").join(" ")) && ["lt", "de", "da"].every(l => /antradienio iki šeštadienio|dienstags bis samstags|tirsdag til lørdag/.test(JSON.stringify(castle.__i18n[l]))));
+  ok("and no page still says the museums open on a Monday", !/Monday to Friday|montags bis freitags|mandag til fredag|darbo dienomis/.test(JSON.stringify(Object.values(X.EXAMPLE_PAGES).map(p => p.item))));
+  ok("the jazz cellar keeps Monday and Tuesday shut, as a quiet start to the week", N.windowsFor(X.EXAMPLE_PARTNERS.find(p => p.key === "jazz").hours, 1).length === 0 && N.windowsFor(X.EXAMPLE_PARTNERS.find(p => p.key === "jazz").hours, 5).length === 1);
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
