@@ -6,7 +6,7 @@
 // Times on the page run from the reader's own "now" at the place, rounded up
 // to five minutes, since the walk itself was checked for the whole half hour
 // it is served in.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { C } from "../utils/theme";
 import { t as uiT, resolveUiLanguage, UI_LANGUAGE_KEY } from "../utils/uiLanguage";
 import { countryProfile } from "../utils/countries";
@@ -33,15 +33,20 @@ export const NowPlanner = ({ country = "LT", lang: langProp = "", defaultFrom = 
   const [from, setFrom] = useState(firstFrom);
   const [hours, setHours] = useState(3);
   const [state, setState] = useState({ busy: false, walk: null, error: "", madeAt: 0 });
+  // Which choice the newest request was for. An answer for an older choice,
+  // arriving after the reader tapped another button, is dropped.
+  const asked = useRef("");
 
   // A new choice clears the old walk, so a 2 hour walk is never shown under
   // a 4 hour button.
-  useEffect(() => { setState(s => ({ ...s, walk: null, error: "" })); }, [from, hours]);
+  useEffect(() => { asked.current = ""; setState({ busy: false, walk: null, error: "", madeAt: 0 }); }, [from, hours]);
 
   if (!firstFrom) return null;
   const zone = countryProfile(country).zone;
 
   const make = async () => {
+    const mine = `${from}|${hours}`;
+    asked.current = mine;
     setState({ busy: true, walk: null, error: "", madeAt: 0 });
     const ask = (slot) => fetch(`/api/plan-now?c=${country}&from=${from}&h=${hours}&lang=${lang}&slot=${encodeURIComponent(slot)}`);
     try {
@@ -49,9 +54,11 @@ export const NowPlanner = ({ country = "LT", lang: langProp = "", defaultFrom = 
       if (r.status === 409) { const j = await r.json().catch(() => ({})); if (j.slot) r = await ask(j.slot); }
       if (!r.ok) throw new Error(String(r.status));
       const walk = await r.json();
+      if (asked.current !== mine) return;
       const nowMin = placeClock(new Date(), zone).minutes;
       setState({ busy: false, walk, error: "", madeAt: Math.ceil(nowMin / 5) * 5 });
     } catch {
+      if (asked.current !== mine) return;
       setState({ busy: false, walk: null, error: uiT("now.error", lang), madeAt: 0 });
     }
   };
