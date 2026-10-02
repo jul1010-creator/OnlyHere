@@ -83,6 +83,7 @@ import { AffiliatesPage } from "./components/AffiliatesPage";
 import { KlaipedaDemo } from "./pages/KlaipedaDemo";
 import { COUNTRY_PROFILES, DEFAULT_COUNTRY, countryProfile, setWorkingCountry, countryParam, rowCountry, activeCountry, homePath } from "./utils/countries";
 import { KLAIPEDA_DEMO_PATH } from "./data/klaipedaDemo";
+import { translateEntry, needsTranslation, fingerprint, proseOf } from "./utils/entryTranslate";
 import { TripLibraryPage } from "./components/TripLibraryPage";
 import { askForGuidePass, markGuideBuilt, todayRecord, usedTodayReason, copenhagenDay, cancelGuidePass } from "./utils/guideAllowance";
 import { LIBRARY_PATH } from "./utils/tripLibrary";
@@ -2679,6 +2680,59 @@ function GemlyxApp() {
       setReportRows(before);
       setReportError("That could not be saved. The update policy may not be in place yet.");
     }
+  };
+
+  // ── AN ENTRY IN FOUR LANGUAGES ──────────────────────────────────────
+  // Oliver, 2 Oct 2026: "How to we make the drafts other languages than
+  // English?" and then "Sure, you can do that". A published row gets Danish,
+  // German and Lithuanian versions of its sentences beside the English
+  // (utils/entryTranslate.js). Done after publishing rather than before, so
+  // publishing stays as quick as it was, and on the live row, re-read just
+  // before writing so an edit made meanwhile is never overwritten.
+  const [translateRun, setTranslateRun] = useState(null);
+  const translateRow = async (id) => {
+    const read = async () => {
+      const r = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${Number(id)}&select=payload`);
+      const rows = await r.json().catch(() => null);
+      return r.ok ? rows?.[0]?.payload || null : null;
+    };
+    const live = await read();
+    if (!live) return "error";
+    if (!needsTranslation(live)) return "current";
+    const where = [live.city || live.town || live.location || "", countryProfile(rowCountry(live)).name].filter(Boolean).join(", ");
+    const tr = await translateEntry(live, (prompt, max) => askClaude(prompt, max, "claude-sonnet-5", true), { where });
+    if (!tr) return "failed";
+    const latest = await read();
+    if (!latest || fingerprint(proseOf(latest)) !== tr.fp) return "changed";
+    const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${Number(id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
+      body: JSON.stringify({ payload: { ...latest, __i18n: tr } }),
+    });
+    return res.ok ? "done" : "error";
+  };
+  const translateInBackground = (id, name) => {
+    if (!id) return;
+    translateRow(id).then(result => {
+      if (result === "done") showToast(`🌐 ${name || "The entry"} is now in Danish, German and Lithuanian too.`, 3500);
+      else if (result === "failed" || result === "error") showToast(`🌐 ${name || "The entry"} could not be translated just now. "Translate places" tries again.`, 4500);
+    }).catch(() => {});
+  };
+  // Every published row on this page's country that has no translation of its
+  // current English, one at a time.
+  const translateAllHere = async () => {
+    if (translateRun?.busy) return;
+    const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=id,type,payload&published=eq.true&order=id.desc`);
+    const rows = await res.json().catch(() => null);
+    const todo = (Array.isArray(rows) ? rows : []).filter(r => rowCountry(r?.payload) === PAGE_COUNTRY && needsTranslation(r.payload));
+    setTranslateRun({ busy: true, done: 0, total: todo.length, failed: 0 });
+    let done = 0, failed = 0;
+    for (const r of todo) {
+      const result = await translateRow(r.id).catch(() => "error");
+      if (result === "done" || result === "current") done++; else failed++;
+      setTranslateRun({ busy: true, done, total: todo.length, failed });
+    }
+    setTranslateRun({ busy: false, done, total: todo.length, failed });
   };
 
   const loadManageItems = async () => {
@@ -14818,7 +14872,8 @@ ${researchRules("festival", ev)}`
       const body = isEditing ? JSON.stringify({ payload: shaped }) : JSON.stringify({ type: studioType, payload: shaped, published: true });
       const res = await supaFetch(url, {
         method: isEditing ? "PATCH" : "POST",
-        headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
+        // The new row's id comes back, so its translation can be written to it.
+        headers: { "Content-Type": "application/json", Prefer: isEditing ? "return=minimal" : "return=representation" },
         body,
       });
       if (!res.ok) {
@@ -14831,6 +14886,9 @@ ${researchRules("festival", ev)}`
       } else {
         setPublishStatus("sent");
         setPublishErrorDetail(null);
+        // The translations, after the row is safe (see translateRow).
+        const newId = isEditing ? editingId : (await res.json().catch(() => null))?.[0]?.id;
+        translateInBackground(newId, shaped.name);
         // ── HAND OVER THE NEXT FINISHED DRAFT (Oliver, Aug 6: "when I have
         // drafted one of them, the other that has been researched will pop
         // up") ────────────────────────────────────────────────────
@@ -24392,6 +24450,10 @@ ${languageBlock()}`;
                         <button onClick={() => { setManageOpen(v => !v); if (!manageOpen) loadManageItems(); }}
                           style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
                           {manageOpen ? "Hide" : "📋 Manage Published"}
+                        </button>
+                        <button onClick={translateAllHere} disabled={!!translateRun?.busy} data-testid="translate-places"
+                          style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: translateRun?.busy ? "default" : "pointer" }}>
+                          🌐 {translateRun?.busy ? `Translating ${translateRun.done} of ${translateRun.total}` : translateRun ? `Translated ${translateRun.done} of ${translateRun.total}${translateRun.failed ? ` - ${translateRun.failed} to retry` : ""}` : "Translate places"}
                         </button>
                         <button onClick={() => { setFactsPanelOpen(v => !v); if (!factsPanelOpen) loadSavedFacts(); }}
                           style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
