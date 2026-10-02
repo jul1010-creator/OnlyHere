@@ -21,7 +21,8 @@
 // hour, a price for a thing they already do, a service a visitor needs. No
 // percentage off everything.
 
-import { NOW_STARTS, SHIP_MARGIN, nowCandidates, scheduleWalk, windowsFor } from "../utils/nowPlanner";
+import { NOW_STARTS, SHIP_MARGIN, MUST_SEE, nowCandidates, scheduleWalk, windowsFor, withMustSee, nextOpen, reversedWalk, placesOf } from "../utils/nowPlanner";
+import { fingerprint, proseOf } from "../utils/entryTranslate";
 
 export const KLAIPEDA_EXAMPLES_PATH = "/lithuania/examples";
 
@@ -108,7 +109,7 @@ export const EXAMPLE_PARTNERS = [
 
 // ── THE REAL PLACES ─────────────────────────────────────────────────
 const REAL = [
-  { key: "castle", type: "free", name: "Castle Museum", lat: 55.70592, lon: 21.12891, hours: LM_WINTER, tier: "Highly Recommended" },
+  { key: "castle", type: "free", name: "Castle Museum", lat: 55.70592, lon: 21.12891, hours: LM_WINTER, tier: "Can't Miss Out" },
   { key: "history", type: "free", name: "History Museum of Lithuania Minor", lat: 55.70734, lon: 21.13471, hours: LM_WINTER, tier: "Worth Considering" },
   { key: "clock", type: "free", name: "Clock and Watch Museum", lat: 55.71221, lon: 21.13416, hours: CLOCK, tier: "Highly Recommended" },
   { key: "ghost", type: "free", name: "The Black Ghost", lat: 55.70660, lon: 21.12682, tier: "Highly Recommended" },
@@ -157,6 +158,7 @@ export const EXAMPLE_WALKS = [
     order: [
       { id: "free:castle", stay: 40, why: "The castle site and its finds." },
       { id: "free:ghost", stay: 15, why: "Worth the rain for a few minutes. He looks better wet." },
+      { id: "free:theatre", stay: 15, why: "Ännchen of Tharau, quickly, under an umbrella." },
       { id: "food:tea", stay: 40, why: "Somewhere warm while the worst of the shower passes." },
       { id: "free:history", stay: 45, why: "The story of Lithuania Minor, from when Klaipėda was Memel." },
       { id: "free:post", stay: 20, why: "Write home from a dry table." },
@@ -173,8 +175,9 @@ export const EXAMPLE_WALKS = [
     at: "2026-10-15T14:00", from: "centre", hours: 2, wet: false,
     order: [
       { id: "food:bakery", stay: 20, why: "Coffee first, a few doors up the street." },
-      { id: "free:clock", stay: 40, why: "Open until 20:00 on Thursdays, so there is no rush." },
-      { id: "free:sculpture", stay: 20, why: "116 sculptures in what was the town's cemetery until 1959." },
+      { id: "free:theatre", stay: 15, why: "Ännchen of Tharau in the middle. Scan the sign and she tells her story." },
+      { id: "free:castle", stay: 40, why: "The model of the old town in here makes the streets outside easier to read." },
+      { id: "free:meridianas", stay: 15, why: "The town's ship, on the way back up to the centre." },
     ],
   },
   {
@@ -198,15 +201,36 @@ export const EXAMPLE_WALKS = [
 export const GUIDE_LANGS = ["en", "lt", "de", "da"];
 export const GUIDE_LANG_NAMES = { en: "English", lt: "Lietuvių", de: "Deutsch", da: "Dansk" };
 export const GUIDE_LABELS = {
-  en: { find: "Gemlyx find", tip: "Good to know", offer: "Gemlyx partner", example: "Example" },
-  lt: { find: "Gemlyx atradimas", tip: "Verta žinoti", offer: "Gemlyx partneris", example: "Pavyzdys" },
-  de: { find: "Gemlyx-Fund", tip: "Gut zu wissen", offer: "Gemlyx-Partner", example: "Beispiel" },
-  da: { find: "Gemlyx-fund", tip: "Godt at vide", offer: "Gemlyx-partner", example: "Eksempel" },
+  en: { find: "Gemlyx find", tip: "Good to know", offer: "Gemlyx partner", example: "Example", open: "Open the page", page: "Example page", madeUp: "Example page · made-up business" },
+  lt: { find: "Gemlyx atradimas", tip: "Verta žinoti", offer: "Gemlyx partneris", example: "Pavyzdys", open: "Atverti puslapį", page: "Puslapio pavyzdys", madeUp: "Puslapio pavyzdys · išgalvotas verslas" },
+  de: { find: "Gemlyx-Fund", tip: "Gut zu wissen", offer: "Gemlyx-Partner", example: "Beispiel", open: "Seite öffnen", page: "Beispielseite", madeUp: "Beispielseite · erfundenes Geschäft" },
+  da: { find: "Gemlyx-fund", tip: "Godt at vide", offer: "Gemlyx-partner", example: "Eksempel", open: "Åbn siden", page: "Eksempelside", madeUp: "Eksempelside · opdigtet virksomhed" },
 };
 
 export const EXAMPLE_GUIDES = [
   {
-    id: "castle", name: "Castle Museum", meta: "Priešpilio g. 2 · €6",
+    id: "town", page: "town", name: "Klaipėda", meta: { en: "Port town · Lithuania", lt: "Uostamiestis · Lietuva", de: "Hafenstadt · Litauen", da: "Havneby · Litauen" },
+    about: {
+      en: "A port town on the Baltic, with a half-timbered Old Town and the Curonian Spit a short ferry ride away.",
+      lt: "Uostamiestis prie Baltijos jūros su fachverkiniais senamiesčio namais. Kuršių nerija vos už trumpos kelionės keltu.",
+      de: "Eine Hafenstadt an der Ostsee mit einer Altstadt aus Fachwerkhäusern, und die Kurische Nehrung ist eine kurze Fährfahrt entfernt.",
+      da: "En havneby ved Østersøen med en gammel bydel af bindingsværk, og Den Kuriske Landtange et kort stykke med færgen.",
+    },
+    find: {
+      en: "Over ten sculptures and sights around town tell their own story when you scan the QR code beside them. Bring headphones.",
+      lt: "Daugiau nei dešimt miesto skulptūrų ir lankytinų vietų papasakoja savo istoriją, kai nuskenuojate šalia esantį QR kodą. Pasiimkite ausines.",
+      de: "Über zehn Skulpturen und Sehenswürdigkeiten in der Stadt erzählen ihre eigene Geschichte, wenn du den QR-Code daneben scannst. Kopfhörer mitnehmen.",
+      da: "Over ti skulpturer og seværdigheder i byen fortæller deres egen historie, når du scanner QR-koden ved siden af. Tag høretelefoner med.",
+    },
+    tip: {
+      en: "Cruise ships dock right by the Old Town, so there is no tender and no bus to catch. The walk in is flat.",
+      lt: "Kruiziniai laivai švartuojasi visai prie senamiesčio, tad nereikia nei valčių, nei autobuso. Kelias į miestą lygus.",
+      de: "Kreuzfahrtschiffe legen direkt an der Altstadt an, also kein Tenderboot und kein Bus. Der Weg in die Stadt ist flach.",
+      da: "Krydstogtskibe lægger til lige ved den gamle bydel, så der er ingen tenderbåd og ingen bus. Turen ind er flad.",
+    },
+  },
+  {
+    id: "castle", page: "free:castle", name: "Castle Museum", meta: "Priešpilio g. 2 · €6",
     about: {
       en: "On the site of Klaipėda's old castle. Archaeological finds, the town's old seals, and scale models of the castle and the town.",
       lt: "Senosios Klaipėdos pilies vietoje. Archeologiniai radiniai, senieji miesto antspaudai, pilies ir miesto maketai.",
@@ -227,7 +251,7 @@ export const EXAMPLE_GUIDES = [
     },
   },
   {
-    id: "clock", name: "Clock and Watch Museum", meta: "Liepų g. 12 · €5",
+    id: "clock", page: "free:clock", name: "Clock and Watch Museum", meta: "Liepų g. 12 · €5",
     about: {
       en: "Clocks by old European masters, from the Renaissance to modern times, in a 19th century villa on Liepų street.",
       lt: "Senųjų Europos meistrų laikrodžiai nuo Renesanso iki mūsų dienų, 19-ojo amžiaus viloje Liepų gatvėje.",
@@ -248,7 +272,7 @@ export const EXAMPLE_GUIDES = [
     },
   },
   {
-    id: "sculpture", name: "Sculpture Park", meta: { en: "Free · open at all hours", lt: "Nemokamai · atvira visą parą", de: "Eintritt frei · immer offen", da: "Gratis · altid åbent" },
+    id: "sculpture", page: "free:sculpture", name: "Sculpture Park", meta: { en: "Free · open at all hours", lt: "Nemokamai · atvira visą parą", de: "Eintritt frei · immer offen", da: "Gratis · altid åbent" },
     about: {
       en: "116 modern sculptures by 67 Lithuanian artists, among old trees north of the Old Town.",
       lt: "116 šiuolaikinių skulptūrų, kurias sukūrė 67 Lietuvos menininkai, tarp senų medžių į šiaurę nuo senamiesčio.",
@@ -269,7 +293,7 @@ export const EXAMPLE_GUIDES = [
     },
   },
   {
-    id: "fish", name: "Rūkykla Marios", meta: { en: "Žvejų g. · lunch from €9", lt: "Žvejų g. · pietūs nuo 9 €", de: "Žvejų g. · Mittag ab 9 €", da: "Žvejų g. · frokost fra 9 €" }, partner: true,
+    id: "fish", page: "food:fish", name: "Rūkykla Marios", meta: { en: "Žvejų g. · lunch from €9", lt: "Žvejų g. · pietūs nuo 9 €", de: "Žvejų g. · Mittag ab 9 €", da: "Žvejų g. · frokost fra 9 €" }, partner: true,
     about: {
       en: "A small smokehouse kitchen by the Danė. Fish smoked on the spot in the morning, served with rye bread and pickles.",
       lt: "Nedidelė rūkykla prie Danės. Žuvis rūkoma vietoje rytais ir patiekiama su rugine duona ir raugintais agurkais.",
@@ -309,6 +333,7 @@ export const PARTNER_WEEK = [
 // The walk the rules make from an example's order, in the shape the live
 // route answers with, plus the places in the order that did not make it and
 // why: closed that day, or no time for it and the way back.
+const DAY_NAME = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const DAY_OF = { 0: "Sundays", 1: "Mondays", 2: "Tuesdays", 3: "Wednesdays", 4: "Thursdays", 5: "Fridays", 6: "Saturdays" };
 export const exampleClock = (at) => {
   const [date, time] = String(at).split("T");
@@ -325,15 +350,303 @@ export const runExample = (ex) => {
   const candidates = nowCandidates(exampleRows(), { country: "LT", zone: "Europe/Vilnius", now });
   const budget = ex.hours * 60;
   const margin = start.ship ? SHIP_MARGIN : 0;
-  const walk = scheduleWalk(ex.order, candidates, { country: "LT", start, startClock, budget, margin });
-  const kept = new Set(walk.stops.map(s => s.id));
-  const left = ex.order.filter(o => !kept.has(o.id)).map(o => {
+  const ctx = { country: "LT", start, startClock, budget, margin };
+  // The order as the route makes it: the model's, then every Can't Miss Out
+  // place it left out put in where it costs least.
+  const order = withMustSee(ex.order, candidates, ctx);
+  const made = scheduleWalk(order, candidates, ctx);
+  const alt = reversedWalk(made, candidates, ctx);
+  const kept = new Set(made.stops.map(s => s.id));
+  const left = order.filter(o => !kept.has(o.id)).map(o => {
     const c = candidates.find(x => x.id === o.id);
-    const shut = c?.hours && Array.isArray(windowsFor(c.hours, startClock.day)) && windowsFor(c.hours, startClock.day).length === 0;
-    return { id: o.id, name: c?.name || o.id, reason: shut ? `Closed on ${DAY_OF[startClock.day]} at this time of year` : "Left out to keep time for the way back" };
+    const today = c?.hours ? windowsFor(c.hours, startClock.day) : null;
+    const shut = Array.isArray(today) && today.length === 0;
+    const next = shut ? nextOpen(c.hours, startClock) : null;
+    const hhmm = (m) => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+    const closes = Array.isArray(today) && today.length ? Math.max(...today.map(([, b]) => b)) : null;
+    const reason = shut
+      ? `Closed on ${DAY_OF[startClock.day]} at this time of year${next ? `. Opens ${DAY_NAME[next.day]} ${hhmm(next.minutes)}` : ""}`
+      : closes !== null && closes < startClock.minutes + budget
+        ? `Closes at ${hhmm(closes)} today, before there is time for it`
+        : "Left out to keep time for the way back";
+    return { id: o.id, name: c?.name || o.id, mustSee: c?.tier === MUST_SEE, reason };
   });
+  const base = { start: { name: start.name, lat: start.lat, lon: start.lon, ship: !!start.ship }, weather: { wet: !!ex.wet }, margin, clock: startClock, budget, places: placesOf(made, candidates) };
   return {
-    walk: { start: { name: start.name, lat: start.lat, lon: start.lon, ship: !!start.ship }, weather: { wet: !!ex.wet }, margin, ...walk },
+    walk: { ...base, ...made },
+    alt: alt ? { ...base, ...alt } : null,
     left, startClock,
   };
 };
+
+// ── THE PAGES BEHIND THE LISTINGS ───────────────────────────────────
+//
+// Oliver, 2 Oct 2026: "The listings should maybe open a tiny window of their
+// page?" and "A pop up window explaining the town from them". So each listing
+// opens its own page in the window the Danish app opens from the chat: the
+// real DetailPage, with rows shaped like published ones.
+//
+// The real places say only what data/klaipedaDemo.js checked, with its sources
+// on them. Klaipėda itself and the four places that have a guide card are also
+// in Lithuanian, German and Danish, stored the way translations are stored on
+// a published row (__i18n, fingerprinted over the English), so the page reads
+// them through the same localizedEntry the live app uses. The rest are English
+// only, which is what a reader sees on a live row that has not been translated
+// yet.
+const OTHER_LANGS = ["lt", "de", "da"];
+
+// One language's text for a page: the fields, and `body` as a list of blocks
+// in the same order in every language. Headings are written once, in English:
+// entryWords.js already has every standard heading in four languages.
+const bodyBlocks = (body) => (body || []).map(([t, v]) => t === "h" ? { type: "heading", content: v } : t === "p" ? { type: "paragraph", content: v } : { type: "bullets", items: v });
+const pathsOf = (doc) => {
+  const out = {};
+  ["desc", "gemlyxFind", "ticketsGlance", "extraCosts", "priceNote", "tip"].forEach(k => { if (doc[k]) out[k] = doc[k]; });
+  (doc.body || []).forEach(([t, v], i) => {
+    if (t === "p") out[`blogBody.${i}.content`] = v;
+    if (t === "b") v.forEach((it, j) => { out[`blogBody.${i}.items.${j}`] = it; });
+  });
+  return out;
+};
+
+const page = ({ kind, row, en, tr = {} }) => {
+  const item = { country: "LT", ...row, ...Object.fromEntries(Object.entries(en).filter(([k]) => k !== "body")), blogBody: bodyBlocks(en.body) };
+  const langs = OTHER_LANGS.filter(l => tr[l]);
+  if (langs.length) {
+    // The other languages' body has no headings, so they are filled in from the
+    // English, then every field is laid on the same paths proseOf reads.
+    const i18n = { fp: fingerprint(proseOf(item)), at: "2026-10-02" };
+    langs.forEach(l => {
+      const doc = { ...tr[l], body: (en.body || []).map(([t, v], i) => t === "h" ? [t, v] : tr[l].body[i]) };
+      i18n[l] = pathsOf(doc);
+    });
+    item.__i18n = i18n;
+  }
+  return { kind, item };
+};
+
+const GUIDE = Object.fromEntries(EXAMPLE_GUIDES.map(g => [g.id, g]));
+const fromGuide = (id, l) => ({ desc: GUIDE[id].about[l], gemlyxFind: GUIDE[id].find[l] });
+
+export const EXAMPLE_PAGES = {
+  town: page({
+    kind: "town",
+    row: { id: "x-town", name: "Klaipėda", region: "Lithuania", emoji: "⚓", __lat: 55.7078, __lon: 21.1316, mapHint: "Klaipėda Old Town", __sources: ["https://klaipedatravel.lt/en/structure-and-contacts/", "https://cruisinginthewake.com/ports/klaipeda.html", "https://keltas.lt/senosios-perkelos-tvarkarastis/"] },
+    en: {
+      ...fromGuide("town", "en"),
+      body: [
+        ["h", "Being There"],
+        ["p", GUIDE.town.tip.en],
+        ["h", "Things to Know"],
+        ["b", [
+          "Lithuania uses the euro, and cards work almost everywhere, including small cafés.",
+          "Buy bus tickets in the e.Ticket Klaipėda app. It is cheaper than paying the driver.",
+          "Bolt works in Klaipėda, so you can order a car in the app and see the price first.",
+          "The Curonian Spit is ten minutes across the water on the ferry. Check today's departures on keltas.lt, because the timetable changes with the season.",
+        ]],
+      ],
+    },
+    tr: {
+      lt: {
+        ...fromGuide("town", "lt"),
+        body: [null, ["p", GUIDE.town.tip.lt], null,
+          ["b", [
+            "Lietuvoje atsiskaitoma eurais, o kortelės priimamos beveik visur, net mažose kavinėse.",
+            "Autobuso bilietus pirkite programėlėje e.Ticket Klaipėda. Tai pigiau nei mokėti vairuotojui.",
+            "Klaipėdoje veikia Bolt, tad automobilį galite užsisakyti programėlėje ir iš anksto matyti kainą.",
+            "Iki Kuršių nerijos keltu vos dešimt minučių. Šios dienos išvykimo laikus pasitikrinkite keltas.lt, nes tvarkaraštis keičiasi pagal sezoną.",
+          ]],
+        ],
+      },
+      de: {
+        ...fromGuide("town", "de"),
+        body: [null, ["p", GUIDE.town.tip.de], null,
+          ["b", [
+            "Litauen hat den Euro, und Karten gehen fast überall, auch in kleinen Cafés.",
+            "Bustickets kaufst du in der App e.Ticket Klaipėda. Das ist günstiger als beim Fahrer.",
+            "Bolt fährt in Klaipėda, du kannst also ein Auto in der App bestellen und siehst den Preis vorher.",
+            "Die Kurische Nehrung liegt zehn Minuten mit der Fähre über das Wasser. Prüf die heutigen Abfahrten auf keltas.lt, denn der Fahrplan wechselt mit der Saison.",
+          ]],
+        ],
+      },
+      da: {
+        ...fromGuide("town", "da"),
+        body: [null, ["p", GUIDE.town.tip.da], null,
+          ["b", [
+            "Litauen bruger euro, og kort virker næsten overalt, også på små caféer.",
+            "Køb busbilletter i appen e.Ticket Klaipėda. Det er billigere end at betale chaufføren.",
+            "Bolt kører i Klaipėda, så du kan bestille en bil i appen og se prisen først.",
+            "Den Kuriske Landtange ligger ti minutter over vandet med færgen. Tjek dagens afgange på keltas.lt, for køreplanen skifter med sæsonen.",
+          ]],
+        ],
+      },
+    },
+  }),
+
+  "free:castle": page({
+    kind: "free",
+    row: { id: "x-castle", name: "Castle Museum", city: "Klaipėda", type: "Museum", emoji: "🏰", __lat: 55.70592, __lon: 21.12891, mapHint: "Klaipėda Castle Museum, Priešpilio g. 2", website: "https://www.mlimuziejus.lt/en/information-for-visitors/", __sources: ["https://www.mlimuziejus.lt/en/ticket-prices/", "https://www.mlimuziejus.lt/en/information-for-visitors/"] },
+    en: {
+      ...fromGuide("castle", "en"),
+      ticketsGlance: "Adults €6, students, pupils and seniors €3",
+      extraCosts: "Combined ticket with the History Museum of Lithuania Minor and the Blacksmith's Museum, €9 for adults",
+      body: [
+        ["h", "Being There"],
+        ["p", "The museum stands where the castle stood, at the edge of the Old Town beside the old castle harbour."],
+        ["p", "From mid September to mid June it opens Monday to Friday, 10:00 to 18:00, and is closed at weekends. In summer it opens Tuesday to Sunday instead. Last tickets at 17:30."],
+        ["h", "Things to Know"],
+        ["b", ["The Black Ghost sculpture rises out of the castle harbour a few minutes' walk away."]],
+      ],
+    },
+    tr: {
+      lt: { ...fromGuide("castle", "lt"), ticketsGlance: "Suaugusiesiems 6 €, studentams, moksleiviams ir senjorams 3 €", extraCosts: "Bendras bilietas su Mažosios Lietuvos istorijos muziejumi ir Kalvystės muziejumi suaugusiesiems 9 €",
+        body: [null,
+          ["p", "Muziejus stovi ten, kur stovėjo pilis, senamiesčio pakraštyje prie senojo pilies uosto."],
+          ["p", "Nuo rugsėjo vidurio iki birželio vidurio muziejus atviras darbo dienomis nuo 10:00 iki 18:00, o savaitgaliais uždarytas. Vasarą jis dirba nuo antradienio iki sekmadienio. Paskutiniai bilietai parduodami 17:30."],
+          null,
+          ["b", ["Skulptūra „Juodasis vaiduoklis“ kyla iš pilies uosto vandens, vos kelios minutės pėsčiomis nuo čia."]]] },
+      de: { ...fromGuide("castle", "de"), ticketsGlance: "Erwachsene 6 €, Studierende, Schüler und Senioren 3 €", extraCosts: "Kombiticket mit dem Geschichtsmuseum Kleinlitauens und dem Schmiedemuseum, 9 € für Erwachsene",
+        body: [null,
+          ["p", "Das Museum steht dort, wo die Burg stand, am Rand der Altstadt neben dem alten Burghafen."],
+          ["p", "Von Mitte September bis Mitte Juni ist es montags bis freitags von 10:00 bis 18:00 geöffnet und am Wochenende geschlossen. Im Sommer öffnet es stattdessen dienstags bis sonntags. Die letzten Tickets gibt es um 17:30."],
+          null,
+          ["b", ["Die Skulptur des Schwarzen Geistes ragt ein paar Gehminuten entfernt aus dem Burghafen."]]] },
+      da: { ...fromGuide("castle", "da"), ticketsGlance: "Voksne 6 €, studerende, elever og pensionister 3 €", extraCosts: "Samlet billet med museet for Lille Litauens historie og smedemuseet, 9 € for voksne",
+        body: [null,
+          ["p", "Museet ligger, hvor borgen lå, i udkanten af den gamle bydel ved den gamle borghavn."],
+          ["p", "Fra midten af september til midten af juni har det åbent mandag til fredag fra 10:00 til 18:00 og er lukket i weekenden. Om sommeren har det i stedet åbent tirsdag til søndag. Sidste billetter sælges 17:30."],
+          null,
+          ["b", ["Skulpturen Det Sorte Spøgelse rejser sig op af borghavnen få minutters gang derfra."]]] },
+    },
+  }),
+
+  "free:clock": page({
+    kind: "free",
+    row: { id: "x-clock", name: "Clock and Watch Museum", city: "Klaipėda", type: "Museum", emoji: "🕰️", __lat: 55.71221, __lon: 21.13416, mapHint: "Clock and Watch Museum, Liepų g. 12, Klaipėda", website: "https://www.lndm.lt/lm/paslaugos-ir-darbo-laikas/", __sources: ["https://www.lndm.lt/lm/paslaugos-ir-darbo-laikas/"] },
+    en: {
+      ...fromGuide("clock", "en"),
+      ticketsGlance: "€5, reduced €2.50",
+      body: [
+        ["h", "Being There"],
+        ["p", "Tuesday to Saturday 10:00 to 18:00, but Thursday 12:00 to 20:00. Sunday 10:00 to 16:00. Closed on Mondays. Last entry 30 minutes before closing."],
+        ["h", "Things to Know"],
+        ["b", ["A good one for a rainy hour.", "Under ten minutes on foot north of Theatre Square, across the river."]],
+      ],
+    },
+    tr: {
+      lt: { ...fromGuide("clock", "lt"), ticketsGlance: "5 €, su nuolaida 2,50 €",
+        body: [null, ["p", "Nuo antradienio iki šeštadienio dirba nuo 10:00 iki 18:00, ketvirtadieniais nuo 12:00 iki 20:00, sekmadieniais nuo 10:00 iki 16:00. Pirmadieniais uždaryta. Paskutiniai lankytojai įleidžiami likus 30 minučių iki uždarymo."],
+          null, ["b", ["Gera vieta lietingai valandai.", "Mažiau nei dešimt minučių pėsčiomis į šiaurę nuo Teatro aikštės, kitapus upės."]]] },
+      de: { ...fromGuide("clock", "de"), ticketsGlance: "5 €, ermäßigt 2,50 €",
+        body: [null, ["p", "Dienstag bis Samstag 10:00 bis 18:00, donnerstags aber 12:00 bis 20:00. Sonntag 10:00 bis 16:00. Montags geschlossen. Letzter Einlass 30 Minuten vor Schluss."],
+          null, ["b", ["Gut für eine Regenstunde.", "Keine zehn Minuten zu Fuß nördlich vom Theaterplatz, auf der anderen Seite des Flusses."]]] },
+      da: { ...fromGuide("clock", "da"), ticketsGlance: "5 €, nedsat pris 2,50 €",
+        body: [null, ["p", "Tirsdag til lørdag 10:00 til 18:00, men torsdag 12:00 til 20:00. Søndag 10:00 til 16:00. Lukket mandag. Sidste indgang 30 minutter før lukketid."],
+          null, ["b", ["Et godt sted en regnvejrstime.", "Under ti minutters gang nord for Teaterpladsen, på den anden side af floden."]]] },
+    },
+  }),
+
+  "free:sculpture": page({
+    kind: "free",
+    row: { id: "x-sculpture", name: "Sculpture Park", city: "Klaipėda", type: "Park", emoji: "🗿", __lat: 55.71690, __lon: 21.14016, mapHint: "Klaipėda Sculpture Park", __sources: ["https://en.wikipedia.org/wiki/Klaip%C4%97da_Sculpture_Park"] },
+    en: {
+      ...fromGuide("sculpture", "en"),
+      ticketsGlance: "Free",
+      body: [
+        ["h", "Being There"],
+        ["p", GUIDE.sculpture.tip.en],
+        ["p", "Open at all hours, so it works early in the morning, before the museums open."],
+      ],
+    },
+    tr: {
+      lt: { ...fromGuide("sculpture", "lt"), ticketsGlance: "Nemokamai", body: [null, ["p", GUIDE.sculpture.tip.lt], ["p", "Atvira visą parą, tad čia galima užsukti ir anksti ryte, kol muziejai dar uždaryti."]] },
+      de: { ...fromGuide("sculpture", "de"), ticketsGlance: "Eintritt frei", body: [null, ["p", GUIDE.sculpture.tip.de], ["p", "Rund um die Uhr offen, also auch etwas für den frühen Morgen, bevor die Museen öffnen."]] },
+      da: { ...fromGuide("sculpture", "da"), ticketsGlance: "Gratis", body: [null, ["p", GUIDE.sculpture.tip.da], ["p", "Åbent døgnet rundt, så det kan også bruges tidligt om morgenen, før museerne åbner."]] },
+    },
+  }),
+
+  "food:fish": page({
+    kind: "food",
+    row: { id: "x-fish", name: "Rūkykla Marios", location: "Žvejų g., Klaipėda", category: "Smokehouse", price: "Lunch €9", emoji: "🐟", __lat: 55.70890, __lon: 21.13120, mapHint: "Žvejų g., Klaipėda", __offer: { ...EXAMPLE_PARTNERS.find(p => p.key === "fish").offer, until: UNTIL } },
+    en: {
+      ...fromGuide("fish", "en"),
+      tip: "Ask what came in that morning.",
+      body: [["h", "Being There"], ["p", "Smoked fish by weight from the counter, or the lunch of the day at one of the long tables, with rye bread, pickles and a glass of kvass."]],
+    },
+    tr: {
+      lt: { ...fromGuide("fish", "lt"), tip: "Paklauskite, ką atvežė šį rytą.", body: [null, ["p", "Rūkyta žuvis sveriama prie prekystalio, o dienos pietūs patiekiami prie ilgų stalų su rugine duona, raugintais agurkais ir stikline giros."]] },
+      de: { ...fromGuide("fish", "de"), tip: "Frag, was heute Morgen reingekommen ist.", body: [null, ["p", "Räucherfisch nach Gewicht an der Theke oder der Mittagstisch an einem der langen Tische, mit Roggenbrot, sauren Gurken und einem Glas Kwass."]] },
+      da: { ...fromGuide("fish", "da"), tip: "Spørg, hvad der kom ind i morges.", body: [null, ["p", "Røget fisk efter vægt fra disken, eller dagens frokost ved et af de lange borde, med rugbrød, syltede agurker og et glas kvas."]] },
+    },
+  }),
+
+  // English only from here on, as a live row is until it has been translated.
+  "free:history": page({
+    kind: "free",
+    row: { id: "x-history", name: "History Museum of Lithuania Minor", city: "Klaipėda", type: "Museum", emoji: "🏛️", __lat: 55.70734, __lon: 21.13471, mapHint: "Didžioji Vandens g. 2, Klaipėda", website: "https://www.mlimuziejus.lt/en/information-for-visitors/", __sources: ["https://www.mlimuziejus.lt/en/ticket-prices/", "https://www.mlimuziejus.lt/en/information-for-visitors/"] },
+    en: {
+      desc: "The story of Lithuania Minor, the Lithuanian part of old Prussia that Klaipėda, then called Memel, belonged to.",
+      ticketsGlance: "Adults €4, students, pupils and seniors €2",
+      extraCosts: "Combined ticket with the Castle Museum and the Blacksmith's Museum, €9 for adults",
+      body: [["h", "Being There"], ["p", "Same hours as the Castle Museum: from mid September to mid June, Monday to Friday 10:00 to 18:00, closed at weekends. Last tickets at 17:30."]],
+    },
+  }),
+  "free:ghost": page({
+    kind: "free",
+    row: { id: "x-ghost", name: "The Black Ghost", city: "Klaipėda", type: "Sculpture", emoji: "👻", __lat: 55.70660, __lon: 21.12682, mapHint: "Black Ghost sculpture, Klaipėda", __sources: ["https://klaipedatravel.lt/en/place/jv/"] },
+    en: {
+      desc: "A dark figure rising out of the water of the old castle harbour. The legend says he appeared to a castle guard in the 16th century with a warning about grain and firewood.",
+      ticketsGlance: "Free",
+      body: [["h", "Things to Know"], ["b", ["One of the talking sculptures: scan the QR code beside it and it tells the legend.", "Five minutes on foot from the cruise terminal."]]],
+    },
+  }),
+  "free:theatre": page({
+    kind: "free",
+    row: { id: "x-theatre", name: "Theatre Square", city: "Klaipėda", type: "Square", emoji: "🎭", __lat: 55.70780, __lon: 21.13163, mapHint: "Teatro aikštė, Klaipėda", __sources: ["https://klaipedatravel.lt/en/place/ta/"] },
+    en: {
+      desc: "The square in front of the theatre, with Ännchen of Tharau in the middle, the girl from Simon Dach's 17th century love poem.",
+      ticketsGlance: "Free",
+      body: [
+        ["h", "Being There"],
+        ["p", "She first stood here in 1912, went missing in the war, and a new one was put back in 1989. On 23 March 1939 Hitler spoke from the balcony of the theatre behind her."],
+        ["h", "Things to Know"],
+        ["b", ["She is one of the talking sculptures: scan the QR code on the sign next to her and she tells her story."]],
+      ],
+    },
+  }),
+  "free:meridianas": page({
+    kind: "free",
+    row: { id: "x-meridianas", name: "Meridianas", city: "Klaipėda", type: "Landmark", emoji: "⛵", __lat: 55.71034, __lon: 21.13491, mapHint: "Meridianas, Klaipėda", __sources: ["https://klaipedatravel.lt/en/place/sailing-vessel-meridianas/"] },
+    en: {
+      desc: "The sailing ship moored by Biržos Bridge is the town's symbol. Built in Turku in 1948, it trained cadets of the Klaipėda maritime school until 1967.",
+      ticketsGlance: "Free to see from the quay",
+      body: [["h", "Things to Know"], ["b", ["Best seen from the bridge."]]],
+    },
+  }),
+};
+
+// The made-up partners' own pages, short, English only, each with its offer.
+const PARTNER_PAGE = {
+  bakery: { kind: "food", emoji: "🥐", category: "Bakery café", price: "Pastries from €2", desc: "A small bakery café round the corner from the tourist centre. Rye bread, cinnamon buns and filter coffee.", tip: "The afternoon is quiet, which is when the refill runs." },
+  amber: { kind: "shop", emoji: "🟠", desc: "A workshop where Baltic amber is cut and polished by hand. Visitors can try it at the bench.", tip: "" },
+  tea: { kind: "food", emoji: "🫖", category: "Tea room", price: "Tea from €3", desc: "A tea room with low tables and a long list of herbal teas.", tip: "Weekend mornings are the quiet ones." },
+  beer: { kind: "nightlife", emoji: "🍺", category: "Beer bar", priceNote: "Beer from €4", crowd: "Locals after work, visitors later", desc: "Lithuanian beer on tap from small breweries around the country." },
+  post: { kind: "shop", emoji: "✉️", desc: "Postcards of Klaipėda old and new, and a table to write them at." },
+  jazz: { kind: "nightlife", emoji: "🎷", category: "Jazz cellar", priceNote: "Cover €8 after 21:00", crowd: "Mixed, quiet until the band starts", desc: "A brick cellar with live jazz from Wednesday to Saturday." },
+  bike: { kind: "shop", emoji: "🚲", desc: "Bikes, helmets and locks for the day. A bike can be handed back at the cruise terminal." },
+  bags: { kind: "shop", emoji: "🧳", desc: "A staffed room for bags near the river, for people between a hotel and a later bus or ferry." },
+};
+EXAMPLE_PARTNERS.forEach(p => {
+  const id = `${p.type}:${p.key}`;
+  if (EXAMPLE_PAGES[id] || !PARTNER_PAGE[p.key]) return;
+  const { kind, desc, tip, ...rest } = PARTNER_PAGE[p.key];
+  EXAMPLE_PAGES[id] = page({
+    kind,
+    row: { id: `x-${p.key}`, name: p.name, location: `${p.street}, Klaipėda`, town: "Klaipėda", __lat: p.lat, __lon: p.lon, mapHint: `${p.street}, Klaipėda`, __offer: { ...p.offer, until: UNTIL }, ...rest },
+    en: { desc, ...(tip ? { tip } : {}), body: [["h", "Being There"], ["p", `${p.what} on ${p.street}. Made up for this page, like its offer.`]] },
+  });
+});
+
+// Which page a listing opens. A walk stop, an offer and a guide card all
+// carry the same id the walk uses ("free:castle"); the town is "town".
+export const pageFor = (id) => EXAMPLE_PAGES[id] || null;
