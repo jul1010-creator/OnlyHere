@@ -13,12 +13,12 @@ import { C } from "../utils/theme";
 import { GemlyxLogo } from "../components/GemlyxLogo";
 import { EditableWalk } from "../components/NowPlanner";
 import { DetailPage } from "../components/DetailPage";
-import { MUST_SEE } from "../utils/nowPlanner";
+import { MUST_SEE, weatherChanges } from "../utils/nowPlanner";
 import { entryWord } from "../utils/entryWords";
 import { offerHoursLabel } from "../utils/offer";
 import { windowOf, timingAt, cleanDays, cleanClock } from "../utils/offerClock";
 import {
-  EXAMPLE_WALKS, EXAMPLE_PARTNERS, EXAMPLE_GUIDES, GUIDE_LANGS, GUIDE_LANG_NAMES, GUIDE_LABELS, PARTNER_WEEK,
+  EXAMPLE_WALKS, WEATHER_WALKS, EXAMPLE_PARTNERS, EXAMPLE_GUIDES, GUIDE_LANGS, GUIDE_LANG_NAMES, GUIDE_LABELS, PARTNER_WEEK,
   runExample, isExamplePartner, pageFor,
 } from "../data/klaipedaExamples";
 
@@ -51,6 +51,10 @@ export const KlaipedaExamples = () => {
   const [way, setWay] = useState("a");
   useEffect(() => { setWay("a"); }, [walkId]);
   const shownWalk = way === "b" && run.alt ? run.alt : run.walk;
+  // The same morning in other weather. See WEATHER_WALKS.
+  const [skyId, setSkyId] = useState(WEATHER_WALKS[1].id);
+  const sky = WEATHER_WALKS.find(w => w.id === skyId) || WEATHER_WALKS[0];
+  const skyRun = useMemo(() => runExample(sky), [sky]);
   // The page a listing opens, in the window. See EXAMPLE_PAGES.
   const [open, setOpen] = useState(null);
   const openPage = (id) => { const p = pageFor(id); if (p) setOpen({ id, ...p }); };
@@ -108,7 +112,7 @@ export const KlaipedaExamples = () => {
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }} role="tablist" aria-label="Example walks">
           {EXAMPLE_WALKS.map(w => (
             <button key={w.id} role="tab" aria-selected={w.id === ex.id} onClick={() => setWalkId(w.id)} style={pill(w.id === ex.id)} data-testid={`example-walk-${w.id}`}>
-              {w.moment.split(",")[0]}
+              {w.chip}
             </button>
           ))}
         </div>
@@ -143,6 +147,39 @@ export const KlaipedaExamples = () => {
         </div>
         <div style={{ fontSize: 11.5, lineHeight: 1.6, color: C.muted, margin: "0 0 40px" }}>
           The AI picks the order. Every time, opening hour and offer on the card is then checked by fixed rules, so a closed door or a missed ship cannot get through.
+        </div>
+
+        {/* ── WEATHER ─────────────────────────────────────────── */}
+        <H2>The same morning, in other weather</H2>
+        <Lead>The forecast for the next three hours comes from the Norwegian Meteorological Institute. Gemlyx picks for it, and fixed rules then hold the walk to it.</Lead>
+
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }} role="tablist" aria-label="Weather">
+          {WEATHER_WALKS.map(w => (
+            <button key={w.id} role="tab" aria-selected={w.id === sky.id} onClick={() => setSkyId(w.id)} style={pill(w.id === sky.id)} data-testid={`example-sky-${w.id}`}>
+              {w.label}
+            </button>
+          ))}
+        </div>
+
+        <div data-testid="example-weather" style={{ ...card, border: `1px solid ${C.gold}55`, borderRadius: 16, padding: "16px 16px 18px", marginBottom: 40 }}>
+          <div style={{ fontSize: 20, fontWeight: 600, fontFamily: "'Fraunces', serif" }}>{sky.title}</div>
+          <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>{sky.moment}</div>
+          {weatherChanges(sky.weather).length > 0 && (
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 12 }}>
+              {weatherChanges(sky.weather).map(t => <Tag key={t} strong>{t}</Tag>)}
+            </div>
+          )}
+          <EditableWalk walk={skyRun.walk} madeAt={skyRun.startClock.minutes} lang="en" country="LT" tag={(s) => isExamplePartner(s.id) ? "Example" : null} onOpen={(s) => openPage(s.id)} />
+          {skyRun.left.length > 0 && (
+            <div style={{ borderTop: `1px solid ${C.border}`, marginTop: 14, paddingTop: 12 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 6 }}>Left out of this walk</div>
+              {skyRun.left.map(l => (
+                <div key={l.id} style={{ fontSize: 12.5, lineHeight: 1.55, marginBottom: 4 }}>
+                  <span style={{ fontWeight: 700, color: C.text }}>{l.name}</span> <span style={{ color: WARN }}>{l.reason}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* ── OFFERS ──────────────────────────────────────────── */}
