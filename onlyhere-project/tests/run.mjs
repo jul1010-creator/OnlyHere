@@ -297,6 +297,7 @@ writeFileSync(entry, `
   export { SCAN_KINDS, scanKindOf, scanPrompt } from ${JSON.stringify(join(root, "src/utils/scanKinds.js"))};
   export * as NP from ${JSON.stringify(join(root, "src/utils/nowPlanner.js"))};
   export * as TR from ${JSON.stringify(join(root, "src/utils/entryTranslate.js"))};
+  export * as KEX from ${JSON.stringify(join(root, "src/data/klaipedaExamples.js"))};
   export * as OC from ${JSON.stringify(join(root, "src/utils/offerClock.js"))};
   export * as WK from ${JSON.stringify(join(root, "src/utils/walkable.js"))};
   export { livePromotions, promoCard, untilLabel, PROMO_KINDS, zoneOf } from ${JSON.stringify(join(root, "src/utils/promotions.js"))};
@@ -81037,6 +81038,34 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   // The Lithuanian Studio's prompt wrapper turns "Danish" into "Lithuanian".
   // The prompt names each language in itself, so there is nothing to turn.
   ok("and the translation prompt survives the Lithuanian Studio's wrapper", ["da", "de", "lt"].every(l => M.localisePrompt(T.translatePrompt(prose, l), "LT").startsWith(T.translatePrompt(prose, l))));
+}
+
+// ── Batch 183: examples to show Klaipėda's tourism centre ──
+// Oliver, 2 Oct 2026: "Can you make a set of examples on the page that I can
+// show for the tourism center?" and "Guides and Offers alike. Make up
+// anything. Be clever. Have ideas that are realistic. So not 40% discount on
+// everything.."
+{
+  const X = M.KEX;
+  const appX = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const pageX = readFileSync(join(root, "src/pages/KlaipedaExamples.jsx"), "utf8");
+  ok("the examples have their own address, apart from the QR one, and stay out of search", X.KLAIPEDA_EXAMPLES_PATH === "/lithuania/examples" && X.KLAIPEDA_EXAMPLES_PATH !== M.KLAIPEDA_DEMO_PATH && /<Route path=\{KLAIPEDA_EXAMPLES_PATH\} element=\{<KlaipedaExamples \/>\} \/>/.test(appX) && /noindex/.test(pageX));
+  ok("the page says at the top that the businesses and offers are made up", /These are examples/.test(pageX) && /Every business, every offer and every number about them is made up/.test(pageX));
+  ok("and every made-up partner carries the Example mark, in the walk and in the list", /tag=\{\(s\) => isExamplePartner\(s\.id\) \? "Example" : null\}/.test(pageX) && /<Tag>Example<\/Tag>/.test(pageX) && X.EXAMPLE_PARTNERS.every(p => X.isExamplePartner(`${p.type}:${p.key}`)) && !X.isExamplePartner("free:castle"));
+  ok("no percentage off anything", X.EXAMPLE_PARTNERS.every(p => !/%|percent|discount/i.test(p.offer.text)));
+  ok("no partner is pointed at a real door: a street, never a house number", X.EXAMPLE_PARTNERS.every(p => /^[^\d]+ g\.$/.test(p.street)));
+  const runs = Object.fromEntries(X.EXAMPLE_WALKS.map(e => [e.id, X.runExample(e)]));
+  ok("every example walk is made by the live rules, with three stops or more and home in time", Object.values(runs).every(r => r.walk.stops.length >= 3 && r.walk.back.at <= r.walk.deadline));
+  ok("the wet Saturday leaves the castle out, because it is closed on Saturdays after mid September", runs.saturday.left.some(l => l.name === "Castle Museum" && /Closed on Saturdays/.test(l.reason)) && !runs.saturday.walk.stops.some(s => s.name === "Castle Museum"));
+  const fishOn = (r) => r.walk.stops.find(s => s.id === "food:fish");
+  ok("the same lunch offer shows on a Tuesday and not on a Saturday, as it was set", fishOn(runs.tuesday)?.deal?.to === "15:00" && fishOn(runs.saturday) && fishOn(runs.saturday).deal === null);
+  ok("the coffee refill shows in its quiet hour", runs.thursday.walk.stops[0]?.id === "food:bakery" && !!runs.thursday.walk.stops[0].deal);
+  const digits = (s) => (String(s).match(/\d+/g) || []).sort().join(",");
+  const fields = X.EXAMPLE_GUIDES.flatMap(g => ["about", "find", "tip", "offer"].filter(f => g[f]).map(f => g[f]));
+  ok("every guide reads in four languages, and no translation loses or changes a number", fields.every(f => X.GUIDE_LANGS.every(l => typeof f[l] === "string" && f[l].length > 5 && digits(f[l]) === digits(f.en))));
+  const shown = JSON.stringify([X.EXAMPLE_PARTNERS, X.EXAMPLE_WALKS, X.EXAMPLE_GUIDES, X.GUIDE_LABELS]) + pageX.replace(/\/\/.*$/gm, "");
+  ok("no dashes and none of his banned words on it", !/[—–]| - /.test(shown) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(shown));
+  ok("the walk on the examples page is the live walk's own drawing", /export const WalkView = /.test(readFileSync(join(root, "src/components/NowPlanner.jsx"), "utf8")) && /<WalkView walk=\{walk\}/.test(readFileSync(join(root, "src/components/NowPlanner.jsx"), "utf8")));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
