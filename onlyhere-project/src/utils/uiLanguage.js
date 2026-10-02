@@ -709,6 +709,7 @@ export const UI_STRINGS = {
   "offer.everyDay":   { en: "Every day", da: "Hver dag", de: "Täglich", lt: "Kasdien" },
   // The "I have X hours" walk, 2 Oct 2026. {n} a number, {time} a clock time,
   // {app} the ride app's name.
+  "now.partner":    { en: "Gemlyx partner", da: "Gemlyx-partner", de: "Gemlyx-Partner", lt: "Gemlyx partneris" },
   "now.title":      { en: "Plan from right now", da: "Planlæg fra lige nu", de: "Plane ab jetzt", lt: "Planuokite nuo dabar" },
   "now.howLong":    { en: "How long do you have?", da: "Hvor lang tid har du?", de: "Wie viel Zeit hast du?", lt: "Kiek turite laiko?" },
   "now.hours":      { en: "{n} h", da: "{n} t", de: "{n} Std.", lt: "{n} val." },

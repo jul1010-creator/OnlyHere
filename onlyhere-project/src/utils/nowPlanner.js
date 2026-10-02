@@ -185,9 +185,17 @@ export const nowCandidates = (rows, { country = "LT", zone = "", now = new Date(
 // `order` is a list of { id, stay?, why? }. Each stop is walked to (or ridden
 // to, when the leg leaves the walkable centre), stayed at, and only kept when
 // it is open for the whole visit at both ends of the half hour the walk is
-// served for, and when the way back still fits. A deal that has not started
-// is waited for up to 20 minutes. What does not fit is dropped, never squeezed.
-const MAX_WAIT = 20;
+// served for, and when the way back still fits. What does not fit is dropped,
+// never squeezed.
+//
+// ── A PARTNER IS PICKED ON MERIT, AND SHOWN AS A PARTNER ────────────
+// Oliver, 2 Oct 2026, choosing between partners first and partners on merit:
+// "Partners on merit, labelled." So a deal never decides whether a place is in
+// the walk, where it goes, or when the walker gets there: the model is not
+// told about deals, the rules do not score them, and nobody waits for one to
+// start. A place that earns its stop and has a deal on for the whole visit
+// shows the deal, marked as a Gemlyx partner. Terms clause 14 and OFFER_NOTE
+// promise exactly this, and this is where the promise is kept.
 const SPREAD = SLOT_MINUTES;
 
 export const scheduleWalk = (order, candidates, ctx) => {
@@ -205,19 +213,14 @@ export const scheduleWalk = (order, candidates, ctx) => {
     if (!c || stops.some(s => s.id === c.id)) continue;
     if (c.kind === "Food" && foods >= Math.max(1, Math.floor(budget / 180))) continue;
     const leg = legOf(here, c);
-    let arrive = t + leg.minutes;
+    const arrive = t + leg.minutes;
     const stay = Math.min(120, Math.max(15, Math.round(Number(pick.stay) || c.stay)));
-    // A deal with hours: wait a little for it to start, and skip it if the
-    // visit would fall outside it.
+    // The deal shows only when it is on for the whole of the visit's start,
+    // for a walker leaving at either end of the half hour.
     let dealNow = false;
     if (c.offer) {
       const w = c.offer.window;
-      const clockAt = (m) => ({ day: startClock.day, minutes: startClock.minutes + m });
-      let timing = timingAt(w, clockAt(arrive));
-      if (timing === "later" && w.fromMin - (startClock.minutes + arrive) <= MAX_WAIT) {
-        arrive = w.fromMin - startClock.minutes;
-        timing = timingAt(w, clockAt(arrive));
-      }
+      const timing = timingAt(w, { day: startClock.day, minutes: startClock.minutes + arrive });
       dealNow = timing === "now" || timing === "always";
       if (dealNow && w && startClock.minutes + arrive + SPREAD >= w.toMin) dealNow = false;
     }
@@ -250,7 +253,7 @@ export const scheduleWalk = (order, candidates, ctx) => {
 
 // ── THE WALK WITHOUT ANY AI ─────────────────────────────────────────
 // What is served when the model is off, slow, or writes something that does
-// not survive scheduleWalk. Best first: a deal on now, the tier, indoors when
+// not survive scheduleWalk. Best first: the tier, indoors when
 // it is wet, and lunch when the walk crosses it, weighed against the walk.
 export const ruleOrder = (candidates, ctx) => {
   const { start, startClock, budget, wet = false } = ctx;
@@ -261,8 +264,7 @@ export const ruleOrder = (candidates, ctx) => {
   while (left.length && order.length < 8) {
     let best = null, bestScore = -Infinity;
     for (const c of left) {
-      const dealScore = c.offer ? (["now", "always"].includes(timingAt(c.offer.window, startClock)) ? 4 : 2) : 0;
-      const score = (TIER_SCORE[c.tier] || 0) + dealScore + (wet && c.indoor ? 2 : 0) + (wet && !c.indoor ? -1 : 0)
+      const score = (TIER_SCORE[c.tier] || 0) + (wet && c.indoor ? 2 : 0) + (wet && !c.indoor ? -1 : 0)
         + (c.kind === "Food" ? (lunch && !order.some(o => o.kind === "Food") ? 3 : -3) : 0)
         - walkMinutes(here, c) / 8;
       if (score > bestScore) { bestScore = score; best = c; }
@@ -281,9 +283,8 @@ const HHMM = (m) => `${String(Math.floor(((m % 1440) + 1440) % 1440 / 60)).padSt
 export const planPrompt = (candidates, ctx) => {
   const { country = "LT", start, startClock, budget, margin = 0, wet = false, temp = null, lang = "en" } = ctx;
   const list = candidates.slice(0, 40).map(c => {
-    const deal = c.offer ? ` | DEAL: ${c.offer.text}${c.offer.window ? ` (${c.offer.window.from ? `${c.offer.window.from} to ${c.offer.window.to}` : "all day"}${c.offer.window.days.length ? `, weekdays ${c.offer.window.days.join(",")}` : ""})` : ""}` : "";
     const far = offTownWalk({ country, from: start, to: c }) ? " | OUTSIDE THE WALKABLE CENTRE, needs a Bolt" : ` | ${walkMinutes(start, c)} min walk from the start`;
-    return `${c.id} | ${c.name} | ${c.kind}${c.tier ? ` | ${c.tier}` : ""}${c.indoor ? " | indoors" : ""}${far}${deal}${c.about ? ` | ${c.about}` : ""}`;
+    return `${c.id} | ${c.name} | ${c.kind}${c.tier ? ` | ${c.tier}` : ""}${c.indoor ? " | indoors" : ""}${far}${c.about ? ` | ${c.about}` : ""}`;
   }).join("\n");
   return `You plan one walk for a visitor in ${COUNTRY_PROFILES[country]?.name || country} who has ${budget} minutes, starting now at ${HHMM(startClock.minutes)} local time from ${start.name}${margin ? `, and who must be back there ${margin} minutes before their time is up (they are off a cruise ship)` : ""}.
 Weather now: ${wet ? "wet, so favour places indoors" : "dry"}${temp !== null ? `, ${Math.round(temp)} °C` : ""}.
@@ -292,7 +293,7 @@ PLACES YOU MAY USE, and no others. Use the id exactly as written:
 ${list}
 
 RULES
-- Pick an order of 3 to 7 places that makes a good walk: few backtracks, the best places first, one meal around lunch time if the walk crosses it, a deal worked in at a time it is on.
+- Pick an order of 3 to 7 places that makes a good walk: few backtracks, the best places first, one meal around lunch time if the walk crosses it.
 - Opening hours and walking times are checked after you, so a place you pick that does not fit is dropped. Do not pad the list.
 - ${(WALK_RULES[country] || "").replace(/\n/g, " ")}
 - For each place, one short sentence on why it is in the walk, in ${LANG_NAMES[lang] || "English"}, in plain words, with no dashes of any kind and no exclamation marks. Name nothing that is not in its own line above.
