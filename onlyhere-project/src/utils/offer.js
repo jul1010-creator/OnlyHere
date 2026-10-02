@@ -40,6 +40,8 @@ import { dayStart, dayEnd } from "./calendarDay";
 import { stripDashes } from "./helpers";
 import { PAID_PLANS_LIVE } from "../config";
 import { t as uiT } from "./uiLanguage";
+import { OFFER_WEEK, cleanDays, cleanClock, minutesOf, placeClock, windowOf, timingAt } from "./offerClock";
+export { OFFER_WEEK, cleanClock, placeClock };
 
 const clean = (v) => stripDashes(String(v ?? "").replace(/\s+/g, " ").trim());
 
@@ -105,43 +107,11 @@ export const cleanOffer = (raw) => {
 // still be on ship time or home time, and "until 16:00" means 16:00 at the
 // counter in Klaipėda. Callers pass the zone of the row's country.
 //
-// Days use Date.getDay numbering (0 is Sunday), Monday first in the Studio.
-export const OFFER_WEEK = [1, 2, 3, 4, 5, 6, 0];
-
-const cleanDays = (v) => [...new Set((Array.isArray(v) ? v : [])
-  .map(Number).filter(n => Number.isInteger(n) && n >= 0 && n <= 6))]
-  .sort((a, b) => OFFER_WEEK.indexOf(a) - OFFER_WEEK.indexOf(b));
-
-// "13", "13.00", "13:00" and "9:30" all read; anything else is "".
-export const cleanClock = (v) => {
-  const m = /^([01]?\d|2[0-3])(?:[:.]([0-5]\d))?$/.exec(String(v ?? "").trim());
-  return m ? `${m[1].padStart(2, "0")}:${m[2] || "00"}` : "";
-};
-const minutesOf = (hhmm) => { const c = cleanClock(hhmm); return c ? Number(c.slice(0, 2)) * 60 + Number(c.slice(3)) : null; };
-
-// The weekday and minute of the day at the place. Falls back to the device
-// clock only where Intl cannot do zones, which no current browser lacks.
-const WD = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
-export const placeClock = (now = new Date(), zone = "") => {
-  try {
-    const parts = new Intl.DateTimeFormat("en-GB", { timeZone: zone || undefined, weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(now);
-    const get = (type) => parts.find(p => p.type === type)?.value;
-    const day = WD[get("weekday")];
-    const minutes = Number(get("hour")) * 60 + Number(get("minute"));
-    if (day !== undefined && Number.isFinite(minutes)) return { day, minutes };
-  } catch { /* fall through */ }
-  return { day: now.getDay(), minutes: now.getHours() * 60 + now.getMinutes() };
-};
-
+// The clock helpers live in offerClock.js, which imports nothing a server
+// route cannot load, so api/plan-now.js reads an offer's hours by the same
+// rules as the pages do.
 // The window, or null for an all day, every day offer.
-export const offerWindow = (offer) => {
-  const o = cleanOffer(offer);
-  if (!o) return null;
-  const from = minutesOf(o.from), to = minutesOf(o.to);
-  const hours = from !== null && to !== null && to > from;
-  if (!o.days?.length && !hours) return null;
-  return { days: o.days || [], from: hours ? cleanClock(o.from) : "", to: hours ? cleanClock(o.to) : "", fromMin: hours ? from : 0, toMin: hours ? to : 24 * 60 };
-};
+export const offerWindow = (offer) => windowOf(cleanOffer(offer));
 
 // Where an offer stands right now, at the place:
 //   "always"  no window, so on whenever its dates are
@@ -151,13 +121,7 @@ export const offerWindow = (offer) => {
 // An offer outside its dates is "ended", whatever its window says.
 export const offerTiming = (offer, { now = new Date(), zone = "" } = {}) => {
   if (!offerLive(offer, now)) return "ended";
-  const w = offerWindow(offer);
-  if (!w) return "always";
-  const { day, minutes } = placeClock(now, zone);
-  if (w.days.length && !w.days.includes(day)) return "off";
-  if (minutes < w.fromMin) return "later";
-  if (minutes >= w.toMin) return "off";
-  return "now";
+  return timingAt(offerWindow(offer), placeClock(now, zone));
 };
 
 // ── WHY IT WILL NOT RENDER, IN WORDS, IN THE STUDIO ─────────────────
