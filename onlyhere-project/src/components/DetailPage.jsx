@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { localizedEntry } from "../utils/entryTranslate";
 import { activeCountry, countryProfile, rowCountry, DEFAULT_COUNTRY } from "../utils/countries";
 import { C } from "../utils/theme";
 import { getEventDate, travelLabel, isUpcoming, isCurrentlyLive, arrivalRow, externalHref, hasFinished, TRAVEL_ORIGIN } from "../utils/helpers";
@@ -165,7 +166,10 @@ const eventsForTown = (townName) => {
 export const detailPoint = (item, kind) =>
   placeCoords(item) || (kind === "town" ? townPointFor(item?.name) : null);
 
-export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, checkLiveInfo, userCoords, isSaved, onToggleSave, hasBeen = false, onToggleBeen, savedCount = 0, onPlanFromSaved, onOpenEvent, onOpenNearby, paid = false, signedIn = false, onNeedAccount, lang = DEFAULT_UI_LANGUAGE, windowed = false }) => {
+export const DetailPage = ({ item: itemIn, onClose, kind, liveInfo, liveInfoLoading, checkLiveInfo, userCoords, isSaved, onToggleSave, hasBeen = false, onToggleBeen, savedCount = 0, onPlanFromSaved, onOpenEvent, onOpenNearby, paid = false, signedIn = false, onNeedAccount, lang = DEFAULT_UI_LANGUAGE, windowed = false }) => {
+  // The entry in the reader's language when a translation of its current
+  // English exists, otherwise as it is. See utils/entryTranslate.js.
+  const item = useMemo(() => localizedEntry(itemIn, lang), [itemIn, lang]);
   // Folded away by default. See the events block below for why, and for why
   // the count sits on the row that opens it.
   const [eventsOpen, setEventsOpen] = useState(false);

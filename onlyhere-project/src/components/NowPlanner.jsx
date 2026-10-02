@@ -123,7 +123,7 @@ export const NowPlanner = ({ country = "LT", lang: langProp = "", defaultFrom = 
                       <div style={{ fontSize: 11.5, color: C.muted, marginTop: 2 }}>{fill(uiT("now.stay", lang), { n: s.stay })}</div>
                       {s.deal && (
                         <div style={{ display: "inline-block", marginTop: 6, fontSize: 11.5, fontWeight: 700, borderRadius: 100, padding: "3px 10px", background: C.gold, color: C.onGold }}>
-                          ● {s.deal.text}{s.deal.to ? ` · ${fill(uiT("offer.onNowUntil", lang), { time: clock(Number(s.deal.to.slice(0, 2)) * 60 + Number(s.deal.to.slice(3)), lang) })}` : ""}
+                          ● {uiT("now.partner", lang)}: {s.deal.text}{s.deal.to ? ` · ${fill(uiT("offer.onNowUntil", lang), { time: clock(Number(s.deal.to.slice(0, 2)) * 60 + Number(s.deal.to.slice(3)), lang) })}` : ""}
                         </div>
                       )}
                       {s.why && <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.5, marginTop: 6 }}>{s.why}</div>}
