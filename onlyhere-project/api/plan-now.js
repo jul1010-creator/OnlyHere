@@ -16,7 +16,6 @@
 // No account and no gate: a cruise passenger off the ship for three hours is
 // not signing up for anything, which was the point of the QR codes.
 import { requestIsFromSite, NOT_FROM_SITE } from "../src/utils/apiGuard.js";
-import { SUPABASE_URL, SUPABASE_KEY } from "../src/config.js";
 import { COUNTRY_PROFILES } from "../src/utils/countries.js";
 import { placeClock } from "../src/utils/offerClock.js";
 import {
@@ -48,10 +47,18 @@ const weatherAt = async (p) => {
   } catch { return { wet: false, temp: null }; }
 };
 
+// NOT FROM src/config.js. That file reads import.meta for the browser build,
+// and Vercel loads these routes as CommonJS, where import.meta is a syntax
+// error and the whole route fails to start (the first deploy of this one,
+// 2 Oct 2026). The server reads published rows with its own key.
+const SUPABASE_URL = process.env.SUPABASE_URL || "https://vpxfahjnerkkkoueovhl.supabase.co";
+
 const rowsFor = async (country) => {
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!key) throw new Error("no key");
   const r = await fetch(
     `${SUPABASE_URL}/rest/v1/gemlyx_content?select=id,type,payload&published=eq.true&type=in.(free,food,booking,festival)&payload->>country=eq.${encodeURIComponent(country)}`,
-    { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }, signal: AbortSignal.timeout(4000) },
+    { headers: { apikey: key, Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(4000) },
   );
   if (!r.ok) throw new Error(`content ${r.status}`);
   return r.json();
