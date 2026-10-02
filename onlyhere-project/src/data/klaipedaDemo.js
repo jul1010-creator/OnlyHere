@@ -230,7 +230,6 @@ export const LOCAL_TIPS = [
   { title: "Buses", text: "Buy tickets in the e.Ticket Klaipėda app. It is cheaper than paying the driver." },
   { title: "Taxis", text: "Bolt works in Klaipėda, so you can order a car in the app and see the price first." },
   { title: "Talking sculptures", text: "Over ten sculptures and sights around town tell their own story when you scan the QR code beside them. Bring your phone and headphones." },
-  { title: "Museum days", text: "The museums on these trips close on Mondays in summer, and from mid September to mid June the castle and history museums close at weekends instead. The day picker above checks this for you." },
 ];
 
 // ── IS IT OPEN ON THAT DAY ──────────────────────────────────────────
