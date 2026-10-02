@@ -80988,7 +80988,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const w = N.scheduleWalk([{ id: "food:3" }], cands, { country: "LT", start: terminal, startClock: { day: 2, minutes: 15 * 60 + 15 }, budget: 240, margin: 30 });
   ok("a deal is not shown as on for a visit that can begin as it ends", w.stops[0] && w.stops[0].deal === null);
   const api = readFileSync(join(root, "api/plan-now.js"), "utf8");
-  ok("the walk route answers one spelling of each request only", /if \(keys !== "c,from,h,lang,slot"\) return json\(res, 400/.test(api) && /Object\.prototype\.hasOwnProperty\.call\(starts, String\(q\.from \|\| ""\)\)/.test(api) && /\/\^\[0-9\]\$\/\.test\(String\(q\.h \|\| ""\)\)/.test(api));
+  ok("the walk route answers one spelling of each request only", /if \(keys !== \(style \? "c,from,h,lang,slot,style" : "c,from,h,lang,slot"\)\) return json\(res, 400/.test(api) && /const style = q\.style === STROLL \? STROLL : "";/.test(api) && /Object\.prototype\.hasOwnProperty\.call\(starts, String\(q\.from \|\| ""\)\)/.test(api) && /\/\^\[0-9\]\$\/\.test\(String\(q\.h \|\| ""\)\)/.test(api));
   const np = readFileSync(join(root, "src/components/NowPlanner.jsx"), "utf8");
   ok("an answer for an older choice is dropped", /if \(asked\.current !== mine\) return;/.test(np));
   const store = readFileSync(join(root, "src/utils/studioDraftStore.js"), "utf8");
@@ -81115,6 +81115,55 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("the window is the app's own entry page, marked as an example", /<DetailPage windowed item=\{open\.item\}/.test(pageX) && /sample=\{isExamplePartner\(open\.id\) \? L\.madeUp : L\.page\}/.test(pageX));
   const shownX = JSON.stringify(Object.values(X.EXAMPLE_PAGES).map(p => p.item)) + JSON.stringify(X.GUIDE_LABELS);
   ok("no dashes and none of his banned words in the pages either", !/[—–]| - /.test(shownX) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(shownX));
+}
+
+// ── Batch 185: the Old Town walk, and what the weather changes ──
+// Oliver, 2 Oct 2026: "Shall there also be a 'walk around in old town'? Also,
+// I'd like you to put into the test a 'this is how it transforms during snow'
+// 'this is how it transform during rain' 'this is how it transforms when very
+// windy', etc."
+{
+  const N = M.NP, X = M.KEX;
+  const T = N.NOW_STARTS.LT.terminal;
+  const row = (id, name, lat, lon, extra = {}) => ({ id, type: "free", payload: { name, country: "LT", __lat: lat, __lon: lon, ...extra } });
+  const cands = N.nowCandidates([
+    row(1, "Theatre Square", 55.7078, 21.1316),
+    row(2, "Dark figure", 55.7066, 21.1268, { desc: "Rising out of the old castle harbour." }),
+    row(3, "Old museum", 55.7073, 21.1347, { __hours: { hours: ["Tuesday: 10:00 to 18:00"] } }),
+    row(4, "Sculpture Park", 55.7169, 21.1402),
+  ], { country: "LT", zone: "Europe/Vilnius", now: new Date("2026-10-13T07:30:00Z") });
+  const base = { country: "LT", start: T, startClock: { day: 2, minutes: 630 }, budget: 240, margin: 30 };
+  const order = [{ id: "free:2", stay: 30 }, { id: "free:1", stay: 30 }, { id: "free:3", stay: 45 }];
+  const dry = N.scheduleWalk(order, cands, { ...base, weather: { wet: false, snow: false, wind: 4 } });
+  const rain = N.scheduleWalk(order, cands, { ...base, weather: { wet: true, snow: false, wind: 6 } });
+  const snow = N.scheduleWalk(order, cands, { ...base, weather: { wet: true, snow: true, wind: 5 } });
+  const storm = N.scheduleWalk(order, cands, { ...base, weather: { wet: false, snow: false, wind: 17 } });
+  const stayOf = (w, id) => w.stops.find(s => s.id === id)?.stay;
+  ok("in the dry, a stop outdoors keeps the time it was given", stayOf(dry, "free:1") === 30 && stayOf(dry, "free:2") === 30);
+  ok("in rain, every stop outdoors is cut to 15 minutes and the museum keeps its time", stayOf(rain, "free:1") === 15 && stayOf(rain, "free:2") === 15 && stayOf(rain, "free:3") === 45);
+  ok("in snow, the same, and every walk between stops takes longer", stayOf(snow, "free:1") === 15 && snow.stops[0].leg > dry.stops[0].leg && snow.stops.every((s, i) => s.leg >= rain.stops[i].leg));
+  ok("in a storm wind, the place out on the harbour is left out and the rest stay", !storm.stops.some(s => s.id === "free:2") && storm.stops.some(s => s.id === "free:1") && N.STORM_WIND === 14);
+  ok("a stiff breeze under a near gale changes nothing", N.scheduleWalk(order, cands, { ...base, weather: { wind: 13 } }).stops.length === dry.stops.length);
+  is("the page says what the rules did, in words", [N.weatherChanges({ wet: true }), N.weatherChanges({ snow: true }), N.weatherChanges({ wind: 17 }), N.weatherChanges({})],
+    [["Outdoor stops kept to 15 minutes"], ["Walking takes 30% longer", "Outdoor stops kept to 15 minutes"], ["Walking takes 10% longer", "Outdoor stops kept to 20 minutes", "Places out on open water left out"], []]);
+  ok("the model is told about snow and a storm wind, and which places are out on the water", /snowing/.test(N.planPrompt(cands, { ...base, weather: { snow: true } })) && /storm wind/.test(N.planPrompt(cands, { ...base, weather: { wind: 17 } })) && /out on open water/.test(N.planPrompt(cands, { ...base })));
+  ok("and the rules alone put a harbour place last in a storm", N.ruleOrder(cands, { ...base, weather: { wind: 17 } }).slice(-1)[0].id === "free:2");
+  const api = readFileSync(join(root, "api/plan-now.js"), "utf8");
+  ok("the forecast is read for snow and for the strongest wind of the next three hours", /snow: \/snow\|sleet\/\.test\(symbol\)/.test(api) && /wind_speed/.test(api) && /weather, style, lang \}/.test(api));
+  // The Old Town walk.
+  const town = N.strollCandidates(cands, "LT");
+  ok("the Old Town walk keeps what is inside the Old Town and is not a museum", town.map(c => c.id).sort().join() === "free:1,free:2" && N.inOldTown("LT", { lat: 55.7078, lon: 21.1316 }) && !N.inOldTown("LT", { lat: 55.7169, lon: 21.1402 }));
+  ok("and keeps every stop short", N.scheduleWalk([{ id: "free:1", stay: 60 }], town, { ...base, style: N.STROLL }).stops[0].stay === N.STROLL_STAY);
+  ok("and is told to the model in words", /easy walk around the Old Town/.test(N.planPrompt(town, { ...base, style: N.STROLL })));
+  const np = readFileSync(join(root, "src/components/NowPlanner.jsx"), "utf8");
+  ok("the planner offers it where a country has an Old Town drawn, and asks for it in one spelling", /\{OLD_TOWN\[country\] && \(/.test(np) && /\$\{stroll \? `&style=\$\{STROLL\}` : ""\}/.test(np));
+  ok("and says what snow and a storm wind did to the walk", /uiT\(walk\.weather\?\.snow \? "now\.snow" : "now\.wet", lang\)/.test(np) && /uiT\("now\.windy", lang\)/.test(np));
+  // On the examples page.
+  const run = (id) => X.runExample(X.WEATHER_WALKS.find(w => w.id === id));
+  ok("the examples show the same morning in four kinds of weather", X.WEATHER_WALKS.map(w => w.id).join() === "dry,rain,snow,storm" && X.WEATHER_WALKS.every(w => run(w.id).walk.stops.length >= 4));
+  ok("and in the storm the Black Ghost and the ship are left out, and say why", ["The Black Ghost", "Meridianas"].every(n => run("storm").left.some(l => l.name === n && /open water/.test(l.reason))));
+  const old = X.runExample(X.EXAMPLE_WALKS.find(e => e.id === "oldtown"));
+  ok("the Old Town example stays inside the Old Town, with no museum", old.walk.stops.length >= 4 && old.walk.stops.every(s => N.inOldTown("LT", s) && s.kind !== "Museum"));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
