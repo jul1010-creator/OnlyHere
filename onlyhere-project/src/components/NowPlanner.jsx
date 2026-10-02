@@ -6,12 +6,13 @@
 // Times on the page run from the reader's own "now" at the place, rounded up
 // to five minutes, since the walk itself was checked for the whole half hour
 // it is served in.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { C } from "../utils/theme";
 import { t as uiT, resolveUiLanguage, UI_LANGUAGE_KEY } from "../utils/uiLanguage";
 import { countryProfile } from "../utils/countries";
 import { placeClock } from "../utils/offerClock";
-import { NOW_HOURS, NOW_STARTS, slotOf, walkMapsUrl, rideApp } from "../utils/nowPlanner";
+import { NOW_HOURS, NOW_STARTS, slotOf, walkMapsUrl, rideApp, MUST_SEE, STAY_STEP, replanWalk, canStayLonger } from "../utils/nowPlanner";
+import { entryWord } from "../utils/entryWords";
 
 const fill = (s, vars) => Object.entries(vars).reduce((out, [k, v]) => out.split(`{${k}}`).join(String(v)), s);
 const clock = (m, lang) => {
@@ -29,8 +30,9 @@ const readerLang = () => {
 // The walk itself, drawn from what the route answers with. Also used by the
 // examples page (pages/KlaipedaExamples.jsx), which runs the same rules on
 // made-up partners, and passes `tag` to mark them as made up.
-export const WalkView = ({ walk, madeAt, lang, country = "LT", tag = null }) => {
+export const WalkView = ({ walk, madeAt, lang, country = "LT", tag = null, onOpen = null, edit = null }) => {
   const app = rideApp(country);
+  const small = { background: "transparent", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, width: 26, height: 26, fontSize: 14, fontWeight: 700, lineHeight: 1, cursor: "pointer", fontFamily: "'Inter', sans-serif", display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 };
   return (
     <div data-testid="now-walk" style={{ marginTop: 16 }}>
       {walk.weather?.wet && <div style={{ fontSize: 12, color: C.muted, marginBottom: 10 }}>{uiT("now.wet", lang)}</div>}
@@ -52,10 +54,22 @@ export const WalkView = ({ walk, madeAt, lang, country = "LT", tag = null }) => 
                 <div style={{ fontSize: 13, fontWeight: 700, color: C.gold, minWidth: 44 }}>{clock(madeAt + s.arrive, lang)}</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 15, fontWeight: 600, fontFamily: "'Fraunces', serif" }}>
-                    {s.name}
+                    {onOpen
+                      ? <button onClick={() => onOpen(s)} data-testid="now-open" style={{ background: "none", border: "none", padding: 0, color: C.text, font: "inherit", cursor: "pointer", textAlign: "left", borderBottom: `1px dotted ${C.muted}` }}>{s.name}</button>
+                      : s.name}
+                    {s.tier === MUST_SEE && <span data-testid="now-must-see" style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, color: C.onGold, background: C.gold, borderRadius: 100, padding: "2px 8px", fontFamily: "'Inter', sans-serif", verticalAlign: "middle", whiteSpace: "nowrap" }}>⭐ {entryWord(MUST_SEE, lang)}</span>}
                     {tag && tag(s) && <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, color: C.muted, border: `1px solid ${C.border}`, borderRadius: 100, padding: "2px 7px", fontFamily: "'Inter', sans-serif", verticalAlign: "middle" }}>{tag(s)}</span>}
                   </div>
-                  <div style={{ fontSize: 11.5, color: C.muted, marginTop: 2 }}>{fill(uiT("now.stay", lang), { n: s.stay })}</div>
+                  {edit ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
+                      <button onClick={() => edit.shorter(s.id)} disabled={s.stay <= 15} aria-label={uiT("now.shorter", lang)} title={uiT("now.shorter", lang)} data-testid="now-shorter" style={{ ...small, opacity: s.stay <= 15 ? 0.35 : 1 }}>−</button>
+                      <span style={{ fontSize: 11.5, color: C.muted, minWidth: 74, textAlign: "center" }}>{fill(uiT("now.stay", lang), { n: s.stay })}</span>
+                      <button onClick={() => edit.longer(s.id)} disabled={!edit.canLonger(s.id)} aria-label={uiT("now.longer", lang)} title={uiT("now.longer", lang)} data-testid="now-longer" style={{ ...small, opacity: edit.canLonger(s.id) ? 1 : 0.35 }}>+</button>
+                      <button onClick={() => edit.remove(s.id)} aria-label={uiT("now.remove", lang)} title={uiT("now.remove", lang)} data-testid="now-remove" style={{ ...small, marginLeft: 6 }}>×</button>
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 11.5, color: C.muted, marginTop: 2 }}>{fill(uiT("now.stay", lang), { n: s.stay })}</div>
+                  )}
                   {s.deal && (
                     <div style={{ display: "inline-block", marginTop: 6, fontSize: 11.5, fontWeight: 700, borderRadius: 100, padding: "3px 10px", background: C.gold, color: C.onGold }}>
                       ● {uiT("now.partner", lang)}: {s.deal.text}{s.deal.to ? ` · ${fill(uiT("offer.onNowUntil", lang), { time: clock(Number(s.deal.to.slice(0, 2)) * 60 + Number(s.deal.to.slice(3)), lang) })}` : ""}
@@ -71,6 +85,16 @@ export const WalkView = ({ walk, madeAt, lang, country = "LT", tag = null }) => 
               ? <a href={app.url} target="_blank" rel="noopener noreferrer" style={{ color: C.gold, textDecoration: "none", fontWeight: 700 }}>{fill(uiT("now.ride", lang), { app: app.name, n: walk.back.leg })} ↗</a>
               : fill(uiT("now.walk", lang), { n: walk.back.leg })}
           </div>
+          {edit && edit.removed.length > 0 && (
+            <div data-testid="now-taken-out" style={{ fontSize: 12, color: C.muted, padding: "8px 0 2px", display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+              <span>{uiT("now.takenOut", lang)}:</span>
+              {edit.removed.map(r => (
+                <button key={r.id} onClick={() => edit.putBack(r.id)} style={{ background: "transparent", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "3px 10px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                  {r.name} · {uiT("now.putBack", lang)}
+                </button>
+              ))}
+            </div>
+          )}
           <div data-testid="now-back" style={{ fontSize: 13, fontWeight: 700, color: C.text, padding: "8px 0 4px" }}>
             {walk.start.ship
               ? fill(uiT("now.backShip", lang), { time: clock(madeAt + walk.back.at, lang), n: Math.max(walk.margin, walk.deadline + walk.margin - walk.back.at) })
@@ -86,6 +110,44 @@ export const WalkView = ({ walk, madeAt, lang, country = "LT", tag = null }) => 
   );
 };
 
+// ── THE WALK, CHANGED BY THE READER ─────────────────────────────────
+// Oliver, 2 Oct 2026: "If we make a time for how long we want to be each
+// place, then make able to remove one from their listing." Each stop gets a
+// shorter and a longer and a take out, and the walk is run again on the phone
+// by the same rules from the places the server sent with it (walk.places), so
+// every time and every open door stays checked. Longer is offered only while
+// it pushes nothing else out.
+export const EditableWalk = ({ walk, madeAt, lang, country = "LT", tag = null, onOpen = null }) => {
+  const [edits, setEdits] = useState({ stays: {}, removed: [] });
+  useEffect(() => { setEdits({ stays: {}, removed: [] }); }, [walk]);
+  const ctx = useMemo(() => ({ country, start: walk.start, startClock: walk.clock, budget: walk.budget, margin: walk.margin || 0 }), [walk, country]);
+  const usable = !!(walk?.clock && walk?.budget && Array.isArray(walk?.places) && walk.places.length);
+  const changed = Object.keys(edits.stays).length > 0 || edits.removed.length > 0;
+  const shown = useMemo(() => (usable && changed ? { ...walk, ...replanWalk(walk, edits, ctx) } : walk), [walk, edits, ctx, usable, changed]);
+  if (!usable) return <WalkView walk={walk} madeAt={madeAt} lang={lang} country={country} tag={tag} onOpen={onOpen} />;
+  const stayOf = (id) => shown.stops.find(x => x.id === id)?.stay;
+  const edit = {
+    longer: (id) => { if (canStayLonger(walk, edits, id, ctx)) setEdits(e => ({ ...e, stays: { ...e.stays, [id]: stayOf(id) + STAY_STEP } })); },
+    shorter: (id) => setEdits(e => ({ ...e, stays: { ...e.stays, [id]: Math.max(15, stayOf(id) - STAY_STEP) } })),
+    canLonger: (id) => canStayLonger(walk, edits, id, ctx),
+    remove: (id) => setEdits(e => ({ ...e, removed: [...e.removed, id] })),
+    putBack: (id) => setEdits(e => ({ ...e, removed: e.removed.filter(x => x !== id) })),
+    removed: edits.removed.map(id => ({ id, name: walk.stops.find(x => x.id === id)?.name || id })),
+  };
+  return <WalkView walk={shown} madeAt={madeAt} lang={lang} country={country} tag={tag} onOpen={onOpen} edit={edit} />;
+};
+
+// Which way round this phone walks, kept so a reload does not flip it. See
+// reversedWalk in utils/nowPlanner.js for why there are two.
+const WALK_SIDE_KEY = "gemlyx:walkSide";
+export const walkSide = () => {
+  try {
+    let v = window.localStorage.getItem(WALK_SIDE_KEY);
+    if (v !== "0" && v !== "1") { v = Math.random() < 0.5 ? "0" : "1"; window.localStorage.setItem(WALK_SIDE_KEY, v); }
+    return v;
+  } catch { return Math.random() < 0.5 ? "0" : "1"; }
+};
+
 export const NowPlanner = ({ country = "LT", lang: langProp = "", defaultFrom = "" }) => {
   const lang = langProp || readerLang();
   const starts = NOW_STARTS[country] || {};
@@ -96,6 +158,7 @@ export const NowPlanner = ({ country = "LT", lang: langProp = "", defaultFrom = 
   // Which choice the newest request was for. An answer for an older choice,
   // arriving after the reader tapped another button, is dropped.
   const asked = useRef("");
+  const side = useMemo(() => walkSide(), []);
 
   // A new choice clears the old walk, so a 2 hour walk is never shown under
   // a 4 hour button.
@@ -113,7 +176,8 @@ export const NowPlanner = ({ country = "LT", lang: langProp = "", defaultFrom = 
       let r = await ask(slotOf(new Date()));
       if (r.status === 409) { const j = await r.json().catch(() => ({})); if (j.slot) r = await ask(j.slot); }
       if (!r.ok) throw new Error(String(r.status));
-      const walk = await r.json();
+      const got = await r.json();
+      const walk = side === "1" && got.alt ? { ...got, ...got.alt } : got;
       if (asked.current !== mine) return;
       const nowMin = placeClock(new Date(), zone).minutes;
       setState({ busy: false, walk, error: "", madeAt: Math.ceil(nowMin / 5) * 5 });
@@ -158,7 +222,7 @@ export const NowPlanner = ({ country = "LT", lang: langProp = "", defaultFrom = 
 
       {state.error && <div style={{ fontSize: 12.5, color: "#FFB347", marginTop: 12 }}>{state.error}</div>}
 
-      {walk && <WalkView walk={walk} madeAt={madeAt} lang={lang} country={country} />}
+      {walk && <EditableWalk walk={walk} madeAt={madeAt} lang={lang} country={country} />}
     </div>
   );
 };

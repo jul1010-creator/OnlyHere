@@ -166,7 +166,7 @@ const eventsForTown = (townName) => {
 export const detailPoint = (item, kind) =>
   placeCoords(item) || (kind === "town" ? townPointFor(item?.name) : null);
 
-export const DetailPage = ({ item: itemIn, onClose, kind, liveInfo, liveInfoLoading, checkLiveInfo, userCoords, isSaved, onToggleSave, hasBeen = false, onToggleBeen, savedCount = 0, onPlanFromSaved, onOpenEvent, onOpenNearby, paid = false, signedIn = false, onNeedAccount, lang = DEFAULT_UI_LANGUAGE, windowed = false }) => {
+export const DetailPage = ({ item: itemIn, onClose, kind, liveInfo, liveInfoLoading, checkLiveInfo, userCoords, isSaved, onToggleSave, hasBeen = false, onToggleBeen, savedCount = 0, onPlanFromSaved, onOpenEvent, onOpenNearby, paid = false, signedIn = false, onNeedAccount, lang = DEFAULT_UI_LANGUAGE, windowed = false, sample = "" }) => {
   // The entry in the reader's language when a translation of its current
   // English exists, otherwise as it is. See utils/entryTranslate.js.
   const item = useMemo(() => localizedEntry(itemIn, lang), [itemIn, lang]);
@@ -501,6 +501,15 @@ export const DetailPage = ({ item: itemIn, onClose, kind, liveInfo, liveInfoLoad
           and it is the one line that tells a reader the picture is real. */}
       <PhotoCredit photo={hasShot ? item.photo : ""} credit={item.__photoCredit} style={{ padding: "6px 20px 0", maxWidth: 620, margin: "0 auto" }} />
       <div style={{ padding: "14px 20px 40px", maxWidth: 620, margin: "0 auto" }}>
+        {/* ── A SAMPLE PAGE ───────────────────────────────────────────
+            Oliver, 2 Oct 2026, on the Klaipėda examples: "The listings should
+            maybe open a tiny window of their page?" They open this page, with
+            `sample` saying what it is. A sample has no live check, no feedback
+            and no reviews: nobody should be paying for an AI call about a
+            made-up café, or leaving a review of one. */}
+        {sample && (
+          <div data-testid="sample-tag" style={{ display: "inline-block", fontSize: 10.5, fontWeight: 700, letterSpacing: 0.6, color: C.muted, border: `1px solid ${C.border}`, borderRadius: 100, padding: "3px 9px", marginBottom: 10 }}>{sample}</div>
+        )}
         <div style={{ fontSize: 10, fontWeight: 700, color: ink, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>
           {/* A shop and a shopping street both say where they are, which is
               what `location` holds on them. Oliver, 22 Sep 2026. */}
@@ -1468,10 +1477,10 @@ export const DetailPage = ({ item: itemIn, onClose, kind, liveInfo, liveInfoLoad
           </div>
         )}
 
-        <button onClick={() => checkLiveInfo(item)} disabled={liveInfoLoading === item.name}
+        {!sample && <button onClick={() => checkLiveInfo(item)} disabled={liveInfoLoading === item.name}
           style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px", fontSize: 13, fontWeight: 700, color: C.text, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: liveInfo?.[item.name] ? 12 : 14 }}>
           {liveInfoLoading === item.name ? uiT("entry.checking", lang) : `🔍 ${uiT("entry.liveInfo", lang)}`}
-        </button>
+        </button>}
         {liveInfo?.[item.name] && (
           <div style={{ background: `${color}18`, border: `1px solid ${color}`, borderRadius: 12, padding: "12px 14px", marginBottom: 14, fontSize: 13, color: C.text, lineHeight: 1.6 }}>
             {liveInfo[item.name]}
@@ -1741,9 +1750,9 @@ export const DetailPage = ({ item: itemIn, onClose, kind, liveInfo, liveInfoLoad
             about the PLACE, and these two are a reader talking to us about the
             WRITING. Reading them as one thing is how a note meant for Oliver
             ends up published as somebody's opinion of a bar. */}
-        <ArticleFeedback itemType={kind} itemName={item.name} signedIn={signedIn} onNeedAccount={onNeedAccount} />
+        {!sample && <ArticleFeedback itemType={kind} itemName={item.name} signedIn={signedIn} onNeedAccount={onNeedAccount} />}
 
-        <ReviewsSection itemType={kind} itemName={item.name} />
+        {!sample && <ReviewsSection itemType={kind} itemName={item.name} />}
       </div>
     </div>
     </div>
