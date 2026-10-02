@@ -1,0 +1,118 @@
+// /api/plan-now.js
+// GET ?c=LT&from=terminal&h=3&lang=en&slot=2026-10-06T10:30Z
+//
+// The "I have X hours" walk (Oliver, 2 Oct 2026). See src/utils/nowPlanner.js
+// for the rules; this file only fetches what they need and asks the model to
+// put the places in order.
+//
+// ── WHY IT COSTS ALMOST NOTHING ─────────────────────────────────────
+// The answer is cached by Vercel for the half hour it was made in, keyed on
+// the whole URL. Everybody leaving the terminal in the same half hour, with
+// the same hours and language, gets the walk made for the first of them. The
+// slot must be this half hour or the last one, so the cache cannot be walked
+// through, and at most 2 starts x 4 lengths x 4 languages are made per half
+// hour, and in practice a handful.
+//
+// No account and no gate: a cruise passenger off the ship for three hours is
+// not signing up for anything, which was the point of the QR codes.
+import { requestIsFromSite, NOT_FROM_SITE } from "../src/utils/apiGuard.js";
+import { SUPABASE_URL, SUPABASE_KEY } from "../src/config.js";
+import { COUNTRY_PROFILES } from "../src/utils/countries.js";
+import { placeClock } from "../src/utils/offerClock.js";
+import {
+  NOW_STARTS, NOW_HOURS, NOW_LANGS, SHIP_MARGIN, slotAccepted, slotOf, slotDate,
+  nowCandidates, scheduleWalk, ruleOrder, planPrompt, readOrder, goodWalk,
+} from "../src/utils/nowPlanner.js";
+
+const json = (res, status, body, cache = "no-store") => {
+  res.setHeader("Cache-Control", cache);
+  return res.status(status).json(body);
+};
+
+// The model writes the order only between these hours at the place. Outside
+// them the rules make the walk on their own: almost nothing is open, and the
+// call would be paid for nobody.
+const AI_FROM = 7 * 60, AI_TO = 21 * 60;
+
+const weatherAt = async (p) => {
+  try {
+    const r = await fetch(`https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=${p.lat.toFixed(3)}&lon=${p.lon.toFixed(3)}`,
+      { headers: { "User-Agent": "Gemlyx/1.0 (gemlyxtravel.com)" }, signal: AbortSignal.timeout(2500) });
+    if (!r.ok) return { wet: false, temp: null };
+    const j = await r.json();
+    const next = (j?.properties?.timeseries || []).slice(0, 3);
+    const rain = next.reduce((n, t) => n + (Number(t?.data?.next_1_hours?.details?.precipitation_amount) || 0), 0);
+    const symbol = String(next[0]?.data?.next_1_hours?.summary?.symbol_code || "");
+    const temp = Number(next[0]?.data?.instant?.details?.air_temperature);
+    return { wet: rain >= 0.5 || /rain|sleet|snow/.test(symbol), temp: Number.isFinite(temp) ? temp : null };
+  } catch { return { wet: false, temp: null }; }
+};
+
+const rowsFor = async (country) => {
+  const r = await fetch(
+    `${SUPABASE_URL}/rest/v1/gemlyx_content?select=id,type,payload&published=eq.true&type=in.(free,food,booking,festival)&payload->>country=eq.${encodeURIComponent(country)}`,
+    { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }, signal: AbortSignal.timeout(4000) },
+  );
+  if (!r.ok) throw new Error(`content ${r.status}`);
+  return r.json();
+};
+
+const askModel = async (prompt) => {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) return null;
+  try {
+    const r = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({ model: "claude-sonnet-5", max_tokens: 900, messages: [{ role: "user", content: prompt }] }),
+      signal: AbortSignal.timeout(20000),
+    });
+    const d = await r.json();
+    if (!r.ok) return null;
+    return (d.content || []).filter(b => b.type === "text").map(b => b.text).join("");
+  } catch { return null; }
+};
+
+export default async function handler(req, res) {
+  if (req.method !== "GET") return json(res, 405, { error: "GET only." });
+  if (!requestIsFromSite(req.headers)) {
+    return json(res, 403, { error: NOT_FROM_SITE });
+  }
+
+  const q = req.query || {};
+  const country = String(q.c || "").toUpperCase();
+  const start = NOW_STARTS[country]?.[String(q.from || "")];
+  const hours = Number(q.h);
+  const lang = NOW_LANGS.includes(String(q.lang)) ? String(q.lang) : "";
+  const now = new Date();
+  if (!start || !NOW_HOURS.includes(hours) || !lang) return json(res, 400, { error: "Unknown start, length or language." });
+  if (!slotAccepted(String(q.slot || ""), now)) return json(res, 409, { error: "Stale half hour.", slot: slotOf(now) });
+
+  const zone = COUNTRY_PROFILES[country].zone;
+  const at = slotDate(String(q.slot));
+  const startClock = placeClock(at, zone);
+  const budget = hours * 60;
+  const margin = start.ship ? SHIP_MARGIN : 0;
+
+  let rows;
+  try { rows = await rowsFor(country); }
+  catch { return json(res, 503, { error: "Could not read the places just now." }); }
+
+  const weather = await weatherAt(start);
+  const candidates = nowCandidates(rows, { country, zone, now: at });
+  const ctx = { country, start, startClock, budget, margin, wet: weather.wet, temp: weather.temp, lang };
+
+  let walk = null, made = "rules";
+  if (candidates.length && startClock.minutes >= AI_FROM && startClock.minutes < AI_TO) {
+    const order = readOrder(await askModel(planPrompt(candidates, ctx)));
+    const tried = order ? scheduleWalk(order, candidates, ctx) : null;
+    if (goodWalk(tried, budget)) { walk = tried; made = "ai"; }
+  }
+  if (!walk) walk = scheduleWalk(ruleOrder(candidates, ctx), candidates, ctx);
+
+  return json(res, 200, {
+    slot: q.slot, country, from: start.id, hours, lang, made,
+    start: { name: start.name, lat: start.lat, lon: start.lon, ship: !!start.ship },
+    weather, margin, ...walk,
+  }, "public, s-maxage=1800, stale-while-revalidate=120");
+}
