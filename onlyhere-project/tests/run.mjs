@@ -295,6 +295,9 @@ writeFileSync(entry, `
   export { groupNav, childActive, groupActive, NAV_GROUPS } from ${JSON.stringify(join(root, "src/utils/navGroups.js"))};
   export { groupByMonth, monthLabel } from ${JSON.stringify(join(root, "src/utils/calendarMonths.js"))};
   export { SCAN_KINDS, scanKindOf, scanPrompt } from ${JSON.stringify(join(root, "src/utils/scanKinds.js"))};
+  export * as NP from ${JSON.stringify(join(root, "src/utils/nowPlanner.js"))};
+  export * as OC from ${JSON.stringify(join(root, "src/utils/offerClock.js"))};
+  export * as WK from ${JSON.stringify(join(root, "src/utils/walkable.js"))};
   export { livePromotions, promoCard, untilLabel, PROMO_KINDS, zoneOf } from ${JSON.stringify(join(root, "src/utils/promotions.js"))};
   export { abroadBriefParts, inventoryBlock, inventoryLine, forLand, landAsk, landRules, sameDayHours, startsFor, INVENTORY_CAP, randomAbroadVisit } from ${JSON.stringify(join(root, "src/utils/guideAbroad.js"))};
   export { FROZEN_TRANSPORT, frozenFrom, frozenIn, factsLost, frozenBlock, lostNote } from ${JSON.stringify(join(root, "src/utils/frozenFacts.js"))};
@@ -80886,6 +80889,57 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const dpH = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
   ok("the entry page reads the place's clock", /offerView\(item\.__offer, \{ paid, zone: countryProfile\(rowCountry\(item\)\)\.zone \}\)/.test(dpH) && /data-testid="offer-hours"/.test(dpH));
   ok("and so does the Special deals page", /promoCard\(p, \{ paid, today, lang \}\)/.test(readFileSync(join(root, "src/components/PromotionsPage.jsx"), "utf8")));
+}
+
+// ── Batch 179: "I have X hours" ──
+// Oliver, 2 Oct 2026, of the AI feature to build: "Sure do that". A walk made
+// for this moment from the terminal or the tourist centre, the model putting
+// Gemlyx's own places in order and the rules checking every minute of it.
+{
+  const N = M.NP, zone = "Europe/Vilnius";
+  const tue1130 = new Date("2026-10-06T08:30:00Z");
+  const week = ["Monday: Closed", "Tuesday: 10:00 – 18:00", "Wednesday: 10:00 – 18:00", "Thursday: 10:00 – 18:00", "Friday: 10:00 – 18:00", "Saturday: 10:00 – 16:00", "Sunday: Closed"];
+  const rows = [
+    { id: 1, type: "free", payload: { name: "Theatre Square", country: "LT", __lat: 55.7078, __lon: 21.1316, tier: "Can't Miss Out" } },
+    { id: 2, type: "free", payload: { name: "Museum of Clocks", country: "LT", __lat: 55.7105, __lon: 21.1389, tier: "Highly Recommended", __hours: { hours: week } } },
+    { id: 3, type: "food", payload: { name: "Momo Grill", country: "LT", __lat: 55.7101, __lon: 21.1340, __hours: { hours: ["Tuesday: 11:00 – 22:00"] }, __offer: { text: "Free soda with a meal", until: "2026-12-31", days: [2], from: "12:00", to: "16:00" } } },
+    { id: 4, type: "free", payload: { name: "Melnragė beach", country: "LT", __lat: 55.7377, __lon: 21.0717 } },
+    { id: 5, type: "free", payload: { name: "Castle Museum", country: "LT", __lat: 55.7056, __lon: 21.1290, __hours: { hours: ["Tuesday: Closed"] } } },
+    { id: 6, type: "free", payload: { name: "A Danish place", __lat: 55.6, __lon: 12.5 } },
+    { id: 7, type: "food", payload: { name: "No hours bistro", country: "LT", __lat: 55.7090, __lon: 21.1320 } },
+  ];
+  const cands = N.nowCandidates(rows, { country: "LT", zone, now: tue1130 });
+  is("only this country's places with a coordinate are in the running", cands.map(c => c.id), ["free:1", "free:2", "food:3", "free:4", "free:5", "food:7"]);
+  ok("a square is outdoors whatever its name says, a museum indoors", cands.find(c => c.id === "free:1").indoor === false && cands.find(c => c.id === "free:2").indoor === true);
+  is("Google's weekday lines read, closed and open all day included", [N.windowsFor(week, 2), N.windowsFor(["Tuesday: 9 AM – 5 PM"], 2), N.windowsFor(["Tuesday: Open 24 hours"], 2), N.windowsFor(week, 1), N.windowsFor(["Tuesday: whenever"], 2)], [[[600, 1080]], [[540, 1020]], [[0, 1440]], [], null]);
+  const start = N.NOW_STARTS.LT.terminal;
+  const ctx = { country: "LT", start, startClock: M.OC.placeClock(tue1130, zone), budget: 180, margin: N.SHIP_MARGIN };
+  const walk = N.scheduleWalk([{ id: "free:5" }, { id: "food:7" }, { id: "food:3", why: "Lunch — with a free soda" }, { id: "free:1" }, { id: "made:up" }], cands, ctx);
+  is("closed today, hours unknown for a kitchen, or made up: none of them is in the walk", walk.stops.map(s => s.id), ["food:3", "free:1"]);
+  ok("the deal is waited for when it starts soon, and shown", walk.stops[0].arrive === 30 && walk.stops[0].deal?.text === "Free soda with a meal");
+  is("and no dash comes out of the model", walk.stops[0].why, "Lunch, with a free soda");
+  ok("back at the ship with the margin kept", walk.back.at <= 180 - N.SHIP_MARGIN && walk.deadline === 150);
+  const far = N.scheduleWalk([{ id: "free:4" }], cands, { ...ctx, budget: 360 });
+  ok("a place outside the walkable centre is reached by Bolt, there and back", far.stops[0]?.ride === true && far.back.ride === true && N.rideApp("LT").name === "Bolt");
+  const rules = N.scheduleWalk(N.ruleOrder(cands, ctx), cands, ctx);
+  ok("with no model at all there is still a walk, and it holds", N.goodWalk(rules, 180) && rules.back.at <= rules.deadline);
+  is("everybody in the same half hour asks for the same walk", [N.slotOf(new Date("2026-10-06T08:44:10Z")), N.slotOf(new Date("2026-10-06T08:59:59Z"))], ["2026-10-06T08:30Z", "2026-10-06T08:30Z"]);
+  ok("and only this half hour or the last one is made", N.slotAccepted("2026-10-06T08:00Z", new Date("2026-10-06T08:44:10Z")) && !N.slotAccepted("2026-10-06T07:30Z", new Date("2026-10-06T08:44:10Z")) && !N.slotAccepted("tomorrow", new Date()));
+  const prompt = N.planPrompt(cands, { ...ctx, lang: "lt" });
+  ok("the model is told the places, the clock, the ship, the walking rule and the language", /free:2 \| Museum of Clocks/.test(prompt) && /11:30 local time/.test(prompt) && /off a cruise ship/.test(prompt) && /Greater Klaipėda is not/.test(prompt) && /in Lithuanian/.test(prompt));
+  is("its answer is read leniently and never trusted past the ids", N.readOrder('Sure! {"order":[{"id":"free:1","stay":30},{"oops":1}]}'), [{ id: "free:1", stay: 30 }]);
+  ok("a broken answer reads as none", N.readOrder("no json") === null && N.readOrder("{broken") === null);
+  ok("the walk opens in Maps on foot, start to start", /travelmode=walking&origin=55\.70526,21\.12217&destination=55\.70526,21\.12217/.test(N.walkMapsUrl(start, walk.stops)));
+  ok("the walkable centre is Theatre Square where it is, with the terminal inside it", Math.abs(M.WK.WALKABLE_CENTRES.LT[0].lat - 55.7078) < 0.001 && !!M.WK.centreOf("LT", start));
+  const api = readFileSync(join(root, "api/plan-now.js"), "utf8");
+  ok("the route is cached for its half hour and only then", /"public, s-maxage=1800, stale-while-revalidate=120"/.test(api) && /slotAccepted\(String\(q\.slot \|\| ""\), now\)/.test(api));
+  ok("the model only orders, and the rules decide", /scheduleWalk\(order, candidates, ctx\)/.test(api) && /if \(!walk\) walk = scheduleWalk\(ruleOrder\(candidates, ctx\), candidates, ctx\);/.test(api));
+  ok("the planner imports only files a server can load", (readFileSync(join(root, "src/utils/nowPlanner.js"), "utf8").match(/^import .* from "(.*)";$/gm) || []).every(l => /\.js";$/.test(l)));
+  const page = readFileSync(join(root, "src/pages/KlaipedaDemo.jsx"), "utf8");
+  ok("and it sits on the Klaipėda walks page, starting where the QR was", /<NowPlanner country="LT" defaultFrom=/.test(page));
+  const np = readFileSync(join(root, "src/components/NowPlanner.jsx"), "utf8");
+  const nowKeys = [...np.matchAll(/"(now\.[a-zA-Z]+)"/g)].map(m => m[1]);
+  ok("every word on it is in four languages", nowKeys.length >= 15 && nowKeys.every(k => ["en", "da", "de", "lt"].every(l => !!M.UI_STRINGS[k]?.[l])));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
