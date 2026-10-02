@@ -296,6 +296,7 @@ writeFileSync(entry, `
   export { groupByMonth, monthLabel } from ${JSON.stringify(join(root, "src/utils/calendarMonths.js"))};
   export { SCAN_KINDS, scanKindOf, scanPrompt } from ${JSON.stringify(join(root, "src/utils/scanKinds.js"))};
   export * as NP from ${JSON.stringify(join(root, "src/utils/nowPlanner.js"))};
+  export * as TR from ${JSON.stringify(join(root, "src/utils/entryTranslate.js"))};
   export * as OC from ${JSON.stringify(join(root, "src/utils/offerClock.js"))};
   export * as WK from ${JSON.stringify(join(root, "src/utils/walkable.js"))};
   export { livePromotions, promoCard, untilLabel, PROMO_KINDS, zoneOf } from ${JSON.stringify(join(root, "src/utils/promotions.js"))};
@@ -80916,7 +80917,9 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const ctx = { country: "LT", start, startClock: M.OC.placeClock(tue1130, zone), budget: 180, margin: N.SHIP_MARGIN };
   const walk = N.scheduleWalk([{ id: "free:5" }, { id: "food:7" }, { id: "food:3", why: "Lunch — with a free soda" }, { id: "free:1" }, { id: "made:up" }], cands, ctx);
   is("closed today, hours unknown for a kitchen, or made up: none of them is in the walk", walk.stops.map(s => s.id), ["food:3", "free:1"]);
-  ok("the deal is waited for when it starts soon, and shown", walk.stops[0].arrive === 30 && walk.stops[0].deal?.text === "Free soda with a meal");
+  // 2 Oct 2026, "Partners on merit, labelled": nobody waits for a deal, and a
+  // deal that has not started by the time they arrive is not shown.
+  ok("nobody is held back to catch a deal, and one not yet on is not shown", walk.stops[0].arrive === 15 && walk.stops[0].deal === null);
   is("and no dash comes out of the model", walk.stops[0].why, "Lunch, with a free soda");
   ok("back at the ship with the margin kept", walk.back.at <= 180 - N.SHIP_MARGIN && walk.deadline === 150);
   const far = N.scheduleWalk([{ id: "free:4" }], cands, { ...ctx, budget: 360 });
@@ -80991,6 +80994,49 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const appR = readFileSync(join(root, "src/App.jsx"), "utf8");
   ok("a reload keeps the offer and its hours", /offerText: typeof e\.offerText === "string"/.test(store) && /offerDays: Array\.isArray\(e\.offerDays\)/.test(store) && /if \(saved\.offerFrom\) setStudioOfferFrom\(saved\.offerFrom\);/.test(appR) && /offerDays: studioOfferDays,/.test(appR));
   ok("a Lithuanian square ends in a letter \\b cannot see", /\(\?<!\\p\{L\}\)\(park\|parkas/.test(appR) && new RegExp("(?<!\\p{L})(aikštė|gatvė)(?!\\p{L})", "iu").test("Atgimimo aikštė"));
+}
+
+// ── Batch 182: partners on merit, and entries in four languages ──
+// Oliver, 2 Oct 2026: "we need a system built so we can mix these studio
+// generated guides with the businesses who joins us", choosing "Partners on
+// merit, labelled"; and "Sure, you can do that" to translated entries.
+{
+  const N = M.NP, T = M.TR;
+  const base = { country: "LT", zone: "Europe/Vilnius", now: new Date("2026-10-06T10:30:00Z") };
+  const twin = (offer) => N.nowCandidates([
+    { id: 1, type: "food", payload: { name: "Partner", country: "LT", __lat: 55.7101, __lon: 21.1340, __hours: { hours: ["Tuesday: 08:00 – 23:00"] }, ...(offer ? { __offer: { text: "Free soda", until: "2026-12-31" } } : {}) } },
+    { id: 2, type: "food", payload: { name: "Other", country: "LT", __lat: 55.7090, __lon: 21.1320, __hours: { hours: ["Tuesday: 08:00 – 23:00"] } } },
+  ], base);
+  const ctx = { country: "LT", start: N.NOW_STARTS.LT.terminal, startClock: { day: 2, minutes: 13 * 60 + 30 }, budget: 180, margin: 30 };
+  is("a deal does not move a place up the walk", N.ruleOrder(twin(true), ctx).map(o => o.id), N.ruleOrder(twin(false), ctx).map(o => o.id));
+  ok("and the model is never told which places have one", !/DEAL|deal/.test(N.planPrompt(twin(true), { ...ctx, lang: "en" })));
+  const w = N.scheduleWalk([{ id: "food:1" }], twin(true), ctx);
+  ok("a partner that earns its stop shows its deal, marked as a partner", w.stops[0]?.deal?.text === "Free soda" && /uiT\("now\.partner", lang\)/.test(readFileSync(join(root, "src/components/NowPlanner.jsx"), "utf8")) && ["en", "da", "de", "lt"].every(l => !!M.UI_STRINGS["now.partner"]?.[l]));
+  const page = readFileSync(join(root, "src/pages/KlaipedaDemo.jsx"), "utf8");
+  ok("the hand-written walks are off the Klaipėda page", /const SHOW_HAND_WRITTEN_WALKS = false;/.test(page) && /\{SHOW_HAND_WRITTEN_WALKS && <>/.test(page));
+
+  const row = { name: "Danė Square", desc: "A riverside square — busy on summer evenings.", ticketsGlance: "Free entry", priceNote: "Coffee from 3 EUR", website: "https://x.lt", blogBody: [{ type: "heading", content: "Being There" }, { type: "paragraph", content: "Boats moor here from 10:00." }, { type: "bullets", items: ["Bring a jacket", "Benches face the river"] }] };
+  const prose = T.proseOf(row);
+  is("the sentences a reader sees are what gets translated, and nothing else", Object.keys(prose).sort(), ["blogBody.1.content", "blogBody.2.items.0", "blogBody.2.items.1", "desc", "priceNote", "ticketsGlance"]);
+  ok("the prompt names the language in its own words and keeps names and numbers", /into dansk/.test(T.translatePrompt(prose, "da", { name: row.name })) && /Keep every number/.test(T.translatePrompt(prose, "lt")) && !/Danish|Lithuanian|German/.test(T.translatePrompt(prose, "da")));
+  const answer = JSON.stringify({ desc: "Et torv ved floden — travlt om sommeraftenen.", ticketsGlance: "Gratis adgang", priceNote: "Kaffe fra 4 EUR", "blogBody.1.content": "Både lægger til her fra 10:00.", "blogBody.2.items.0": "Tag en jakke med", website: "https://evil" });
+  const got = T.readTranslation(`Here you go: ${answer}`, prose);
+  ok("a translation that changes a price is refused for that field, the rest kept, no dashes", got && !got.priceNote && got.ticketsGlance === "Gratis adgang" && got["blogBody.1.content"] === "Både lægger til her fra 10:00." && !/—/.test(got.desc) && !got.website);
+  const stored = { ...row, __i18n: { fp: T.fingerprint(prose), at: "2026-10-02", da: got } };
+  const seen = M.TR.localizedEntry(stored, "da");
+  ok("a Danish reader sees Danish where there is Danish, and English where there is not", seen.ticketsGlance === "Gratis adgang" && seen.priceNote === "Coffee from 3 EUR" && seen.blogBody[1].content === "Både lægger til her fra 10:00." && seen.blogBody[2].items[1] === "Benches face the river" && seen.name === "Danė Square");
+  ok("and the stored row is never changed by showing it", stored.blogBody[1].content === "Boats moor here from 10:00." && M.TR.localizedEntry(stored, "en") === stored);
+  const edited = { ...stored, ticketsGlance: "Free entry, except during festivals" };
+  ok("an edit to the English makes the translation stale, so English shows until it is redone", M.TR.localizedEntry(edited, "da").ticketsGlance === "Free entry, except during festivals" && T.needsTranslation(edited) && !T.needsTranslation({ ...stored, __i18n: { ...stored.__i18n, de: got, lt: got } }));
+  const dp = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
+  ok("the entry page reads the reader's language", /const item = useMemo\(\(\) => localizedEntry\(itemIn, lang\), \[itemIn, lang\]\);/.test(dp));
+  const appT = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("publishing translates afterwards, on the row's own id", /const newId = isEditing \? editingId : \(await res\.json\(\)\.catch\(\(\) => null\)\)\?\.\[0\]\?\.id;/.test(appT) && /translateInBackground\(newId, shaped\.name\);/.test(appT) && /Prefer: isEditing \? "return=minimal" : "return=representation"/.test(appT));
+  ok("re-reading before writing, so an edit made meanwhile is never overwritten", /if \(!latest \|\| fingerprint\(proseOf\(latest\)\) !== tr\.fp\) return "changed";/.test(appT));
+  ok("the Studio can translate everything on its page that is missing", /onClick=\{translateAllHere\}/.test(appT) && /rowCountry\(r\?\.payload\) === PAGE_COUNTRY && needsTranslation\(r\.payload\)/.test(appT));
+  // The Lithuanian Studio's prompt wrapper turns "Danish" into "Lithuanian".
+  // The prompt names each language in itself, so there is nothing to turn.
+  ok("and the translation prompt survives the Lithuanian Studio's wrapper", ["da", "de", "lt"].every(l => M.localisePrompt(T.translatePrompt(prose, l), "LT").startsWith(T.translatePrompt(prose, l))));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
