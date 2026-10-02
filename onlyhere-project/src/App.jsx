@@ -6835,7 +6835,9 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
           // festival in the Netherlands and a park in Michigan. Nobody sells a
           // ticket to Danė Square. Denmark keeps the hunt as it was, because
           // there a word like "park" also names places that do charge.
-          const OPEN_SPACE = /\b(park|parkas|square|skveras|aikštė|aikste|beach|paplūdimys|papludimys|promenade|krantinė|quay|dune|kopa|street|gatvė)\b/i;
+          // Letter boundaries, not \b: \b is ASCII only, so a word ending in ė
+          // ("Atgimimo aikštė") never matched it.
+          const OPEN_SPACE = /(?<!\p{L})(park|parkas|square|skveras|aikštė|aikste|beach|paplūdimys|papludimys|promenade|krantinė|quay|dune|kopa|street|gatvė)(?!\p{L})/iu;
           const openSpaceAbroad = !draftInDenmark && OPEN_SPACE.test(`${name} ${placesName || ""}`) && !/muziej|museum|zoo|aquarium|delfinarium|dolphin/i.test(`${name} ${placesName || ""}`);
           const needHunt = HUNTS_FOR_A_PRICE.includes(sType) && !pricesAdmission(priced) && !openSpaceAbroad;
           if (needHunt) {
@@ -11083,6 +11085,9 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
     if (saved.photoName) setStudioPhotoName(saved.photoName);
     if (saved.offerText) setStudioOfferText(saved.offerText);
     if (saved.offerUntil) setStudioOfferUntil(saved.offerUntil);
+    if (Array.isArray(saved.offerDays) && saved.offerDays.length) setStudioOfferDays(saved.offerDays);
+    if (saved.offerFrom) setStudioOfferFrom(saved.offerFrom);
+    if (saved.offerTo) setStudioOfferTo(saved.offerTo);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -11113,6 +11118,9 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
         photoName: studioPhotoName,
         offerText: studioOfferText,
         offerUntil: studioOfferUntil,
+        offerDays: studioOfferDays,
+        offerFrom: studioOfferFrom,
+        offerTo: studioOfferTo,
       } : null;
       const { store } = packStore({ queue: draftQueue, results: queueResults, editor }, Date.now());
       let storage = null;
@@ -11125,7 +11133,7 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
     return () => clearTimeout(t);
   }, [studioSession, draftQueue, queueResults, editingId, studioDraft, studioDraftText,
       studioType, studioTown, studioResult, studioFrozenGeo, studioIdentityWarning,
-      studioInventedWarning, studioPhotoName, studioOfferText, studioOfferUntil]);
+      studioInventedWarning, studioPhotoName, studioOfferText, studioOfferUntil, studioOfferDays, studioOfferFrom, studioOfferTo]);
 
   // Dropping the finished list is a deliberate act, so it needs a button. It is
   // also the only advice problemNote can give when storage is full.
