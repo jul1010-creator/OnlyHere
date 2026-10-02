@@ -86,12 +86,19 @@ export default async function handler(req, res) {
     return json(res, 403, { error: NOT_FROM_SITE });
   }
 
+  // ONE SPELLING PER WALK. The cache is keyed on the whole URL, so "h=3.0",
+  // "c=lt", an extra "&x=1" or "from=toString" would each be a fresh, paid
+  // model call. Only the exact canonical query is answered. Found in review,
+  // 2 Oct 2026.
   const q = req.query || {};
-  const country = String(q.c || "").toUpperCase();
-  const start = NOW_STARTS[country]?.[String(q.from || "")];
-  const hours = Number(q.h);
+  const keys = Object.keys(q).sort().join(",");
+  const country = String(q.c || "");
+  const starts = Object.prototype.hasOwnProperty.call(NOW_STARTS, country) ? NOW_STARTS[country] : null;
+  const start = starts && Object.prototype.hasOwnProperty.call(starts, String(q.from || "")) ? starts[String(q.from)] : null;
+  const hours = /^[0-9]$/.test(String(q.h || "")) ? Number(q.h) : NaN;
   const lang = NOW_LANGS.includes(String(q.lang)) ? String(q.lang) : "";
   const now = new Date();
+  if (keys !== "c,from,h,lang,slot") return json(res, 400, { error: "Unexpected query." });
   if (!start || !NOW_HOURS.includes(hours) || !lang) return json(res, 400, { error: "Unknown start, length or language." });
   if (!slotAccepted(String(q.slot || ""), now)) return json(res, 409, { error: "Stale half hour.", slot: slotOf(now) });
 
