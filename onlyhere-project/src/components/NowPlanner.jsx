@@ -11,7 +11,7 @@ import { C } from "../utils/theme";
 import { t as uiT, resolveUiLanguage, UI_LANGUAGE_KEY } from "../utils/uiLanguage";
 import { countryProfile } from "../utils/countries";
 import { placeClock } from "../utils/offerClock";
-import { NOW_HOURS, NOW_STARTS, slotOf, walkMapsUrl, rideApp, MUST_SEE, STAY_STEP, replanWalk, canStayLonger } from "../utils/nowPlanner";
+import { NOW_HOURS, NOW_STARTS, OLD_TOWN, STROLL, STORM_WIND, slotOf, walkMapsUrl, rideApp, MUST_SEE, STAY_STEP, replanWalk, canStayLonger } from "../utils/nowPlanner";
 import { entryWord } from "../utils/entryWords";
 
 const fill = (s, vars) => Object.entries(vars).reduce((out, [k, v]) => out.split(`{${k}}`).join(String(v)), s);
@@ -35,7 +35,8 @@ export const WalkView = ({ walk, madeAt, lang, country = "LT", tag = null, onOpe
   const small = { background: "transparent", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, width: 26, height: 26, fontSize: 14, fontWeight: 700, lineHeight: 1, cursor: "pointer", fontFamily: "'Inter', sans-serif", display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 };
   return (
     <div data-testid="now-walk" style={{ marginTop: 16 }}>
-      {walk.weather?.wet && <div style={{ fontSize: 12, color: C.muted, marginBottom: 10 }}>{uiT("now.wet", lang)}</div>}
+      {(walk.weather?.snow || walk.weather?.wet) && <div data-testid="now-weather" style={{ fontSize: 12, color: C.muted, marginBottom: 6 }}>{uiT(walk.weather?.snow ? "now.snow" : "now.wet", lang)}</div>}
+      {Number(walk.weather?.wind) >= STORM_WIND && <div data-testid="now-wind" style={{ fontSize: 12, color: C.muted, marginBottom: 6 }}>{uiT("now.windy", lang)}</div>}
       {walk.stops.length === 0 ? (
         <div style={{ fontSize: 13, color: C.muted }}>{uiT("now.empty", lang)}</div>
       ) : (
@@ -120,7 +121,7 @@ export const WalkView = ({ walk, madeAt, lang, country = "LT", tag = null, onOpe
 export const EditableWalk = ({ walk, madeAt, lang, country = "LT", tag = null, onOpen = null }) => {
   const [edits, setEdits] = useState({ stays: {}, removed: [] });
   useEffect(() => { setEdits({ stays: {}, removed: [] }); }, [walk]);
-  const ctx = useMemo(() => ({ country, start: walk.start, startClock: walk.clock, budget: walk.budget, margin: walk.margin || 0 }), [walk, country]);
+  const ctx = useMemo(() => ({ country, start: walk.start, startClock: walk.clock, budget: walk.budget, margin: walk.margin || 0, weather: walk.weather || null, style: walk.style || "" }), [walk, country]);
   const usable = !!(walk?.clock && walk?.budget && Array.isArray(walk?.places) && walk.places.length);
   const changed = Object.keys(edits.stays).length > 0 || edits.removed.length > 0;
   const shown = useMemo(() => (usable && changed ? { ...walk, ...replanWalk(walk, edits, ctx) } : walk), [walk, edits, ctx, usable, changed]);
@@ -154,6 +155,8 @@ export const NowPlanner = ({ country = "LT", lang: langProp = "", defaultFrom = 
   const firstFrom = starts[defaultFrom] ? defaultFrom : Object.keys(starts)[0];
   const [from, setFrom] = useState(firstFrom);
   const [hours, setHours] = useState(3);
+  // The Old Town walk, where the country has an Old Town drawn.
+  const [stroll, setStroll] = useState(false);
   const [state, setState] = useState({ busy: false, walk: null, error: "", madeAt: 0 });
   // Which choice the newest request was for. An answer for an older choice,
   // arriving after the reader tapped another button, is dropped.
@@ -162,16 +165,16 @@ export const NowPlanner = ({ country = "LT", lang: langProp = "", defaultFrom = 
 
   // A new choice clears the old walk, so a 2 hour walk is never shown under
   // a 4 hour button.
-  useEffect(() => { asked.current = ""; setState({ busy: false, walk: null, error: "", madeAt: 0 }); }, [from, hours]);
+  useEffect(() => { asked.current = ""; setState({ busy: false, walk: null, error: "", madeAt: 0 }); }, [from, hours, stroll]);
 
   if (!firstFrom) return null;
   const zone = countryProfile(country).zone;
 
   const make = async () => {
-    const mine = `${from}|${hours}`;
+    const mine = `${from}|${hours}|${stroll}`;
     asked.current = mine;
     setState({ busy: true, walk: null, error: "", madeAt: 0 });
-    const ask = (slot) => fetch(`/api/plan-now?c=${country}&from=${from}&h=${hours}&lang=${lang}&slot=${encodeURIComponent(slot)}`);
+    const ask = (slot) => fetch(`/api/plan-now?c=${country}&from=${from}&h=${hours}&lang=${lang}&slot=${encodeURIComponent(slot)}${stroll ? `&style=${STROLL}` : ""}`);
     try {
       let r = await ask(slotOf(new Date()));
       if (r.status === 409) { const j = await r.json().catch(() => ({})); if (j.slot) r = await ask(j.slot); }
@@ -214,6 +217,14 @@ export const NowPlanner = ({ country = "LT", lang: langProp = "", defaultFrom = 
           </button>
         ))}
       </div>
+
+      {OLD_TOWN[country] && (
+        <div style={{ marginBottom: 14 }}>
+          <button onClick={() => setStroll(v => !v)} aria-pressed={stroll} style={pill(stroll)} data-testid="now-old-town">
+            {uiT("now.oldTown", lang)}
+          </button>
+        </div>
+      )}
 
       <button onClick={make} disabled={state.busy} data-testid="now-make"
         style={{ width: "100%", background: C.gold, color: C.onGold, border: "none", borderRadius: 12, padding: "13px", fontSize: 14, fontWeight: 700, cursor: state.busy ? "default" : "pointer", fontFamily: "'Inter', sans-serif", opacity: state.busy ? 0.7 : 1 }}>
