@@ -81,8 +81,10 @@ import { SupportPage } from "./components/SupportPage";
 // to it too and App.jsx imports AboutMePage.
 import { AffiliatesPage } from "./components/AffiliatesPage";
 import { KlaipedaDemo } from "./pages/KlaipedaDemo";
+import { KlaipedaExamples } from "./pages/KlaipedaExamples";
 import { COUNTRY_PROFILES, DEFAULT_COUNTRY, countryProfile, setWorkingCountry, countryParam, rowCountry, activeCountry, homePath } from "./utils/countries";
 import { KLAIPEDA_DEMO_PATH } from "./data/klaipedaDemo";
+import { KLAIPEDA_EXAMPLES_PATH } from "./data/klaipedaExamples";
 import { translateEntry, needsTranslation, fingerprint, proseOf } from "./utils/entryTranslate";
 import { TripLibraryPage } from "./components/TripLibraryPage";
 import { askForGuidePass, markGuideBuilt, todayRecord, usedTodayReason, copenhagenDay, cancelGuidePass } from "./utils/guideAllowance";
@@ -35382,6 +35384,11 @@ export default function Gemlyx() {
           would add to their site before the app is made to work outside
           Denmark. See data/klaipedaDemo.js. */}
       <Route path={KLAIPEDA_DEMO_PATH} element={<KlaipedaDemo />} />
+      {/* ── KLAIPĖDA, EXAMPLES TO SHOW THE TOURISM CENTRE ───────
+          Oliver, 2 Oct 2026: "Guides and Offers alike. Make up anything."
+          Real places, made-up partners, the live walk rules. Linked from
+          nowhere and noindex. See data/klaipedaExamples.js. */}
+      <Route path={KLAIPEDA_EXAMPLES_PATH} element={<KlaipedaExamples />} />
       {/* ── TRIPS OTHER PEOPLE KEPT ────────────────────────────
           One component for both, because the list and a trip from it are the
           same page at two depths, and the trip renders through GuidePage the
