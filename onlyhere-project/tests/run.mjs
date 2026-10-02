@@ -152,7 +152,7 @@ writeFileSync(entry, `
   export { WEATHER_CITIES as MAP_WEATHER_CITIES, COUNTRY_MAPS, LT_SHAPES, ltProject } from ${JSON.stringify(join(root, "src/data/mapShapes.js"))};
   export { tripcomStayUrl, tripcomCity } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
   export { studioPrompts } from ${JSON.stringify(join(root, "src/utils/studioPrompts.js"))};
-  export { looksLikeTransit, kindFromName, findRealNearestStop, hasTransitType, geocodePostcode, geocodeIsASettlement, LONG_WALK_MINUTES } from ${JSON.stringify(join(root, "src/utils/geo.js"))};
+  export { looksLikeTransit, kindFromName, findRealNearestStop, hasTransitType, geocodePostcode, geocodeIsASettlement, LONG_WALK_MINUTES, busStopByName } from ${JSON.stringify(join(root, "src/utils/geo.js"))};
   export { licenseIsUsable, distinctiveToken, mentionsSubject, looksHistorical, pickDescription, bestCaption } from ${JSON.stringify(join(root, "api/commons-photo.js"))};
   export { photoRequestMail, needsOwnLine, gmailComposeUrl, mailtoUrl, pressSearchUrl, OWN_LINE, SENDER, entryAddress } from ${JSON.stringify(join(root, "src/utils/photoRequestMail.js"))};
   export { emailsIn, cleanEmail, contactPagesIn, rankEmails, findContactEmails } from ${JSON.stringify(join(root, "src/utils/contactEmail.js"))};
@@ -400,7 +400,7 @@ writeFileSync(entry, `
   export { COUNTRY_PROFILES, DEFAULT_COUNTRY, countryProfile, rowCountry, countryFromPath, activeCountry, isInCountry, setWorkingCountry, workingCountry, workingProfile, countryParam, homePath, countryKey } from ${JSON.stringify(join(root, "src/utils/countries.js"))};
   export { shapeForLive, madeHeading, isPublisherNote, PUBLISHER_NOTE, cleanCredit } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
   export { longestEcho, echoWords, isNameEcho, echoInDraft, describeEcho, ECHO_RUN } from ${JSON.stringify(join(root, "src/utils/echoCheck.js"))};
-  export { CHOICE_LIMIT, cleanCandidates, sameSubject, sameCandidate, needsChoosing, choicesFor, describeChoosing, applyChoice, choiceNote, subjectCore, listingMatchesSubject, streetListingMatches, describeListingRefusal } from ${JSON.stringify(join(root, "src/utils/placeChoice.js"))};
+  export { CHOICE_LIMIT, cleanCandidates, sameSubject, sameCandidate, needsChoosing, choicesFor, describeChoosing, applyChoice, choiceNote, subjectCore, listingMatchesSubject, streetListingMatches, describeListingRefusal, sameAcrossLanguages } from ${JSON.stringify(join(root, "src/utils/placeChoice.js"))};
   export { headingSkeleton, skeletonKey, openingKey, spreadBy, skeletonSpread, openingSpread, describeSameness, samenessReport } from ${JSON.stringify(join(root, "src/utils/sameness.js"))};
   export { moneyTraceable, COMPRESSION_GLANCE, glanceShapeProblem, EXTRACTABLE_GLANCE, EDITORIAL_GLANCE, NEVER_EXTRACT, CLOSED_OR_DERIVED, glanceFieldsFor, numbersTraceable, freeClaimTraceable, saysFreeOnly, statesAnAmount, GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, describeGlance, staleUncertainties, describeStale } from ${JSON.stringify(join(root, "src/utils/glanceExtract.js"))};
   export { DANISH_MARKERS, danishWordsIn, looksUntranslated, looksDanishPage, hasEnglishVersion, languageBarrier } from ${JSON.stringify(join(root, "src/utils/languageBarrier.js"))};
@@ -2883,7 +2883,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     // subject, and what is taken from it is the strongest material in the
     // pipeline. For a street that is whichever business Google ranks first.
     ok("a listing is checked against the subject before anything is taken from it",
-       /if \(!listingMatchesSubject\(name, draftTown, hoursData\.name, \{ theNameIsAStreet: NAME_IS_A_STREET\.includes\(sType\) \}\)\) \{/.test(appSrc3));
+       /if \(!confirmedVenue && !listingMatchesSubject\(name, draftTown, hoursData\.name, \{ theNameIsAStreet: NAME_IS_A_STREET\.includes\(sType\) \}\)\) \{/.test(appSrc3));
     ok("and the refusal says which listing it was, not just that there was none",
        /why: describeListingRefusal\(name, draftTown, hoursData\.name\)/.test(appSrc3));
     // Anchored on the CALL rather than on the string: `if (false) decide(...)`
@@ -2899,7 +2899,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     // comment's first line in the file is an inline one on the placesWebsite
     // declaration a hundred lines earlier, so an unanchored indexOf returns a
     // backwards range and an empty region, which asserts nothing at all.
-    const refusalAt3 = appSrc3.indexOf("if (!listingMatchesSubject");
+    const refusalAt3 = appSrc3.indexOf("if (!confirmedVenue && !listingMatchesSubject");
     const refusal3 = appSrc3.slice(refusalAt3, appSrc3.indexOf("// Google's registered URL for this business", refusalAt3));
     ok("the refusal region is a real region", refusal3.length > 200);
     ok("and the refusal stops the block rather than falling through into the material",
@@ -80934,12 +80934,36 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const api = readFileSync(join(root, "api/plan-now.js"), "utf8");
   ok("the route is cached for its half hour and only then", /"public, s-maxage=1800, stale-while-revalidate=120"/.test(api) && /slotAccepted\(String\(q\.slot \|\| ""\), now\)/.test(api));
   ok("the model only orders, and the rules decide", /scheduleWalk\(order, candidates, ctx\)/.test(api) && /if \(!walk\) walk = scheduleWalk\(ruleOrder\(candidates, ctx\), candidates, ctx\);/.test(api));
+  // The first deploy failed to start: config.js reads import.meta, and Vercel
+  // loads a route as CommonJS. No route may import it.
+  ok("no route imports the browser's config", readdirSync(join(root, "api")).filter(f => f.endsWith(".js")).every(f => !/from "\.\.\/src\/config\.js"/.test(readFileSync(join(root, "api", f), "utf8"))));
+  ok("and nothing the planner loads reads import.meta", ["nowPlanner", "walkable", "rideHail", "countries", "calendarDay", "offerClock"].every(f => !/import\.meta/.test(readFileSync(join(root, `src/utils/${f}.js`), "utf8"))));
   ok("the planner imports only files a server can load", (readFileSync(join(root, "src/utils/nowPlanner.js"), "utf8").match(/^import .* from "(.*)";$/gm) || []).every(l => /\.js";$/.test(l)));
   const page = readFileSync(join(root, "src/pages/KlaipedaDemo.jsx"), "utf8");
   ok("and it sits on the Klaipėda walks page, starting where the QR was", /<NowPlanner country="LT" defaultFrom=/.test(page));
   const np = readFileSync(join(root, "src/components/NowPlanner.jsx"), "utf8");
   const nowKeys = [...np.matchAll(/"(now\.[a-zA-Z]+)"/g)].map(m => m[1]);
   ok("every word on it is in four languages", nowKeys.length >= 15 && nowKeys.every(k => ["en", "da", "de", "lt"].every(l => !!M.UI_STRINGS[k]?.[l])));
+}
+
+// ── Batch 180: what four Klaipėda drafts showed ──
+// Oliver, 2 Oct 2026, pasting the traces of Sąjūdis Park, Malūnas Park, Danė
+// Square and Melnragė Park, and going to bed: "Look into these traces".
+{
+  const appSrc = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const same = [["Sąjūdis Park", "Sąjūdžio parkas"], ["Malūnas Park by the Pond", "Malūno parkas"], ["Danė Square", "Danės skveras"], ["Melnragė Park", "Melnragės parkas"], ["Theatre Square", "Teatro aikštė"], ["Museum of Clocks", "Laikrodžių muziejus"], ["Klaipėda Castle", "Klaipėdos pilis"]];
+  ok("Google's Lithuanian name for the place is the place", same.every(([a, b]) => M.sameAcrossLanguages(a, b) && M.listingMatchesSubject(a, "", b)));
+  const differ = [["Danė Square", "Danės gatvė"], ["Theatre Square", "Teatro gatvė"], ["Klaipėda Castle", "Klaipėdos parkas"], ["Sculpture Park", "Melnragės parkas"], ["Ribe Park", "Ribers parkas"]];
+  ok("and a different place, or a Danish one, is still refused", differ.every(([a, b]) => !M.sameAcrossLanguages(a, b)) && !M.sameAcrossLanguages("Kongens Have", "Kongens Nytorv"));
+  ok("a listing the research confirmed keeps its opening hours", /venueByResearch = refusedListing\.name;/.test(appSrc) && /const confirmedVenue = !!venueByResearch && !NAME_IS_A_STREET\.includes\(sType\) && fold\(String\(hoursData\.name \|\| ""\)\.trim\(\)\) === fold\(venueByResearch\);/.test(appSrc));
+  ok("abroad, a query that does not say where gets the town and the country", /const scopeQuery = \(q\) => \(draftInDenmark \|\| saysWhere\(q\) \? q : `\$\{q\} \$\{whereWords\.join\(" "\)\}`\);/.test(appSrc) && /cfg\.queries\.map\(scopeQuery\)/.test(appSrc));
+  ok("and the place's own Lithuanian name gets a search of its own", /\.\.\.\(placesName && fold\(placesName\) !== fold\(name\) \? \[`\$\{placesName\} \$\{draftTown \|\| draftLand\.name\}`\] : \[\]\)/.test(appSrc));
+  ok("nobody hunts for a ticket to a park or a square abroad", /const needHunt = HUNTS_FOR_A_PRICE\.includes\(sType\) && !pricesAdmission\(priced\) && !openSpaceAbroad;/.test(appSrc) && /const openSpaceAbroad = !draftInDenmark && OPEN_SPACE\.test/.test(appSrc));
+  ok("a Klaipėda city bus stop is a bus stop, whatever Google files it as", M.busStopByName("Volungėlės st.") && M.busStopByName("Molo st.") && !M.busStopByName("Klaipeda Central Train Station"));
+  ok("the At a Glance read thinks little and answers in one go", /askOpenAI\(GLANCE_EXTRACT_PROMPT\(name, sType, glanceFields, rawResearch\), 4000, \{ effort: "low" \}\)/.test(appSrc));
+  const aic = readFileSync(join(root, "src/utils/aiClient.js"), "utf8");
+  ok("and a model that refuses the setting is asked again without it", /\.\.\.\(effort \? \{ reasoning_effort: effort \} : \{\}\)/.test(aic) && /out = await openAIOnce\(prompt, maxTokens, ""\)/.test(aic));
+  ok("the log no longer says Denmark about Lithuania", !/which corner of Denmark this is",/.test(appSrc) && /which corner of \$\{draftLand\.name\} this is/.test(appSrc));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
