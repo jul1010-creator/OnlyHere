@@ -1063,7 +1063,7 @@ export const pickTicketUrl = (results, { name, town, where = "", year = null } =
 export const describeTicketSearch = (results, { name, town, year = null } = {}) => {
   const list = (Array.isArray(results) ? results : []).filter(r => r?.url);
   const onAnAgent = list.filter(r => isTiqetsUrl(r.url) || isTicketmasterUrl(r.url));
-  if (!onAnAgent.length) return `No ticket page found for ${name || "this"} on Tiqets or Ticketmaster. Plenty of Danish events sell through their own site or a local agent, and no ticket link is the right answer for those.`;
+  if (!onAnAgent.length) return `No ticket page found for ${name || "this"} on Tiqets or Ticketmaster. Plenty of places sell through their own site or a local agent, and many charge nothing, and no ticket link is the right answer for those.`;
   const bookable = onAnAgent.filter(r => isBookableTicketUrl(r.url));
   if (!bookable.length) return `There are pages mentioning ${name || "this"}, but only listings and category pages, which sell nothing. Left empty rather than sending a reader back to a search.`;
   // ── ABROAD IS ITS OWN ANSWER, NOT "NONE MATCHED" ─────────────────
