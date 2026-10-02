@@ -86,16 +86,6 @@ export const WalkView = ({ walk, madeAt, lang, country = "LT", tag = null, onOpe
               ? <a href={app.url} target="_blank" rel="noopener noreferrer" style={{ color: C.gold, textDecoration: "none", fontWeight: 700 }}>{fill(uiT("now.ride", lang), { app: app.name, n: walk.back.leg })} ↗</a>
               : fill(uiT("now.walk", lang), { n: walk.back.leg })}
           </div>
-          {edit && edit.removed.length > 0 && (
-            <div data-testid="now-taken-out" style={{ fontSize: 12, color: C.muted, padding: "8px 0 2px", display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-              <span>{uiT("now.takenOut", lang)}:</span>
-              {edit.removed.map(r => (
-                <button key={r.id} onClick={() => edit.putBack(r.id)} style={{ background: "transparent", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "3px 10px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                  {r.name} · {uiT("now.putBack", lang)}
-                </button>
-              ))}
-            </div>
-          )}
           <div data-testid="now-back" style={{ fontSize: 13, fontWeight: 700, color: C.text, padding: "8px 0 4px" }}>
             {walk.start.ship
               ? fill(uiT("now.backShip", lang), { time: clock(madeAt + walk.back.at, lang), n: Math.max(walk.margin, walk.deadline + walk.margin - walk.back.at) })
@@ -106,6 +96,18 @@ export const WalkView = ({ walk, madeAt, lang, country = "LT", tag = null, onOpe
             {uiT("now.route", lang)} ↗
           </a>
         </>
+      )}
+      {/* Outside the walk, so taking out every stop still leaves the way to
+          put them back. Found in review, 2 Oct 2026. */}
+      {edit && edit.removed.length > 0 && (
+        <div data-testid="now-taken-out" style={{ fontSize: 12, color: C.muted, padding: "8px 0 2px", display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+          <span>{uiT("now.takenOut", lang)}:</span>
+          {edit.removed.map(r => (
+            <button key={r.id} onClick={() => edit.putBack(r.id)} style={{ background: "transparent", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "3px 10px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+              {r.name} · {uiT("now.putBack", lang)}
+            </button>
+          ))}
+        </div>
       )}
     </div>
   );
