@@ -194,7 +194,10 @@ export const nowCandidates = (rows, { country = "LT", zone = "", now = new Date(
       lat: at.lat, lon: at.lon,
       tier: p.tier || "",
       indoor: kind === "Food" || kind === "Workshop" || (INDOOR.test(text) && !OUTDOOR.test(p.name)),
-      exposed: EXPOSED.test(`${p.name} ${p.desc || p.description || ""}`),
+      // The name and the first sentence only. A square described further down
+      // as "a few minutes from the harbour" is not on the harbour, and a storm
+      // should not take it out. Found in review, 2 Oct 2026.
+      exposed: EXPOSED.test(`${p.name} ${String(p.desc || p.description || "").split(/[.!?]\s/)[0]}`),
       hours: Array.isArray(p.__hours?.hours) ? p.__hours.hours : null,
       offer: offerOf(p.__offer, today),
       about: words(p.desc || p.description || p.popularityTag || "", 160),
@@ -364,6 +367,7 @@ RULES
 - Opening hours and walking times are checked after you, so a place you pick that does not fit is dropped. Do not pad the list.
 - ${(WALK_RULES[country] || "").replace(/\n/g, " ")}
 - A place marked Can't Miss Out belongs in the walk whenever it is open and the time allows.
+- Write each sentence about the place itself, never about where it falls in the walk ("first", "to finish", "on the way back"): half the visitors walk it the other way round.
 - For each place, one short sentence on why it is in the walk, in ${LANG_NAMES[lang] || "English"}, in plain words, with no dashes of any kind and no exclamation marks. Name nothing that is not in its own line above.
 
 Answer with JSON only, in this shape:
@@ -476,7 +480,11 @@ export const canStayLonger = (walk, edits, id, ctx) => {
   const s = now.stops.find(x => x.id === id);
   if (!s || s.stay + STAY_STEP > 120) return false;
   const next = replanWalk(walk, { ...edits, stays: { ...(edits?.stays || {}), [id]: s.stay + STAY_STEP } }, ctx);
-  return next.stops.length === now.stops.length;
+  // And only when the stay grows at all: in rain, or on the Old Town walk, an
+  // outdoor stop is held at its cap, and a + that does nothing is a broken
+  // button. Found in review, 2 Oct 2026.
+  const grown = next.stops.find(x => x.id === id);
+  return next.stops.length === now.stops.length && !!grown && grown.stay > s.stay;
 };
 
 // What the reader's phone needs to run those again: each kept place as the
