@@ -148,7 +148,7 @@ export const EXAMPLE_WALKS = [
       { id: "booking:amber", stay: 25, why: "Twenty minutes with a piece of Baltic amber, and you take it home." },
       { id: "free:theatre", stay: 15, why: "Ännchen of Tharau in the middle. Scan the sign and she tells her story." },
       { id: "food:fish", stay: 40, why: "Fish smoked that morning, on Fishermen's Street." },
-      { id: "free:meridianas", stay: 15, why: "The town's ship, a last look from the bridge on the way back." },
+      { id: "free:meridianas", stay: 15, why: "The town's ship, best seen from the bridge." },
     ],
   },
   {
@@ -164,9 +164,9 @@ export const EXAMPLE_WALKS = [
       { id: "free:history", stay: 45, why: "The story of Lithuania Minor, from when Klaipėda was Memel." },
       { id: "free:post", stay: 20, why: "Write home from a dry table." },
       { id: "free:clock", stay: 60, why: "Clocks from the Renaissance on, and the best room in town for a wet afternoon." },
-      { id: "free:meridianas", stay: 15, why: "The town's ship, on the way back down to the river." },
+      { id: "free:meridianas", stay: 15, why: "The town's ship, moored on the Danė." },
       { id: "booking:amber", stay: 25, why: "Twenty minutes with a piece of Baltic amber, and you take it home." },
-      { id: "food:fish", stay: 50, why: "A late lunch, a short walk from the ship." },
+      { id: "food:fish", stay: 50, why: "Smoked fish at a long table, a short walk from the ship." },
     ],
   },
   {
@@ -175,10 +175,10 @@ export const EXAMPLE_WALKS = [
     moment: "Thursday 14:00, dry",
     at: "2026-10-15T14:00", from: "centre", hours: 2, wet: false,
     order: [
-      { id: "food:bakery", stay: 20, why: "Coffee first, a few doors up the street." },
+      { id: "food:bakery", stay: 20, why: "Coffee a few doors up the street from the centre." },
       { id: "free:theatre", stay: 15, why: "Ännchen of Tharau in the middle. Scan the sign and she tells her story." },
       { id: "free:castle", stay: 40, why: "The model of the old town in here makes the streets outside easier to read." },
-      { id: "free:meridianas", stay: 15, why: "The town's ship, on the way back up to the centre." },
+      { id: "free:meridianas", stay: 15, why: "The town's ship, best seen from the bridge." },
     ],
   },
   {
@@ -204,8 +204,8 @@ export const EXAMPLE_WALKS = [
       { id: "free:theatre", stay: 15, why: "Ännchen of Tharau in the middle of the square." },
       { id: "free:post", stay: 15, why: "Write one home and they post it." },
       { id: "booking:amber", stay: 20, why: "Look in at the bench where the amber is polished." },
-      { id: "free:friedrich", stay: 15, why: "The lane of cafés off Tiltų street, for later." },
-      { id: "free:meridianas", stay: 15, why: "The town's ship on the Danė, to finish." },
+      { id: "free:friedrich", stay: 15, why: "The lane of cafés off Tiltų street." },
+      { id: "free:meridianas", stay: 15, why: "The town's ship on the Danė." },
     ],
   },
 ];
@@ -222,11 +222,11 @@ export const WEATHER_WALKS = [
     order: EXAMPLE_WALKS[0].order },
   { ...TUESDAY, id: "rain", label: "Rain", title: "Rain all morning", moment: "Tuesday 10:30, rain, 9 °C", weather: { wet: true, snow: false, wind: 6 },
     order: [
-      { id: "free:castle", stay: 40, why: "Indoors first, while it is at its heaviest." },
+      { id: "free:castle", stay: 40, why: "Indoors and dry, with the town model to read." },
       { id: "free:history", stay: 45, why: "Next door and dry: the story of Memel and Lithuania Minor." },
       { id: "booking:amber", stay: 25, why: "Twenty minutes at a warm bench with a piece of amber." },
       { id: "free:theatre", stay: 15, why: "Ännchen of Tharau, quickly, under an umbrella." },
-      { id: "food:fish", stay: 45, why: "Lunch somewhere warm, on the way back to the ship." },
+      { id: "food:fish", stay: 45, why: "Lunch somewhere warm, close to the ship." },
     ] },
   { ...TUESDAY, id: "snow", label: "Snow", title: "Snow on the ground", moment: "Tuesday 10:30, snow, minus 3 °C", weather: { wet: true, snow: true, wind: 5 },
     order: [
@@ -639,7 +639,8 @@ export const EXAMPLE_PAGES = {
     },
   }),
 
-  // English only from here on, as a live row is until it has been translated.
+  // These five read in four languages too, so every window follows the
+// language buttons. Only the made-up partners below stay in English.
   "free:history": page({
     kind: "free",
     row: { id: "x-history", name: "History Museum of Lithuania Minor", city: "Klaipėda", type: "Museum", emoji: "🏛️", __lat: 55.70734, __lon: 21.13471, mapHint: "Didžioji Vandens g. 2, Klaipėda", website: "https://www.mlimuziejus.lt/en/information-for-visitors/", __sources: ["https://www.mlimuziejus.lt/en/ticket-prices/", "https://www.mlimuziejus.lt/en/information-for-visitors/"] },
@@ -649,6 +650,44 @@ export const EXAMPLE_PAGES = {
       extraCosts: "Combined ticket with the Castle Museum and the Blacksmith's Museum, €9 for adults",
       body: [["h", "Being There"], ["p", "Same hours as the Castle Museum: from mid September to mid June, Monday to Friday 10:00 to 18:00, closed at weekends. Last tickets at 17:30."]],
     },
+    tr: {
+      "lt": {
+        "desc": "Mažosios Lietuvos, lietuviškos senosios Prūsijos dalies, istorija. Klaipėda, tada vadinta Memeliu, priklausė jai.",
+        "ticketsGlance": "Suaugusiesiems 4 €, studentams, moksleiviams ir senjorams 2 €",
+        "extraCosts": "Bendras bilietas su Pilies muziejumi ir Kalvystės muziejumi suaugusiesiems 9 €",
+        "body": [
+          null,
+          [
+            "p",
+            "Darbo laikas toks pat kaip Pilies muziejaus: nuo rugsėjo vidurio iki birželio vidurio darbo dienomis nuo 10:00 iki 18:00, savaitgaliais uždaryta. Paskutiniai bilietai parduodami 17:30."
+          ]
+        ]
+      },
+      "de": {
+        "desc": "Die Geschichte Kleinlitauens, des litauischen Teils des alten Preußens, zu dem Klaipėda, damals Memel, gehörte.",
+        "ticketsGlance": "Erwachsene 4 €, Studierende, Schüler und Senioren 2 €",
+        "extraCosts": "Kombiticket mit dem Burgmuseum und dem Schmiedemuseum, 9 € für Erwachsene",
+        "body": [
+          null,
+          [
+            "p",
+            "Gleiche Zeiten wie das Burgmuseum: von Mitte September bis Mitte Juni montags bis freitags von 10:00 bis 18:00, am Wochenende geschlossen. Die letzten Tickets gibt es um 17:30."
+          ]
+        ]
+      },
+      "da": {
+        "desc": "Historien om Lille Litauen, den litauiske del af det gamle Preussen, som Klaipėda, dengang Memel, hørte til.",
+        "ticketsGlance": "Voksne 4 €, studerende, elever og pensionister 2 €",
+        "extraCosts": "Samlet billet med borgmuseet og smedemuseet, 9 € for voksne",
+        "body": [
+          null,
+          [
+            "p",
+            "Samme åbningstider som borgmuseet: fra midten af september til midten af juni mandag til fredag fra 10:00 til 18:00, lukket i weekenden. Sidste billetter sælges 17:30."
+          ]
+        ]
+      }
+    },
   }),
   "free:ghost": page({
     kind: "free",
@@ -657,6 +696,50 @@ export const EXAMPLE_PAGES = {
       desc: "A dark figure rising out of the water of the old castle harbour. The legend says he appeared to a castle guard in the 16th century with a warning about grain and firewood.",
       ticketsGlance: "Free",
       body: [["h", "Things to Know"], ["b", ["One of the talking sculptures: scan the QR code beside it and it tells the legend.", "Five minutes on foot from the cruise terminal."]]],
+    },
+    tr: {
+      "lt": {
+        "desc": "Tamsi figūra, kylanti iš senojo pilies uosto vandens. Legenda pasakoja, kad 16-ajame amžiuje jis pasirodė pilies sargybiniui ir įspėjo dėl grūdų ir malkų.",
+        "ticketsGlance": "Nemokamai",
+        "body": [
+          null,
+          [
+            "b",
+            [
+              "Viena iš kalbančių skulptūrų: nuskenuokite šalia esantį QR kodą ir išgirsite legendą.",
+              "Penkios minutės pėsčiomis nuo kruizinių laivų terminalo."
+            ]
+          ]
+        ]
+      },
+      "de": {
+        "desc": "Eine dunkle Gestalt, die aus dem Wasser des alten Burghafens aufsteigt. Der Legende nach erschien er im 16. Jahrhundert einem Burgwächter mit einer Warnung zu Getreide und Brennholz.",
+        "ticketsGlance": "Kostenlos",
+        "body": [
+          null,
+          [
+            "b",
+            [
+              "Eine der sprechenden Skulpturen: Scanne den QR-Code daneben, und sie erzählt die Legende.",
+              "Fünf Minuten zu Fuß vom Kreuzfahrtterminal."
+            ]
+          ]
+        ]
+      },
+      "da": {
+        "desc": "En mørk skikkelse, der rejser sig op af vandet i den gamle borghavn. Ifølge sagnet viste han sig for en borgvagt i det 16. århundrede med en advarsel om korn og brænde.",
+        "ticketsGlance": "Gratis",
+        "body": [
+          null,
+          [
+            "b",
+            [
+              "En af de talende skulpturer: scan QR-koden ved siden af, så fortæller den sagnet.",
+              "Fem minutters gang fra krydstogtterminalen."
+            ]
+          ]
+        ]
+      }
     },
   }),
   "free:theatre": page({
@@ -672,6 +755,62 @@ export const EXAMPLE_PAGES = {
         ["b", ["She is one of the talking sculptures: scan the QR code on the sign next to her and she tells her story."]],
       ],
     },
+    tr: {
+      "lt": {
+        "desc": "Aikštė priešais teatrą, jos viduryje stovi Taravos Anikė, mergina iš Simono Dacho 17-ojo amžiaus meilės eilėraščio.",
+        "ticketsGlance": "Nemokamai",
+        "body": [
+          null,
+          [
+            "p",
+            "Pirmą kartą ji čia pastatyta 1912 metais, per karą dingo, o nauja skulptūra sugrąžinta 1989 metais. 1939 metų kovo 23 dieną Hitleris kalbėjo nuo teatro balkono už jos."
+          ],
+          null,
+          [
+            "b",
+            [
+              "Ji yra viena iš kalbančių skulptūrų: nuskenuokite QR kodą ant lentelės šalia jos ir ji papasakos savo istoriją."
+            ]
+          ]
+        ]
+      },
+      "de": {
+        "desc": "Der Platz vor dem Theater, in der Mitte Ännchen von Tharau, das Mädchen aus Simon Dachs Liebesgedicht aus dem 17. Jahrhundert.",
+        "ticketsGlance": "Kostenlos",
+        "body": [
+          null,
+          [
+            "p",
+            "Sie stand hier zuerst 1912, verschwand im Krieg, und 1989 wurde eine neue aufgestellt. Am 23. März 1939 sprach Hitler vom Balkon des Theaters hinter ihr."
+          ],
+          null,
+          [
+            "b",
+            [
+              "Sie ist eine der sprechenden Skulpturen: Scanne den QR-Code auf dem Schild neben ihr, und sie erzählt ihre Geschichte."
+            ]
+          ]
+        ]
+      },
+      "da": {
+        "desc": "Pladsen foran teatret med Ännchen von Tharau i midten, pigen fra Simon Dachs kærlighedsdigt fra det 17. århundrede.",
+        "ticketsGlance": "Gratis",
+        "body": [
+          null,
+          [
+            "p",
+            "Hun stod her første gang i 1912, forsvandt under krigen, og en ny blev sat op i 1989. Den 23. marts 1939 talte Hitler fra balkonen på teatret bag hende."
+          ],
+          null,
+          [
+            "b",
+            [
+              "Hun er en af de talende skulpturer: scan QR-koden på skiltet ved siden af hende, så fortæller hun sin historie."
+            ]
+          ]
+        ]
+      }
+    },
   }),
   "free:friedrich": page({
     kind: "free",
@@ -681,6 +820,50 @@ export const EXAMPLE_PAGES = {
       ticketsGlance: "Free to walk through",
       body: [["h", "Things to Know"], ["b", ["Each restaurant keeps its own hours.", "Lithuanian dishes worth trying: cepelinai, the big potato dumplings, and šaltibarščiai, cold pink beetroot soup, when it is warm."]]],
     },
+    tr: {
+      "lt": {
+        "desc": "Kavinių ir restoranų pasažas prie Tiltų gatvės, lengviausia vieta senamiestyje sočiai pavalgyti.",
+        "ticketsGlance": "Praeiti nemokamai",
+        "body": [
+          null,
+          [
+            "b",
+            [
+              "Kiekvienas restoranas dirba savo darbo laiku.",
+              "Verta paragauti lietuviškų patiekalų: cepelinų ir, kai šilta, šaltibarščių."
+            ]
+          ]
+        ]
+      },
+      "de": {
+        "desc": "Eine Passage mit Cafés und Restaurants an der Tiltų gatvė, der einfachste Ort in der Altstadt für ein richtiges Essen.",
+        "ticketsGlance": "Frei zugänglich",
+        "body": [
+          null,
+          [
+            "b",
+            [
+              "Jedes Restaurant hat eigene Öffnungszeiten.",
+              "Litauische Gerichte zum Probieren: Cepelinai, die großen Kartoffelklöße, und Šaltibarščiai, kalte rosa Rote-Bete-Suppe, wenn es warm ist."
+            ]
+          ]
+        ]
+      },
+      "da": {
+        "desc": "En passage med caféer og restauranter ud til Tiltų gatvė, det letteste sted i den gamle bydel at sætte sig til et ordentligt måltid.",
+        "ticketsGlance": "Gratis at gå igennem",
+        "body": [
+          null,
+          [
+            "b",
+            [
+              "Hver restaurant har sine egne åbningstider.",
+              "Litauiske retter, der er værd at smage: cepelinai, de store kartoffelboller, og šaltibarščiai, kold lyserød rødbedesuppe, når det er varmt."
+            ]
+          ]
+        ]
+      }
+    },
   }),
   "free:meridianas": page({
     kind: "free",
@@ -689,6 +872,47 @@ export const EXAMPLE_PAGES = {
       desc: "The sailing ship moored by Biržos Bridge is the town's symbol. Built in Turku in 1948, it trained cadets of the Klaipėda maritime school until 1967.",
       ticketsGlance: "Free to see from the quay",
       body: [["h", "Things to Know"], ["b", ["Best seen from the bridge."]]],
+    },
+    tr: {
+      "lt": {
+        "desc": "Prie Biržos tilto prišvartuotas burlaivis yra miesto simbolis. Pastatytas Turku 1948 metais, iki 1967 metų jame mokėsi Klaipėdos jūreivystės mokyklos kursantai.",
+        "ticketsGlance": "Nemokamai, žiūrint nuo krantinės",
+        "body": [
+          null,
+          [
+            "b",
+            [
+              "Geriausiai matyti nuo tilto."
+            ]
+          ]
+        ]
+      },
+      "de": {
+        "desc": "Das Segelschiff an der Biržos-Brücke ist das Wahrzeichen der Stadt. 1948 in Turku gebaut, bildete es bis 1967 Kadetten der Seefahrtsschule von Klaipėda aus.",
+        "ticketsGlance": "Vom Kai aus kostenlos zu sehen",
+        "body": [
+          null,
+          [
+            "b",
+            [
+              "Am besten von der Brücke aus zu sehen."
+            ]
+          ]
+        ]
+      },
+      "da": {
+        "desc": "Sejlskibet, der ligger fortøjet ved Biržos-broen, er byens vartegn. Bygget i Turku i 1948 uddannede det kadetter fra søfartsskolen i Klaipėda indtil 1967.",
+        "ticketsGlance": "Gratis at se fra kajen",
+        "body": [
+          null,
+          [
+            "b",
+            [
+              "Ses bedst fra broen."
+            ]
+          ]
+        ]
+      }
     },
   }),
 };
