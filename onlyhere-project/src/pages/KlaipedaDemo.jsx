@@ -24,6 +24,7 @@ import {
 } from "../data/klaipedaDemo";
 
 const WARN = "#FFB347";
+const SHOW_HAND_WRITTEN_WALKS = false;
 const WEEK = [1, 2, 3, 4, 5, 6, 0];
 const SHORT = { 0: "Sun", 1: "Mon", 2: "Tue", 3: "Wed", 4: "Thu", 5: "Fri", 6: "Sat" };
 
@@ -150,13 +151,20 @@ export const KlaipedaDemo = () => {
           A port town on the Baltic, with a half-timbered Old Town and the Curonian Spit a short ferry ride away.
         </p>
         <p style={{ fontSize: 13, lineHeight: 1.65, color: C.muted, margin: "0 0 26px" }}>
-          Two ready-made trips you can follow on foot. Gemlyx is opening Lithuania, starting here.
+          A walk made for the time you have, from the places Gemlyx has checked. Gemlyx is opening Lithuania, starting here.
         </p>
 
         {/* The walk made for this moment (components/NowPlanner.jsx). The QR at
             the terminal carries ?from=terminal, the one at the centre ?from=centre. */}
         <NowPlanner country="LT" defaultFrom={typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("from") || "" : ""} />
 
+        {/* ── THE HAND-WRITTEN WALKS ARE OFF ─────────────────────────
+            Oliver, 2 Oct 2026, of the two walks written for the 29 Sep demo:
+            "that's just some ChatGPT crap.. we need a system built so we can
+            mix these studio generated guides with the businesses who joins
+            us". The walk above is that system. These stay switched off until
+            they are taken out with the next release of this page. */}
+        {SHOW_HAND_WRITTEN_WALKS && <>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 22 }} role="tablist" aria-label="Trips">
           {TRIPS.map(t => (
             <button key={t.id} role="tab" aria-selected={t.id === trip.id} onClick={() => setTripId(t.id)} style={pill(t.id === trip.id)}>
@@ -199,6 +207,7 @@ export const KlaipedaDemo = () => {
             {trip.closing}
           </div>
         )}
+        </>}
 
         <h2 style={{ fontSize: 22, fontWeight: 500, fontFamily: "'Fraunces', serif", lineHeight: 1.2, margin: "0 0 14px" }}>What a local would tell you</h2>
         <div style={{ display: "grid", gap: 10, marginBottom: 40 }}>
@@ -210,9 +219,9 @@ export const KlaipedaDemo = () => {
           ))}
         </div>
 
-        <div style={{ fontSize: 11.5, lineHeight: 1.7, color: C.muted, borderTop: `1px solid ${C.border}`, paddingTop: 16 }}>
+        {SHOW_HAND_WRITTEN_WALKS && <div style={{ fontSize: 11.5, lineHeight: 1.7, color: C.muted, borderTop: `1px solid ${C.border}`, paddingTop: 16 }}>
           Hours and prices checked on {fmtChecked()} against each place's own website, and klaipedatravel.lt, the Klaipėda Tourism Information Centre, where a place has none. Every stop links to where its details came from. Walking times are estimates.
-        </div>
+        </div>}
       </div>
     </div>
   );
