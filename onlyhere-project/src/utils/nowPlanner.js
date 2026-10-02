@@ -242,6 +242,7 @@ export const scheduleWalk = (order, candidates, ctx) => {
       id: c.id, name: c.name, kind: c.kind, lat: c.lat, lon: c.lon,
       leg: leg.minutes, ride: leg.ride, arrive, leave, stay,
       deal: c.offer && dealNow ? { text: c.offer.text, to: c.offer.window?.to || "" } : null,
+      tier: c.tier || "",
       why: words(stripDashes(pick.why), 160),
     });
     if (c.kind === "Food") foods++;
@@ -296,6 +297,7 @@ RULES
 - Pick an order of 3 to 7 places that makes a good walk: few backtracks, the best places first, one meal around lunch time if the walk crosses it.
 - Opening hours and walking times are checked after you, so a place you pick that does not fit is dropped. Do not pad the list.
 - ${(WALK_RULES[country] || "").replace(/\n/g, " ")}
+- A place marked Can't Miss Out belongs in the walk whenever it is open and the time allows.
 - For each place, one short sentence on why it is in the walk, in ${LANG_NAMES[lang] || "English"}, in plain words, with no dashes of any kind and no exclamation marks. Name nothing that is not in its own line above.
 
 Answer with JSON only, in this shape:
@@ -333,3 +335,87 @@ export const walkMapsUrl = (start, stops) => {
 };
 
 export const rideApp = (country) => RIDE_APPS[String(country || "").toUpperCase()] || null;
+
+// ── CAN'T MISS OUT ──────────────────────────────────────────────────
+// Oliver, 2 Oct 2026: "perhaps include the 'cannot miss out on' feature.
+// Because missing out the castle museum is absolute sadness." A place the
+// Studio rated Can't Miss Out goes into the order whichever way the order was
+// made, at the point where it adds the least walking, before the rules check
+// it. The rules still decide: a closed door is still left out, and the page
+// then says when it opens next rather than leaving it out in silence.
+export const MUST_SEE = "Can't Miss Out";
+// One on a walk of two hours or less, so a short walk is not all museum.
+const mustSeeMax = (budget) => (budget <= 120 ? 1 : 2);
+export const withMustSee = (order, candidates, ctx) => {
+  const { country = "LT", start, budget = 180 } = ctx;
+  const out = (Array.isArray(order) ? order : []).filter(o => o && o.id);
+  const byId = new Map(candidates.map(c => [c.id, c]));
+  const missing = candidates
+    .filter(c => c.tier === MUST_SEE && !out.some(o => o.id === c.id) && !offTownWalk({ country, from: start, to: c }))
+    .sort((a, b) => walkMinutes(start, a) - walkMinutes(start, b))
+    .slice(0, Math.max(0, mustSeeMax(budget) - candidates.filter(c => c.tier === MUST_SEE && out.some(o => o.id === c.id)).length));
+  for (const c of missing) {
+    const pts = [start, ...out.map(o => byId.get(o.id) || start), start];
+    let best = 0, bestCost = Infinity;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const cost = walkMinutes(pts[i], c) + walkMinutes(c, pts[i + 1]) - walkMinutes(pts[i], pts[i + 1]);
+      if (cost < bestCost) { bestCost = cost; best = i; }
+    }
+    out.splice(best, 0, { id: c.id });
+  }
+  return out;
+};
+
+// When a place opens next after a { day, minutes }, within the coming week:
+// { day, minutes } or null.
+export const nextOpen = (lines, { day, minutes }) => {
+  for (let d = 0; d < 8; d++) {
+    const w = windowsFor(lines, (day + d) % 7);
+    if (!w) return null;
+    const first = w.map(([a]) => a).filter(a => d > 0 || a > minutes).sort((a, b) => a - b)[0];
+    if (first !== undefined) return { day: (day + d) % 7, minutes: first };
+  }
+  return null;
+};
+
+// ── THE SAME PLACES THE OTHER WAY ROUND ─────────────────────────────
+// Oliver, 2 Oct 2026, of the QR codes: "Can you imagine 30 people use on, and
+// they walk on top of oneanother". Everybody in a half hour gets the same
+// places, so the walk is made twice, once each way round, and each phone keeps
+// one of the two. Half a ship goes clockwise and half the other way, so they
+// share each place at different times and meet only once on the way. The
+// second one costs no model call: it is the first one's order, reversed, run
+// through the same rules.
+export const reversedWalk = (walk, candidates, ctx) => {
+  const order = [...(walk?.stops || [])].reverse().map(s => ({ id: s.id, stay: s.stay, why: s.why }));
+  const alt = scheduleWalk(order, candidates, ctx);
+  return alt.stops.length === (walk?.stops || []).length ? alt : null;
+};
+
+// ── THE READER'S OWN CHANGES ────────────────────────────────────────
+// Oliver, 2 Oct 2026: "If we make a time for how long we want to be each
+// place, then make able to remove one from their listing." The walk is run
+// again from the places it was made of, with the reader's stays and without
+// the places they took out, so every time and every open door is checked
+// again. Nothing is added: a stop that no longer fits is dropped by the same
+// rule as before, and the page will not lengthen a stay that would do that.
+export const STAY_STEP = 10;
+export const replanWalk = (walk, { stays = {}, removed = [] } = {}, ctx) => {
+  const order = (walk?.stops || []).filter(s => !removed.includes(s.id)).map(s => ({ id: s.id, stay: stays[s.id] ?? s.stay, why: s.why }));
+  return scheduleWalk(order, walk?.places || [], ctx);
+};
+// Whether a stay can grow by a step without pushing another stop out.
+export const canStayLonger = (walk, edits, id, ctx) => {
+  const now = replanWalk(walk, edits, ctx);
+  const s = now.stops.find(x => x.id === id);
+  if (!s || s.stay + STAY_STEP > 120) return false;
+  const next = replanWalk(walk, { ...edits, stays: { ...(edits?.stays || {}), [id]: s.stay + STAY_STEP } }, ctx);
+  return next.stops.length === now.stops.length;
+};
+
+// What the reader's phone needs to run those again: each kept place as the
+// rules read it.
+export const placesOf = (walk, candidates) => {
+  const ids = new Set((walk?.stops || []).map(s => s.id));
+  return candidates.filter(c => ids.has(c.id)).map(c => ({ id: c.id, name: c.name, kind: c.kind, lat: c.lat, lon: c.lon, tier: c.tier, hours: c.hours, offer: c.offer, stay: c.stay }));
+};

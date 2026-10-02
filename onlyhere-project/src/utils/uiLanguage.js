@@ -709,6 +709,12 @@ export const UI_STRINGS = {
   "offer.everyDay":   { en: "Every day", da: "Hver dag", de: "Täglich", lt: "Kasdien" },
   // The "I have X hours" walk, 2 Oct 2026. {n} a number, {time} a clock time,
   // {app} the ride app's name.
+  // The reader's own changes to a walk, 2 Oct 2026.
+  "now.longer":     { en: "Stay longer", da: "Bliv længere", de: "Länger bleiben", lt: "Pabūti ilgiau" },
+  "now.shorter":    { en: "Stay shorter", da: "Kortere tid", de: "Kürzer bleiben", lt: "Pabūti trumpiau" },
+  "now.remove":     { en: "Take out", da: "Fjern", de: "Herausnehmen", lt: "Pašalinti" },
+  "now.putBack":    { en: "Put back", da: "Sæt tilbage", de: "Wieder rein", lt: "Grąžinti" },
+  "now.takenOut":   { en: "Taken out", da: "Fjernet", de: "Herausgenommen", lt: "Pašalinta" },
   "now.partner":    { en: "Gemlyx partner", da: "Gemlyx-partner", de: "Gemlyx-Partner", lt: "Gemlyx partneris" },
   "now.title":      { en: "Plan from right now", da: "Planlæg fra lige nu", de: "Plane ab jetzt", lt: "Planuokite nuo dabar" },
   "now.howLong":    { en: "How long do you have?", da: "Hvor lang tid har du?", de: "Wie viel Zeit hast du?", lt: "Kiek turite laiko?" },
