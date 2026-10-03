@@ -471,6 +471,8 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
     // keep something. The heading answers why they are being asked, and the
     // guide wording would be a non-sequitur here.
     : reason === "review" ? (mode === "up" ? "auth.reviewArticle" : "auth.signInReview")
+    : reason === "plan" ? (mode === "up" ? "auth.planTrip" : "auth.signInPlan")
+    : reason === "deal" ? (mode === "up" ? "auth.seeDeal" : "auth.signInDeal")
     : mode === "up" ? "auth.createAnAccount" : "auth.signIn", lang);
 
   const field = { width: "100%", boxSizing: "border-box", background: C.bg, border: `1px solid ${C.border}`, color: C.text, borderRadius: 10, padding: "12px 13px", fontSize: 14, fontFamily: "'Inter', sans-serif", marginBottom: 9 };
@@ -617,6 +619,8 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
             ? <>{uiT("auth.whyGuide", lang)}</>
             : reason === "review"
               ? <>{uiT("auth.whyReview", lang)}</>
+              : reason === "plan" ? <>{uiT("auth.whyPlan", lang)}</>
+              : reason === "deal" ? <>{uiT("auth.whyDeal", lang)}</>
               : <>{uiT("auth.whyDefault", lang)}</>}
           {localSaveCount > 0 && (
             <span style={{ color: C.gold }}> {localSaveCount} {uiT(localSaveCount === 1 ? "auth.savedOne" : "auth.savedMany", lang)}</span>

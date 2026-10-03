@@ -27,7 +27,7 @@ import { ticketmasterUrl, ticketDisclosure, tiqetsUrl, tiqetsDisclosure, affilia
 import { isTiqetsProductUrl, ticketAgentOf, isBookableTicketUrl, isTourUrl, sameShop, priceSourceHost, isResellerUrl } from "../utils/ticketLink";
 import { cleanTicketOffer, offerIsTheDoor, ticketOfferLine, partnerReason, partnerPitchFits, officialSiteLabel, agentName, OFFER_AGENTS } from "../utils/ticketOffer";
 import { branchPoints, branchesOf, hasBranches, branchLine, branchLabel } from "../utils/branches";
-import { offerView, offerHoursLabel, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE } from "../utils/offer";
+import { offerView, offerHoursLabel, OFFER_LOCKED_LABEL, offerLockedNote, OFFER_NOTE, OFFER_LOCKED_NOTE as OFFER_LOCKED_NOTE_DK } from "../utils/offer";
 import { saveLabel, saveHint, planFromSavedLabel } from "../utils/savedTrip";
 import { HowWeKnow } from "./HowWeKnow";
 import { SocialSection } from "./SocialSection";
@@ -41,6 +41,7 @@ import { audioLine } from "../utils/wegotripMatch";
 // every word is English is the half-translation uiLanguage.js already calls
 // worse than none. `lang` arrives as a prop from App.jsx, which holds it.
 import { t as uiT, DEFAULT_UI_LANGUAGE } from "../utils/uiLanguage";
+import { dealCode, cleanBooking, busyAt } from "../utils/dealExtras";
 import { entryWord, bookLabel } from "../utils/entryWords";
 import { readableOn } from "../utils/readableColor";
 import { events, majorEvents, vikingEvents } from "../data/events";
@@ -1545,11 +1546,46 @@ export const DetailPage = ({ item: itemIn, onClose, kind, liveInfo, liveInfoLoad
                 </div>
               )}
               <div style={{ fontSize: view.locked ? 12 : 13, color: view.locked ? C.muted : C.text, lineHeight: 1.55 }}>
-                {view.locked ? OFFER_LOCKED_NOTE : view.text}
+                {/* A deal abroad needs only a free account, so the note is the way in. */}
+                {view.locked && !signedIn && offerLockedNote() !== OFFER_LOCKED_NOTE_DK
+                  ? <button onClick={() => onNeedAccount?.("deal")} style={{ background: "none", border: "none", padding: 0, color: C.gold, fontSize: 12, fontWeight: 700, cursor: "pointer", textDecoration: "underline", fontFamily: "'Inter', sans-serif" }}>{offerLockedNote()}</button>
+                  : view.locked ? offerLockedNote() : view.text}
               </div>
+              {!view.locked && dealCode(item) && (
+                <div style={{ fontSize: 13, color: C.text, marginTop: 8 }}>
+                  {uiT("deal.code", lang).split("{code}")[0]}<strong style={{ color: C.gold, letterSpacing: 1.5, fontSize: 15 }}>{dealCode(item)}</strong>{uiT("deal.code", lang).split("{code}")[1] || ""}
+                </div>
+              )}
               <div style={{ fontSize: 10, color: C.muted, lineHeight: 1.5, marginTop: 7 }}>
                 {OFFER_NOTE}{view.until ? ` Until ${view.until}.` : ""}
               </div>
+            </div>
+          );
+        })()}
+
+        {/* ── BOOK A TABLE, AND HOW BUSY IT USUALLY IS ─────────────────
+            Oliver, 1 Oct 2026, for people off a cruise ship with a few hours:
+            the restaurant's own booking (Gemlyx takes none itself), and a
+            forecast stored from BestTime, read for the hour where the place
+            is. Neither needs an account. See utils/dealExtras.js. */}
+        {(() => {
+          const book = cleanBooking(item.__booking);
+          const busy = busyAt(item.__busy, new Date(), countryProfile(item.country || activeCountry()).zone || "Europe/Copenhagen");
+          if (!book && !busy) return null;
+          return (
+            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+              {book && (
+                <a href={book.href} target={book.kind === "web" ? "_blank" : undefined} rel="noopener noreferrer"
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6, background: C.gold, color: C.onGold || "#0A0F1E", borderRadius: 100, padding: "9px 16px", fontSize: 13, fontWeight: 700, textDecoration: "none", fontFamily: "'Inter', sans-serif" }}>
+                  {uiT(book.kind === "phone" ? "deal.call" : "deal.book", lang)}
+                </a>
+              )}
+              {busy && (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 12.5, color: C.light }}>
+                  <span style={{ width: 8, height: 8, borderRadius: 8, background: busy.level === "quiet" ? "#4CAF50" : busy.level === "some" ? C.gold : "#FF7A59" }} />
+                  {uiT(`busy.${busy.level}`, lang)}{busy.quieterAt ? `, ${uiT("busy.quieter", lang).replace("{time}", busy.quieterAt)}` : ""}
+                </span>
+              )}
             </div>
           );
         })()}
@@ -1752,7 +1788,7 @@ export const DetailPage = ({ item: itemIn, onClose, kind, liveInfo, liveInfoLoad
             ends up published as somebody's opinion of a bar. */}
         {!sample && <ArticleFeedback itemType={kind} itemName={item.name} signedIn={signedIn} onNeedAccount={onNeedAccount} />}
 
-        {!sample && <ReviewsSection itemType={kind} itemName={item.name} />}
+        {!sample && <ReviewsSection itemType={kind} itemName={item.name} signedIn={signedIn} onNeedAccount={onNeedAccount} />}
       </div>
     </div>
     </div>

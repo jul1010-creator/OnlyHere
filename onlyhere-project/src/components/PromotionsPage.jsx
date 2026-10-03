@@ -6,7 +6,10 @@
 import { C } from "../utils/theme";
 import { PhotoPlate } from "./PhotoPlate";
 import { promoCard, untilLabel } from "../utils/promotions";
-import { OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE } from "../utils/offer";
+import { OFFER_LOCKED_LABEL, offerLockedNote, OFFER_NOTE } from "../utils/offer";
+import { dealCode, busyAt } from "../utils/dealExtras";
+import { t as uiT } from "../utils/uiLanguage";
+import { countryProfile, activeCountry } from "../utils/countries";
 
 export const PromotionsPage = ({ promos = [], title = "Special deals", paid = false, onOpen, lang = "en" }) => {
   const today = new Date();
@@ -43,9 +46,22 @@ export const PromotionsPage = ({ promos = [], title = "Special deals", paid = fa
                   <div style={{ background: `${C.gold}14`, border: `1px solid ${C.gold}55`, borderRadius: 10, padding: "9px 11px" }}>
                     <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 0.4, marginBottom: 3 }}>◈ {OFFER_LOCKED_LABEL}</div>
                     <div style={{ fontSize: card.locked ? 12 : 13, color: card.locked ? C.muted : C.text, lineHeight: 1.5 }}>
-                      {card.locked ? OFFER_LOCKED_NOTE : card.text}
+                      {card.locked ? offerLockedNote() : card.text}
                     </div>
+                    {!card.locked && dealCode(p) && (
+                      <div style={{ fontSize: 12, color: C.text, marginTop: 5 }}>
+                        {uiT("deal.code", lang).split("{code}")[0]}<strong style={{ color: C.gold, letterSpacing: 1.2 }}>{dealCode(p)}</strong>{uiT("deal.code", lang).split("{code}")[1] || ""}
+                      </div>
+                    )}
                   </div>
+                  {(() => {
+                    const busy = busyAt(p.__busy, today, countryProfile(p.country || activeCountry()).zone || "Europe/Copenhagen");
+                    return busy ? (
+                      <div style={{ fontSize: 11.5, color: C.light }}>
+                        {uiT(`busy.${busy.level}`, lang)}{busy.quieterAt ? `, ${uiT("busy.quieter", lang).replace("{time}", busy.quieterAt)}` : ""}
+                      </div>
+                    ) : null;
+                  })()}
                   <div style={{ fontSize: 11, color: C.light, fontWeight: 600 }}>{untilLabel(card.until, today)}</div>
                 </div>
               </button>

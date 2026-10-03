@@ -1,8 +1,18 @@
 import { useState, useEffect } from "react";
 import { C } from "../utils/theme";
 import { SUPABASE_URL, SUPABASE_KEY } from "../config";
+import { getSession } from "../utils/auth";
 
-export const ReviewsSection = ({ itemType, itemName }) => {
+// 30 Sep 2026: posting needs an account (Oliver: the perks need one). The
+// database refuses an anonymous insert; this asks first instead.
+
+// The columns a reader may see. Not user_id: since reviews need an account,
+// each row carries the account that wrote it, and a public select of every
+// column would link all of one person's reviews together (review, 2 Oct 2026).
+// The SQL grants exactly these to the public roles.
+const REVIEW_COLUMNS = "id,item_type,item_name,author,text,created_at";
+
+export const ReviewsSection = ({ itemType, itemName, signedIn = false, onNeedAccount }) => {
   const [reviews, setReviews] = useState(null);
   const [name, setName] = useState("");
   const [text, setText] = useState("");
@@ -14,7 +24,7 @@ export const ReviewsSection = ({ itemType, itemName }) => {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_reviews?select=*&item_type=eq.${encodeURIComponent(itemType)}&item_name=eq.${encodeURIComponent(itemName)}&order=created_at.desc`, {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_reviews?select=${REVIEW_COLUMNS}&item_type=eq.${encodeURIComponent(itemType)}&item_name=eq.${encodeURIComponent(itemName)}&order=created_at.desc`, {
           headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
         });
         // res.ok, because a PostgREST error body is an OBJECT and the
@@ -38,11 +48,14 @@ export const ReviewsSection = ({ itemType, itemName }) => {
 
   const submit = async () => {
     if (!text.trim() || status === "sending") return;
+    if (!signedIn) { onNeedAccount?.("review"); return; }
     setStatus("sending");
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_reviews`, {
+      const session = await getSession();
+      if (!session?.token) { setStatus(null); onNeedAccount?.("review"); return; }
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_reviews?select=${REVIEW_COLUMNS}`, {
         method: "POST",
-        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", Prefer: "return=representation" },
+        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${session.token}`, "Content-Type": "application/json", Prefer: "return=representation" },
         body: JSON.stringify({ item_type: itemType, item_name: itemName, author: name.trim() || "Anonymous", text: text.trim() }),
       });
       const data = await res.json();
@@ -60,9 +73,9 @@ export const ReviewsSection = ({ itemType, itemName }) => {
       <div style={{ fontSize: 11, color: C.muted, marginBottom: 16 }}>Real visitor comments, not edited or verified by Gemlyx, shown as written.</div>
 
       <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, marginBottom: 16 }}>
-        <input value={name} onChange={e => setName(e.target.value)} placeholder="Name (optional)"
+        <input value={name} onChange={e => setName(e.target.value)} placeholder="Name (optional)" maxLength={60}
           style={{ width: "100%", border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 12px", fontSize: 12, outline: "none", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif", marginBottom: 8, boxSizing: "border-box" }} />
-        <textarea value={text} onChange={e => setText(e.target.value)} placeholder="Been here? Share what it was really like…" rows={3}
+        <textarea value={text} onChange={e => setText(e.target.value)} placeholder="Been here? Share what it was really like…" rows={3} maxLength={2000}
           style={{ width: "100%", border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 12px", fontSize: 13, outline: "none", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif", marginBottom: 8, boxSizing: "border-box", resize: "vertical" }} />
         <button onClick={submit} disabled={status === "sending" || !text.trim()}
           style={{ background: C.gold, border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 12, fontWeight: 700, color: "#000", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
