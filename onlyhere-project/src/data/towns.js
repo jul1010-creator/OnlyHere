@@ -22,4 +22,12 @@ export const TOWN_COORDS = {
   "Gudhjem": [55.214, 14.972], "Sønderho": [55.337, 8.474], "Mariager": [56.649, 9.977],
   "Sæby": [57.331, 10.519], "Thorup Strand": [57.143, 9.106], "Ebeltoft": [56.195, 10.679],
   "Nyhavn": [55.680, 12.590],
+  // Klaipėda, the one town Gemlyx covers in Lithuania (countries.js, homeTown).
+  // Its Studio drafts measure their coordinate and their journey against this
+  // point, which liveContent.js would otherwise only learn from a published
+  // Klaipėda town row, and there is none yet. The same point the weather card
+  // uses (data/mapShapes.js). The readers that list towns either keep only
+  // Danish points or rank by distance from a reader in Denmark, so no Danish
+  // page shows it.
+  "Klaipėda": [55.7033, 21.1443],
 };
