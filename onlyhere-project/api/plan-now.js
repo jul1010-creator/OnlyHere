@@ -21,8 +21,8 @@ import { COUNTRY_PROFILES } from "../src/utils/countries.js";
 import { placeClock } from "../src/utils/offerClock.js";
 import {
   NOW_STARTS, NOW_HOURS, NOW_LANGS, SHIP_MARGIN, slotAccepted, slotOf, slotDate,
-  nowCandidates, scheduleWalk, ruleOrder, planPrompt, readOrder, goodWalk,
-  withMustSee, reversedWalk, placesOf, STROLL, strollCandidates,
+  nowCandidates, ruleOrder, planPrompt, readOrder, goodWalk,
+  withMustSee, tidyWalk, reversedWalk, placesOf, STROLL, strollCandidates,
 } from "../src/utils/nowPlanner.js";
 
 const json = (res, status, body, cache = "no-store") => {
@@ -146,10 +146,10 @@ export default async function handler(req, res) {
   let walk = null, made = "rules";
   if (candidates.length && startClock.minutes >= AI_FROM && startClock.minutes < AI_TO) {
     const order = readOrder(await askModel(planPrompt(candidates, ctx)));
-    const tried = order ? scheduleWalk(withMustSee(order, candidates, ctx), candidates, ctx) : null;
+    const tried = order ? tidyWalk(withMustSee(order, candidates, ctx), candidates, ctx) : null;
     if (goodWalk(tried, budget)) { walk = tried; made = "ai"; }
   }
-  if (!walk) walk = scheduleWalk(withMustSee(ruleOrder(candidates, ctx), candidates, ctx), candidates, ctx);
+  if (!walk) walk = tidyWalk(withMustSee(ruleOrder(candidates, ctx), candidates, ctx), candidates, ctx);
   // The other way round, for half the phones, and what a phone needs to run
   // the walk again when the reader changes a stay or takes a stop out.
   const alt = reversedWalk(walk, candidates, ctx);
