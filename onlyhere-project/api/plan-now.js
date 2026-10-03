@@ -16,6 +16,7 @@
 // No account and no gate: a cruise passenger off the ship for three hours is
 // not signing up for anything, which was the point of the QR codes.
 import { requestIsFromSite, NOT_FROM_SITE } from "../src/utils/apiGuard.js";
+import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_KEY } from "../src/utils/supabasePublic.js";
 import { COUNTRY_PROFILES } from "../src/utils/countries.js";
 import { placeClock } from "../src/utils/offerClock.js";
 import {
@@ -34,11 +35,15 @@ const json = (res, status, body, cache = "no-store") => {
 // call would be paid for nobody.
 const AI_FROM = 7 * 60, AI_TO = 21 * 60;
 
+// A forecast that could not be read is said to be unknown, not dry: the
+// model is told so, and the page does not promise sunshine. Security review,
+// 3 Oct 2026, finding 16.
+const UNKNOWN_WEATHER = { known: false, wet: false, snow: false, wind: 0, temp: null };
 const weatherAt = async (p) => {
   try {
     const r = await fetch(`https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=${p.lat.toFixed(3)}&lon=${p.lon.toFixed(3)}`,
       { headers: { "User-Agent": "Gemlyx/1.0 (gemlyxtravel.com)" }, signal: AbortSignal.timeout(2500) });
-    if (!r.ok) return { wet: false, snow: false, wind: 0, temp: null };
+    if (!r.ok) return UNKNOWN_WEATHER;
     const j = await r.json();
     const next = (j?.properties?.timeseries || []).slice(0, 3);
     const rain = next.reduce((n, t) => n + (Number(t?.data?.next_1_hours?.details?.precipitation_amount) || 0), 0);
@@ -53,18 +58,18 @@ const weatherAt = async (p) => {
       wind: Math.round(wind),
       temp: Number.isFinite(temp) ? temp : null,
     };
-  } catch { return { wet: false, snow: false, wind: 0, temp: null }; }
+  } catch { return UNKNOWN_WEATHER; }
 };
 
 // NOT FROM src/config.js. That file reads import.meta for the browser build,
 // and Vercel loads these routes as CommonJS, where import.meta is a syntax
 // error and the whole route fails to start (the first deploy of this one,
-// 2 Oct 2026). The server reads published rows with its own key.
-const SUPABASE_URL = process.env.SUPABASE_URL || "https://vpxfahjnerkkkoueovhl.supabase.co";
+// 2 Oct 2026). Published rows are public, so they are read with the public
+// key, which reads nothing else (security review, 3 Oct 2026, finding 16).
+const SUPABASE_URL = process.env.SUPABASE_URL || PUBLIC_SUPABASE_URL;
 
 const rowsFor = async (country) => {
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!key) throw new Error("no key");
+  const key = PUBLIC_SUPABASE_KEY;
   const r = await fetch(
     `${SUPABASE_URL}/rest/v1/gemlyx_content?select=id,type,payload&published=eq.true&type=in.(free,food,booking,festival)&payload->>country=eq.${encodeURIComponent(country)}`,
     { headers: { apikey: key, Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(4000) },
@@ -112,6 +117,15 @@ export default async function handler(req, res) {
   const style = q.style === STROLL ? STROLL : "";
   if (keys !== (style ? "c,from,h,lang,slot,style" : "c,from,h,lang,slot")) return json(res, 400, { error: "Unexpected query." });
   if (!start || !NOW_HOURS.includes(hours) || !lang) return json(res, 400, { error: "Unknown start, length or language." });
+  // ── AND ONE SPELLING OF THE ADDRESS ITSELF ────────────────────────
+  // Security review, 3 Oct 2026, finding 6: the check above sorts the keys
+  // and reads decoded values, while the CDN keys its cache on the address as
+  // sent. "h=3&c=LT..." or "%4Cang" passed the check and missed the cache,
+  // a fresh paid call each time. So the raw query must be the exact string
+  // NowPlanner builds, in its order and its encoding.
+  const raw = String(req.url || "").split("?").slice(1).join("?");
+  const canonical = `c=${country}&from=${start.id}&h=${hours}&lang=${lang}&slot=${encodeURIComponent(String(q.slot || ""))}${style ? `&style=${style}` : ""}`;
+  if (raw !== canonical) return json(res, 400, { error: "Unexpected query." });
   if (!slotAccepted(String(q.slot || ""), now)) return json(res, 409, { error: "Stale half hour.", slot: slotOf(now) });
 
   const zone = COUNTRY_PROFILES[country].zone;

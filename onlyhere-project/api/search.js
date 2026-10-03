@@ -12,6 +12,7 @@
 // fetch('/api/search?q=Den Gamle By opening hours 2026')
 
 import { requestIsFromSite, NOT_FROM_SITE } from "../src/utils/apiGuard.js";
+import { gateAi, searchCeiling } from "../src/utils/aiGate.js";
 
 export default async function handler(req, res) {
   // ── SECURITY, 17 AUG 2026 ─────────────────────────────────────────
@@ -20,7 +21,10 @@ export default async function handler(req, res) {
   if (!requestIsFromSite(req.headers)) {
     return res.status(403).json({ error: NOT_FROM_SITE });
   }
-  const { q, domains, n } = req.query;
+  const gate = await gateAi({ headers: req.headers, body: req.query, endpoint: "search", env: process.env });
+  if (!gate.ok) return res.status(gate.status).json({ error: gate.error, gate: true });
+  const { domains } = req.query;
+  const { q, n } = searchCeiling(req.query || {}, { founder: gate.founder, anon: gate.anon });
 
   if (!q) {
     return res.status(400).json({ error: "Missing 'q' query param" });
@@ -51,7 +55,7 @@ export default async function handler(req, res) {
         // see of it, and a ticketing site's four best pages for "Copenhagen" are
         // unlikely to include the one event you wanted. So a caller that has
         // narrowed to a domain can ask for more.
-        max_results: Math.min(Math.max(Number(n) || (domains ? 8 : 4), 1), 20),
+        max_results: n,
         include_answer: true, // Tavily gives a short synthesized answer, cheap to use directly
         // Optional: restrict this specific call to a fixed set of domains (e.g. Wikipedia).
         // Backward compatible — omitted entirely when the caller doesn't pass ?domains=.
@@ -62,7 +66,7 @@ export default async function handler(req, res) {
     if (!tavilyRes.ok) {
       const errText = await tavilyRes.text();
       console.error("Tavily error:", errText);
-      return res.status(502).json({ error: "Search service failed", detail: errText });
+      return res.status(502).json({ error: "Search service failed" });
     }
 
     const data = await tavilyRes.json();

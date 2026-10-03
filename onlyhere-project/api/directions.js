@@ -105,8 +105,11 @@ export default async function handler(req, res) {
     // departure_time is optional — only transit/driving use it (transit for real
     // schedule-based predictions like late-night checks, driving for live traffic).
     // Must be a future Unix timestamp in seconds; Google rejects a past one.
-    if (departure_time && (travelMode === "transit" || travelMode === "driving")) {
-      url += `&departure_time=${departure_time}`;
+    // A whole number of seconds or nothing: the raw value was appended to the
+    // Google URL as typed, so "…&waypoints=…" rode along (Fable, 30 Sep 2026).
+    const departAt = /^\d{9,11}$/.test(String(departure_time || "")) ? String(departure_time) : "";
+    if (departAt && (travelMode === "transit" || travelMode === "driving")) {
+      url += `&departure_time=${departAt}`;
     }
     // ── THE QUESTION THAT DECIDES WHETHER A PLACE IS AN ISLAND ──────
     // Google routes for SPEED, so it takes the Odden to Aarhus boat rather than

@@ -71,6 +71,19 @@ export default async function handler(req, res) {
   // more call in utils/auth.js.
   //
   // The id is who.userId and nothing else. See the paragraph at the top.
+  // ── WHAT THEY WROTE IN PUBLIC GOES WITH THEM ──────────────────────
+  // 1 Oct 2026. Reviews carry the account's id since the lockdown SQL, and the
+  // privacy policy says nothing of theirs is kept after deletion. Best effort:
+  // a failure here must not stop the login from being deleted, and the daily
+  // AI counters, which hold the id, go too.
+  const svc = { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` };
+  const uid = encodeURIComponent(who.userId);
+  await Promise.all([
+    fetch(`${SUPABASE_URL}/rest/v1/gemlyx_reviews?user_id=eq.${uid}`, { method: "DELETE", headers: svc }).catch(() => null),
+    // Both counters that hold the id: the AI allowance (ai:u:) and the guide
+    // allowance (u:), which the privacy policy also promises go (review, 2 Oct 2026).
+    fetch(`${SUPABASE_URL}/rest/v1/gemlyx_guide_allowance?key=in.(${encodeURIComponent(`"ai:u:${String(who.userId).toLowerCase()}"`)},${encodeURIComponent(`"u:${String(who.userId).toLowerCase()}"`)})`, { method: "DELETE", headers: svc }).catch(() => null),
+  ]);
   try {
     const gone = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${encodeURIComponent(who.userId)}`, {
       method: "DELETE",

@@ -27,6 +27,7 @@
 // below — it does a deeper multi-source search per query at higher cost.
 
 import { requestIsFromSite, NOT_FROM_SITE } from "../src/utils/apiGuard.js";
+import { gateAi, shapePerplexity } from "../src/utils/aiGate.js";
 
 export default async function handler(req, res) {
   // ── SECURITY, 17 AUG 2026 ─────────────────────────────────────────
@@ -42,7 +43,9 @@ export default async function handler(req, res) {
   if (!key) {
     return res.status(500).json({ error: "PERPLEXITY_API_KEY not set on the server" });
   }
-  const { prompt, model = "sonar", max_tokens = 1024 } = req.body || {};
+  const gate = await gateAi({ headers: req.headers, body: req.body, endpoint: "perplexity", env: process.env });
+  if (!gate.ok) return res.status(gate.status).json({ error: gate.error, gate: true });
+  const { prompt, model, max_tokens } = shapePerplexity(req.body || {}, { founder: gate.founder, anon: gate.anon });
   if (!prompt || typeof prompt !== "string") {
     return res.status(400).json({ error: "Missing 'prompt' string in request body" });
   }
@@ -59,7 +62,7 @@ export default async function handler(req, res) {
     const data = await r.json();
     if (!r.ok) {
       console.error("Perplexity error:", data);
-      return res.status(r.status).json({ error: data.error?.message || "Perplexity request failed", detail: data });
+      return res.status(r.status).json({ error: "Perplexity request failed" });
     }
     const text = data.choices?.[0]?.message?.content || "";
     // Perplexity returns citations as a flat array of URLs (not titled), and
@@ -71,6 +74,6 @@ export default async function handler(req, res) {
     return res.status(200).json({ text, citations, usage: data.usage });
   } catch (err) {
     console.error("Perplexity fetch failed:", err);
-    return res.status(500).json({ error: String(err) });
+    return res.status(500).json({ error: "Perplexity request failed" });
   }
 }

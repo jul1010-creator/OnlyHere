@@ -32,6 +32,7 @@
 //
 // ?dry=1 reports exactly what it WOULD check and what that would cost, and
 // makes no paid call at all. Run that first.
+import { createHash, timingSafeEqual } from "node:crypto";
 import { readPage } from "../src/utils/readPage.js";
 import { domainOf } from "../src/utils/pageScan.js";
 import { parseEventDate, isPastDate, datePropositionProblem, statusRefusalFor } from "../src/utils/eventDates.js";
@@ -60,7 +61,12 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "UPDATE_EVENTS_SECRET not set on the server. Add it in Vercel before this endpoint can be used." });
   }
   const provided = req.query.key || req.headers["x-update-events-key"];
-  if (provided !== secret) {
+  // Compared in constant time, so the answer's timing says nothing about how
+  // much of a guess was right (Fable's audit, 30 Sep 2026). Hashing both sides
+  // first makes the lengths equal, which timingSafeEqual requires. The ?key=
+  // form stays: the weekly scheduled check calls it that way.
+  const digest = (v) => createHash("sha256").update(String(v || "")).digest();
+  if (!provided || !timingSafeEqual(digest(provided), digest(secret))) {
     return res.status(401).json({ error: "Missing or wrong key" });
   }
 
