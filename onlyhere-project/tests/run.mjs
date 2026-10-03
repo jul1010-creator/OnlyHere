@@ -112,12 +112,12 @@ writeFileSync(entry, `
   export { whoWrote, modelProvenanceNote, DRAFT_STAGES, readerFacingStages, WRITER, EXTRACTOR, MEASURED } from ${JSON.stringify(join(root, "src/utils/modelProvenance.js"))};
   export { venueStyleOf, venueStyleLabel, VENUE_STYLES, VENUE_STYLE_LABEL, unstyledVenues, venueStyleCoverage, stylesPresent, showVenueStyleFacet, buildNightlifeStyleFacet, VENUE_STYLE_COVERAGE_MIN } from ${JSON.stringify(join(root, "src/utils/venueStyle.js"))};
   export { looksLikeLodging, stayDrift, stayDriftNote, publicAccessAnswered, STAY_TERMS, LODGING_RULE, LODGING_NOTES_RULE, LODGING_WORDS, isLodgingType, LODGING_TYPES } from ${JSON.stringify(join(root, "src/utils/venueSubject.js"))};
-  export { PLACES as KLP_PLACES, TRIPS as KLP_TRIPS, LOCAL_TIPS as KLP_TIPS, openOn as klpOpenOn, nextWeekday as klpNextWeekday, todayInKlaipeda, stopTime as klpStopTime, mapsRouteUrl as klpRouteUrl, KLAIPEDA_DEMO_PATH } from ${JSON.stringify(join(root, "src/data/klaipedaDemo.js"))};
+  export { LOCAL_TIPS as KLP_TIPS, todayInKlaipeda, KLAIPEDA_DEMO_PATH } from ${JSON.stringify(join(root, "src/data/klaipedaDemo.js"))};
   export { familyChip, priceClass, entryPrice, priceChip, entryKindLabel, ENTRY_KIND_LABEL, CHIP_MAX, PAID_LABEL, SAYS_FREE, AMOUNT, isUnqualifiedFree, CONCESSION_SCOPE, entryBooking, bookingChip, BOOKING_FIELDS, NEEDS_BOOKING, WALK_IN } from ${JSON.stringify(join(root, "src/utils/entryPrice.js"))};
   export { literalRenderings, literalNote, looksLikeAName, FALSE_FRIENDS, FALSE_FRIEND_RULE, NAME_RULE } from ${JSON.stringify(join(root, "src/utils/literalDanish.js"))};
   export { licenseUrl, creditIsRequired } from ${JSON.stringify(join(root, "src/utils/imageCredits.js"))};
   export { STUDIO_VOICE } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
-  export { cleanOffer, offerProblems, offerLive, offerView, offerTiming, offerWindow, offerHoursLabel, cleanClock, placeClock, OFFER_WEEK, hasPaidPlan, OFFER_TEXT_MAX, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE } from ${JSON.stringify(join(root, "src/utils/offer.js"))};
+  export { cleanOffer, offerProblems, offerLive, offerView, offerTiming, offerWindow, offerHoursLabel, cleanClock, placeClock, OFFER_WEEK, hasPaidPlan, OFFER_TEXT_MAX, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE, offerLockedNote } from ${JSON.stringify(join(root, "src/utils/offer.js"))};
   export { AI_DISCLOSURE, aiDisclosure, aiDisclosureFor, disclosureLanguage, AI_CHAT_SURFACES, AI_IMAGE_NOTE, aiImageNote, inReaderLanguage } from ${JSON.stringify(join(root, "src/utils/aiDisclosure.js"))};
   export { splitReport, sortReports, filterReports, reportAge, isHandled, unhandledCount, INBOX_SETUP_SQL, FILTERS as INBOX_FILTERS, topicLabel as inboxTopicLabel, reportCountry } from ${JSON.stringify(join(root, "src/utils/supportInbox.js"))};
   export { SUPPORT_TOPICS, REPORT_TOPIC, topicIds, topicLabel, isTopic, GOOD_FAITH_STATEMENT, messagePrompt, MESSAGE_MIN, MESSAGE_MAX, NAME_MAX, looksLikeEmail, looksLikeUrl, supportProblems, problemFor, supportReference, supportPayload, supportMailto, supportReceipt, SUPPORT_TABLE, SUPPORT_SETUP_SQL, SUPPORT_EMAIL, PRIVACY_EMAIL } from ${JSON.stringify(join(root, "src/utils/support.js"))};
@@ -181,6 +181,10 @@ writeFileSync(entry, `
   export { startLog, endLog, note, decide, recentLogs, summariseLog, formatLog, formatLogs, logChips, OUTCOMES } from ${JSON.stringify(join(root, "src/utils/runLog.js"))};
   export { fieldProvenance, correctionProvenance, entrySources, untracedFields, describeProvenance, readerCorrection, readerCorrections, isCheckerVoice, readerUncertainty, readerUncertainties, READER_UNCERTAINTY_LIMIT } from ${JSON.stringify(join(root, "src/utils/provenance.js"))};
   export { ALLOWED_ORIGINS, originOf, isAllowedOrigin, requestIsFromSite, NOT_FROM_SITE, STUDIO_ONLY_ENDPOINTS, resolveUser, isFounder } from ${JSON.stringify(join(root, "src/utils/apiGuard.js"))};
+  export { gateAi, shapeAnthropic, shapeOpenAI, shapePerplexity, searchCeiling, AI_CEILINGS, readAiLimits, visitorKey, visitorAddress, takeDaily } from ${JSON.stringify(join(root, "src/utils/aiGate.js"))};
+  export { cleanErrorMessage, safeUpstreamError } from ${JSON.stringify(join(root, "src/utils/upstreamError.js"))};
+  export { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_KEY } from ${JSON.stringify(join(root, "src/utils/supabasePublic.js"))};
+  export { sitePath, AI_PATHS } from ${JSON.stringify(join(root, "src/utils/apiAuth.js"))};
   export { citationUrls, askOpenAI, askClaude, localisePrompt } from ${JSON.stringify(join(root, "src/utils/aiClient.js"))};
   export { THEMES, THEME_ORDER, DEFAULT_THEME, storedTheme, THEME_PARAM } from ${JSON.stringify(join(root, "src/utils/theme.js"))};
   export { layoutBody, trimCaption } from ${JSON.stringify(join(root, "src/utils/articleLayout.js"))};
@@ -294,12 +298,15 @@ writeFileSync(entry, `
   export { KLAIPEDA_STOPS, KLAIPEDA_STOPS_READ_ON } from ${JSON.stringify(join(root, "src/data/klaipedaStops.js"))};
   export { groupNav, childActive, groupActive, NAV_GROUPS } from ${JSON.stringify(join(root, "src/utils/navGroups.js"))};
   export { groupByMonth, monthLabel } from ${JSON.stringify(join(root, "src/utils/calendarMonths.js"))};
+  export { dealCode, cleanBooking, bookingProblem, busyFromBestTime, busyAt, cleanBusy, localClock } from ${JSON.stringify(join(root, "src/utils/dealExtras.js"))};
+  export { rideFor, RIDE_FROM_MINUTES } from ${JSON.stringify(join(root, "src/utils/rideHail.js"))};
   export { SCAN_KINDS, scanKindOf, scanPrompt } from ${JSON.stringify(join(root, "src/utils/scanKinds.js"))};
   export * as NP from ${JSON.stringify(join(root, "src/utils/nowPlanner.js"))};
   export * as TR from ${JSON.stringify(join(root, "src/utils/entryTranslate.js"))};
   export * as KEX from ${JSON.stringify(join(root, "src/data/klaipedaExamples.js"))};
   export * as OC from ${JSON.stringify(join(root, "src/utils/offerClock.js"))};
   export * as WK from ${JSON.stringify(join(root, "src/utils/walkable.js"))};
+  export { offTownWalk, centreOf, walkRule, kmApart, WALKABLE_CENTRES } from ${JSON.stringify(join(root, "src/utils/walkable.js"))};
   export { livePromotions, promoCard, untilLabel, PROMO_KINDS, zoneOf } from ${JSON.stringify(join(root, "src/utils/promotions.js"))};
   export { abroadBriefParts, inventoryBlock, inventoryLine, forLand, landAsk, landRules, sameDayHours, startsFor, INVENTORY_CAP, randomAbroadVisit } from ${JSON.stringify(join(root, "src/utils/guideAbroad.js"))};
   export { FROZEN_TRANSPORT, frozenFrom, frozenIn, factsLost, frozenBlock, lostNote } from ${JSON.stringify(join(root, "src/utils/frozenFacts.js"))};
@@ -9424,8 +9431,9 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // result cap: four is plenty for an open search and thin for one pinned to a
   // single site, where four is all of it you will ever see.
   ok("a domain-restricted search gets more results than an open one",
-     /max_results: Math\.min\(Math\.max\(Number\(n\) \|\| \(domains \? 8 : 4\), 1\), 20\)/.test(api));
-  ok("and it is capped, so a caller cannot ask for the world", /, 20\)/.test(api));
+     // Batch 172: the count is settled in aiGate.searchCeiling, 8 for a member and 20 for him.
+     /max_results: n,/.test(api) && M.searchCeiling({ q: "x", domains: "a.dk" }).n === 8 && M.searchCeiling({ q: "x" }).n === 4);
+  ok("and it is capped, so a caller cannot ask for the world", M.searchCeiling({ q: "x", n: 999 }).n === 8 && M.searchCeiling({ q: "x", n: 999 }, { founder: true }).n === 20);
   // WHAT THEY FOUND TRAVELS WITH THE DRAFT, first, so the next time he asks this
   // question the draft itself answers it.
   ok("and what they found rides in the draft's source list", /\[\.\.\.new Set\(\[\.\.\.founderUrls, \.\.\.candidateUrls\]\)\]/.test(app5));
@@ -32153,7 +32161,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // The strip on a shared payload has to keep matching GUIDE_SCAFFOLDING, or the
   // local list and the link start carrying different trips again.
   ok("and a shared link strips the same three fields",
-     /\(\(\{ _testProfile, _testPlan, _planProblems, \.\.\.rest \}\) => rest\)\(guide\)/.test(gpS));
+     /\(\(\{ _testProfile, _testPlan, _planProblems, _convoText, \.\.\.rest \}\) => rest\)\(guide\)/.test(gpS));
 
   // ── A REFUSED WRITE NO LONGER ANNOUNCES A SAVE ───────────────────
   // Safari in private mode throws on setItem. The catch swallowed it and the
@@ -33438,7 +33446,9 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("and the www of it", isAllowedOrigin("https://www.gemlyxtravel.com/"));
   ok("and the vite dev server", isAllowedOrigin("http://localhost:5173/"));
   ok("and the original deployment his friend tested on", isAllowedOrigin("https://only-here-three.vercel.app/"));
-  ok("and a preview build of this project", isAllowedOrigin("https://onlyhere-project-git-main.vercel.app"));
+  ok("and a preview build of this project, by the address Vercel gives it", isAllowedOrigin("https://onlyhere-project-git-main-x.vercel.app", { VERCEL_BRANCH_URL: "onlyhere-project-git-main-x.vercel.app" }));
+  // Security review, 3 Oct 2026, finding 12: a name that only starts like his.
+  ok("and somebody else's project named like his is not", !isAllowedOrigin("https://onlyhere-project-evil.vercel.app", {}) && !isAllowedOrigin("https://gemlyx-copy.vercel.app", {}));
   // ── AND THE ONE THAT WAS A HOLE IN MY OWN FIRST DRAFT ────────────
   // The preview rule was [a-z0-9-]+\.vercel\.app, and anybody can put a page on
   // vercel.app in two minutes. The response would be unreadable to them, since
@@ -33488,7 +33498,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 
   // Unset means any signed-in account, because Studio is already behind a login
   // and locking himself out at four in the morning is the likelier accident.
-  ok("with no allow-list, any account passes", isFounder("user-1", ""));
+  // Batch 172: an empty list is the founder alone, never everybody.
+  ok("with no allow-list, only the founder passes", !isFounder("user-1", "") && isFounder("467fb712-e3e9-4d43-b1b8-e4e1bb32b76d", ""));
   ok("with one, a listed account passes", isFounder("user-1", "user-1, user-2"));
   ok("and an unlisted one does not", !isFounder("user-9", "user-1, user-2"));
 
@@ -33722,7 +33733,9 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // ONE PLACE KNOWS THE TOKEN EXPIRES. Six hand-rolled retries are gone; the
   // only two callers left are the two helpers. A third means somebody has
   // started writing the seventh.
-  is("only the two helpers renew a session", (app16.match(/await refreshStudioSession\(\)/g) || []).length, 2);
+  // A third since 2 Oct 2026: freshPassToken, the helper that renews the
+  // token just before the guide pass reads it.
+  is("only the three helpers renew a session", (app16.match(/await refreshStudioSession\(\)/g) || []).length, 3);
 
   // ── THE ASSISTANT IS INSIDE STUDIO AND WAS OUTSIDE THE FIX ──────
   // Its three calls sent session.access_token once, so an hour in it could
@@ -41367,7 +41380,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       "setTimeout", "clearTimeout", "setInterval", "clearInterval", "requestAnimationFrame", "cancelAnimationFrame",
       "Math", "JSON", "Object", "Array", "String", "Number", "Boolean", "Date", "RegExp", "Error", "TypeError", "Promise",
       "Map", "Set", "WeakMap", "WeakSet", "Symbol", "Proxy", "Reflect", "BigInt", "Intl", "URL", "URLSearchParams",
-      "Blob", "File", "FileReader", "FormData", "Headers", "Request", "Response", "AbortController", "TextDecoder", "TextEncoder",
+      "Blob", "File", "FileReader", "FormData", "Headers", "Request", "Response", "AbortController", "TextDecoder", "TextEncoder", "Uint8Array",
       "isNaN", "isFinite", "parseInt", "parseFloat", "encodeURIComponent", "decodeURIComponent", "encodeURI", "decodeURI",
       "structuredClone", "queueMicrotask", "performance", "crypto", "atob", "btoa", "alert", "confirm", "prompt",
       "IntersectionObserver", "ResizeObserver", "MutationObserver", "PerformanceObserver", "Image", "Audio", "Event", "CustomEvent",
@@ -46761,7 +46774,10 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // The page named Booking.com and Ticketmaster as the partners that pay while
   // both of their config values were empty strings, and left Tiqets, the only
   // one live, unnamed. Naming the wrong partner is worse than naming none.
-  const set = (decl) => new RegExp(`export const ${decl} = "[^"]+"`).test(cfg);
+  // A partner is set when any of its declarations is ("A|B"). Booking.com
+  // earns through its CJ link with no affiliate id, which the first version of
+  // this check could not see, so the page said it earned nothing (1 Oct 2026).
+  const set = (decl) => decl.split("|").some(d => new RegExp(`export const ${d} = "[^"]+"`).test(cfg));
   // ── ASKED AS AGREEMENT, NOT AS A SNAPSHOT ───────────────────────
   //
   // 23 Aug 2026, the evening Ticketmaster approved him after ten days: "Ticket
@@ -46798,7 +46814,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     const paying = para.slice(0, sentStart);
     const wrongSide = [];
     for (const [name, decl] of [["Tiqets", "TIQETS_BROWSE_LINK"],
-                                ["Booking.com", "BOOKING_AFFILIATE_ID"],
+                                ["Booking.com", "BOOKING_AFFILIATE_ID|BOOKING_CJ_LINK"],
                                 ["Ticketmaster", "TICKETMASTER_AFFILIATE_TEMPLATE"]]) {
       const on = set(decl);
       const saysPays = paying.includes(name);
@@ -49832,7 +49848,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       ok("and names the regulation the report route answers to", /2022\/2065/.test(policy));
       ok("and states a legal basis for it", /Answering a message sent through the contact page/.test(policy));
       ok("and how long a message is kept", /Messages sent through the contact page/.test(policy));
-      ok("and the version moved when the notice did", /Version 2\.3/.test(policy) && /What changed in version 2\.3/.test(policy));
+      ok("and the version moved when the notice did", /Version 2\.4 · In force from/.test(policy) && /What changed in version 2\.4/.test(policy) && /Version 2\.3\./.test(policy));
       // The one promise the form itself makes, checked against the notice
       // rather than assumed: the page tells the reader it is not recording
       // where they came from, so the notice must not describe one either.
@@ -53256,7 +53272,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // field, so a reader sent a link cannot see it and no permission check is
     // needed.
     ok("and the save path still strips them from what is shared",
-       /_testProfile, _testPlan, _planProblems, \.\.\.rest/.test(gp));
+       /_testProfile, _testPlan, _planProblems, _convoText, \.\.\.rest/.test(gp));
   }
 }
 
@@ -62058,7 +62074,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // omission in it.
   is("every detail page gets the buttons",
      // Batch 165: plus OPEN_ABROAD, no account on a Lithuanian page.
-     (appF.match(/<DetailPage windowed=\{entryWindowed\} lang=\{uiLang\} paid=\{OPEN_ABROAD \|\| hasPaidPlan\(userProfile\)\} signedIn=\{OPEN_ABROAD \|\| !!userSession\} onNeedAccount=/g) || []).length, 7);
+     // Batch 172: deals and reviews abroad need an account too.
+     (appF.match(/<DetailPage windowed=\{entryWindowed\} lang=\{uiLang\} paid=\{\(OPEN_ABROAD && !!userSession\) \|\| hasPaidPlan\(userProfile\)\} signedIn=\{!!userSession\} onNeedAccount=/g) || []).length, 7);
   is("and none is left without them",
      (appF.match(/<DetailPage /g) || []).length, 7);
 
@@ -62090,7 +62107,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // NAMES an action opens on it — otherwise a returning reader is dropped on a
   // create-account form.
   ok("the review gate opens on Sign in",
-     /setAuthReason\("review"\); setAuthMode\("in"\); setAuthOpen\(true\);/.test(appF));
+     /setAuthReason\(typeof why === "string" \? why : "review"\); setAuthMode\("in"\); setAuthOpen\(true\);/.test(appF)); // Batch 172: a deal names itself
 
   // ── A BUTTON THAT DOES NOTHING IS WORSE THAN NO BUTTON ───────────
   // A signed-out reader is offered the account rather than a dead control, and
@@ -72181,11 +72198,12 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   // Same rule as isFounder, kept identical so the two cannot disagree: an unset
   // list lets anybody signed in through, because the alternative is locking him
   // out of his own Studio on a deploy he makes at four in the morning.
-  ok("an unset list still lets him in", isFounder("anyone", "") === true);
+  // Batch 172: an unset list is his own id only, never anybody signed in.
+  ok("an unset list lets only his own account in", isFounder("anyone", "") === false && isFounder("467fb712-e3e9-4d43-b1b8-e4e1bb32b76d", "") === true);
   ok("a set list lets only the named in", isFounder("mine", "mine,other") === true && isFounder("theirs", "mine,other") === false);
   // So the open state is said out loud, on the panel, where it cannot be shipped
   // without being read.
-  ok("and the open state warns on the login panel", /VITE_FOUNDER_IDS is not set, so any Gemlyx account can open Studio/.test(appS));
+  ok("and the fallback state is said on the login panel", /VITE_FOUNDER_IDS is not set, so Studio falls back to your own account id only/.test(appS)); // Batch 172
   ok("only while it is actually unset", /\{!String\(FOUNDER_IDS \|\| ""\)\.trim\(\) && \(/.test(appS));
   ok("and it names the server variable too, because that is the one that matters",
      /GEMLYX_FOUNDER_IDS/.test(appS));
@@ -75034,7 +75052,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   is("while what is not text is left alone", G.days[0].glance.__night.kr, 500);
   ok("a guide with no days is handed back as it came", M.guideWithoutFiller(null) === null && M.guideWithoutFiller({ x: 1 }).x === 1);
   const gpL = stripComments(readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8"));
-  ok("applied to every way a guide is opened", /useState\(\(\) => guideWithoutFiller\(freshGuide\) \|\| null\)/.test(gpL) && /setGuide\(guideWithoutFiller\(rows\[0\]\.payload\)\)/.test(gpL) && /setGuide\(guideWithoutFiller\(liveGuide\)\)/.test(gpL));
+  ok("applied to every way a guide is opened", /useState\(\(\) => guideWithoutFiller\(freshGuide\) \|\| null\)/.test(gpL) && /setGuide\(guideWithoutFiller\(payload\)\)/.test(gpL) && /setGuide\(guideWithoutFiller\(liveGuide\)\)/.test(gpL));
   // "Copenhagen Admiral Hotel" above "Same bed as night 1"
   ok("a same-bed night does not name a second hotel", /\{day\.glance\.recommendedStay && !sameBed && \(/.test(gpL));
   // "Copenhagen Airport, Helsingør Old Town, Copenhagen Airport"
@@ -79735,7 +79753,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("clause 12.6 extends the accuracy clauses to all other content", /<span class="n">12\.6<\/span> Clauses 12\.2 to 12\.4 apply equally to all other Gemlyx Content[\s\S]{0,400}any answer given through the conversation interface[\s\S]{0,200}accepts no responsibility for any such information being incorrect, incomplete or out of date, save as provided in clause 19\.1\./.test(terms));
   ok("and reliance on it is excluded like a Guide's", /19\.2\.1<\/span> reliance upon a price, timetable, opening hour, event date, availability or other item of information contained in a Guide or in any other Gemlyx Content, or given in an answer/.test(terms));
   ok("still never beyond what the law allows", /19\.1<\/span> Nothing in these Terms shall exclude or limit the liability of Gemlyx for death or personal injury/.test(terms));
-  ok("the version moved and says why", M.TERMS_VERSION === "2.2" && /Version 2\.2 · In force from 27 September 2026/.test(terms) && /Version 2\.2, in force from 27 September 2026, adds clause 12\.6/.test(terms));
+  ok("the version moved and says why", M.TERMS_VERSION === "2.3" && /Version 2\.3 · In force from/.test(terms) && /Version 2\.2, in force from 27 September 2026, adds clause 12\.6/.test(terms) && /Version 2\.3, in force from 1 November 2026, extends the Service to Lithuania/.test(terms));
 }
 
 // ── BATCH 147: ONE GUIDE A DAY, AND A CEILING ON THE DAY ─────────────
@@ -79772,7 +79790,9 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   is("the address is Vercel's, not the client's own header first", M.clientIp({ "x-real-ip": "9.9.9.9", "x-forwarded-for": "1.1.1.1, 9.9.9.9" }), "9.9.9.9");
   // The server, with Supabase stood in by a fake.
   const site = { origin: "https://www.gemlyxtravel.com", "x-real-ip": "1.2.3.4" };
-  const env = { SUPABASE_SERVICE_ROLE_KEY: "service-key" };
+  // The counting rules below, with the account rule of 1 Oct 2026 switched off
+  // so each one is checked on its own. The account rule has its own block.
+  const env = { SUPABASE_SERVICE_ROLE_KEY: "service-key", GEMLYX_GUIDES_WITHOUT_ACCOUNT: "1" };
   const fakeDb = (answer, seen = []) => async (url, opts) => {
     seen.push({ url, body: opts?.body ? JSON.parse(opts.body) : null, auth: opts?.headers?.Authorization });
     if (url.endsWith("/auth/v1/user")) return { ok: opts.headers.Authorization === "Bearer good", json: async () => ({ id: "U1", email: "o@g.dk" }) };
@@ -79826,6 +79846,30 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   {
     const out = await M.buildPassDecide({ headers: { "x-real-ip": "1.2.3.4" }, body: {}, env, fetchImpl: fakeDb("ok"), now });
     ok("the site's origin check comes first", out.status === 403);
+  }
+  {
+    // Batch 172, 1 Oct 2026: a new guide needs a confirmed account, asked
+    // before any counter moves, so nobody can spend the day's total anonymously.
+    const strict = { SUPABASE_SERVICE_ROLE_KEY: "service-key" };
+    const confirmedDb = (answer, seen = []) => async (url, opts) => {
+      seen.push({ url, body: opts?.body ? JSON.parse(opts.body) : null });
+      if (url.endsWith("/auth/v1/user")) return { ok: opts.headers.Authorization === "Bearer good" || opts.headers.Authorization === "Bearer unconfirmed", json: async () => ({ id: "U1", email: "o@g.dk", ...(opts.headers.Authorization === "Bearer good" ? { email_confirmed_at: "2026-09-01T00:00:00Z" } : {}) }) };
+      return { ok: true, status: 200, json: async () => answer };
+    };
+    const anon = [];
+    const a = await M.buildPassDecide({ headers: site, body: { visitor: "abcdefgh-1" }, env: strict, fetchImpl: confirmedDb("ok", anon), now });
+    ok("no account, no new guide, and nothing is counted", a.status === 401 && a.json.reason === "account" && a.json.message === M.refusalText("account") && !anon.some(x => x.url.includes("/rpc/")));
+    const u = await M.buildPassDecide({ headers: { ...site, authorization: "Bearer unconfirmed" }, body: { visitor: "abcdefgh-1" }, env: strict, fetchImpl: confirmedDb("ok"), now });
+    ok("an account still to confirm its email is asked to", u.status === 401 && u.json.reason === "confirm");
+    const seen = [];
+    const g = await M.buildPassDecide({ headers: { ...site, authorization: "Bearer good" }, body: { visitor: "abcdefgh-1" }, env: strict, fetchImpl: confirmedDb("ok", seen), now });
+    ok("a confirmed account gets its pass, counted on the account", g.status === 200 && g.json.pass && seen.find(x => x.url.includes("/rpc/")).body.p_keys.includes("u:u1"));
+    const retryAnon = await M.buildPassDecide({ headers: site, body: { visitor: "abcdefgh-1", retry: pass }, env: strict, fetchImpl: confirmedDb("ok"), now });
+    ok("a retry on a pass already given is not asked again", retryAnon.status === 200 && retryAnon.json.retry);
+    const st = [];
+    const store = { getItem: (k) => st[k] ?? null, setItem: (k, v) => { st[k] = v; } };
+    const told = await M.askForGuidePass({ fetchImpl: async () => ({ ok: false, status: 401, json: async () => ({ ok: false, reason: "account", message: M.refusalText("account") }) }), storage: store, makeId: () => "abcdefgh-1", now });
+    ok("and the browser says so instead of building", told.ok === false && told.reason === "account");
   }
   // The browser half.
   {
@@ -80330,36 +80374,12 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
 // show Klaipėda's tourism centre what Gemlyx adds before the app is made to
 // work outside Denmark.
 {
-  const d = (y, m, day) => new Date(y, m - 1, day);
-  const castle = M.KLP_PLACES.castleMuseum.hours, clock = M.KLP_PLACES.clockMuseum.hours;
-  is("the castle museum keeps summer and winter days apart", [
-    M.klpOpenOn(castle, d(2026, 7, 6)).open,   // Monday in summer
-    M.klpOpenOn(castle, d(2026, 7, 5)).open,   // Sunday in summer
-    M.klpOpenOn(castle, d(2026, 10, 4)).open,  // Sunday in winter
-    M.klpOpenOn(castle, d(2026, 10, 5)).open,  // Monday in winter
-    M.klpOpenOn(castle, d(2026, 9, 16)).open,  // last summer day, a Wednesday
-    M.klpOpenOn(castle, d(2026, 9, 19)).open,  // first winter Saturday
-    M.klpOpenOn(castle, d(2026, 7, 7)).open,   // Tuesday in summer
-  ], [false, true, false, false, true, true, false]);
-  // Oliver, 3 Oct 2026: "Castle museum is closed monday you know". The
-  // museum's "II-VI" is Tuesday to Saturday, since in Lithuania I is Monday;
-  // the first reading had every day one early.
-  is("and Monday is shut in winter, as the museum's own II-VI says", M.klpOpenOn(castle, d(2026, 10, 5)).text, "Closed on Mondays at this time of year");
-  is("and says why in words", M.klpOpenOn(castle, d(2026, 10, 4)).text, "Closed on Sundays at this time of year");
-  is("the clock museum's Thursday is late and its Monday is shut", [M.klpOpenOn(clock, d(2026, 10, 1)).text, M.klpOpenOn(clock, d(2026, 10, 5)).text], ["Open 12:00 to 20:00", "Closed on Mondays"]);
-  is("a lane of restaurants is never called open or closed", M.klpOpenOn(M.KLP_PLACES.friedrich.hours, d(2026, 10, 5)).open, null);
-  is("picking a weekday means the next one, today included", [M.klpNextWeekday(d(2026, 9, 29), 2).getDate(), M.klpNextWeekday(d(2026, 9, 29), 1).getDate()], [29, 5]);
+  // The hand-written walks this block tested went on 2 Oct 2026 (Batch 182).
   is("today is Klaipėda's today, an hour ahead of Denmark", M.todayInKlaipeda(new Date("2026-09-29T21:30:00Z")).getDate(), 30);
-  is("the cruise trip counts from the gangway", [M.klpStopTime(M.KLP_TRIPS[0], 0), M.klpStopTime(M.KLP_TRIPS[0], 65), M.klpStopTime(M.KLP_TRIPS[0], 210)], ["+0:00", "+1:05", "+3:30"]);
-  ok("and gets back inside four hours with a margin", Math.max(...M.KLP_TRIPS[0].stops.filter(s => s.place).map(s => s.at)) <= 210);
-  ok("every stop is a known place with a source", M.KLP_TRIPS.every(t => t.stops.every(s => s.walk || (M.KLP_PLACES[s.place] && /^https:\/\//.test(M.KLP_PLACES[s.place].source)))));
-  ok("the day trip's clock only moves forward", (() => { const ts = M.KLP_TRIPS[1].stops.filter(s => s.place).map(s => s.at); return ts.every((t, i) => i === 0 || t > ts[i - 1]); })());
-  ok("the whole walk fits in one Google Maps link", M.KLP_TRIPS.every(t => { const u = new URL(M.klpRouteUrl(t)); const w = u.searchParams.get("waypoints"); return u.searchParams.get("travelmode") === "walking" && (!w || w.split("|").length <= 9); }));
-  const words = JSON.stringify([M.KLP_PLACES, M.KLP_TRIPS, M.KLP_TIPS]) + readFileSync(join(root, "src/pages/KlaipedaDemo.jsx"), "utf8");
-  ok("no dash and none of his banned words anywhere on it", !/[—–]/.test(words) && !/\b(actually|genuine|genuinely|truly|simply)\b/i.test(words));
-  ok("prices are euros, never kroner", !/DKK|\bkr\b/.test(JSON.stringify(M.KLP_PLACES)));
+  const words = JSON.stringify(M.KLP_TIPS) + readFileSync(join(root, "src/pages/KlaipedaDemo.jsx"), "utf8");
+  ok("no dash and none of his banned words anywhere on it", !/[—–]/.test(words.replace(/\/\/.*$/gm, "")) && !/\b(actually|genuine|genuinely|truly|simply)\b/i.test(words));
   const app = readFileSync(join(root, "src/App.jsx"), "utf8");
-  ok("it has an address, and nothing links to it", M.KLAIPEDA_DEMO_PATH === "/lithuania/trips" && /<Route path=\{KLAIPEDA_DEMO_PATH\} element=\{<KlaipedaDemo \/>\} \/>/.test(app) && (app.match(/KLAIPEDA_DEMO_PATH/g) || []).length === 2);
+  ok("it has an address, and nothing links to it", M.KLAIPEDA_DEMO_PATH === "/lithuania/trips" && /<Route path=\{KLAIPEDA_DEMO_PATH\} element=\{<KlaipedaDemo \/>\} \/>/.test(app));
   ok("and it asks search engines to stay away", /noindex/.test(readFileSync(join(root, "src/pages/KlaipedaDemo.jsx"), "utf8")));
 }
 
@@ -80617,7 +80637,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
 {
   const app = readFileSync(join(root, "src/App.jsx"), "utf8");
   ok("the switch is the page's country", /const OPEN_ABROAD = PAGE_ABROAD;/.test(app));
-  ok("and the Danish page keeps every gate it had", /paid=\{OPEN_ABROAD \|\| hasPaidPlan\(userProfile\)\}/.test(app) && /signedIn=\{OPEN_ABROAD \|\| !!userSession\}/.test(app));
+  ok("and the Danish page keeps every gate it had", /paid=\{\(OPEN_ABROAD && !!userSession\) \|\| hasPaidPlan\(userProfile\)\}/.test(app) && /signedIn=\{!!userSession\}/.test(app)); // Batch 172
 }
 
 // ── Batch 166: Gemlyx promotions, every live offer in one list ──────
@@ -80644,7 +80664,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const app = readFileSync(join(root, "src/App.jsx"), "utf8");
   ok("the page reads the entries, not a list of its own", /const promotions = livePromotions\(\{/.test(app));
   ok("out of the menu while nothing is on", /const hidePromotions = liveLoaded && !libraryFailed && !isStudio && promotions\.length === 0;/.test(app));
-  ok("open abroad, locked like the entry page in Denmark", /tab === "promotions" && <PromotionsPage promos=\{promotions\}[^\n]*\n\s*paid=\{OPEN_ABROAD \|\| hasPaidPlan\(userProfile\)\} lang=\{uiLang\} onOpen=\{\(p\) => openStopDetail\(p\)\}/.test(app));
+  ok("open abroad to members, locked like the entry page in Denmark", /tab === "promotions" && <PromotionsPage promos=\{promotions\}[^\n]*\n\s*paid=\{\(OPEN_ABROAD && !!userSession\) \|\| hasPaidPlan\(userProfile\)\}\n\s*onOpen=\{\(p\) => \{ if \(OPEN_ABROAD && needsAccountFor\("deal"\)\) return; openStopDetail\(p\); \}\}/.test(app)); // Batch 172
   const page = readFileSync(join(root, "src/components/PromotionsPage.jsx"), "utf8");
   ok("no dash in the page's copy", !/[\u2013\u2014]/.test(page.replace(/\/\/.*$/gm, "")));
 }
@@ -80836,14 +80856,183 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("the gold button goes with its page", /\{NAV_ITEMS\.some\(item => item\.id === featuredTab\) && <button className="gx-topnav-ai" data-testid="nav-featured"/.test(app));
 }
 
-// ── Batch 177: Scan a Source reads more than events ──
+// ── Batch 172: security, after Fable's audit ──
 {
+  const site = { origin: "https://www.gemlyxtravel.com", authorization: "Bearer tok" };
+  const env = { SUPABASE_SERVICE_ROLE_KEY: "svc", GEMLYX_FOUNDER_IDS: "founder-id" };
+  const user = (u) => async (url) => url.endsWith("/auth/v1/user")
+    ? { ok: true, json: async () => u }
+    : { ok: true, json: async () => "ok" };
+  const run = (o) => M.gateAi({ endpoint: "anthropic", body: {}, env, ...o });
+  const results = await Promise.all([
+    run({ headers: { origin: "https://evil.example" }, fetchImpl: user({ id: "x" }) }),
+    run({ headers: { origin: "https://www.gemlyxtravel.com" }, fetchImpl: user({ id: "x" }) }),
+    run({ headers: site, fetchImpl: async () => ({ ok: false, json: async () => ({}) }) }),
+    run({ headers: site, fetchImpl: user({ id: "member", email_confirmed_at: null }) }),
+    run({ headers: site, fetchImpl: user({ id: "member", email_confirmed_at: "2026-09-30" }) }),
+    run({ headers: site, fetchImpl: user({ id: "founder-id" }) }),
+    run({ headers: site, fetchImpl: async (url) => url.endsWith("/auth/v1/user") ? { ok: true, json: async () => ({ id: "member", email_confirmed_at: "x" }) } : { ok: true, json: async () => "ai:u:member" } }),
+    run({ headers: site, fetchImpl: async (url) => url.endsWith("/auth/v1/user") ? { ok: true, json: async () => ({ id: "member", email_confirmed_at: "x" }) } : { ok: false, json: async () => ({}) } }),
+    run({ headers: site, body: { big: "x".repeat(1_100_000) }, fetchImpl: user({ id: "member", email_confirmed_at: "x" }) }),
+  ]);
+  const [foreign, noToken, badToken, unconfirmed, member, founder, overLimit, counterDown, tooBig] = results;
+  is("a request from another site is refused", foreign.status, 403);
+  // Oliver, 3 Oct 2026, "Open, but capped": no account is a visitor on the
+  // tightest terms, not a refusal. A dead token or an unconfirmed email is the
+  // same visitor. With every fetch failing, the counter is out of reach too,
+  // and that is still a no.
+  ok("no account is a visitor, counted, not refused", noToken.ok && noToken.anon === true && noToken.founder === false);
+  is("a dead token with the counter out of reach is refused", badToken.status, 503);
+  ok("an unconfirmed email is a visitor too", unconfirmed.ok && unconfirmed.anon === true);
+  ok("a confirmed member passes, and is counted", member.ok && member.founder === false && member.anon === false);
+  ok("the founder passes uncounted", founder.ok && founder.founder === true);
+  is("over the daily allowance is a 429", overLimit.status, 429);
+  is("and a counter that cannot be reached refuses a member", counterDown.status, 503);
+  is("a member's request has a size limit", tooBig.status, 413);
+
+  const a = M.shapeAnthropic({ model: "claude-opus-5", max_tokens: 64000, tools: [{ name: "t", input_schema: {} }, { type: "web_search_20250305", name: "web_search" }] });
+  is("a member gets an allowed model", a.model, "claude-sonnet-5");
+  is("and the member ceiling", a.max_tokens, 16000);
+  is("and no paid server tools", a.tools.map(t => t.name), ["t"]);
+  is("the founder keeps his model", M.shapeAnthropic({ model: "claude-opus-5", max_tokens: 64000 }, { founder: true }).model, "claude-opus-5");
+  const o = M.shapeOpenAI({ model: "gpt-9", max_tokens: 99999, n: 5 });
+  ok("OpenAI is held to its model and length, one answer", o.model === "gpt-5.6-sol" && o.max_completion_tokens === 12000 && !("n" in o) && !("max_tokens" in o));
+  const p = M.shapePerplexity({ prompt: "hi", model: "sonar-deep-research", max_tokens: 50000 });
+  ok("Perplexity is held to sonar and 1024 tokens", p.model === "sonar" && p.max_tokens === 1024 && p.prompt === "hi");
+
+  for (const f of ["anthropic", "openai", "perplexity", "search"]) {
+    const src = readFileSync(join(root, "api", `${f}.js`), "utf8");
+    ok(`/api/${f} is behind the gate`, new RegExp(`const gate = await gateAi\\(\\{ headers: req\\.headers, body: req\\.(body|query), endpoint: "${f}", env: process\\.env \\}\\);`).test(src) && /if \(!gate\.ok\) return res\.status\(gate\.status\)/.test(src));
+    ok(`/api/${f} does not hand an upstream error body back`, !/detail: (errText|data)/.test(src));
+  }
+  // The visitor's own terms.
+  const sent = [];
+  const counting = (answer) => async (url, init) => { if (!url.endsWith("/auth/v1/user")) sent.push(JSON.parse(init.body)); return url.endsWith("/auth/v1/user") ? { ok: false, json: async () => ({}) } : { ok: true, json: async () => answer }; };
+  const visitor = { origin: "https://www.gemlyxtravel.com", "x-real-ip": "203.0.113.9" };
+  const [vOk, vOver, vAll, vBig] = await Promise.all([
+    run({ headers: visitor, fetchImpl: counting("ok") }),
+    run({ headers: visitor, fetchImpl: counting(M.visitorKey(visitor, "svc".slice(-16))) }),
+    run({ headers: visitor, fetchImpl: counting("ai:anon") }),
+    run({ headers: visitor, body: { big: "x".repeat(450_000) }, fetchImpl: counting("ok") }),
+  ]);
+  ok("a visitor is counted three ways: themselves, all visitors, the site", vOk.ok && sent[0].p_keys.length === 3 && sent[0].p_keys[1] === "ai:anon" && sent[0].p_keys[2] === "ai:site" && sent[0].p_limits[0] === 120);
+  ok("and the counter never holds the address itself", /^ai:v:[0-9a-f]{24}$/.test(sent[0].p_keys[0]) && !sent[0].p_keys[0].includes("203.0.113.9"));
+  ok("a visitor over their own day, or all visitors over theirs, is a 429", vOver.status === 429 && vAll.status === 429 && /used its AI for today/.test(vAll.error));
+  is("a visitor's body limit is the smallest", vBig.status, 413);
+  const va = M.shapeAnthropic({ model: "claude-opus-4-8", max_tokens: 64000 }, { anon: true });
+  ok("a visitor keeps the guide writer's model and gets 8192 tokens, enough for its 6000", va.model === "claude-opus-4-8" && va.max_tokens === 8192);
+  ok("and an unknown model is not theirs either", M.shapeAnthropic({ model: "claude-opus-5" }, { anon: true }).model === "claude-sonnet-5");
+  ok("OpenAI's paid web search is taken off for anybody but the founder", M.shapeOpenAI({ tools: [{ type: "function", function: { name: "f" } }, { type: "web_search" }] }, { anon: true }).tools.length === 1);
+  is("and the visitor's OpenAI ceiling", M.shapeOpenAI({ max_tokens: 99999 }, { anon: true }).max_completion_tokens, 8000);
+
+  ok("the raw body is not passed through any more", !/JSON\.stringify\(req\.body\)/.test(readFileSync(join(root, "api/anthropic.js"), "utf8") + readFileSync(join(root, "api/openai.js"), "utf8")));
+
+  ok("the account is added to AI calls on the way out", M.AI_PATHS.test("/api/anthropic") && M.AI_PATHS.test("/api/search?q=x") && !M.AI_PATHS.test("/api/weather?lat=1"));
+  is("only this site's requests get it", [M.sitePath("/api/openai", "https://www.gemlyxtravel.com"), M.sitePath("https://other.example/api/openai", "https://www.gemlyxtravel.com")], ["/api/openai", ""]);
+  const main = readFileSync(join(root, "src/main.jsx"), "utf8");
+  ok("and it is installed before anything renders", /\ninstallApiAuth\(\)\n[\s\S]*ReactDOM\.createRoot/.test(main));
+
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the planner asks for an account first", /const generateGuide = async \(overrideConvoText, modeOverride\) => \{\n\s*if \(needsAccountFor\("plan"\)\) return;/.test(app) && /const buildAbroad = \(\) => \{\n\s*if \(guideModal === "loading"\) return;\n\s*if \(needsAccountFor\("plan"\)\) return;/.test(app));
+  ok("so does the chat", /if \(!msg \|\| aiLoading\) return;\n\s*if \(needsAccountFor\("plan"\)\) return;/.test(app));
+  ok("a deal abroad is for members", /paid=\{\(OPEN_ABROAD && !!userSession\) \|\| hasPaidPlan\(userProfile\)\}/.test(app) && !/signedIn=\{OPEN_ABROAD/.test(app));
+  const rev = readFileSync(join(root, "src/components/ReviewsSection.jsx"), "utf8");
+  ok("a review is posted with the member's own token", /if \(!signedIn\) \{ onNeedAccount\?\.\("review"\); return; \}/.test(rev) && /Authorization: `Bearer \$\{session\.token\}`/.test(rev));
+  const gp = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+  ok("the trip library only takes a member's row", /if \(member\?\.token\) fetch\(`\$\{SUPABASE_URL\}\/rest\/v1\/\$\{LIBRARY_TABLE\}`/.test(gp));
+  ok("no link falls back to a raw address", !/\.href \|\| stayHere\.door\.href/.test(gp) && !/\.href \|\| l\.href/.test(readFileSync(join(root, "src/components/CostsBlock.jsx"), "utf8")));
+  is("the deal note says what unlocks it abroad", [M.offerLockedNote ? M.offerLockedNote("LT") : "Sign up to see the deal.", M.offerLockedNote ? M.offerLockedNote("DK") : "Only for paying users."], ["Sign up to see the deal.", "Only for paying users."]);
+
+  const vj = JSON.parse(readFileSync(join(root, "vercel.json"), "utf8"));
+  const keys = (vj.headers?.[0]?.headers || []).map(h => h.key);
+  ok("the site sends security headers", ["Strict-Transport-Security", "X-Content-Type-Options", "Referrer-Policy", "Permissions-Policy", "X-Frame-Options", "Content-Security-Policy-Report-Only"].every(k => keys.includes(k)));
+  const dir = readFileSync(join(root, "api/directions.js"), "utf8");
+  ok("the departure time is a number of seconds or nothing", /const departAt = \/\^\\d\{9,11\}\$\/\.test/.test(dir) && /&departure_time=\$\{departAt\}/.test(dir));
+  const w = readFileSync(join(root, "api/weather.js"), "utf8");
+  const gpG = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+  // The old read stays only as the fallback for before the SQL has run.
+  ok("a guide is read by its link through gemlyx_guide, not by listing the table", /rest\/v1\/rpc\/gemlyx_guide`/.test(gpG) && /body: JSON\.stringify\(\{ p_id: String\(guideId\) \}\)/.test(gpG) && /if \(r\.status !== 404 && body\?\.code !== "PGRST202"\) return r\.ok \? body : failed;/.test(gpG) && /gemlyx_guides\?select=payload&id=eq\./.test(gpG));
+  const mw = readFileSync(join(root, "middleware.js"), "utf8");
+  ok("and so are the link previews", /rest\/v1\/rpc\/gemlyx_guide`/.test(mw) && /if \(res\.status === 404 \|\| got\?\.code === "PGRST202"\) \{/.test(mw));
+  ok("the chat that built a guide is not saved into its link", /_planProblems, _convoText, \.\.\.rest \}\) => rest\)\(guide\)/.test(gpG));
+  const sqlL = readFileSync(join(root, "SECURITY_LOCKDOWN_30SEP.sql"), "utf8");
+  ok("the lockdown SQL reads one guide by id and strips the old chats", /create or replace function public\.gemlyx_guide\(p_id text\) returns jsonb/.test(sqlL) && /grant execute on function public\.gemlyx_guide\(text\) to anon, authenticated;/.test(sqlL) && /set payload = payload - '_convoText'/.test(sqlL) && !/guides are readable by link/.test(sqlL));
+  const del = readFileSync(join(root, "api/delete-account.js"), "utf8");
+  ok("deleting an account takes its reviews and its AI counters", /gemlyx_reviews\?user_id=eq\.\$\{uid\}/.test(del) && /gemlyx_guide_allowance\?key=in\.\(/.test(del) && /`"u:\$\{String\(who\.userId\)\.toLowerCase\(\)\}"`/.test(del) && del.indexOf("gemlyx_reviews?user_id") < del.indexOf("/auth/v1/admin/users/"));
+  const askR = readFileSync(join(root, "api/ask.js"), "utf8");
+  ok("a question needs a confirmed email, the founder aside", /if \(userId && !\(u\?\.email_confirmed_at \|\| u\?\.confirmed_at\) && !isFounder\(String\(userId\), process\.env\.GEMLYX_FOUNDER_IDS\)\)/.test(askR));
+  ok("and comes from the site", /if \(!requestIsFromSite\(req\.headers\)\) return json\(res, 403, \{ error: NOT_FROM_SITE \}\);/.test(askR) && askR.indexOf("requestIsFromSite(req.headers)") < askR.indexOf("/auth/v1/user"));
+  const evc = readFileSync(join(root, "api/update-events-check.js"), "utf8");
+  ok("the weekly check's key is compared in constant time, and ?key= still works", /timingSafeEqual\(digest\(provided\), digest\(secret\)\)/.test(evc) && /req\.query\.key \|\| req\.headers\["x-update-events-key"\]/.test(evc) && !/provided !== secret/.test(evc));
+  ok("weather coordinates are numbers", /const lat = Number\(req\.query\.lat\), lon = Number\(req\.query\.lon\);/.test(w));
+}
+
+// ── Batch 174: off the ship, deal codes, booking, busyness ──
+{
+  const a = { name: "Devi", city: "Klaipėda" };
+  ok("a deal code is short, readable and stable", /^GX-[A-HJ-NP-Z2-46-9]{4}$/.test(M.dealCode(a)) && M.dealCode(a) === M.dealCode({ ...a }) && !/[01ILOS5]/.test(M.dealCode(a).slice(3)));
+  ok("and differs from place to place", M.dealCode(a) !== M.dealCode({ name: "Friedrich Passage", city: "Klaipėda" }) && M.dealCode({}) === "");
+  is("a phone number books by calling", M.cleanBooking("+370 600 12345"), { kind: "phone", href: "tel:+37060012345", value: "+370 600 12345" });
+  is("a web address books on the restaurant's own page", M.cleanBooking("restaurant.lt/booking")?.href, "https://restaurant.lt/booking");
+  ok("anything else is refused, with a reason", M.cleanBooking("call us") === null && /neither a web address nor a phone number/.test(M.bookingProblem("call us")) && M.bookingProblem("") === "");
+  ok("a script address never becomes a button", M.cleanBooking("javascript:alert(1)") === null);
+  const raw = Array(24).fill(0); raw[0] = 50; raw[8] = 90; raw[18] = 70;
+  const bt = { status: "OK", venue_info: { venue_name: "Devi" }, analysis: [{ day_info: { day_int: 0 }, day_raw: raw }] };
+  const busy = M.busyFromBestTime(bt, new Date("2026-10-01T10:00:00Z"));
+  ok("BestTime's Monday is getDay's 1 and its first hour is 06:00", busy.week[1][6] === 50 && busy.week[1][14] === 90);
+  ok("and an hour past midnight belongs to the next day", busy.week[2][0] === 70);
+  ok("a forecast with nothing in it is not stored", M.busyFromBestTime({ status: "OK", analysis: [{ day_info: { day_int: 0 }, day_raw: Array(24).fill(0) }] }) === null && M.busyFromBestTime({ status: "Error" }) === null);
+  // Monday 1 Oct 2029 is a Monday; use a fixed Monday in Vilnius time.
+  const monAt = (h) => new Date(Date.UTC(2026, 9, 5, h - 3)); // Vilnius is UTC+3 in October
+  is("the clock is Klaipėda's", M.localClock(monAt(14), "Europe/Vilnius"), { day: 1, hour: 14 });
+  const b2 = { week: Array.from({ length: 7 }, () => Array(24).fill(0)) };
+  b2.week[1][12] = 80; b2.week[1][13] = 60; b2.week[1][14] = 20; b2.week[1][10] = 20;
+  is("busy at noon, with when it quietens", M.busyAt(b2, monAt(12), "Europe/Vilnius"), { level: "busy", value: 80, quieterAt: "14:00" });
+  is("quiet says so and promises nothing", M.busyAt(b2, monAt(10), "Europe/Vilnius"), { level: "quiet", value: 20, quieterAt: null });
+  ok("a closed or unknown hour says nothing", M.busyAt(b2, monAt(3), "Europe/Vilnius") === null && M.busyAt(null) === null);
+
+
+  const page = readFileSync(join(root, "src/pages/KlaipedaDemo.jsx"), "utf8");
+  ok("it reads where the code hangs from the address", /new URLSearchParams\(window\.location\.search\)\.get\("from"\)/.test(page) && /defaultFrom=\{from\}/.test(page));
+  ok("and shows today's events and the deals in town, Lithuanian rows only", /rowCountry\(r\) === "LT"/.test(page) && /eventOnDays\(e, \[today\]\)/.test(page) && /livePromotions\(/.test(page));
+
+  // Bolt, from the Klaipėda tourism site's own tips (1 Oct 2026).
+  ok("a long walk in Lithuania names Bolt", M.rideFor({ country: "LT", minutes: 25 })?.name === "Bolt" && M.rideFor({ country: "LT", tooFar: true })?.name === "Bolt");
+  ok("a short one does not, and Denmark names nothing yet", M.rideFor({ country: "LT", minutes: 12 }) === null && M.rideFor({ country: "DK", minutes: 40 }) === null);
+  const gpR = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+  ok("the guide puts it under a long walking leg, by the guide's country", /rideFor\(\{ country: guide\?\._country, minutes: walkMinutes, tooFar: estIsImpossibleWalk \}\)/.test(gpR));
+  // Klaipėda is walkable, greater Klaipėda is not (Oliver, 1 Oct 2026).
+  const theatre = { lat: 55.7127, lon: 21.1314 }, castle = { lat: 55.7065, lon: 21.1277 }, melnrage = { lat: 55.7382, lon: 21.0834 }, giruliai = { lat: 55.7672, lon: 21.0911 };
+  ok("a walk inside the city centre is a walk", M.offTownWalk({ country: "LT", from: theatre, to: castle }) === false);
+  ok("a walk from the centre to Melnragė is not", M.offTownWalk({ country: "LT", from: theatre, to: melnrage }) === true);
+  ok("nor between two places outside it", M.offTownWalk({ country: "LT", from: melnrage, to: giruliai }) === true);
+  ok("a short hop out there still is", M.offTownWalk({ country: "LT", from: melnrage, to: { lat: 55.7390, lon: 21.0850 } }) === false);
+  ok("and nothing is decided without both ends, or in Denmark", M.offTownWalk({ country: "LT", from: theatre, to: null }) === false && M.offTownWalk({ country: "DK", from: theatre, to: melnrage }) === false);
+  ok("the guide's writer is told, in so many words", /Greater Klaipėda is not/.test(M.walkRule("LT")) && /even for a traveller who loves walking/.test(M.walkRule("LT")) && M.walkRule("DK") === "");
+  const ga = readFileSync(join(root, "src/utils/guideAbroad.js"), "utf8");
+  ok("on every prompt for a Lithuanian guide", /\$\{landRules\(land\)\}\$\{walkRule\(land\.code\)\}/.test(ga));
+  const gpW = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+  ok("and the guide relabels such a leg rather than trusting it", /const offTown = usedMode === "walking" && offTownWalk\(\{/.test(gpW) && /\|\| offTown;/.test(gpW) && /exact && !offTown \?/.test(gpW));
+  // Scan a Source reads more than events (Oliver, 1 Oct 2026).
   is("Scan a Source reads events, places to see, food and towns", M.SCAN_KINDS.map(k => k.id), ["festival", "free", "food", "town"]);
   ok("each asks for its own kind, in the page's country, and drops the tagline", /Lithuanian place to see/.test(M.scanPrompt("free", "Lithuanian")) && /drop the tagline/.test(M.scanPrompt("free", "Lithuanian")) && /"dates"/.test(M.scanPrompt("festival")) && !/"dates"/.test(M.scanPrompt("food")));
   ok("an unknown kind reads as events, as before", M.scanKindOf("moon").id === "festival");
   const appS = readFileSync(join(root, "src/App.jsx"), "utf8");
   ok("a tapped name drafts as the kind scanned", /setStudioType\(scanKindOf\(scanKind\)\.id\); setStudioTown\(it\.name\);/.test(appS));
   ok("and Queue all puts every name in the queue, as that kind, in the Studio's country", /Queue all \{scanResults\.length\}/.test(appS) && /fresh\.map\(name => \(\{ name, type, country: studioCountry \}\)\)/.test(appS));
+  ok("busyness is a Studio route, gated like the others", M.STUDIO_ONLY_ENDPOINTS.includes("busyness"));
+  const bz = readFileSync(join(root, "api/busyness.js"), "utf8");
+  ok("the BestTime key stays on the server", /process\.env\.BESTTIME_API_KEY_PRIVATE/.test(bz) && !/BESTTIME/.test(readFileSync(join(root, "src/App.jsx"), "utf8").replace(/\/\/.*$/gm, "")));
+  const appB = readFileSync(join(root, "src/App.jsx"), "utf8");
+  // Every page abroad waits for its first row (Oliver, 1 Oct 2026).
+  ok("every Lithuanian page waits for data, the planner for places", ["tips: hereCount(tipsOnly(essentials)) === 0,", "attractions: hereCount(freeEntrance) + hereCount(craftItems) === 0,", "food: hereCount(foodSpots) === 0,", "visits: hereCount(towns) === 0,", "ai: hereCount(freeEntrance) + hereCount(foodSpots) + hereCount(craftItems) === 0,"].every(line => appB.includes(line)) && /events: !\[\.\.\.events, \.\.\.majorEvents, \.\.\.calendarEvents\]\.some\(e => rowCountry\(e\) === PAGE_COUNTRY/.test(appB) && /const hereCount = \(rows\) => /.test(appB));
+  ok("and Explore is never one of them", !/\bhome: /.test(appB.slice(appB.indexOf("const emptyHere = {"), appB.indexOf("const hideAbroad"))));
+  ok("Studio fetches it through the renewing fetch", /studioFetch\(`\/api\/busyness`/.test(appB));
+  ok("Studio refuses a booking that would not work", /const bookFault = bookingProblem\(studioBooking\);/.test(appB) && /if \(cleanBooking\(studioBooking\)\) shaped\.__booking = studioBooking\.trim\(\);\s*else delete shaped\.__booking;/.test(appB));
+  ok("and shows the partner their code", /Deal code for the partner: <strong[^>]*>\{dealCode\(studioDraft\)\}<\/strong>/.test(appB));
+  const dp = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
+  ok("a guest sees the code only with the deal itself", /\{!view\.locked && dealCode\(item\) && \(/.test(dp));
+  ok("and booking and busyness need no account", /const book = cleanBooking\(item\.__booking\);/.test(dp) && !/signedIn && .*cleanBooking/.test(dp));
   // "why does it all say free?" (Oliver, 2 Oct 2026). "free" is the Studio's old
   // name for Attractions, from when the list was free entrances only.
   ok("the queue names an attraction an attraction, not 'free'", /\(\{entryKindLabel\(it\.type, it\.type\)\.toLowerCase\(\)\}/.test(appS) && !/\(\{it\.type\}\{it\.country/.test(appS));
@@ -80949,7 +81138,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("and nothing the planner loads reads import.meta", ["nowPlanner", "walkable", "rideHail", "countries", "calendarDay", "offerClock"].every(f => !/import\.meta/.test(readFileSync(join(root, `src/utils/${f}.js`), "utf8"))));
   ok("the planner imports only files a server can load", (readFileSync(join(root, "src/utils/nowPlanner.js"), "utf8").match(/^import .* from "(.*)";$/gm) || []).every(l => /\.js";$/.test(l)));
   const page = readFileSync(join(root, "src/pages/KlaipedaDemo.jsx"), "utf8");
-  ok("and it sits on the Klaipėda walks page, starting where the QR was", /<NowPlanner country="LT" defaultFrom=/.test(page));
+  ok("and it sits on the Klaipėda walks page, starting where the QR was", /<NowPlanner country="LT" (lang=\{lang\} )?defaultFrom=/.test(page));
   const np = readFileSync(join(root, "src/components/NowPlanner.jsx"), "utf8");
   const nowKeys = [...np.matchAll(/"(now\.[a-zA-Z]+)"/g)].map(m => m[1]);
   ok("every word on it is in four languages", nowKeys.length >= 15 && nowKeys.every(k => ["en", "da", "de", "lt"].every(l => !!M.UI_STRINGS[k]?.[l])));
@@ -81019,7 +81208,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const w = N.scheduleWalk([{ id: "food:1" }], twin(true), ctx);
   ok("a partner that earns its stop shows its deal, marked as a partner", w.stops[0]?.deal?.text === "Free soda" && /uiT\("now\.partner", lang\)/.test(readFileSync(join(root, "src/components/NowPlanner.jsx"), "utf8")) && ["en", "da", "de", "lt"].every(l => !!M.UI_STRINGS["now.partner"]?.[l]));
   const page = readFileSync(join(root, "src/pages/KlaipedaDemo.jsx"), "utf8");
-  ok("the hand-written walks are off the Klaipėda page", /const SHOW_HAND_WRITTEN_WALKS = false;/.test(page) && /\{SHOW_HAND_WRITTEN_WALKS && <>/.test(page));
+  ok("the hand-written walks are gone from the Klaipėda page", !/TRIPS|StopCard|tripFor/.test(page) && /<NowPlanner country="LT" lang=\{lang\} defaultFrom=\{from\} \/>/.test(page));
 
   const row = { name: "Danė Square", desc: "A riverside square — busy on summer evenings.", ticketsGlance: "Free entry", priceNote: "Coffee from 3 EUR", website: "https://x.lt", blogBody: [{ type: "heading", content: "Being There" }, { type: "paragraph", content: "Boats moor here from 10:00." }, { type: "bullets", items: ["Bring a jacket", "Benches face the river"] }] };
   const prose = T.proseOf(row);
@@ -81214,6 +81403,51 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("the castle's own page says Tuesday to Saturday in every language", /Tuesday to Saturday/.test(castle.blogBody.map(b => b.content || "").join(" ")) && ["lt", "de", "da"].every(l => /antradienio iki šeštadienio|dienstags bis samstags|tirsdag til lørdag/.test(JSON.stringify(castle.__i18n[l]))));
   ok("and no page still says the museums open on a Monday", !/Monday to Friday|montags bis freitags|mandag til fredag|darbo dienomis/.test(JSON.stringify(Object.values(X.EXAMPLE_PAGES).map(p => p.item))));
   ok("the jazz cellar keeps Monday and Tuesday shut, as a quiet start to the week", N.windowsFor(X.EXAMPLE_PARTNERS.find(p => p.key === "jazz").hours, 1).length === 0 && N.windowsFor(X.EXAMPLE_PARTNERS.find(p => p.key === "jazz").hours, 5).length === 1);
+}
+
+// ── Batch 181b: what the review of the held security work found ──
+{
+  const appH = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the guide pass gets a token that is still good", /token: await freshPassToken\(\),[\s\S]{0,40}makeId: newVisitorId/.test(appH) && (appH.match(/token: await freshPassToken\(\)/g) || []).length === 2);
+  ok("and a renewed Studio session keeps the founder's id", /email: studioSession\.email, \.\.\.\(studioSession\.userId \? \{ userId: studioSession\.userId \} : \{\}\) \};/.test(appH));
+  ok("a signed-out reader is told to sign in, not that nothing is new", /if \(res\.status === 401\) \{ setLiveInfo\(prev => \(\{ \.\.\.prev, \[item\.name\]: uiT\("ai\.signIn", uiLang\) \}\)\)/.test(appH) && ["en", "da", "de", "lt"].every(l => !!M.UI_STRINGS["ai.signIn"]?.[l]));
+  const gpH = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+  ok("and so is somebody chatting on a shared guide", /uiT\(result\.status === 401 \? "ai\.signIn" : "guide\.chatFailed", uiLang\)/.test(gpH));
+  ok("the busyness forecast survives publishing a new entry", /if \(!isEditing && cleanBusy\(editedDraft\?\.__busy\)\) shaped\.__busy = editedDraft\.__busy;/.test(appH));
+  const rv = readFileSync(join(root, "src/components/ReviewsSection.jsx"), "utf8");
+  const sql = readFileSync(join(root, "SECURITY_LOCKDOWN_30SEP.sql"), "utf8");
+  ok("a review shows who wrote it, never which account", /const REVIEW_COLUMNS = "id,item_type,item_name,author,text,created_at";/.test(rv) && !/select=\*/.test(rv) && /revoke select on public\.gemlyx_reviews from anon, authenticated/.test(sql));
+  ok("and the boxes stop where the database does", /maxLength=\{60\}/.test(rv) && /maxLength=\{2000\}/.test(rv));
+  ok("every rule on the forms tables that is not an insert goes", /and cmd <> 'INSERT' loop/.test(sql));
+  ok("a camera original fits the media bucket", /file_size_limit = 20971520/.test(sql));
+  ok("a reload keeps the booking box too", /booking: typeof e\.booking === "string"/.test(readFileSync(join(root, "src/utils/studioDraftStore.js"), "utf8")));
+}
+
+// ── Batch 188: the security review of 3 Oct 2026 ──
+// Oliver, uploading gemlyx-security-2026-10-03.md: "we gotta adress the
+// security note", and choosing "Open, but capped" for the AI routes.
+{
+  const rd = (f) => readFileSync(join(root, f), "utf8");
+  const leaked = M.safeUpstreamError({ error: { message: "Incorrect API key provided: sk-proj-****************abcd. See the docs.", type: "invalid_request_error" } }, 401, "OpenAI");
+  ok("a provider's error comes back without any of the key in it, and keeps its type", !/abcd|sk-/.test(leaked.error.message) && leaked.error.type === "invalid_request_error");
+  ok("and the billing words the guide builder looks for survive", /credit balance is too low/.test(M.safeUpstreamError({ error: { message: "Your credit balance is too low to access the API." } }, 400).error.message));
+  ok("the Claude and OpenAI routes hand back only the cleaned error", (rd("api/anthropic.js").match(/safeUpstreamError\(/g) || []).length === 2 && /safeUpstreamError\(data, r\.status, "OpenAI"\)/.test(rd("api/openai.js")) && !/String\(err\)/.test(rd("api/anthropic.js")));
+  const pn = rd("api/plan-now.js");
+  ok("plan-now answers one spelling of its address only, raw", /if \(raw !== canonical\) return json\(res, 400/.test(pn) && /const raw = String\(req\.url \|\| ""\)/.test(pn) && /\/api\/plan-now\?c=\$\{country\}&from=\$\{from\}&h=\$\{hours\}&lang=\$\{lang\}&slot=\$\{encodeURIComponent\(slot\)\}/.test(rd("src/components/NowPlanner.jsx")));
+  ok("and reads published rows with the public key, never the service key", /const key = PUBLIC_SUPABASE_KEY;/.test(pn) && !/SUPABASE_SERVICE_ROLE_KEY/.test(pn));
+  ok("the public key on the server is the one in the page", rd("src/config.js").includes(M.PUBLIC_SUPABASE_KEY) && /"role":"anon"/.test(Buffer.from(M.PUBLIC_SUPABASE_KEY.split(".")[1], "base64").toString()));
+  ok("a forecast that could not be read is unknown, not dry", /const UNKNOWN_WEATHER = \{ known: false/.test(pn) && /forecast could not be read/.test(M.NP.planPrompt([], { country: "LT", start: M.NP.NOW_STARTS.LT.centre, startClock: { day: 2, minutes: 600 }, budget: 120, weather: { known: false } })));
+  ok("a founder's ticket answer stays out of the shared cache", /res\.setHeader\("Cache-Control", "private, max-age=900"\);/.test(rd("api/tickets.js")) && !/s-maxage=900, stale-while-revalidate=3600/.test(rd("api/tickets.js")));
+  ok("the ask route takes its place in the day under a lock before answering", /const took = await takeDaily\(\{ day, keys: \[\{ key: `ask:u:/.test(rd("api/ask.js")));
+  ok("the problem form mails ten a day per visitor and 300 in all", /limit: 10 \}, \{ key: "report:site", limit: 300 \}/.test(rd("api/report-problem.js")));
+  ok("the share pages carry the same headers as the rest of the site", (rd("middleware.js").match(/\.\.\.PAGE_HEADERS,/g) || []).length === 2 && /"x-frame-options": "DENY"/.test(rd("middleware.js")));
+  ok("no local env file can be committed", /^\.env\.\*$/m.test(rd(".gitignore")) && /^\.env\.\*$/m.test(readFileSync(join(root, "../.gitignore"), "utf8")));
+  const wf = readFileSync(join(root, "../.github/workflows/build-check.yml"), "utf8");
+  ok("the build check reads only, and runs actions pinned to their commits", /permissions:\n  contents: read/.test(wf) && /actions\/checkout@[0-9a-f]{40}/.test(wf) && /actions\/setup-node@[0-9a-f]{40}/.test(wf));
+  ok("the database knows the founder by account, never by email", /create or replace function public\.is_founder\(\)[\s\S]{0,200}auth\.uid\(\) = '467fb712/.test(rd("SECURITY_LOCKDOWN_30SEP.sql")) && !/auth\.jwt\(\) ->> 'email'\) = 'oliververhein/.test(rd("SECURITY_LOCKDOWN_30SEP.sql")));
+  ok("a failed content read is a failure, not an empty library", /if \(!res\.ok\) throw new Error\(`the content library answered/.test(rd("src/utils/liveContent.js")));
+  ok("a saved guide's link is 16 characters from the cryptographic source", /crypto\.getRandomValues\(bytes\)/.test(rd("src/pages/GuidePage.jsx")) && /const id = guideLinkId\(\);/.test(rd("src/pages/GuidePage.jsx")));
+  ok("translating everything says so when the places could not be read", /if \(!res\.ok \|\| !Array\.isArray\(rows\)\) \{ showToast\("🌐 Could not read the published places/.test(rd("src/App.jsx")));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
