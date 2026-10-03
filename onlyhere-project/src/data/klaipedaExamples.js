@@ -21,7 +21,7 @@
 // hour, a price for a thing they already do, a service a visitor needs. No
 // percentage off everything.
 
-import { NOW_STARTS, SHIP_MARGIN, MUST_SEE, STROLL, nowCandidates, scheduleWalk, windowsFor, withMustSee, nextOpen, reversedWalk, placesOf, strollCandidates, weatherRules } from "../utils/nowPlanner";
+import { NOW_STARTS, SHIP_MARGIN, MUST_SEE, STROLL, nowCandidates, tidyWalk, windowsFor, withMustSee, nextOpen, reversedWalk, placesOf, strollCandidates, weatherRules } from "../utils/nowPlanner";
 import { fingerprint, proseOf } from "../utils/entryTranslate";
 
 export const KLAIPEDA_EXAMPLES_PATH = "/lithuania/examples";
@@ -252,7 +252,7 @@ export const WEATHER_WALKS = [
   { ...TUESDAY, id: "rain", label: "Rain", title: "Rain all morning", moment: "Tuesday 10:30, rain, 9 °C", weather: { wet: true, snow: false, wind: 6 },
     order: [
       { id: "free:castle", stay: 40, why: "Indoors and dry, with the town model to read." },
-      { id: "free:history", stay: 45, why: "Next door and dry: the story of Memel and Lithuania Minor." },
+      { id: "free:history", stay: 45, why: "Dry inside, and the story of Memel and Lithuania Minor." },
       { id: "booking:amber", stay: 25, why: "Twenty minutes at a warm bench with a piece of amber." },
       { id: "free:theatre", stay: 15, why: "Ännchen of Tharau, quickly, under an umbrella." },
       { id: "food:fish", stay: 45, why: "Lunch somewhere warm, close to the ship." },
@@ -261,7 +261,7 @@ export const WEATHER_WALKS = [
     order: [
       { id: "free:ghost", stay: 15, why: "Snow on the dark water of the castle harbour, for a few minutes." },
       { id: "free:castle", stay: 45, why: "Inside and warm, with the town model to read." },
-      { id: "free:history", stay: 45, why: "Next door, without going far on the ice." },
+      { id: "free:history", stay: 45, why: "Indoors again, with the story of Memel and Lithuania Minor." },
       { id: "free:theatre", stay: 20, why: "Ännchen of Tharau with snow on her shoulders." },
       { id: "food:fish", stay: 45, why: "Hot soup and smoked fish before the walk back." },
     ] },
@@ -269,7 +269,7 @@ export const WEATHER_WALKS = [
     order: [
       { id: "free:ghost", stay: 15, why: "Rising out of the castle harbour." },
       { id: "free:castle", stay: 40, why: "Out of the wind, with the town model to read." },
-      { id: "free:history", stay: 45, why: "Next door, still out of the wind." },
+      { id: "free:history", stay: 45, why: "Out of the wind again, with the story of Memel." },
       { id: "booking:amber", stay: 25, why: "Twenty minutes at the bench with a piece of amber." },
       { id: "free:theatre", stay: 15, why: "Sheltered by the theatre and the houses around it." },
       { id: "food:fish", stay: 40, why: "Lunch on Fishermen's Street." },
@@ -438,9 +438,10 @@ export const runExample = (ex) => {
   const margin = start.ship ? SHIP_MARGIN : 0;
   const ctx = { country: "LT", start, startClock, budget, margin, weather, style };
   // The order as the route makes it: the model's, then every Can't Miss Out
-  // place it left out put in where it costs least.
+  // place it left out put in where it costs least, then untangled so no
+  // street is walked twice.
   const order = withMustSee(ex.order, candidates, ctx);
-  const made = scheduleWalk(order, candidates, ctx);
+  const made = tidyWalk(order, candidates, ctx);
   const alt = reversedWalk(made, candidates, ctx);
   const kept = new Set(made.stops.map(s => s.id));
   const left = order.filter(o => !kept.has(o.id)).map(o => {
