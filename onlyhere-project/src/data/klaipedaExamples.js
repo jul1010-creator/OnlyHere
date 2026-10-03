@@ -32,8 +32,15 @@ const lines = (spans) => WEEK_NAMES.map((d, i) => spans[i] ? `${d}: ${spans[i][0
 const every = (from, to) => ({ 0: [from, to], 1: [from, to], 2: [from, to], 3: [from, to], 4: [from, to], 5: [from, to], 6: [from, to] });
 
 // Winter hours, from 17 September, the season these examples fall in.
-// Tuesday to Saturday: the museum's "II-VI", where I is Monday. See the
-// note on the Roman numerals in data/klaipedaDemo.js.
+//
+// ── THE ROMAN NUMERALS, READ ONE DAY OFF ────────────────────────────
+// Oliver, 3 Oct 2026: "Castle museum is closed monday you know". It is. The
+// museum writes its days in Roman numerals, and in Lithuania I is Monday:
+// "II-VI" in winter is Tuesday to Saturday and "III-VII" in summer is
+// Wednesday to Sunday. The first reading, on 29 Sep, had each one a day
+// early, which put the castle open on winter Mondays and shut on winter
+// Saturdays. Read again off mlimuziejus.lt on 3 Oct 2026, for the Castle
+// Museum, the History Museum of Lithuania Minor and the Blacksmith's Museum.
 const LM_WINTER = lines({ 2: ["10:00", "18:00"], 3: ["10:00", "18:00"], 4: ["10:00", "18:00"], 5: ["10:00", "18:00"], 6: ["10:00", "18:00"] });
 const CLOCK = lines({ 2: ["10:00", "18:00"], 3: ["10:00", "18:00"], 4: ["12:00", "20:00"], 5: ["10:00", "18:00"], 6: ["10:00", "18:00"], 0: ["10:00", "16:00"] });
 
