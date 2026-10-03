@@ -42,3 +42,10 @@ export const groupByMonth = (events = [], { now = new Date(), lang = "en" } = {}
   // anything undated after them.
   return groups.sort((a, b) => (a.key === "" ? 1 : b.key === "" ? -1 : a.key.localeCompare(b.key)));
 };
+
+// A day as the reader's language writes it ("Monday 5 October", "mandag den
+// 5. oktober").
+export const dayLabel = (date, lang = "en") => {
+  try { return new Intl.DateTimeFormat(LOCALES[lang] || "en-GB", { weekday: "long", day: "numeric", month: "long" }).format(date); }
+  catch { return date.toDateString(); }
+};

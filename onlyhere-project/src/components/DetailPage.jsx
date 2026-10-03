@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { localizedEntry } from "../utils/entryTranslate";
 import { activeCountry, countryProfile, rowCountry, DEFAULT_COUNTRY } from "../utils/countries";
 import { C } from "../utils/theme";
 import { getEventDate, travelLabel, isUpcoming, isCurrentlyLive, arrivalRow, externalHref, hasFinished, TRAVEL_ORIGIN } from "../utils/helpers";
@@ -26,7 +27,7 @@ import { ticketmasterUrl, ticketDisclosure, tiqetsUrl, tiqetsDisclosure, affilia
 import { isTiqetsProductUrl, ticketAgentOf, isBookableTicketUrl, isTourUrl, sameShop, priceSourceHost, isResellerUrl } from "../utils/ticketLink";
 import { cleanTicketOffer, offerIsTheDoor, ticketOfferLine, partnerReason, partnerPitchFits, officialSiteLabel, agentName, OFFER_AGENTS } from "../utils/ticketOffer";
 import { branchPoints, branchesOf, hasBranches, branchLine, branchLabel } from "../utils/branches";
-import { offerView, offerHoursLabel, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE } from "../utils/offer";
+import { offerView, offerHoursLabel, OFFER_LOCKED_LABEL, offerLockedNote, OFFER_NOTE, OFFER_LOCKED_NOTE as OFFER_LOCKED_NOTE_DK } from "../utils/offer";
 import { saveLabel, saveHint, planFromSavedLabel } from "../utils/savedTrip";
 import { HowWeKnow } from "./HowWeKnow";
 import { SocialSection } from "./SocialSection";
@@ -40,6 +41,7 @@ import { audioLine } from "../utils/wegotripMatch";
 // every word is English is the half-translation uiLanguage.js already calls
 // worse than none. `lang` arrives as a prop from App.jsx, which holds it.
 import { t as uiT, DEFAULT_UI_LANGUAGE } from "../utils/uiLanguage";
+import { dealCode, cleanBooking, busyAt } from "../utils/dealExtras";
 import { entryWord, bookLabel } from "../utils/entryWords";
 import { readableOn } from "../utils/readableColor";
 import { events, majorEvents, vikingEvents } from "../data/events";
@@ -165,7 +167,10 @@ const eventsForTown = (townName) => {
 export const detailPoint = (item, kind) =>
   placeCoords(item) || (kind === "town" ? townPointFor(item?.name) : null);
 
-export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, checkLiveInfo, userCoords, isSaved, onToggleSave, hasBeen = false, onToggleBeen, savedCount = 0, onPlanFromSaved, onOpenEvent, onOpenNearby, paid = false, signedIn = false, onNeedAccount, lang = DEFAULT_UI_LANGUAGE, windowed = false }) => {
+export const DetailPage = ({ item: itemIn, onClose, kind, liveInfo, liveInfoLoading, checkLiveInfo, userCoords, isSaved, onToggleSave, hasBeen = false, onToggleBeen, savedCount = 0, onPlanFromSaved, onOpenEvent, onOpenNearby, paid = false, signedIn = false, onNeedAccount, lang = DEFAULT_UI_LANGUAGE, windowed = false, sample = "" }) => {
+  // The entry in the reader's language when a translation of its current
+  // English exists, otherwise as it is. See utils/entryTranslate.js.
+  const item = useMemo(() => localizedEntry(itemIn, lang), [itemIn, lang]);
   // Folded away by default. See the events block below for why, and for why
   // the count sits on the row that opens it.
   const [eventsOpen, setEventsOpen] = useState(false);
@@ -497,6 +502,15 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
           and it is the one line that tells a reader the picture is real. */}
       <PhotoCredit photo={hasShot ? item.photo : ""} credit={item.__photoCredit} style={{ padding: "6px 20px 0", maxWidth: 620, margin: "0 auto" }} />
       <div style={{ padding: "14px 20px 40px", maxWidth: 620, margin: "0 auto" }}>
+        {/* ── A SAMPLE PAGE ───────────────────────────────────────────
+            Oliver, 2 Oct 2026, on the Klaipėda examples: "The listings should
+            maybe open a tiny window of their page?" They open this page, with
+            `sample` saying what it is. A sample has no live check, no feedback
+            and no reviews: nobody should be paying for an AI call about a
+            made-up café, or leaving a review of one. */}
+        {sample && (
+          <div data-testid="sample-tag" style={{ display: "inline-block", fontSize: 10.5, fontWeight: 700, letterSpacing: 0.6, color: C.muted, border: `1px solid ${C.border}`, borderRadius: 100, padding: "3px 9px", marginBottom: 10 }}>{sample}</div>
+        )}
         <div style={{ fontSize: 10, fontWeight: 700, color: ink, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>
           {/* A shop and a shopping street both say where they are, which is
               what `location` holds on them. Oliver, 22 Sep 2026. */}
@@ -698,7 +712,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
             //
             // Absent unless it was measured: no operator page read means no
             // row, not a reassuring one.
-            ...(item.__language?.level === "danish-only" && item.__language?.note
+            ...((item.__language?.level === "danish-only" || item.__language?.level === "local-only") && item.__language?.note
               ? [{ icon: "🗣", label: "Language", value: item.__language.note }]
               : []),
             { icon: "⛺", label: "Camping", value: item.camping },
@@ -1464,10 +1478,10 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
           </div>
         )}
 
-        <button onClick={() => checkLiveInfo(item)} disabled={liveInfoLoading === item.name}
+        {!sample && <button onClick={() => checkLiveInfo(item)} disabled={liveInfoLoading === item.name}
           style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px", fontSize: 13, fontWeight: 700, color: C.text, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: liveInfo?.[item.name] ? 12 : 14 }}>
           {liveInfoLoading === item.name ? uiT("entry.checking", lang) : `🔍 ${uiT("entry.liveInfo", lang)}`}
-        </button>
+        </button>}
         {liveInfo?.[item.name] && (
           <div style={{ background: `${color}18`, border: `1px solid ${color}`, borderRadius: 12, padding: "12px 14px", marginBottom: 14, fontSize: 13, color: C.text, lineHeight: 1.6 }}>
             {liveInfo[item.name]}
@@ -1532,11 +1546,46 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
                 </div>
               )}
               <div style={{ fontSize: view.locked ? 12 : 13, color: view.locked ? C.muted : C.text, lineHeight: 1.55 }}>
-                {view.locked ? OFFER_LOCKED_NOTE : view.text}
+                {/* A deal abroad needs only a free account, so the note is the way in. */}
+                {view.locked && !signedIn && offerLockedNote() !== OFFER_LOCKED_NOTE_DK
+                  ? <button onClick={() => onNeedAccount?.("deal")} style={{ background: "none", border: "none", padding: 0, color: C.gold, fontSize: 12, fontWeight: 700, cursor: "pointer", textDecoration: "underline", fontFamily: "'Inter', sans-serif" }}>{offerLockedNote()}</button>
+                  : view.locked ? offerLockedNote() : view.text}
               </div>
+              {!view.locked && dealCode(item) && (
+                <div style={{ fontSize: 13, color: C.text, marginTop: 8 }}>
+                  {uiT("deal.code", lang).split("{code}")[0]}<strong style={{ color: C.gold, letterSpacing: 1.5, fontSize: 15 }}>{dealCode(item)}</strong>{uiT("deal.code", lang).split("{code}")[1] || ""}
+                </div>
+              )}
               <div style={{ fontSize: 10, color: C.muted, lineHeight: 1.5, marginTop: 7 }}>
                 {OFFER_NOTE}{view.until ? ` Until ${view.until}.` : ""}
               </div>
+            </div>
+          );
+        })()}
+
+        {/* ── BOOK A TABLE, AND HOW BUSY IT USUALLY IS ─────────────────
+            Oliver, 1 Oct 2026, for people off a cruise ship with a few hours:
+            the restaurant's own booking (Gemlyx takes none itself), and a
+            forecast stored from BestTime, read for the hour where the place
+            is. Neither needs an account. See utils/dealExtras.js. */}
+        {(() => {
+          const book = cleanBooking(item.__booking);
+          const busy = busyAt(item.__busy, new Date(), countryProfile(item.country || activeCountry()).zone || "Europe/Copenhagen");
+          if (!book && !busy) return null;
+          return (
+            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+              {book && (
+                <a href={book.href} target={book.kind === "web" ? "_blank" : undefined} rel="noopener noreferrer"
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6, background: C.gold, color: C.onGold || "#0A0F1E", borderRadius: 100, padding: "9px 16px", fontSize: 13, fontWeight: 700, textDecoration: "none", fontFamily: "'Inter', sans-serif" }}>
+                  {uiT(book.kind === "phone" ? "deal.call" : "deal.book", lang)}
+                </a>
+              )}
+              {busy && (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 12.5, color: C.light }}>
+                  <span style={{ width: 8, height: 8, borderRadius: 8, background: busy.level === "quiet" ? "#4CAF50" : busy.level === "some" ? C.gold : "#FF7A59" }} />
+                  {uiT(`busy.${busy.level}`, lang)}{busy.quieterAt ? `, ${uiT("busy.quieter", lang).replace("{time}", busy.quieterAt)}` : ""}
+                </span>
+              )}
             </div>
           );
         })()}
@@ -1737,9 +1786,9 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
             about the PLACE, and these two are a reader talking to us about the
             WRITING. Reading them as one thing is how a note meant for Oliver
             ends up published as somebody's opinion of a bar. */}
-        <ArticleFeedback itemType={kind} itemName={item.name} signedIn={signedIn} onNeedAccount={onNeedAccount} />
+        {!sample && <ArticleFeedback itemType={kind} itemName={item.name} signedIn={signedIn} onNeedAccount={onNeedAccount} />}
 
-        <ReviewsSection itemType={kind} itemName={item.name} />
+        {!sample && <ReviewsSection itemType={kind} itemName={item.name} signedIn={signedIn} onNeedAccount={onNeedAccount} />}
       </div>
     </div>
     </div>

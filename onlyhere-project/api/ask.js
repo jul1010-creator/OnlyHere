@@ -1,4 +1,6 @@
 // /api/ask.js
+import { isFounder, requestIsFromSite, NOT_FROM_SITE } from "../src/utils/apiGuard.js";
+import { takeDaily } from "../src/utils/aiGate.js";
 //
 // ── THE TRAVELER'S ASSISTANT, ANSWERED SERVER SIDE ───────────────────
 // Oliver, 7 Aug 2026: "There is a studio/admin assistant and a paid subscriber
@@ -47,6 +49,8 @@ const todayKey = () => new Date().toISOString().slice(0, 10);
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return json(res, 405, { error: "POST only" });
+  // From the site, like every other route that spends money (apiGuard.js).
+  if (!requestIsFromSite(req.headers)) return json(res, 403, { error: NOT_FROM_SITE });
 
   // Public, and already in the client bundle. The env var is only here so a
   // future project move needs no code change.
@@ -71,6 +75,12 @@ export default async function handler(req, res) {
     if (!who.ok) return json(res, 401, { error: "Your session has expired. Sign in again." });
     const u = await who.json();
     userId = u?.id;
+    // A confirmed email, the same rule as the other AI routes (aiGate.js), so
+    // a throwaway address cannot open account after account for questions.
+    // Fable's audit, 30 Sep 2026. The founder is let through either way.
+    if (userId && !(u?.email_confirmed_at || u?.confirmed_at) && !isFounder(String(userId), process.env.GEMLYX_FOUNDER_IDS)) {
+      return json(res, 403, { error: "Confirm your email first. The link is in your inbox." });
+    }
   } catch {
     return json(res, 503, { error: "Could not verify your session just now." });
   }
@@ -154,6 +164,19 @@ export default async function handler(req, res) {
     return json(res, 429, {
       error: `That is your ${DAILY_LIMIT} questions for today. It resets at midnight UTC.`,
       used, limit: DAILY_LIMIT,
+    });
+  }
+  // ── AND COUNTED IN ONE STEP ───────────────────────────────────────
+  // Security review, 3 Oct 2026, finding 15: the count above is read, and the
+  // log row written only after the answer, so ten questions sent at once all
+  // read the same count and all passed. The daily counter takes the place
+  // under a lock first; the log above stays as the record and the display.
+  const took = await takeDaily({ day, keys: [{ key: `ask:u:${String(userId).toLowerCase()}`, limit: DAILY_LIMIT }], supabaseUrl: SUPABASE_URL, serviceKey: SERVICE_KEY });
+  if (took.closed) return json(res, 503, { error: "Could not check your question allowance just now. Try again in a moment." });
+  if (!took.ok) {
+    return json(res, 429, {
+      error: `That is your ${DAILY_LIMIT} questions for today. It resets at midnight UTC.`,
+      used: DAILY_LIMIT, limit: DAILY_LIMIT,
     });
   }
 

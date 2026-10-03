@@ -34,13 +34,21 @@ const townFromAddress = (address) => {
     // Danish postcodes are four digits; Lithuanian ones five, sometimes written
     // "LT-92114". A Danish address reads exactly as it did.
     const m = parts[i].match(/^(?:[A-Z]{2}-)?\d{4,5}\s+(.+)$/);
-    if (m) return m[1].trim();
+    if (m) {
+      // A Lithuanian address ends on the municipality ("91248 Klaipėdos m.
+      // sav."), so the town is the part before it when there is one, and the
+      // municipality's own town otherwise. See plainTownName.
+      const after = m[1].trim();
+      if (plainTownName(after) === after) return after;
+      const before = parts[i - 1] || "";
+      return before && !/\d|\b(g|al|pr|pl|skg|kel)\.$/i.test(before) ? before : plainTownName(after);
+    }
   }
   return "";
 };
 
 import { requestIsFromSite, NOT_FROM_SITE, resolveUser, isFounder } from "../src/utils/apiGuard.js";
-import { COUNTRY_PROFILES, DEFAULT_COUNTRY } from "../src/utils/countries.js";
+import { COUNTRY_PROFILES, DEFAULT_COUNTRY, plainTownName } from "../src/utils/countries.js";
 
 export default async function handler(req, res) {
   // ── SECURITY, 17 AUG 2026 ─────────────────────────────────────────
@@ -80,7 +88,7 @@ export default async function handler(req, res) {
     // to point the key at anything else.
     const land = COUNTRY_PROFILES[String(req.query.country || "").toUpperCase()] || COUNTRY_PROFILES[DEFAULT_COUNTRY];
     const textQuery = String(name).includes(land.name) ? String(name) : `${name}, ${land.name}`;
-    const r = await fetch("https://places.googleapis.com/v1/places:searchText", {
+    const ask = (languageCode) => fetch("https://places.googleapis.com/v1/places:searchText", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -91,7 +99,7 @@ export default async function handler(req, res) {
         // businessStatus is on the same Pro tier as the three above, so it
         // costs nothing more. 29 Sep 2026: a branch lookup offered a bar in
         // Hornslet that Google lists as permanently closed.
-        "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.location,places.businessStatus",
+        "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.location,places.businessStatus",
       },
       // ── FIVE INSTEAD OF ONE, AND IT COSTS THE SAME ────────────────
       // Oliver, 17 Aug 2026: "you can also make it ask me, if it's not sure, 'do
@@ -103,10 +111,31 @@ export default async function handler(req, res) {
       // assumption that the first hit is the right one, and his Heidi's draft is
       // what that assumption costs when it is wrong: a full research pass, 167
       // seconds, on a bar whose name the searches could not match.
-      body: JSON.stringify({ textQuery, languageCode: land.googleLanguage, regionCode: land.googleRegion, maxResultCount: want }),
+      body: JSON.stringify({ textQuery, languageCode, regionCode: land.googleRegion, maxResultCount: want }),
     });
+    const r = await ask(land.googleLanguage);
     const data = await r.json();
     if (!r.ok) return res.status(r.status).json({ error: data?.error?.message || "Places text search failed" });
+    // ── AND ABROAD, THE ENGLISH NAME AS WELL ──────────────────────
+    // Oliver's Klaipėda runs, 3 Oct 2026: Google answered "Mažosios Lietuvos
+    // istorijos muziejus" for the Museum of the History of Lithuania Minor and
+    // "Pilies muziejus" for the Castle Museum, and both were refused as other
+    // places, which cost each draft its coordinate. Outside Denmark the same
+    // search is asked once more in English, and each listing carries the name
+    // Google gives it there. The id ties the two answers together, and a
+    // second call that fails leaves the first exactly as it was.
+    const english = new Map();
+    if (land.code !== DEFAULT_COUNTRY && land.googleLanguage !== "en") {
+      try {
+        const re = await ask("en");
+        const de = re.ok ? await re.json() : null;
+        (de?.places || []).forEach(x => { if (x?.id && x.displayName?.text) english.set(x.id, x.displayName.text); });
+      } catch { /* the local answer stands on its own */ }
+    }
+    const nameEnOf = (x) => {
+      const en = english.get(x?.id) || "";
+      return en && en !== (x?.displayName?.text || "") ? { nameEn: en } : {};
+    };
     const p = (data.places || [])[0];
     // NOT AN ERROR, AND IT MATTERS THAT IT IS NOT. Plenty of real places have
     // no Google listing, and a 404 here would be read by the caller as a broken
@@ -124,6 +153,7 @@ export default async function handler(req, res) {
       .filter(x => x?.location && x.businessStatus !== "CLOSED_PERMANENTLY")
       .map(x => ({
         name: x.displayName?.text || "",
+        ...nameEnOf(x),
         address: x.formattedAddress || "",
         town: townFromAddress(x.formattedAddress),
         lat: x.location.latitude,
@@ -134,6 +164,7 @@ export default async function handler(req, res) {
     return res.status(200).json({
       found: true,
       name: p.displayName?.text || "",
+      ...nameEnOf(p),
       address: p.formattedAddress || "",
       town: townFromAddress(p.formattedAddress),
       lat: p.location.latitude,

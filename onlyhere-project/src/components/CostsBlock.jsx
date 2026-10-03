@@ -135,7 +135,7 @@ export const CostsBlock = ({ guide, C, rowFor, now = new Date(), doors = false, 
                    footnote.
                    Outlined rather than filled. He asked for "a bit", and this
                    block can hold six of them at once. */
-                ? <a href={outboundLink(l.href).href || l.href} target="_blank" rel={outboundLink(l.href).rel}
+                ? <a href={outboundLink(l.href).href || undefined} target="_blank" rel={outboundLink(l.href).rel}
                     style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 6, background: `${C.gold}1a`, border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "7px 13px", fontSize: 12.5, fontWeight: 700, textDecoration: "none" }}>
                     {action(l.kind)} ↗
                   </a>

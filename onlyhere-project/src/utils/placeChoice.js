@@ -259,8 +259,101 @@ export const listingMatchesSubject = (typed, town, listing, { theNameIsAStreet =
   if (!got || !clean(typed)) return false;
   if (theNameIsAStreet) return streetListingMatches(typed, town, got);
   if (sameSubject(typed, got)) return true;
+  if (sameWordsReordered(typed, got)) return true;
+  if (sameAcrossLanguages(typed, got)) return true;
   const core = subjectCore(typed, town);
   return core !== clean(typed) && sameSubject(core, got);
+};
+
+// ── THE SAME WORDS IN ANOTHER ORDER ─────────────────────────────────
+// "Museum of the History of Lithuania Minor" and "History Museum of Lithuania
+// Minor" are one name written two ways, and Google writes the second. Every
+// word has to be on both sides and nothing added, once "the", "of" and "and"
+// are set aside, so "Castle Museum" is still not "Castle".
+const LINK_WORDS = new Set(["the", "of", "and", "a", "an"]);
+const wordSet = (v) => [...new Set(fold(clean(v)).split(/[^\p{L}\p{N}]+/u).filter(w => w && !LINK_WORDS.has(w)))].sort();
+export const sameWordsReordered = (typed, listing) => {
+  const a = wordSet(typed), b = wordSet(listing);
+  return a.length >= 2 && a.length === b.length && a.every((w, i) => w === b[i]);
+};
+
+// ── THE SAME PLACE, NAMED IN ENGLISH AND IN LITHUANIAN ──────────────
+//
+// Four Klaipėda drafts on 2 Oct 2026 refused Google's listing for the place
+// they were drafting: "Sąjūdis Park" against "Sąjūdžio parkas", "Malūnas Park
+// by the Pond" against "Malūno parkas", "Danė Square" against "Danės skveras",
+// "Melnragė Park" against "Melnragės parkas". Each is the place itself. Its
+// Lithuanian name puts the proper name in the genitive (Sąjūdžio, "of
+// Sąjūdis") and says park as parkas, square as skveras or aikštė. The refusal
+// cost every one of them its opening hours, and one of them its coordinate.
+//
+// So, only when the listing is written in Lithuanian (it carries a letter
+// Danish never uses), the two names are compared with the kind of place set
+// aside on both sides: the remaining words must pair up one for one, each
+// pair the same word up to its ending, and both names must say the same kind
+// of place. "Danė Square" is "Danės skveras". "Danė Square" is not "Danės
+// gatvė", and "Old Town Square" is not "Theatre Square".
+const LT_LETTERS = /[ąčęėįšųūž]/i;
+const KINDS = [
+  ["park", "parkas", "parkelis", "garden", "sodas"],
+  ["square", "skveras", "aikste", "plaza"],
+  ["pond", "tvenkinys", "lake", "ezeras"],
+  ["museum", "muziejus", "gallery", "galerija"],
+  ["street", "gatve", "g"],
+  ["beach", "papludimys"],
+  ["church", "baznycia", "cathedral", "katedra"],
+  ["castle", "pilis", "pilies", "piliaviete"],
+  ["dune", "kopa", "kopos"],
+  ["market", "turgus", "turgaviete"],
+];
+const KIND_OF = new Map(KINDS.flatMap((ws, i) => ws.map(w => [w, i])));
+const FILLER = new Set(["the", "of", "by", "at", "and", "in", "on", "ir", "prie", "klaipeda", "klaipedos", "lithuania", "lietuva", "lietuvos"]);
+const nameParts = (v) => {
+  const kinds = new Set(), words = [];
+  fold(clean(v)).split(/[^\p{L}\p{N}]+/u).filter(Boolean).forEach(w => {
+    if (KIND_OF.has(w)) kinds.add(KIND_OF.get(w));
+    else if (!FILLER.has(w)) words.push(w);
+  });
+  return { kinds, words };
+};
+// English words whose Lithuanian is a different word, as the start every
+// form of the Lithuanian shares: "Theatre Square" is "Teatro aikštė", "Museum
+// of Clocks" is "Laikrodžių muziejus".
+const LT_STEMS = {
+  theatre: "teatr", theater: "teatr", clock: "laikrodz", clocks: "laikrodz",
+  sculpture: "skulptur", sculptures: "skulptur", history: "istorij", historical: "istorij",
+  sea: "jur", maritime: "jur", art: "men", arts: "men", old: "sen", town: "miest", city: "miest",
+  blacksmith: "kalv", blacksmiths: "kalv", forge: "kalv", lighthouse: "svyturi",
+  // "Mažosios Lietuvos istorijos muziejus" is the Museum of the History of
+  // Lithuania Minor (Oliver's runs, 3 Oct 2026).
+  minor: "mazos",
+  amber: "ginatar", fishermen: "zvej", fishing: "zvej", ferry: "kelt", harbour: "uost", port: "uost",
+};
+const sameStem = (a, b) => {
+  if (LT_STEMS[a] && b.startsWith(LT_STEMS[a])) return true;
+  if (LT_STEMS[b] && a.startsWith(LT_STEMS[b])) return true;
+  let n = 0;
+  while (n < a.length && n < b.length && a[n] === b[n]) n++;
+  return n >= Math.max(4, Math.max(a.length, b.length) - 3);
+};
+export const sameAcrossLanguages = (typed, listing) => {
+  if (!LT_LETTERS.test(String(listing || "")) && !LT_LETTERS.test(String(typed || ""))) return false;
+  const A = nameParts(typed), B = nameParts(listing);
+  if (!A.kinds.size || ![...A.kinds].some(k => B.kinds.has(k))) return false;
+  // "Klaipėda Castle" and "Klaipėdos pilis": nothing left but the kind, and
+  // both name the same town.
+  if (!A.words.length && !B.words.length) {
+    const town = (v) => /\bklaiped/.test(fold(clean(v)));
+    return town(typed) && town(listing);
+  }
+  if (!A.words.length || A.words.length !== B.words.length) return false;
+  const left = [...B.words];
+  return A.words.every(w => {
+    const i = left.findIndex(x => sameStem(w, x));
+    if (i < 0) return false;
+    left.splice(i, 1);
+    return true;
+  });
 };
 
 // What the log says when a listing is refused. It names the listing, because

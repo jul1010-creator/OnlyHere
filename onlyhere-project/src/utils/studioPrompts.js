@@ -266,7 +266,7 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "region": "the part of Denma
 // one paragraph in front that says which country it is, that a Danish fact is
 // never carried over, and how its prices are written. A Danish draft gets the
 // prompts exactly as they were, byte for byte.
-const abroadPreamble = (land) => `THIS ENTRY IS ABOUT A PLACE IN ${land.name.toUpperCase()}, NOT DENMARK. The rules and examples below were written for Danish entries. Every rule about how to write applies unchanged. Any FACT a rule or example states about Denmark (Danish shops, ferries, transport apps, holidays, prices in DKK) is about Denmark only and must never be carried over to ${land.name}. Write prices in ${land.currency}${land.currency === "EUR" ? ' with the euro sign in front, e.g. "€6" or "€4 to €6"' : ""}. Spell every place name the way ${land.name} spells it, with its own letters.
+const abroadPreamble = (land) => `THIS ENTRY IS ABOUT A PLACE IN ${land.name.toUpperCase()}, NOT DENMARK. The rules and examples below were written for Danish entries. Every rule about how to write applies unchanged. Any FACT a rule or example states about Denmark (Danish shops, ferries, transport apps, holidays, prices in DKK) is about Denmark only and must never be carried over to ${land.name}. Write prices in ${land.currency}${land.currency === "EUR" ? ' with the euro sign in front, e.g. "€6" or "€4 to €6"' : ""}.${land.currency === "EUR" ? " A price threshold a rule below gives in DKK is a Danish level: in euros it is about a seventh and a half of the figure, so 60 DKK is about €8 and 150 DKK about €20. Never apply a DKK figure as if it were euros." : ""} Spell every place name the way ${land.name} spells it, with its own letters.
 
 `;
 

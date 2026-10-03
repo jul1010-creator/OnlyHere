@@ -308,9 +308,11 @@ export default async function handler(req, res) {
   if (!requestIsFromSite(req.headers)) {
     return res.status(403).json({ error: NOT_FROM_SITE });
   }
-  const { lat, lon, mode, date } = req.query;
-
-  if (!lat || !lon) {
+  const { mode, date } = req.query;
+  // Numbers only, since they go straight into three providers' URLs (Fable,
+  // 30 Sep 2026).
+  const lat = Number(req.query.lat), lon = Number(req.query.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
     return res.status(400).json({ error: "Missing 'lat' or 'lon' query params" });
   }
 
@@ -357,7 +359,8 @@ export default async function handler(req, res) {
     if (!yrRes.ok) {
       const errText = await yrRes.text();
       console.error("Yr.no error:", errText);
-      return res.status(502).json({ error: "Weather service failed", detail: errText });
+      console.error("Weather upstream:", errText);
+      return res.status(502).json({ error: "Weather service failed" });
     }
 
     const data = await yrRes.json();

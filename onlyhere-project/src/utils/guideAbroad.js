@@ -16,6 +16,7 @@
 //
 // Nothing here runs on the Danish page. Every caller asks PAGE_ABROAD first,
 // and forLand hands a Danish prompt back untouched.
+import { walkRule } from "./walkable.js";
 import { countryProfile, DEFAULT_COUNTRY } from "./countries";
 
 // ── WHERE A VISITOR STARTS ──────────────────────────────────────────
@@ -143,7 +144,7 @@ export const forLand = (prompt, land) => {
     .replace(/\bDanish\b/g, land.adjective)
     .replace(/\bDanes\b/g, "locals")
     .replace(/\bDKK\b/g, "EUR");
-  return `${swapped}${landRules(land)}`;
+  return `${swapped}${landRules(land)}${walkRule(land.code)}`;
 };
 
 // Wraps an AI call so every prompt it sends goes through forLand. The Danish

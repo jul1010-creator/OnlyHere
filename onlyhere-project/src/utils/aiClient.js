@@ -67,7 +67,7 @@ export const askClaude = async (promptIn, maxTokens = 500, model = "claude-sonne
       // model had already read the prompt still costs money, and a cost meter
       // that only counts successes flatters the number it exists to report.
       recordModelCall("claude", model, data?.usage);
-      if (!res.ok) { console.warn("Claude call failed:", res.status, data.error?.message || data); return { error: data.error?.message || `Request failed (${res.status})` }; }
+      if (!res.ok) { console.warn("Claude call failed:", res.status, data.error?.message || data); return { error: data.error?.message || (typeof data.error === "string" ? data.error : "") || `Request failed (${res.status})`, status: res.status }; }
       const text = data.content?.filter(b => b.type === "text").map(b => b.text).join("").trim();
       if (!text) {
         console.warn("Claude returned no text block.", { stop_reason: data.stop_reason, blockTypes: data.content?.map(b => b.type), usage: data.usage });
@@ -274,20 +274,25 @@ export const withRetry = async (fn, isFailure, label, attempts = 3) => {
 // fails if a new askOpenAI call site appears without a human signing off on it.
 // If that test fails, do not raise its expected count to make it green. Read
 // the new call site and ask whether OpenAI is planning or writing.
-export const askOpenAI = async (promptIn, maxTokens = 800) => {
+// `effort` asks the reasoning model to think less, for a job that is reading
+// rather than reasoning. The At a Glance extraction took one to four minutes
+// a draft in the 2 Oct 2026 Klaipėda runs, most of it thinking about a
+// lookup. A model that refuses the setting is asked again without it.
+export const askOpenAI = async (promptIn, maxTokens = 800, { effort = "" } = {}) => {
   const prompt = localisePrompt(promptIn);
-  const out = await openAIOnce(prompt, maxTokens);
+  let out = await openAIOnce(prompt, maxTokens, effort);
+  if (effort && out.error && /reasoning_effort|unsupported|unrecognized/i.test(String(out.error))) out = await openAIOnce(prompt, maxTokens, "");
   // One retry, tripled, for the same reason as askClaude above, and see the
   // comment on the empty branch for why tripled and not doubled.
   if (out.empty && maxTokens < 12000) {
     const bigger = Math.min(12000, maxTokens * 3);
     console.warn(`OpenAI came back empty on ${maxTokens} tokens. Retrying once with ${bigger}.`);
-    return await openAIOnce(prompt, bigger);
+    return await openAIOnce(prompt, bigger, effort);
   }
   return out;
 };
 
-const openAIOnce = async (prompt, maxTokens) => {
+const openAIOnce = async (prompt, maxTokens, effort = "") => {
   try {
     const res = await fetch("/api/openai", {
       method: "POST",
@@ -301,6 +306,7 @@ const openAIOnce = async (prompt, maxTokens) => {
         // models dropped max_tokens entirely). This was silently killing Stage 1
         // (research planning) and Stage 4 (note structuring) on every single draft.
         max_completion_tokens: maxTokens,
+        ...(effort ? { reasoning_effort: effort } : {}),
       }),
     });
     const data = await res.json();

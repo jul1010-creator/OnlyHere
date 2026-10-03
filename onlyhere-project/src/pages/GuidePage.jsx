@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
+import { getSession } from "../utils/auth";
 import { readableAuthor } from "../utils/photoAuthor";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { C } from "../utils/theme";
@@ -72,6 +73,8 @@ import { gems } from "../data/gems";
 import { gemsForGuide, gemHeading, checkedLabel, isOwnSite, AUDIENCE_LABEL } from "../utils/cheapGems";
 import { namedIslandOf } from "../utils/geography";
 import { BOOKING_AFFILIATE_ID } from "../config";
+import { rideFor } from "../utils/rideHail";
+import { offTownWalk } from "../utils/walkable";
 import { tiqetsBrowseUrl, partnerDisclosure, supportNote, partnerLinkCount, isPartnerLink, carRentalFits, stayDoorUrl, tripcomStayUrl, stayDisclosure, STAY_DISCLOSURE, outboundLink, featuredStayFor, tourMerchant } from "../utils/affiliates";
 import { CostsBlock } from "../components/CostsBlock";
 import { GuideDayPager } from "../components/GuideDayPager";
@@ -152,6 +155,15 @@ const dayIcon = (i) => ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", 
 // measured, the whole figure is withheld rather than quietly wrong. Same for
 // time, and the longest single journey is only claimed to BE the longest when
 // every journey was measured.
+
+// A saved guide's id: 16 characters of a-z and 0-9, from crypto.getRandomValues.
+const LINK_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
+const guideLinkId = () => {
+  const bytes = new Uint8Array(16);
+  globalThis.crypto.getRandomValues(bytes);
+  return Array.from(bytes, b => LINK_ALPHABET[b % LINK_ALPHABET.length]).join("");
+};
+
 export const tripShape = (guide, legKm) => {
   const days = guide?.days || [];
   const stops = days.flatMap(d => d.stops || []).filter(s => s && s.name);
@@ -429,6 +441,8 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
       const query = `${item.name} ${item.location || item.town || ""} Instagram Facebook official page latest update opening hours events 2026`;
       const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
       const data = await res.json();
+      if (res.status === 401) { setLiveInfo(prev => ({ ...prev, [item.name]: uiT("ai.signIn", uiLang) })); setLiveInfoLoading(null); return; }
+      if (!res.ok) throw new Error(String(res.status));
       setLiveInfo(prev => ({ ...prev, [item.name]: data.answer || (data.results?.[0]?.snippet) || uiT("guide.noUpdates", uiLang) }));
     } catch {
       setLiveInfo(prev => ({ ...prev, [item.name]: uiT("guide.checkFailed", uiLang) }));
@@ -484,13 +498,32 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
     if (freshGuide || !guideId) return;
     setLoading(true);
     setLoadError(null);
-    fetch(`${SUPABASE_URL}/rest/v1/gemlyx_guides?select=payload&id=eq.${encodeURIComponent(guideId)}`, {
-      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
-    })
-      .then(r => r.json())
-      .then(rows => {
-        if (!rows?.[0]?.payload) { setLoadError(uiT("guide.linkGone", uiLang)); return; }
-        setGuide(guideWithoutFiller(rows[0].payload));
+    // ── ONE GUIDE BY ITS LINK, NOT THE TABLE ──────────────────────────
+    // 1 Oct 2026. The table used to be readable row by row with the public
+    // key, which let anybody list every guide ever saved, and with them the
+    // chat that built each one. Now only gemlyx_guide(id) reads it: holding the
+    // link is the only way in, which is what the link always promised.
+    // UNTIL THE SQL HAS RUN the function does not exist (404, PGRST202), and
+    // the old row read still works, so it is used then. Without this every
+    // shared link showed "gone" between the deploy and the SQL (review, 2 Oct
+    // 2026). Once the SQL runs, the function answers and this is never reached.
+    const headers = { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json" };
+    fetch(`${SUPABASE_URL}/rest/v1/rpc/gemlyx_guide`, { method: "POST", headers, body: JSON.stringify({ p_id: String(guideId) }) })
+      .then(async r => {
+        const body = await r.json().catch(() => null);
+        // A server error is not a missing guide. Security review, 3 Oct 2026,
+        // finding 7: it used to read as "this link doesn't exist".
+        const failed = { __loadFailed: true };
+        if (r.status !== 404 && body?.code !== "PGRST202") return r.ok ? body : failed;
+        const old = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_guides?select=payload&id=eq.${encodeURIComponent(guideId)}`, { headers });
+        if (!old.ok) return failed;
+        const rows = await old.json().catch(() => null);
+        return Array.isArray(rows) && rows[0]?.payload ? rows[0].payload : null;
+      })
+      .then(payload => {
+        if (payload?.__loadFailed) { setLoadError(uiT("guide.loadFailed", uiLang)); return; }
+        if (!payload || typeof payload !== "object" || Array.isArray(payload) || payload.code) { setLoadError(uiT("guide.linkGone", uiLang)); return; }
+        setGuide(guideWithoutFiller(payload));
       })
       .catch(() => setLoadError(uiT("guide.loadOffline", uiLang)))
       .finally(() => setLoading(false));
@@ -500,13 +533,20 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
     if (!guide || saving) return;
     setSaving(true);
     setSaveError(null);
-    // Short, URL-friendly id — collision odds are negligible at this scale, and a
-    // free-read/free-insert table (see the SQL file) doesn't need anything fancier.
-    const id = Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4);
+    // The link is the only key to a saved guide once the lockdown SQL has run
+    // (gemlyx_guide(id) answers whoever holds it), so the id is 16 characters
+    // from the browser's cryptographic random source, about 80 bits, where
+    // Math.random gave about 36. Security review, 3 Oct 2026, finding 13.
+    const id = guideLinkId();
+    // The member's own token when there is one: the public trip library only
+    // takes a row from an account (30 Sep 2026), and a guide saved by a member
+    // is theirs.
+    const member = await getSession().catch(() => null);
+    const bearer = member?.token || SUPABASE_KEY;
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_guides`, {
         method: "POST",
-        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${bearer}`, "Content-Type": "application/json", Prefer: "return=minimal" },
         // TEST SCAFFOLDING NEVER GETS SAVED. _testProfile and _testPlan exist
         // so Oliver can see what went into a Random-guide run; they are for him
         // and nobody else. Saving them puts them in the payload permanently, and
@@ -525,7 +565,13 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
         // that opens the link. The same night's Studio fix moved the identical
         // findings out of `uncertainties` for the identical reason; this is the
         // other half of it, on the pipeline he cares about most.
-        body: JSON.stringify({ id, payload: (({ _testProfile, _testPlan, _planProblems, ...rest }) => rest)(guide) }),
+        //
+        // ── AND _convoText, 1 Oct 2026 ─────────────────────────────────
+        // The whole chat that built the guide, every line the traveller typed.
+        // It is only ever read in the session that built it (lastBuiltGuide in
+        // App.jsx), never from a saved link, and a link is readable by anybody
+        // who is sent it.
+        body: JSON.stringify({ id, payload: (({ _testProfile, _testPlan, _planProblems, _convoText, ...rest }) => rest)(guide) }),
       });
       if (!res.ok) { setSaveError(uiT("guide.saveFailed", uiLang)); setSaving(false); return; }
       // Also bookmark it into the same "gemlyx_saved_guides" localStorage list
@@ -560,9 +606,9 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
       // worst trade in this file.
       const published = libraryRow(guide, { id: `lib_${Math.random().toString(36).slice(2, 9)}${Date.now().toString(36).slice(-4)}` });
       if (published) {
-        fetch(`${SUPABASE_URL}/rest/v1/${LIBRARY_TABLE}`, {
+        if (member?.token) fetch(`${SUPABASE_URL}/rest/v1/${LIBRARY_TABLE}`, {
           method: "POST",
-          headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+          headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${member.token}`, "Content-Type": "application/json", Prefer: "return=minimal" },
           body: JSON.stringify(published),
         }).catch(() => { /* see above: never a traveller's problem */ });
       }
@@ -630,7 +676,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
     const stopList = (guide.days || []).map(d => `Day ${d.day || ""}: ${d.title || ""}. Stops: ${(d.stops || []).map(s => s.name).join(", ") || "no stops yet"}`).join("\n");
     const prompt = `You are Gemlyx's Local Assist, continuing to help with a Denmark trip after the itinerary below was already built. Answer naturally and conversationally, like a knowledgeable local friend giving real advice. Never claim to have personally visited a place. You're a happy, upbeat guy who loves helping; a fitting emoji or two per reply is welcome where it adds warmth, never a wall of them. Never use em dashes or en dashes anywhere in your reply. Keep answers focused and reasonably short unless the question needs more detail. If asked to change the itinerary itself, explain what you'd change in words, since you can't directly edit this saved guide from here, so tell them to describe the change back on the main planning chat to rebuild it.\n\nTHE TRIP ALREADY BUILT:\nTitle: ${guide.title || "Untitled trip"}\n${stopList}${guide.essentials ? `\nBudget: ${guide.essentials.budgetReality || ""}\nGetting around: ${guide.essentials.transportTip || ""}\nKeep in mind: ${guide.essentials.keepInMind || ""}` : ""}\n\nCONVERSATION SO FAR:\n${convoText}\n\nRespond to the traveler's last message.${languageBlock()}`;
     const result = await askClaude(prompt, 500);
-    setChatMessages(prev => [...prev, { role: "assistant", text: result.error ? uiT("guide.chatFailed", uiLang) : result.text }]);
+    setChatMessages(prev => [...prev, { role: "assistant", text: result.error ? uiT(result.status === 401 ? "ai.signIn" : "guide.chatFailed", uiLang) : result.text }]);
     setChatLoading(false);
   };
 
@@ -2149,7 +2195,19 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
             // leave (the API answered for "now" at build time), so presenting it
             // as exact is what made "says 19, Maps says 27" feel like a bug
             // rather than schedule variance.
-            const exactLabel = exact ? `${usedMode === "transit" ? "~" : ""}${exact.durationText} ${modeLabel}` : null;
+            // ── GREATER KLAIPĖDA IS NOT A WALK ───────────────────────
+            // Oliver, 1 Oct 2026: the city is walkable, the area around it is
+            // not, "Because many places have no streets." A walking leg that
+            // leaves a walkable centre is relabelled as too far to walk, even
+            // when Google found a footpath, and gets the ride line. Only where
+            // both ends resolved; see utils/walkable.js.
+            const offTown = usedMode === "walking" && offTownWalk({
+              country: guide?._country,
+              from: resolveStopCoordsDetailed(originName, geo, stopTownOf(originName)),
+              to: resolveStopCoordsDetailed(destName, geo, stopTownOf(destName)),
+              km: walkKm,
+            });
+            const exactLabel = exact && !offTown ? `${usedMode === "transit" ? "~" : ""}${exact.durationText} ${modeLabel}` : null;
             // ── THE CAP HAS TO APPLY TO THE GUESS TOO ────────────
             // Oliver, 9 Aug 2026: "maps still seem to get things wrong",
             // holding "~24 min on foot" for Christiania → Reffen next to
@@ -2161,7 +2219,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
             // here rather than rendering as a stroll. A traveler told 24
             // and handed 44 is not slightly inconvenienced, they have
             // missed something.
-            const estIsImpossibleWalk = !exact && usedMode === "walking" && walkEstimateTooFar(km);
+            const estIsImpossibleWalk = (!exact && usedMode === "walking" && walkEstimateTooFar(km)) || offTown;
             // Nothing verified this leg: no Directions answer, and the two
             // stops never resolved to coordinates we would divide. What is
             // left is the model's own sentence, and the prompt asks it to
@@ -2273,10 +2331,26 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                 </div>
               </div>
             );
-            if (!ops.length && !legList) return chip;
+            // ── TOO FAR TO WALK, AND A RIDE THAT WORKS HERE ──────────
+            // Oliver, 1 Oct 2026: Bolt, from the Klaipėda tourism site's own
+            // tips. A long walk, or one too far to call a walk, gets one line
+            // naming the ride app of the guide's country. See utils/rideHail.js.
+            const walkMinutes = usedMode === "walking" ? (exact?.durationMinutes ?? (walkKm != null ? Math.round(walkKm * 15) : null)) : null;
+            const ride = (usedMode === "walking" || estIsImpossibleWalk) ? rideFor({ country: guide?._country, minutes: walkMinutes, tooFar: estIsImpossibleWalk }) : null;
+            const rideLine = ride ? (
+              <a href={ride.url} target="_blank" rel="noopener noreferrer"
+                style={{ fontSize: 10.5, color: C.light, lineHeight: 1.5, maxWidth: 340, textAlign: "center", textDecoration: "none" }}>
+                {uiT("ride.far", uiLang).replace("{app}", ride.name)} ↗
+              </a>
+            ) : null;
+            if (!ops.length && !legList && !rideLine) return chip;
+            if (!ops.length && !legList) return (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>{chip}{rideLine}</div>
+            );
             return (
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
                 {chip}
+                {rideLine}
                 {legList}
                 <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 6 }}>
                   {ops.map(op => (
@@ -2853,7 +2927,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                             that goes to Booking's front page does not. */}
                         {stayHere?.door?.href && stayHere.door.area && stayHere.place && (<>
                           {" in "}
-                          <a href={outboundLink(stayHere.door.href).href || stayHere.door.href} target="_blank" rel={outboundLink(stayHere.door.href).rel}
+                          <a href={outboundLink(stayHere.door.href).href || undefined} target="_blank" rel={outboundLink(stayHere.door.href).rel}
                             style={{ color: C.gold, textDecoration: "underline", textUnderlineOffset: 3 }}>{stayHere.place}</a>
                           <span style={{ color: C.muted, fontWeight: 600, fontSize: 11 }}> on Booking.com ↗</span>
                         </>)}
@@ -2864,7 +2938,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                             had no way to book at all. So it says what it is. */}
                         {stayHere?.door?.href && !stayHere.door.area && (<>
                           {" · "}
-                          <a href={outboundLink(stayHere.door.href).href || stayHere.door.href} target="_blank" rel={outboundLink(stayHere.door.href).rel}
+                          <a href={outboundLink(stayHere.door.href).href || undefined} target="_blank" rel={outboundLink(stayHere.door.href).rel}
                             style={{ color: C.gold, textDecoration: "underline", textUnderlineOffset: 3 }}>Find a room on Booking.com</a>
                           <span style={{ color: C.muted, fontWeight: 600, fontSize: 11 }}> ↗</span>
                         </>)}

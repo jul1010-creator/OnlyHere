@@ -6,6 +6,8 @@
 // that separation real in the code, not just in intent.
 
 import { requestIsFromSite, NOT_FROM_SITE } from "../src/utils/apiGuard.js";
+import { gateAi, shapeAnthropic } from "../src/utils/aiGate.js";
+import { safeUpstreamError } from "../src/utils/upstreamError.js";
 
 export default async function handler(req, res) {
   // ── SECURITY, 17 AUG 2026 ─────────────────────────────────────────
@@ -21,6 +23,11 @@ export default async function handler(req, res) {
   if (!key) {
     return res.status(500).json({ error: "ANTHROPIC_API_KEY not set on the server" });
   }
+  // 30 Sep 2026: a signed-in, confirmed account or the founder, counted per
+  // day, with the model and length decided here. See src/utils/aiGate.js.
+  const gate = await gateAi({ headers: req.headers, body: req.body, endpoint: "anthropic", env: process.env });
+  if (!gate.ok) return res.status(gate.status).json({ error: { message: gate.error }, gate: true });
+  const body = shapeAnthropic(req.body || {}, { founder: gate.founder, anon: gate.anon });
 
   // STREAMING PATH — used by Detour's chat so replies arrive token-by-token
   // the same way Claude/Cowork itself streams text, instead of appearing all
@@ -29,7 +36,7 @@ export default async function handler(req, res) {
   // the fact-check/rewrite tools) still gets the original buffered JSON
   // response below, unchanged — those all `await res.json()` a single object
   // and would break if this endpoint always streamed.
-  if (req.body?.stream === true) {
+  if (body.stream === true) {
     try {
       const upstream = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
@@ -38,16 +45,16 @@ export default async function handler(req, res) {
           "x-api-key": key,
           "anthropic-version": "2023-06-01",
         },
-        body: JSON.stringify(req.body),
+        body: JSON.stringify(body),
       });
 
       if (!upstream.ok || !upstream.body) {
         // Anthropic rejected the request itself (bad key, bad model, etc) —
         // this is still JSON, not an event stream, so read and forward it
         // as a normal error response rather than piping nothing.
-        let errBody;
-        try { errBody = await upstream.json(); } catch { errBody = { error: { message: `Anthropic request failed (${upstream.status})` } }; }
-        return res.status(upstream.status).json(errBody);
+        let errBody = null;
+        try { errBody = await upstream.json(); } catch { errBody = null; }
+        return res.status(upstream.status).json(safeUpstreamError(errBody, upstream.status, "Anthropic"));
       }
 
       // Pipe Anthropic's Server-Sent Events straight through to the browser,
@@ -69,7 +76,8 @@ export default async function handler(req, res) {
       // If headers haven't gone out yet, respond normally; if streaming had
       // already started, just end the connection — a half-sent SSE stream
       // is the best we can do, the client's reader loop will simply stop.
-      if (!res.headersSent) return res.status(500).json({ error: String(err) });
+      console.error("Anthropic stream failed:", err);
+      if (!res.headersSent) return res.status(500).json({ error: { message: "Anthropic request failed" } });
       return res.end();
     }
   }
@@ -82,11 +90,13 @@ export default async function handler(req, res) {
         "x-api-key": key,
         "anthropic-version": "2023-06-01",
       },
-      body: JSON.stringify(req.body),
+      body: JSON.stringify(body),
     });
-    const data = await r.json();
+    const data = await r.json().catch(() => null);
+    if (!r.ok) return res.status(r.status).json(safeUpstreamError(data, r.status, "Anthropic"));
     return res.status(r.status).json(data);
   } catch (err) {
-    return res.status(500).json({ error: String(err) });
+    console.error("Anthropic fetch failed:", err);
+    return res.status(500).json({ error: { message: "Anthropic request failed" } });
   }
 }

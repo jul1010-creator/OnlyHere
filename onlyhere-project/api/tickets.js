@@ -164,7 +164,11 @@ export default async function handler(req, res) {
     // 15 minutes. Ticket status does move, and it does not move minute to
     // minute, so this trades a quarter hour of staleness for not spending the
     // daily quota re-asking the same question during one drafting session.
-    res.setHeader("Cache-Control", "s-maxage=900, stale-while-revalidate=3600");
+    // PRIVATE, not s-maxage. This route answers the founder only, and a copy
+    // kept on the shared CDN would be served to the next caller with the same
+    // address before the token was ever checked. Security review, 3 Oct 2026,
+    // finding 19.
+    res.setHeader("Cache-Control", "private, max-age=900");
     // Returned RAW. Every field this project reads is pulled out by
     // readTicketmasterEvent in utils/tickets.js, and a second shaping step here
     // would be the same two-copies-of-one-thing that keeps biting this codebase.

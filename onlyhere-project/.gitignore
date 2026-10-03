@@ -1,6 +1,11 @@
 node_modules
 dist
 .env
+# Every local env file, not just .env: "vercel env pull" writes .env.local,
+# which holds the real keys. Security review, 3 Oct 2026, finding 10.
+.env.*
+!.env.example
+.vercel
 .DS_Store
 
 # image-finder tool — never commit real keys or local run state

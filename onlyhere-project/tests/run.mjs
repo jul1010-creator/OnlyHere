@@ -112,12 +112,12 @@ writeFileSync(entry, `
   export { whoWrote, modelProvenanceNote, DRAFT_STAGES, readerFacingStages, WRITER, EXTRACTOR, MEASURED } from ${JSON.stringify(join(root, "src/utils/modelProvenance.js"))};
   export { venueStyleOf, venueStyleLabel, VENUE_STYLES, VENUE_STYLE_LABEL, unstyledVenues, venueStyleCoverage, stylesPresent, showVenueStyleFacet, buildNightlifeStyleFacet, VENUE_STYLE_COVERAGE_MIN } from ${JSON.stringify(join(root, "src/utils/venueStyle.js"))};
   export { looksLikeLodging, stayDrift, stayDriftNote, publicAccessAnswered, STAY_TERMS, LODGING_RULE, LODGING_NOTES_RULE, LODGING_WORDS, isLodgingType, LODGING_TYPES } from ${JSON.stringify(join(root, "src/utils/venueSubject.js"))};
-  export { PLACES as KLP_PLACES, TRIPS as KLP_TRIPS, LOCAL_TIPS as KLP_TIPS, openOn as klpOpenOn, nextWeekday as klpNextWeekday, todayInKlaipeda, stopTime as klpStopTime, mapsRouteUrl as klpRouteUrl, KLAIPEDA_DEMO_PATH } from ${JSON.stringify(join(root, "src/data/klaipedaDemo.js"))};
+  export { LOCAL_TIPS as KLP_TIPS, todayInKlaipeda, KLAIPEDA_DEMO_PATH } from ${JSON.stringify(join(root, "src/data/klaipedaDemo.js"))};
   export { familyChip, priceClass, entryPrice, priceChip, entryKindLabel, ENTRY_KIND_LABEL, CHIP_MAX, PAID_LABEL, SAYS_FREE, AMOUNT, isUnqualifiedFree, CONCESSION_SCOPE, entryBooking, bookingChip, BOOKING_FIELDS, NEEDS_BOOKING, WALK_IN } from ${JSON.stringify(join(root, "src/utils/entryPrice.js"))};
   export { literalRenderings, literalNote, looksLikeAName, FALSE_FRIENDS, FALSE_FRIEND_RULE, NAME_RULE } from ${JSON.stringify(join(root, "src/utils/literalDanish.js"))};
   export { licenseUrl, creditIsRequired } from ${JSON.stringify(join(root, "src/utils/imageCredits.js"))};
   export { STUDIO_VOICE } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
-  export { cleanOffer, offerProblems, offerLive, offerView, offerTiming, offerWindow, offerHoursLabel, cleanClock, placeClock, OFFER_WEEK, hasPaidPlan, OFFER_TEXT_MAX, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE } from ${JSON.stringify(join(root, "src/utils/offer.js"))};
+  export { cleanOffer, offerProblems, offerLive, offerView, offerTiming, offerWindow, offerHoursLabel, cleanClock, placeClock, OFFER_WEEK, hasPaidPlan, OFFER_TEXT_MAX, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE, offerLockedNote } from ${JSON.stringify(join(root, "src/utils/offer.js"))};
   export { AI_DISCLOSURE, aiDisclosure, aiDisclosureFor, disclosureLanguage, AI_CHAT_SURFACES, AI_IMAGE_NOTE, aiImageNote, inReaderLanguage } from ${JSON.stringify(join(root, "src/utils/aiDisclosure.js"))};
   export { splitReport, sortReports, filterReports, reportAge, isHandled, unhandledCount, INBOX_SETUP_SQL, FILTERS as INBOX_FILTERS, topicLabel as inboxTopicLabel, reportCountry } from ${JSON.stringify(join(root, "src/utils/supportInbox.js"))};
   export { SUPPORT_TOPICS, REPORT_TOPIC, topicIds, topicLabel, isTopic, GOOD_FAITH_STATEMENT, messagePrompt, MESSAGE_MIN, MESSAGE_MAX, NAME_MAX, looksLikeEmail, looksLikeUrl, supportProblems, problemFor, supportReference, supportPayload, supportMailto, supportReceipt, SUPPORT_TABLE, SUPPORT_SETUP_SQL, SUPPORT_EMAIL, PRIVACY_EMAIL } from ${JSON.stringify(join(root, "src/utils/support.js"))};
@@ -152,7 +152,7 @@ writeFileSync(entry, `
   export { WEATHER_CITIES as MAP_WEATHER_CITIES, COUNTRY_MAPS, LT_SHAPES, ltProject } from ${JSON.stringify(join(root, "src/data/mapShapes.js"))};
   export { tripcomStayUrl, tripcomCity } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
   export { studioPrompts } from ${JSON.stringify(join(root, "src/utils/studioPrompts.js"))};
-  export { looksLikeTransit, kindFromName, findRealNearestStop, hasTransitType, geocodePostcode, geocodeIsASettlement, LONG_WALK_MINUTES } from ${JSON.stringify(join(root, "src/utils/geo.js"))};
+  export { looksLikeTransit, kindFromName, findRealNearestStop, hasTransitType, geocodePostcode, geocodeIsASettlement, LONG_WALK_MINUTES, busStopByName } from ${JSON.stringify(join(root, "src/utils/geo.js"))};
   export { licenseIsUsable, distinctiveToken, mentionsSubject, looksHistorical, pickDescription, bestCaption } from ${JSON.stringify(join(root, "api/commons-photo.js"))};
   export { photoRequestMail, needsOwnLine, gmailComposeUrl, mailtoUrl, pressSearchUrl, OWN_LINE, SENDER, entryAddress } from ${JSON.stringify(join(root, "src/utils/photoRequestMail.js"))};
   export { emailsIn, cleanEmail, contactPagesIn, rankEmails, findContactEmails } from ${JSON.stringify(join(root, "src/utils/contactEmail.js"))};
@@ -181,6 +181,10 @@ writeFileSync(entry, `
   export { startLog, endLog, note, decide, recentLogs, summariseLog, formatLog, formatLogs, logChips, OUTCOMES } from ${JSON.stringify(join(root, "src/utils/runLog.js"))};
   export { fieldProvenance, correctionProvenance, entrySources, untracedFields, describeProvenance, readerCorrection, readerCorrections, isCheckerVoice, readerUncertainty, readerUncertainties, READER_UNCERTAINTY_LIMIT } from ${JSON.stringify(join(root, "src/utils/provenance.js"))};
   export { ALLOWED_ORIGINS, originOf, isAllowedOrigin, requestIsFromSite, NOT_FROM_SITE, STUDIO_ONLY_ENDPOINTS, resolveUser, isFounder } from ${JSON.stringify(join(root, "src/utils/apiGuard.js"))};
+  export { gateAi, shapeAnthropic, shapeOpenAI, shapePerplexity, searchCeiling, AI_CEILINGS, readAiLimits, visitorKey, visitorAddress, takeDaily } from ${JSON.stringify(join(root, "src/utils/aiGate.js"))};
+  export { cleanErrorMessage, safeUpstreamError } from ${JSON.stringify(join(root, "src/utils/upstreamError.js"))};
+  export { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_KEY } from ${JSON.stringify(join(root, "src/utils/supabasePublic.js"))};
+  export { sitePath, AI_PATHS } from ${JSON.stringify(join(root, "src/utils/apiAuth.js"))};
   export { citationUrls, askOpenAI, askClaude, localisePrompt } from ${JSON.stringify(join(root, "src/utils/aiClient.js"))};
   export { THEMES, THEME_ORDER, DEFAULT_THEME, storedTheme, THEME_PARAM } from ${JSON.stringify(join(root, "src/utils/theme.js"))};
   export { layoutBody, trimCaption } from ${JSON.stringify(join(root, "src/utils/articleLayout.js"))};
@@ -294,7 +298,16 @@ writeFileSync(entry, `
   export { KLAIPEDA_STOPS, KLAIPEDA_STOPS_READ_ON } from ${JSON.stringify(join(root, "src/data/klaipedaStops.js"))};
   export { groupNav, childActive, groupActive, NAV_GROUPS } from ${JSON.stringify(join(root, "src/utils/navGroups.js"))};
   export { groupByMonth, monthLabel } from ${JSON.stringify(join(root, "src/utils/calendarMonths.js"))};
+  export { dealCode, cleanBooking, bookingProblem, busyFromBestTime, busyAt, cleanBusy, localClock } from ${JSON.stringify(join(root, "src/utils/dealExtras.js"))};
+  export { rideFor, RIDE_FROM_MINUTES } from ${JSON.stringify(join(root, "src/utils/rideHail.js"))};
   export { SCAN_KINDS, scanKindOf, scanPrompt } from ${JSON.stringify(join(root, "src/utils/scanKinds.js"))};
+  export * as NP from ${JSON.stringify(join(root, "src/utils/nowPlanner.js"))};
+  export * as TR from ${JSON.stringify(join(root, "src/utils/entryTranslate.js"))};
+  export * as KEX from ${JSON.stringify(join(root, "src/data/klaipedaExamples.js"))};
+  export * as SCU from ${JSON.stringify(join(root, "src/data/klaipedaSculptures.js"))};
+  export * as OC from ${JSON.stringify(join(root, "src/utils/offerClock.js"))};
+  export * as WK from ${JSON.stringify(join(root, "src/utils/walkable.js"))};
+  export { offTownWalk, centreOf, walkRule, kmApart, WALKABLE_CENTRES } from ${JSON.stringify(join(root, "src/utils/walkable.js"))};
   export { livePromotions, promoCard, untilLabel, PROMO_KINDS, zoneOf } from ${JSON.stringify(join(root, "src/utils/promotions.js"))};
   export { abroadBriefParts, inventoryBlock, inventoryLine, forLand, landAsk, landRules, sameDayHours, startsFor, INVENTORY_CAP, randomAbroadVisit } from ${JSON.stringify(join(root, "src/utils/guideAbroad.js"))};
   export { FROZEN_TRANSPORT, frozenFrom, frozenIn, factsLost, frozenBlock, lostNote } from ${JSON.stringify(join(root, "src/utils/frozenFacts.js"))};
@@ -394,13 +407,13 @@ writeFileSync(entry, `
   export { denmarkClock, sunElevation, isNightThere, SUNSET_ELEVATION } from ${JSON.stringify(join(root, "src/utils/denmarkTime.js"))};
   export { weatherIcon } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { readTheDay, skyFor } from ${JSON.stringify(join(root, "src/components/WeatherHeaderStrip.jsx"))};
-  export { COUNTRY_PROFILES, DEFAULT_COUNTRY, countryProfile, rowCountry, countryFromPath, activeCountry, isInCountry, setWorkingCountry, workingCountry, workingProfile, countryParam, homePath, countryKey } from ${JSON.stringify(join(root, "src/utils/countries.js"))};
+  export { COUNTRY_PROFILES, DEFAULT_COUNTRY, countryProfile, rowCountry, countryFromPath, activeCountry, isInCountry, setWorkingCountry, workingCountry, workingProfile, countryParam, homePath, countryKey, plainTownName } from ${JSON.stringify(join(root, "src/utils/countries.js"))};
   export { shapeForLive, madeHeading, isPublisherNote, PUBLISHER_NOTE, cleanCredit } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
   export { longestEcho, echoWords, isNameEcho, echoInDraft, describeEcho, ECHO_RUN } from ${JSON.stringify(join(root, "src/utils/echoCheck.js"))};
-  export { CHOICE_LIMIT, cleanCandidates, sameSubject, sameCandidate, needsChoosing, choicesFor, describeChoosing, applyChoice, choiceNote, subjectCore, listingMatchesSubject, streetListingMatches, describeListingRefusal } from ${JSON.stringify(join(root, "src/utils/placeChoice.js"))};
+  export { CHOICE_LIMIT, cleanCandidates, sameSubject, sameCandidate, needsChoosing, choicesFor, describeChoosing, applyChoice, choiceNote, subjectCore, listingMatchesSubject, streetListingMatches, describeListingRefusal, sameAcrossLanguages, sameWordsReordered } from ${JSON.stringify(join(root, "src/utils/placeChoice.js"))};
   export { headingSkeleton, skeletonKey, openingKey, spreadBy, skeletonSpread, openingSpread, describeSameness, samenessReport } from ${JSON.stringify(join(root, "src/utils/sameness.js"))};
   export { moneyTraceable, COMPRESSION_GLANCE, glanceShapeProblem, EXTRACTABLE_GLANCE, EDITORIAL_GLANCE, NEVER_EXTRACT, CLOSED_OR_DERIVED, glanceFieldsFor, numbersTraceable, freeClaimTraceable, saysFreeOnly, statesAnAmount, GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, describeGlance, staleUncertainties, describeStale } from ${JSON.stringify(join(root, "src/utils/glanceExtract.js"))};
-  export { DANISH_MARKERS, danishWordsIn, looksUntranslated, looksDanishPage, hasEnglishVersion, languageBarrier } from ${JSON.stringify(join(root, "src/utils/languageBarrier.js"))};
+  export { DANISH_MARKERS, LITHUANIAN_MARKERS, looksLocalPage, danishWordsIn, looksUntranslated, looksDanishPage, hasEnglishVersion, languageBarrier } from ${JSON.stringify(join(root, "src/utils/languageBarrier.js"))};
   export { readerLanguage, languageName, answerInLanguage, languageBlock, nativeBlock } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
   export { keepLanguageOf } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
   export { readerView } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
@@ -2880,7 +2893,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     // subject, and what is taken from it is the strongest material in the
     // pipeline. For a street that is whichever business Google ranks first.
     ok("a listing is checked against the subject before anything is taken from it",
-       /if \(!listingMatchesSubject\(name, draftTown, hoursData\.name, \{ theNameIsAStreet: NAME_IS_A_STREET\.includes\(sType\) \}\)\) \{/.test(appSrc3));
+       /if \(!confirmedVenue && !listingMatchesSubject\(name, draftTown, hoursData\.name, \{ theNameIsAStreet: NAME_IS_A_STREET\.includes\(sType\) \}\)\) \{/.test(appSrc3));
     ok("and the refusal says which listing it was, not just that there was none",
        /why: describeListingRefusal\(name, draftTown, hoursData\.name\)/.test(appSrc3));
     // Anchored on the CALL rather than on the string: `if (false) decide(...)`
@@ -2896,7 +2909,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     // comment's first line in the file is an inline one on the placesWebsite
     // declaration a hundred lines earlier, so an unanchored indexOf returns a
     // backwards range and an empty region, which asserts nothing at all.
-    const refusalAt3 = appSrc3.indexOf("if (!listingMatchesSubject");
+    const refusalAt3 = appSrc3.indexOf("if (!confirmedVenue && !listingMatchesSubject");
     const refusal3 = appSrc3.slice(refusalAt3, appSrc3.indexOf("// Google's registered URL for this business", refusalAt3));
     ok("the refusal region is a real region", refusal3.length > 200);
     ok("and the refusal stops the block rather than falling through into the material",
@@ -9321,7 +9334,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // partOf: "" and part: "". The Studio exists to make first drafts, and the
   // first draft of a place was the one handed no context at all.
   ok("a first draft falls back past the row it does not have",
-     /draftTown = knownRow\?\.town \|\| knownRow\?\.city \|\| knownRow\?\.location \|\| hint\?\.town \|\| townKeyFor\(name\) \|\| "";/.test(app5));
+     /draftTown = plainTownName\(knownRow\?\.town \|\| knownRow\?\.city \|\| knownRow\?\.location \|\| hint\?\.town \|\| townKeyFor\(name\) \|\| ""\);/.test(app5));
   // ── AND IT IS DECLARED WHERE THE GEOCODER CAN SEE IT ─────────────
   // It was `const draftTown` INSIDE the founder-source block, which closes
   // about two hundred lines before the geocode fallback that reads it. Oliver's
@@ -9419,8 +9432,9 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // result cap: four is plenty for an open search and thin for one pinned to a
   // single site, where four is all of it you will ever see.
   ok("a domain-restricted search gets more results than an open one",
-     /max_results: Math\.min\(Math\.max\(Number\(n\) \|\| \(domains \? 8 : 4\), 1\), 20\)/.test(api));
-  ok("and it is capped, so a caller cannot ask for the world", /, 20\)/.test(api));
+     // Batch 172: the count is settled in aiGate.searchCeiling, 8 for a member and 20 for him.
+     /max_results: n,/.test(api) && M.searchCeiling({ q: "x", domains: "a.dk" }).n === 8 && M.searchCeiling({ q: "x" }).n === 4);
+  ok("and it is capped, so a caller cannot ask for the world", M.searchCeiling({ q: "x", n: 999 }).n === 8 && M.searchCeiling({ q: "x", n: 999 }, { founder: true }).n === 20);
   // WHAT THEY FOUND TRAVELS WITH THE DRAFT, first, so the next time he asks this
   // question the draft itself answers it.
   ok("and what they found rides in the draft's source list", /\[\.\.\.new Set\(\[\.\.\.founderUrls, \.\.\.candidateUrls\]\)\]/.test(app5));
@@ -13908,7 +13922,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     is("no other type has its name replaced",
        others.filter(t => (perType[t] || []).some(q => q.includes("${subject}"))), []);
     ok("and the subject is the street plus its town",
-       /const subject = NAME_IS_NOT_A_PLACE\.includes\(sType\) && draftTown\s*\?\s*`\$\{name\} \$\{draftTown\}`\s*:\s*name;/.test(app));
+       /const subject = draftTown && !fold\(name\)\.includes\(fold\(draftTown\)\)\s*&& \(NAME_IS_NOT_A_PLACE\.includes\(sType\) \|\| \(!draftInDenmark && !NAME_IS_A_TOWN\.includes\(sType\)\)\)\s*\?\s*`\$\{name\} \$\{draftTown\}`\s*:\s*name;/.test(app));
     // The planner writes queries too, and it was told the bare name.
     ok("the query planner is told the town as well",
        // Batch 159: the draft's country adjective, "Danish" for a Danish draft.
@@ -26364,14 +26378,14 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
 
   // AND IT REACHES THE READER. Measured, stamped, stored, shown.
   ok("the language is measured off the operator's own pages",
-    /languageBarrier\(\{ siteText: scrapedSiteText, siteUrls: Object\.keys\(pagesByUrl \|\| \{\}\) \}\)/.test(appK));
+    /languageBarrier\(\{ siteText: scrapedSiteText, siteUrls: Object\.keys\(pagesByUrl \|\| \{\}\), country: draftLand\.code \}\)/.test(appK));
   ok("and stamped on the row like the ticket source is", /t\.__language = \{ level: entryLanguage\.level/.test(appK));
   const shapeK = readFileSync(join(root, "src/utils/studioContent.js"), "utf8");
   ok("it survives to what gets stored", /__language: \{ level: t\.__language\.level/.test(shapeK));
   ok("but only when it was measured", /t\.__language\.level !== "unknown"/.test(shapeK));
   const detailK = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
   ok("and an event page shows it", /icon: "🗣", label: "Language", value: item\.__language\.note/.test(detailK));
-  ok("absent unless there is a barrier to report", /item\.__language\?\.level === "danish-only" && item\.__language\?\.note/.test(detailK));
+  ok("absent unless there is a barrier to report", /\(item\.__language\?\.level === "danish-only" \|\| item\.__language\?\.level === "local-only"\) && item\.__language\?\.note/.test(detailK));
 }
 
 
@@ -29284,7 +29298,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // meant finding the close button, and there was nothing to click OFF onto.
   {
     const code = stripComments(detail);
-    ok("the page takes a windowed prop", /windowed = false \}\) =>/.test(code));
+    ok("the page takes a windowed prop", /windowed = false(, sample = "")? \}\) =>/.test(code));
     // THE CLOSE IS ON THE BACKDROP AND NOT ON THE PANEL. onClick fires for
     // clicks on children too, so without the target check every press inside
     // the page would close the page.
@@ -32148,7 +32162,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // The strip on a shared payload has to keep matching GUIDE_SCAFFOLDING, or the
   // local list and the link start carrying different trips again.
   ok("and a shared link strips the same three fields",
-     /\(\(\{ _testProfile, _testPlan, _planProblems, \.\.\.rest \}\) => rest\)\(guide\)/.test(gpS));
+     /\(\(\{ _testProfile, _testPlan, _planProblems, _convoText, \.\.\.rest \}\) => rest\)\(guide\)/.test(gpS));
 
   // ── A REFUSED WRITE NO LONGER ANNOUNCES A SAVE ───────────────────
   // Safari in private mode throws on setItem. The catch swallowed it and the
@@ -33433,7 +33447,9 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("and the www of it", isAllowedOrigin("https://www.gemlyxtravel.com/"));
   ok("and the vite dev server", isAllowedOrigin("http://localhost:5173/"));
   ok("and the original deployment his friend tested on", isAllowedOrigin("https://only-here-three.vercel.app/"));
-  ok("and a preview build of this project", isAllowedOrigin("https://onlyhere-project-git-main.vercel.app"));
+  ok("and a preview build of this project, by the address Vercel gives it", isAllowedOrigin("https://onlyhere-project-git-main-x.vercel.app", { VERCEL_BRANCH_URL: "onlyhere-project-git-main-x.vercel.app" }));
+  // Security review, 3 Oct 2026, finding 12: a name that only starts like his.
+  ok("and somebody else's project named like his is not", !isAllowedOrigin("https://onlyhere-project-evil.vercel.app", {}) && !isAllowedOrigin("https://gemlyx-copy.vercel.app", {}));
   // ── AND THE ONE THAT WAS A HOLE IN MY OWN FIRST DRAFT ────────────
   // The preview rule was [a-z0-9-]+\.vercel\.app, and anybody can put a page on
   // vercel.app in two minutes. The response would be unreadable to them, since
@@ -33483,7 +33499,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 
   // Unset means any signed-in account, because Studio is already behind a login
   // and locking himself out at four in the morning is the likelier accident.
-  ok("with no allow-list, any account passes", isFounder("user-1", ""));
+  // Batch 172: an empty list is the founder alone, never everybody.
+  ok("with no allow-list, only the founder passes", !isFounder("user-1", "") && isFounder("467fb712-e3e9-4d43-b1b8-e4e1bb32b76d", ""));
   ok("with one, a listed account passes", isFounder("user-1", "user-1, user-2"));
   ok("and an unlisted one does not", !isFounder("user-9", "user-1, user-2"));
 
@@ -33717,7 +33734,9 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // ONE PLACE KNOWS THE TOKEN EXPIRES. Six hand-rolled retries are gone; the
   // only two callers left are the two helpers. A third means somebody has
   // started writing the seventh.
-  is("only the two helpers renew a session", (app16.match(/await refreshStudioSession\(\)/g) || []).length, 2);
+  // A third since 2 Oct 2026: freshPassToken, the helper that renews the
+  // token just before the guide pass reads it.
+  is("only the three helpers renew a session", (app16.match(/await refreshStudioSession\(\)/g) || []).length, 3);
 
   // ── THE ASSISTANT IS INSIDE STUDIO AND WAS OUTSIDE THE FIX ──────
   // Its three calls sent session.access_token once, so an hour in it could
@@ -41362,7 +41381,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       "setTimeout", "clearTimeout", "setInterval", "clearInterval", "requestAnimationFrame", "cancelAnimationFrame",
       "Math", "JSON", "Object", "Array", "String", "Number", "Boolean", "Date", "RegExp", "Error", "TypeError", "Promise",
       "Map", "Set", "WeakMap", "WeakSet", "Symbol", "Proxy", "Reflect", "BigInt", "Intl", "URL", "URLSearchParams",
-      "Blob", "File", "FileReader", "FormData", "Headers", "Request", "Response", "AbortController", "TextDecoder", "TextEncoder",
+      "Blob", "File", "FileReader", "FormData", "Headers", "Request", "Response", "AbortController", "TextDecoder", "TextEncoder", "Uint8Array",
       "isNaN", "isFinite", "parseInt", "parseFloat", "encodeURIComponent", "decodeURIComponent", "encodeURI", "decodeURI",
       "structuredClone", "queueMicrotask", "performance", "crypto", "atob", "btoa", "alert", "confirm", "prompt",
       "IntersectionObserver", "ResizeObserver", "MutationObserver", "PerformanceObserver", "Image", "Audio", "Event", "CustomEvent",
@@ -46756,7 +46775,10 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // The page named Booking.com and Ticketmaster as the partners that pay while
   // both of their config values were empty strings, and left Tiqets, the only
   // one live, unnamed. Naming the wrong partner is worse than naming none.
-  const set = (decl) => new RegExp(`export const ${decl} = "[^"]+"`).test(cfg);
+  // A partner is set when any of its declarations is ("A|B"). Booking.com
+  // earns through its CJ link with no affiliate id, which the first version of
+  // this check could not see, so the page said it earned nothing (1 Oct 2026).
+  const set = (decl) => decl.split("|").some(d => new RegExp(`export const ${d} = "[^"]+"`).test(cfg));
   // ── ASKED AS AGREEMENT, NOT AS A SNAPSHOT ───────────────────────
   //
   // 23 Aug 2026, the evening Ticketmaster approved him after ten days: "Ticket
@@ -46793,7 +46815,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     const paying = para.slice(0, sentStart);
     const wrongSide = [];
     for (const [name, decl] of [["Tiqets", "TIQETS_BROWSE_LINK"],
-                                ["Booking.com", "BOOKING_AFFILIATE_ID"],
+                                ["Booking.com", "BOOKING_AFFILIATE_ID|BOOKING_CJ_LINK"],
                                 ["Ticketmaster", "TICKETMASTER_AFFILIATE_TEMPLATE"]]) {
       const on = set(decl);
       const saysPays = paying.includes(name);
@@ -49477,7 +49499,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // Wired, with a subject the caller actually holds.
   {
     const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
-    ok("the caller passes a subject test", /priceSource\([\s\S]{0,600}?isAbout:/.test(app));
+    ok("the caller passes a subject test", /priceSource\([\s\S]{0,1200}?isAbout:/.test(app));
     ok("built from sourceIsAboutPlace rather than a second matcher", /isAbout: \(pageText, url\) => sourceIsAboutPlace\(/.test(app));
     ok("and an off-subject hit stores nothing", /src && src\.offSubject/.test(app));
   }
@@ -49827,7 +49849,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       ok("and names the regulation the report route answers to", /2022\/2065/.test(policy));
       ok("and states a legal basis for it", /Answering a message sent through the contact page/.test(policy));
       ok("and how long a message is kept", /Messages sent through the contact page/.test(policy));
-      ok("and the version moved when the notice did", /Version 2\.3/.test(policy) && /What changed in version 2\.3/.test(policy));
+      ok("and the version moved when the notice did", /Version 2\.4 · In force from/.test(policy) && /What changed in version 2\.4/.test(policy) && /Version 2\.3\./.test(policy));
       // The one promise the form itself makes, checked against the notice
       // rather than assumed: the page tells the reader it is not recording
       // where they came from, so the notice must not describe one either.
@@ -53251,7 +53273,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // field, so a reader sent a link cannot see it and no permission check is
     // needed.
     ok("and the save path still strips them from what is shared",
-       /_testProfile, _testPlan, _planProblems, \.\.\.rest/.test(gp));
+       /_testProfile, _testPlan, _planProblems, _convoText, \.\.\.rest/.test(gp));
   }
 }
 
@@ -55338,7 +55360,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("the refusal message still promises no coordinate",
       /no address, no hours, no coordinate/.test(readFileSync(join(root, "src/utils/placeChoice.js"), "utf8")));
     ok("and the coordinate now asks the same question the listing does",
-      /listingMatchesSubject\(name, draftTown, pd\.name \|\| pd\.address, \{ theNameIsAStreet: NAME_IS_A_STREET\.includes\(sType\) \}\)/.test(app));
+      /\[pd\.name \|\| pd\.address, pd\.nameEn\]\s*\.some\(n => n && listingMatchesSubject\(name, draftTown, n, \{ theNameIsAStreet: NAME_IS_A_STREET\.includes\(sType\) \}\)\)/.test(app));
     // ── AND BOTH ASK IT THE SAME WAY ──────────────────────────────
     // The bug this block records is one call site asking and the other not.
     // The repeat of that bug is one call site asking the STREET question and
@@ -55358,7 +55380,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // Copenhagen Airport for a festival in Odense.
     ok("and finiteness alone no longer admits one",
       /const placesOk = pr\.ok && !pd\.error && Number\.isFinite/.test(app)
-      && /const nameMatches = placesOk && listingMatchesSubject/.test(app)
+      && /const nameMatches = placesOk && \[pd\.name/.test(app)
       && /const placesAbout = nameMatches && fit\.ok;/.test(app));
     // BOTH CALL SITES, or the pair drifts again. The hours step had it first.
     is("both Google answers are checked against the subject",
@@ -62053,7 +62075,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // omission in it.
   is("every detail page gets the buttons",
      // Batch 165: plus OPEN_ABROAD, no account on a Lithuanian page.
-     (appF.match(/<DetailPage windowed=\{entryWindowed\} lang=\{uiLang\} paid=\{OPEN_ABROAD \|\| hasPaidPlan\(userProfile\)\} signedIn=\{OPEN_ABROAD \|\| !!userSession\} onNeedAccount=/g) || []).length, 7);
+     // Batch 172: deals and reviews abroad need an account too.
+     (appF.match(/<DetailPage windowed=\{entryWindowed\} lang=\{uiLang\} paid=\{\(OPEN_ABROAD && !!userSession\) \|\| hasPaidPlan\(userProfile\)\} signedIn=\{!!userSession\} onNeedAccount=/g) || []).length, 7);
   is("and none is left without them",
      (appF.match(/<DetailPage /g) || []).length, 7);
 
@@ -62085,7 +62108,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // NAMES an action opens on it — otherwise a returning reader is dropped on a
   // create-account form.
   ok("the review gate opens on Sign in",
-     /setAuthReason\("review"\); setAuthMode\("in"\); setAuthOpen\(true\);/.test(appF));
+     /setAuthReason\(typeof why === "string" \? why : "review"\); setAuthMode\("in"\); setAuthOpen\(true\);/.test(appF)); // Batch 172: a deal names itself
 
   // ── A BUTTON THAT DOES NOTHING IS WORSE THAN NO BUTTON ───────────
   // A signed-out reader is offered the account rather than a dead control, and
@@ -69355,7 +69378,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   {
     const appS = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
     ok("the venue tier exists", /Where this place is, the venue/.test(appS));
-    const tier = appS.slice(appS.indexOf("if (!placed && refusedListing) {"),
+    const tier = appS.slice(appS.indexOf("if ((!placed || (!draftInDenmark && placed.precise === false)) && refusedListing) {"),
                             appS.indexOf("const found = danishAddressIn(context);"));
     ok("the tier is findable", tier.length > 400);
     // BEFORE the postcode tier: it is free where that one geocodes, and it
@@ -69377,7 +69400,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     // Pass one's own rule is untouched: this is a second question, not a looser
     // version of the first.
     ok("and pass one still refuses on the name",
-       /const nameMatches = placesOk && listingMatchesSubject\(name, draftTown, pd\.name \|\| pd\.address/.test(appS));
+       /const nameMatches = placesOk && \[pd\.name \|\| pd\.address, pd\.nameEn\]\s*\.some\(n => n && listingMatchesSubject\(name, draftTown, n/.test(appS));
     // ── AND ON THE TOWN, WHICH IS THE SECOND QUESTION ────────────
     // TinderBox is a festival in Odense and the name matched something called
     // Tinderbox at Copenhagen Airport, 140 km away. Kobenhavns Oktoberfest
@@ -72176,11 +72199,12 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   // Same rule as isFounder, kept identical so the two cannot disagree: an unset
   // list lets anybody signed in through, because the alternative is locking him
   // out of his own Studio on a deploy he makes at four in the morning.
-  ok("an unset list still lets him in", isFounder("anyone", "") === true);
+  // Batch 172: an unset list is his own id only, never anybody signed in.
+  ok("an unset list lets only his own account in", isFounder("anyone", "") === false && isFounder("467fb712-e3e9-4d43-b1b8-e4e1bb32b76d", "") === true);
   ok("a set list lets only the named in", isFounder("mine", "mine,other") === true && isFounder("theirs", "mine,other") === false);
   // So the open state is said out loud, on the panel, where it cannot be shipped
   // without being read.
-  ok("and the open state warns on the login panel", /VITE_FOUNDER_IDS is not set, so any Gemlyx account can open Studio/.test(appS));
+  ok("and the fallback state is said on the login panel", /VITE_FOUNDER_IDS is not set, so Studio falls back to your own account id only/.test(appS)); // Batch 172
   ok("only while it is actually unset", /\{!String\(FOUNDER_IDS \|\| ""\)\.trim\(\) && \(/.test(appS));
   ok("and it names the server variable too, because that is the one that matters",
      /GEMLYX_FOUNDER_IDS/.test(appS));
@@ -75029,7 +75053,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   is("while what is not text is left alone", G.days[0].glance.__night.kr, 500);
   ok("a guide with no days is handed back as it came", M.guideWithoutFiller(null) === null && M.guideWithoutFiller({ x: 1 }).x === 1);
   const gpL = stripComments(readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8"));
-  ok("applied to every way a guide is opened", /useState\(\(\) => guideWithoutFiller\(freshGuide\) \|\| null\)/.test(gpL) && /setGuide\(guideWithoutFiller\(rows\[0\]\.payload\)\)/.test(gpL) && /setGuide\(guideWithoutFiller\(liveGuide\)\)/.test(gpL));
+  ok("applied to every way a guide is opened", /useState\(\(\) => guideWithoutFiller\(freshGuide\) \|\| null\)/.test(gpL) && /setGuide\(guideWithoutFiller\(payload\)\)/.test(gpL) && /setGuide\(guideWithoutFiller\(liveGuide\)\)/.test(gpL));
   // "Copenhagen Admiral Hotel" above "Same bed as night 1"
   ok("a same-bed night does not name a second hotel", /\{day\.glance\.recommendedStay && !sameBed && \(/.test(gpL));
   // "Copenhagen Airport, Helsingør Old Town, Copenhagen Airport"
@@ -79730,7 +79754,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("clause 12.6 extends the accuracy clauses to all other content", /<span class="n">12\.6<\/span> Clauses 12\.2 to 12\.4 apply equally to all other Gemlyx Content[\s\S]{0,400}any answer given through the conversation interface[\s\S]{0,200}accepts no responsibility for any such information being incorrect, incomplete or out of date, save as provided in clause 19\.1\./.test(terms));
   ok("and reliance on it is excluded like a Guide's", /19\.2\.1<\/span> reliance upon a price, timetable, opening hour, event date, availability or other item of information contained in a Guide or in any other Gemlyx Content, or given in an answer/.test(terms));
   ok("still never beyond what the law allows", /19\.1<\/span> Nothing in these Terms shall exclude or limit the liability of Gemlyx for death or personal injury/.test(terms));
-  ok("the version moved and says why", M.TERMS_VERSION === "2.2" && /Version 2\.2 · In force from 27 September 2026/.test(terms) && /Version 2\.2, in force from 27 September 2026, adds clause 12\.6/.test(terms));
+  ok("the version moved and says why", M.TERMS_VERSION === "2.3" && /Version 2\.3 · In force from/.test(terms) && /Version 2\.2, in force from 27 September 2026, adds clause 12\.6/.test(terms) && /Version 2\.3, in force from 1 November 2026, extends the Service to Lithuania/.test(terms));
 }
 
 // ── BATCH 147: ONE GUIDE A DAY, AND A CEILING ON THE DAY ─────────────
@@ -79767,7 +79791,9 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   is("the address is Vercel's, not the client's own header first", M.clientIp({ "x-real-ip": "9.9.9.9", "x-forwarded-for": "1.1.1.1, 9.9.9.9" }), "9.9.9.9");
   // The server, with Supabase stood in by a fake.
   const site = { origin: "https://www.gemlyxtravel.com", "x-real-ip": "1.2.3.4" };
-  const env = { SUPABASE_SERVICE_ROLE_KEY: "service-key" };
+  // The counting rules below, with the account rule of 1 Oct 2026 switched off
+  // so each one is checked on its own. The account rule has its own block.
+  const env = { SUPABASE_SERVICE_ROLE_KEY: "service-key", GEMLYX_GUIDES_WITHOUT_ACCOUNT: "1" };
   const fakeDb = (answer, seen = []) => async (url, opts) => {
     seen.push({ url, body: opts?.body ? JSON.parse(opts.body) : null, auth: opts?.headers?.Authorization });
     if (url.endsWith("/auth/v1/user")) return { ok: opts.headers.Authorization === "Bearer good", json: async () => ({ id: "U1", email: "o@g.dk" }) };
@@ -79821,6 +79847,30 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   {
     const out = await M.buildPassDecide({ headers: { "x-real-ip": "1.2.3.4" }, body: {}, env, fetchImpl: fakeDb("ok"), now });
     ok("the site's origin check comes first", out.status === 403);
+  }
+  {
+    // Batch 172, 1 Oct 2026: a new guide needs a confirmed account, asked
+    // before any counter moves, so nobody can spend the day's total anonymously.
+    const strict = { SUPABASE_SERVICE_ROLE_KEY: "service-key" };
+    const confirmedDb = (answer, seen = []) => async (url, opts) => {
+      seen.push({ url, body: opts?.body ? JSON.parse(opts.body) : null });
+      if (url.endsWith("/auth/v1/user")) return { ok: opts.headers.Authorization === "Bearer good" || opts.headers.Authorization === "Bearer unconfirmed", json: async () => ({ id: "U1", email: "o@g.dk", ...(opts.headers.Authorization === "Bearer good" ? { email_confirmed_at: "2026-09-01T00:00:00Z" } : {}) }) };
+      return { ok: true, status: 200, json: async () => answer };
+    };
+    const anon = [];
+    const a = await M.buildPassDecide({ headers: site, body: { visitor: "abcdefgh-1" }, env: strict, fetchImpl: confirmedDb("ok", anon), now });
+    ok("no account, no new guide, and nothing is counted", a.status === 401 && a.json.reason === "account" && a.json.message === M.refusalText("account") && !anon.some(x => x.url.includes("/rpc/")));
+    const u = await M.buildPassDecide({ headers: { ...site, authorization: "Bearer unconfirmed" }, body: { visitor: "abcdefgh-1" }, env: strict, fetchImpl: confirmedDb("ok"), now });
+    ok("an account still to confirm its email is asked to", u.status === 401 && u.json.reason === "confirm");
+    const seen = [];
+    const g = await M.buildPassDecide({ headers: { ...site, authorization: "Bearer good" }, body: { visitor: "abcdefgh-1" }, env: strict, fetchImpl: confirmedDb("ok", seen), now });
+    ok("a confirmed account gets its pass, counted on the account", g.status === 200 && g.json.pass && seen.find(x => x.url.includes("/rpc/")).body.p_keys.includes("u:u1"));
+    const retryAnon = await M.buildPassDecide({ headers: site, body: { visitor: "abcdefgh-1", retry: pass }, env: strict, fetchImpl: confirmedDb("ok"), now });
+    ok("a retry on a pass already given is not asked again", retryAnon.status === 200 && retryAnon.json.retry);
+    const st = [];
+    const store = { getItem: (k) => st[k] ?? null, setItem: (k, v) => { st[k] = v; } };
+    const told = await M.askForGuidePass({ fetchImpl: async () => ({ ok: false, status: 401, json: async () => ({ ok: false, reason: "account", message: M.refusalText("account") }) }), storage: store, makeId: () => "abcdefgh-1", now });
+    ok("and the browser says so instead of building", told.ok === false && told.reason === "account");
   }
   // The browser half.
   {
@@ -80325,31 +80375,12 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
 // show Klaipėda's tourism centre what Gemlyx adds before the app is made to
 // work outside Denmark.
 {
-  const d = (y, m, day) => new Date(y, m - 1, day);
-  const castle = M.KLP_PLACES.castleMuseum.hours, clock = M.KLP_PLACES.clockMuseum.hours;
-  is("the castle museum keeps summer and winter days apart", [
-    M.klpOpenOn(castle, d(2026, 7, 6)).open,   // Monday in summer
-    M.klpOpenOn(castle, d(2026, 7, 5)).open,   // Sunday in summer
-    M.klpOpenOn(castle, d(2026, 10, 4)).open,  // Sunday in winter
-    M.klpOpenOn(castle, d(2026, 10, 5)).open,  // Monday in winter
-    M.klpOpenOn(castle, d(2026, 9, 16)).open,  // last summer day, a Wednesday
-    M.klpOpenOn(castle, d(2026, 9, 19)).open,  // first winter Saturday
-  ], [false, true, false, true, true, false]);
-  is("and says why in words", M.klpOpenOn(castle, d(2026, 10, 4)).text, "Closed on Sundays at this time of year");
-  is("the clock museum's Thursday is late and its Monday is shut", [M.klpOpenOn(clock, d(2026, 10, 1)).text, M.klpOpenOn(clock, d(2026, 10, 5)).text], ["Open 12:00 to 20:00", "Closed on Mondays"]);
-  is("a lane of restaurants is never called open or closed", M.klpOpenOn(M.KLP_PLACES.friedrich.hours, d(2026, 10, 5)).open, null);
-  is("picking a weekday means the next one, today included", [M.klpNextWeekday(d(2026, 9, 29), 2).getDate(), M.klpNextWeekday(d(2026, 9, 29), 1).getDate()], [29, 5]);
+  // The hand-written walks this block tested went on 2 Oct 2026 (Batch 182).
   is("today is Klaipėda's today, an hour ahead of Denmark", M.todayInKlaipeda(new Date("2026-09-29T21:30:00Z")).getDate(), 30);
-  is("the cruise trip counts from the gangway", [M.klpStopTime(M.KLP_TRIPS[0], 0), M.klpStopTime(M.KLP_TRIPS[0], 65), M.klpStopTime(M.KLP_TRIPS[0], 210)], ["+0:00", "+1:05", "+3:30"]);
-  ok("and gets back inside four hours with a margin", Math.max(...M.KLP_TRIPS[0].stops.filter(s => s.place).map(s => s.at)) <= 210);
-  ok("every stop is a known place with a source", M.KLP_TRIPS.every(t => t.stops.every(s => s.walk || (M.KLP_PLACES[s.place] && /^https:\/\//.test(M.KLP_PLACES[s.place].source)))));
-  ok("the day trip's clock only moves forward", (() => { const ts = M.KLP_TRIPS[1].stops.filter(s => s.place).map(s => s.at); return ts.every((t, i) => i === 0 || t > ts[i - 1]); })());
-  ok("the whole walk fits in one Google Maps link", M.KLP_TRIPS.every(t => { const u = new URL(M.klpRouteUrl(t)); const w = u.searchParams.get("waypoints"); return u.searchParams.get("travelmode") === "walking" && (!w || w.split("|").length <= 9); }));
-  const words = JSON.stringify([M.KLP_PLACES, M.KLP_TRIPS, M.KLP_TIPS]) + readFileSync(join(root, "src/pages/KlaipedaDemo.jsx"), "utf8");
-  ok("no dash and none of his banned words anywhere on it", !/[—–]/.test(words) && !/\b(actually|genuine|genuinely|truly|simply)\b/i.test(words));
-  ok("prices are euros, never kroner", !/DKK|\bkr\b/.test(JSON.stringify(M.KLP_PLACES)));
+  const words = JSON.stringify(M.KLP_TIPS) + readFileSync(join(root, "src/pages/KlaipedaDemo.jsx"), "utf8");
+  ok("no dash and none of his banned words anywhere on it", !/[—–]/.test(words.replace(/\/\/.*$/gm, "")) && !/\b(actually|genuine|genuinely|truly|simply)\b/i.test(words));
   const app = readFileSync(join(root, "src/App.jsx"), "utf8");
-  ok("it has an address, and nothing links to it", M.KLAIPEDA_DEMO_PATH === "/lithuania/trips" && /<Route path=\{KLAIPEDA_DEMO_PATH\} element=\{<KlaipedaDemo \/>\} \/>/.test(app) && (app.match(/KLAIPEDA_DEMO_PATH/g) || []).length === 2);
+  ok("it has an address, and nothing links to it", M.KLAIPEDA_DEMO_PATH === "/lithuania/trips" && /<Route path=\{KLAIPEDA_DEMO_PATH\} element=\{<KlaipedaDemo \/>\} \/>/.test(app));
   ok("and it asks search engines to stay away", /noindex/.test(readFileSync(join(root, "src/pages/KlaipedaDemo.jsx"), "utf8")));
 }
 
@@ -80446,7 +80477,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
 
   const loc = readFileSync(join(root, "api/places-locate.js"), "utf8"), hrs = readFileSync(join(root, "api/places-hours.js"), "utf8"), dir = readFileSync(join(root, "api/directions.js"), "utf8"), pho = readFileSync(join(root, "api/commons-photo.js"), "utf8");
   ok("every Google route reads a known country or falls back to Denmark", [loc, hrs, dir].every(f => /COUNTRY_PROFILES\[String\(req\.query\.country \|\| ""\)\.toUpperCase\(\)\] \|\| COUNTRY_PROFILES\[DEFAULT_COUNTRY\]/.test(f)));
-  ok("places-locate asks Google in the country's language and region", /languageCode: land\.googleLanguage, regionCode: land\.googleRegion/.test(loc));
+  ok("places-locate asks Google in the country's language and region", /languageCode, regionCode: land\.googleRegion/.test(loc) && /const r = await ask\(land\.googleLanguage\);/.test(loc));
   ok("and reads a Lithuanian postcode as well as a Danish one", /\/\^\(\?:\[A-Z\]\{2\}-\)\?\\d\{4,5\}\\s\+\(\.\+\)\$\//.test(loc));
   ok("photos come from the country's own Wikipedia", /const localWiki = `\$\{land\.wikiLanguage\}\.wikipedia\.org`;/.test(pho));
   ok("the geocoder asks in the working country", /const land = workingProfile\(\);/.test(readFileSync(join(root, "src/utils/geo.js"), "utf8")));
@@ -80607,7 +80638,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
 {
   const app = readFileSync(join(root, "src/App.jsx"), "utf8");
   ok("the switch is the page's country", /const OPEN_ABROAD = PAGE_ABROAD;/.test(app));
-  ok("and the Danish page keeps every gate it had", /paid=\{OPEN_ABROAD \|\| hasPaidPlan\(userProfile\)\}/.test(app) && /signedIn=\{OPEN_ABROAD \|\| !!userSession\}/.test(app));
+  ok("and the Danish page keeps every gate it had", /paid=\{\(OPEN_ABROAD && !!userSession\) \|\| hasPaidPlan\(userProfile\)\}/.test(app) && /signedIn=\{!!userSession\}/.test(app)); // Batch 172
 }
 
 // ── Batch 166: Gemlyx promotions, every live offer in one list ──────
@@ -80634,7 +80665,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const app = readFileSync(join(root, "src/App.jsx"), "utf8");
   ok("the page reads the entries, not a list of its own", /const promotions = livePromotions\(\{/.test(app));
   ok("out of the menu while nothing is on", /const hidePromotions = liveLoaded && !libraryFailed && !isStudio && promotions\.length === 0;/.test(app));
-  ok("open abroad, locked like the entry page in Denmark", /tab === "promotions" && <PromotionsPage promos=\{promotions\}[^\n]*\n\s*paid=\{OPEN_ABROAD \|\| hasPaidPlan\(userProfile\)\} lang=\{uiLang\} onOpen=\{\(p\) => openStopDetail\(p\)\}/.test(app));
+  ok("open abroad to members, locked like the entry page in Denmark", /tab === "promotions" && <PromotionsPage promos=\{promotions\}[^\n]*\n\s*paid=\{\(OPEN_ABROAD && !!userSession\) \|\| hasPaidPlan\(userProfile\)\}\n\s*onOpen=\{\(p\) => \{ if \(OPEN_ABROAD && needsAccountFor\("deal"\)\) return; openStopDetail\(p\); \}\}/.test(app)); // Batch 172
   const page = readFileSync(join(root, "src/components/PromotionsPage.jsx"), "utf8");
   ok("no dash in the page's copy", !/[\u2013\u2014]/.test(page.replace(/\/\/.*$/gm, "")));
 }
@@ -80826,14 +80857,183 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("the gold button goes with its page", /\{NAV_ITEMS\.some\(item => item\.id === featuredTab\) && <button className="gx-topnav-ai" data-testid="nav-featured"/.test(app));
 }
 
-// ── Batch 177: Scan a Source reads more than events ──
+// ── Batch 172: security, after Fable's audit ──
 {
+  const site = { origin: "https://www.gemlyxtravel.com", authorization: "Bearer tok" };
+  const env = { SUPABASE_SERVICE_ROLE_KEY: "svc", GEMLYX_FOUNDER_IDS: "founder-id" };
+  const user = (u) => async (url) => url.endsWith("/auth/v1/user")
+    ? { ok: true, json: async () => u }
+    : { ok: true, json: async () => "ok" };
+  const run = (o) => M.gateAi({ endpoint: "anthropic", body: {}, env, ...o });
+  const results = await Promise.all([
+    run({ headers: { origin: "https://evil.example" }, fetchImpl: user({ id: "x" }) }),
+    run({ headers: { origin: "https://www.gemlyxtravel.com" }, fetchImpl: user({ id: "x" }) }),
+    run({ headers: site, fetchImpl: async () => ({ ok: false, json: async () => ({}) }) }),
+    run({ headers: site, fetchImpl: user({ id: "member", email_confirmed_at: null }) }),
+    run({ headers: site, fetchImpl: user({ id: "member", email_confirmed_at: "2026-09-30" }) }),
+    run({ headers: site, fetchImpl: user({ id: "founder-id" }) }),
+    run({ headers: site, fetchImpl: async (url) => url.endsWith("/auth/v1/user") ? { ok: true, json: async () => ({ id: "member", email_confirmed_at: "x" }) } : { ok: true, json: async () => "ai:u:member" } }),
+    run({ headers: site, fetchImpl: async (url) => url.endsWith("/auth/v1/user") ? { ok: true, json: async () => ({ id: "member", email_confirmed_at: "x" }) } : { ok: false, json: async () => ({}) } }),
+    run({ headers: site, body: { big: "x".repeat(1_100_000) }, fetchImpl: user({ id: "member", email_confirmed_at: "x" }) }),
+  ]);
+  const [foreign, noToken, badToken, unconfirmed, member, founder, overLimit, counterDown, tooBig] = results;
+  is("a request from another site is refused", foreign.status, 403);
+  // Oliver, 3 Oct 2026, "Open, but capped": no account is a visitor on the
+  // tightest terms, not a refusal. A dead token or an unconfirmed email is the
+  // same visitor. With every fetch failing, the counter is out of reach too,
+  // and that is still a no.
+  ok("no account is a visitor, counted, not refused", noToken.ok && noToken.anon === true && noToken.founder === false);
+  is("a dead token with the counter out of reach is refused", badToken.status, 503);
+  ok("an unconfirmed email is a visitor too", unconfirmed.ok && unconfirmed.anon === true);
+  ok("a confirmed member passes, and is counted", member.ok && member.founder === false && member.anon === false);
+  ok("the founder passes uncounted", founder.ok && founder.founder === true);
+  is("over the daily allowance is a 429", overLimit.status, 429);
+  is("and a counter that cannot be reached refuses a member", counterDown.status, 503);
+  is("a member's request has a size limit", tooBig.status, 413);
+
+  const a = M.shapeAnthropic({ model: "claude-opus-5", max_tokens: 64000, tools: [{ name: "t", input_schema: {} }, { type: "web_search_20250305", name: "web_search" }] });
+  is("a member gets an allowed model", a.model, "claude-sonnet-5");
+  is("and the member ceiling", a.max_tokens, 16000);
+  is("and no paid server tools", a.tools.map(t => t.name), ["t"]);
+  is("the founder keeps his model", M.shapeAnthropic({ model: "claude-opus-5", max_tokens: 64000 }, { founder: true }).model, "claude-opus-5");
+  const o = M.shapeOpenAI({ model: "gpt-9", max_tokens: 99999, n: 5 });
+  ok("OpenAI is held to its model and length, one answer", o.model === "gpt-5.6-sol" && o.max_completion_tokens === 12000 && !("n" in o) && !("max_tokens" in o));
+  const p = M.shapePerplexity({ prompt: "hi", model: "sonar-deep-research", max_tokens: 50000 });
+  ok("Perplexity is held to sonar and 1024 tokens", p.model === "sonar" && p.max_tokens === 1024 && p.prompt === "hi");
+
+  for (const f of ["anthropic", "openai", "perplexity", "search"]) {
+    const src = readFileSync(join(root, "api", `${f}.js`), "utf8");
+    ok(`/api/${f} is behind the gate`, new RegExp(`const gate = await gateAi\\(\\{ headers: req\\.headers, body: req\\.(body|query), endpoint: "${f}", env: process\\.env \\}\\);`).test(src) && /if \(!gate\.ok\) return res\.status\(gate\.status\)/.test(src));
+    ok(`/api/${f} does not hand an upstream error body back`, !/detail: (errText|data)/.test(src));
+  }
+  // The visitor's own terms.
+  const sent = [];
+  const counting = (answer) => async (url, init) => { if (!url.endsWith("/auth/v1/user")) sent.push(JSON.parse(init.body)); return url.endsWith("/auth/v1/user") ? { ok: false, json: async () => ({}) } : { ok: true, json: async () => answer }; };
+  const visitor = { origin: "https://www.gemlyxtravel.com", "x-real-ip": "203.0.113.9" };
+  const [vOk, vOver, vAll, vBig] = await Promise.all([
+    run({ headers: visitor, fetchImpl: counting("ok") }),
+    run({ headers: visitor, fetchImpl: counting(M.visitorKey(visitor, "svc".slice(-16))) }),
+    run({ headers: visitor, fetchImpl: counting("ai:anon") }),
+    run({ headers: visitor, body: { big: "x".repeat(450_000) }, fetchImpl: counting("ok") }),
+  ]);
+  ok("a visitor is counted three ways: themselves, all visitors, the site", vOk.ok && sent[0].p_keys.length === 3 && sent[0].p_keys[1] === "ai:anon" && sent[0].p_keys[2] === "ai:site" && sent[0].p_limits[0] === 120);
+  ok("and the counter never holds the address itself", /^ai:v:[0-9a-f]{24}$/.test(sent[0].p_keys[0]) && !sent[0].p_keys[0].includes("203.0.113.9"));
+  ok("a visitor over their own day, or all visitors over theirs, is a 429", vOver.status === 429 && vAll.status === 429 && /used its AI for today/.test(vAll.error));
+  is("a visitor's body limit is the smallest", vBig.status, 413);
+  const va = M.shapeAnthropic({ model: "claude-opus-4-8", max_tokens: 64000 }, { anon: true });
+  ok("a visitor keeps the guide writer's model and gets 8192 tokens, enough for its 6000", va.model === "claude-opus-4-8" && va.max_tokens === 8192);
+  ok("and an unknown model is not theirs either", M.shapeAnthropic({ model: "claude-opus-5" }, { anon: true }).model === "claude-sonnet-5");
+  ok("OpenAI's paid web search is taken off for anybody but the founder", M.shapeOpenAI({ tools: [{ type: "function", function: { name: "f" } }, { type: "web_search" }] }, { anon: true }).tools.length === 1);
+  is("and the visitor's OpenAI ceiling", M.shapeOpenAI({ max_tokens: 99999 }, { anon: true }).max_completion_tokens, 8000);
+
+  ok("the raw body is not passed through any more", !/JSON\.stringify\(req\.body\)/.test(readFileSync(join(root, "api/anthropic.js"), "utf8") + readFileSync(join(root, "api/openai.js"), "utf8")));
+
+  ok("the account is added to AI calls on the way out", M.AI_PATHS.test("/api/anthropic") && M.AI_PATHS.test("/api/search?q=x") && !M.AI_PATHS.test("/api/weather?lat=1"));
+  is("only this site's requests get it", [M.sitePath("/api/openai", "https://www.gemlyxtravel.com"), M.sitePath("https://other.example/api/openai", "https://www.gemlyxtravel.com")], ["/api/openai", ""]);
+  const main = readFileSync(join(root, "src/main.jsx"), "utf8");
+  ok("and it is installed before anything renders", /\ninstallApiAuth\(\)\n[\s\S]*ReactDOM\.createRoot/.test(main));
+
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the planner asks for an account first", /const generateGuide = async \(overrideConvoText, modeOverride\) => \{\n\s*if \(needsAccountFor\("plan"\)\) return;/.test(app) && /const buildAbroad = \(\) => \{\n\s*if \(guideModal === "loading"\) return;\n\s*if \(needsAccountFor\("plan"\)\) return;/.test(app));
+  ok("so does the chat", /if \(!msg \|\| aiLoading\) return;\n\s*if \(needsAccountFor\("plan"\)\) return;/.test(app));
+  ok("a deal abroad is for members", /paid=\{\(OPEN_ABROAD && !!userSession\) \|\| hasPaidPlan\(userProfile\)\}/.test(app) && !/signedIn=\{OPEN_ABROAD/.test(app));
+  const rev = readFileSync(join(root, "src/components/ReviewsSection.jsx"), "utf8");
+  ok("a review is posted with the member's own token", /if \(!signedIn\) \{ onNeedAccount\?\.\("review"\); return; \}/.test(rev) && /Authorization: `Bearer \$\{session\.token\}`/.test(rev));
+  const gp = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+  ok("the trip library only takes a member's row", /if \(member\?\.token\) fetch\(`\$\{SUPABASE_URL\}\/rest\/v1\/\$\{LIBRARY_TABLE\}`/.test(gp));
+  ok("no link falls back to a raw address", !/\.href \|\| stayHere\.door\.href/.test(gp) && !/\.href \|\| l\.href/.test(readFileSync(join(root, "src/components/CostsBlock.jsx"), "utf8")));
+  is("the deal note says what unlocks it abroad", [M.offerLockedNote ? M.offerLockedNote("LT") : "Sign up to see the deal.", M.offerLockedNote ? M.offerLockedNote("DK") : "Only for paying users."], ["Sign up to see the deal.", "Only for paying users."]);
+
+  const vj = JSON.parse(readFileSync(join(root, "vercel.json"), "utf8"));
+  const keys = (vj.headers?.[0]?.headers || []).map(h => h.key);
+  ok("the site sends security headers", ["Strict-Transport-Security", "X-Content-Type-Options", "Referrer-Policy", "Permissions-Policy", "X-Frame-Options", "Content-Security-Policy-Report-Only"].every(k => keys.includes(k)));
+  const dir = readFileSync(join(root, "api/directions.js"), "utf8");
+  ok("the departure time is a number of seconds or nothing", /const departAt = \/\^\\d\{9,11\}\$\/\.test/.test(dir) && /&departure_time=\$\{departAt\}/.test(dir));
+  const w = readFileSync(join(root, "api/weather.js"), "utf8");
+  const gpG = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+  // The old read stays only as the fallback for before the SQL has run.
+  ok("a guide is read by its link through gemlyx_guide, not by listing the table", /rest\/v1\/rpc\/gemlyx_guide`/.test(gpG) && /body: JSON\.stringify\(\{ p_id: String\(guideId\) \}\)/.test(gpG) && /if \(r\.status !== 404 && body\?\.code !== "PGRST202"\) return r\.ok \? body : failed;/.test(gpG) && /gemlyx_guides\?select=payload&id=eq\./.test(gpG));
+  const mw = readFileSync(join(root, "middleware.js"), "utf8");
+  ok("and so are the link previews", /rest\/v1\/rpc\/gemlyx_guide`/.test(mw) && /if \(res\.status === 404 \|\| got\?\.code === "PGRST202"\) \{/.test(mw));
+  ok("the chat that built a guide is not saved into its link", /_planProblems, _convoText, \.\.\.rest \}\) => rest\)\(guide\)/.test(gpG));
+  const sqlL = readFileSync(join(root, "SECURITY_LOCKDOWN_30SEP.sql"), "utf8");
+  ok("the lockdown SQL reads one guide by id and strips the old chats", /create or replace function public\.gemlyx_guide\(p_id text\) returns jsonb/.test(sqlL) && /grant execute on function public\.gemlyx_guide\(text\) to anon, authenticated;/.test(sqlL) && /set payload = payload - '_convoText'/.test(sqlL) && !/guides are readable by link/.test(sqlL));
+  const del = readFileSync(join(root, "api/delete-account.js"), "utf8");
+  ok("deleting an account takes its reviews and its AI counters", /gemlyx_reviews\?user_id=eq\.\$\{uid\}/.test(del) && /gemlyx_guide_allowance\?key=in\.\(/.test(del) && /`"u:\$\{String\(who\.userId\)\.toLowerCase\(\)\}"`/.test(del) && del.indexOf("gemlyx_reviews?user_id") < del.indexOf("/auth/v1/admin/users/"));
+  const askR = readFileSync(join(root, "api/ask.js"), "utf8");
+  ok("a question needs a confirmed email, the founder aside", /if \(userId && !\(u\?\.email_confirmed_at \|\| u\?\.confirmed_at\) && !isFounder\(String\(userId\), process\.env\.GEMLYX_FOUNDER_IDS\)\)/.test(askR));
+  ok("and comes from the site", /if \(!requestIsFromSite\(req\.headers\)\) return json\(res, 403, \{ error: NOT_FROM_SITE \}\);/.test(askR) && askR.indexOf("requestIsFromSite(req.headers)") < askR.indexOf("/auth/v1/user"));
+  const evc = readFileSync(join(root, "api/update-events-check.js"), "utf8");
+  ok("the weekly check's key is compared in constant time, and ?key= still works", /timingSafeEqual\(digest\(provided\), digest\(secret\)\)/.test(evc) && /req\.query\.key \|\| req\.headers\["x-update-events-key"\]/.test(evc) && !/provided !== secret/.test(evc));
+  ok("weather coordinates are numbers", /const lat = Number\(req\.query\.lat\), lon = Number\(req\.query\.lon\);/.test(w));
+}
+
+// ── Batch 174: off the ship, deal codes, booking, busyness ──
+{
+  const a = { name: "Devi", city: "Klaipėda" };
+  ok("a deal code is short, readable and stable", /^GX-[A-HJ-NP-Z2-46-9]{4}$/.test(M.dealCode(a)) && M.dealCode(a) === M.dealCode({ ...a }) && !/[01ILOS5]/.test(M.dealCode(a).slice(3)));
+  ok("and differs from place to place", M.dealCode(a) !== M.dealCode({ name: "Friedrich Passage", city: "Klaipėda" }) && M.dealCode({}) === "");
+  is("a phone number books by calling", M.cleanBooking("+370 600 12345"), { kind: "phone", href: "tel:+37060012345", value: "+370 600 12345" });
+  is("a web address books on the restaurant's own page", M.cleanBooking("restaurant.lt/booking")?.href, "https://restaurant.lt/booking");
+  ok("anything else is refused, with a reason", M.cleanBooking("call us") === null && /neither a web address nor a phone number/.test(M.bookingProblem("call us")) && M.bookingProblem("") === "");
+  ok("a script address never becomes a button", M.cleanBooking("javascript:alert(1)") === null);
+  const raw = Array(24).fill(0); raw[0] = 50; raw[8] = 90; raw[18] = 70;
+  const bt = { status: "OK", venue_info: { venue_name: "Devi" }, analysis: [{ day_info: { day_int: 0 }, day_raw: raw }] };
+  const busy = M.busyFromBestTime(bt, new Date("2026-10-01T10:00:00Z"));
+  ok("BestTime's Monday is getDay's 1 and its first hour is 06:00", busy.week[1][6] === 50 && busy.week[1][14] === 90);
+  ok("and an hour past midnight belongs to the next day", busy.week[2][0] === 70);
+  ok("a forecast with nothing in it is not stored", M.busyFromBestTime({ status: "OK", analysis: [{ day_info: { day_int: 0 }, day_raw: Array(24).fill(0) }] }) === null && M.busyFromBestTime({ status: "Error" }) === null);
+  // Monday 1 Oct 2029 is a Monday; use a fixed Monday in Vilnius time.
+  const monAt = (h) => new Date(Date.UTC(2026, 9, 5, h - 3)); // Vilnius is UTC+3 in October
+  is("the clock is Klaipėda's", M.localClock(monAt(14), "Europe/Vilnius"), { day: 1, hour: 14 });
+  const b2 = { week: Array.from({ length: 7 }, () => Array(24).fill(0)) };
+  b2.week[1][12] = 80; b2.week[1][13] = 60; b2.week[1][14] = 20; b2.week[1][10] = 20;
+  is("busy at noon, with when it quietens", M.busyAt(b2, monAt(12), "Europe/Vilnius"), { level: "busy", value: 80, quieterAt: "14:00" });
+  is("quiet says so and promises nothing", M.busyAt(b2, monAt(10), "Europe/Vilnius"), { level: "quiet", value: 20, quieterAt: null });
+  ok("a closed or unknown hour says nothing", M.busyAt(b2, monAt(3), "Europe/Vilnius") === null && M.busyAt(null) === null);
+
+
+  const page = readFileSync(join(root, "src/pages/KlaipedaDemo.jsx"), "utf8");
+  ok("it reads where the code hangs from the address", /new URLSearchParams\(window\.location\.search\)\.get\("from"\)/.test(page) && /defaultFrom=\{from\}/.test(page));
+  ok("and shows today's events and the deals in town, Lithuanian rows only", /rowCountry\(r\) === "LT"/.test(page) && /eventOnDays\(e, \[today\]\)/.test(page) && /livePromotions\(/.test(page));
+
+  // Bolt, from the Klaipėda tourism site's own tips (1 Oct 2026).
+  ok("a long walk in Lithuania names Bolt", M.rideFor({ country: "LT", minutes: 25 })?.name === "Bolt" && M.rideFor({ country: "LT", tooFar: true })?.name === "Bolt");
+  ok("a short one does not, and Denmark names nothing yet", M.rideFor({ country: "LT", minutes: 12 }) === null && M.rideFor({ country: "DK", minutes: 40 }) === null);
+  const gpR = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+  ok("the guide puts it under a long walking leg, by the guide's country", /rideFor\(\{ country: guide\?\._country, minutes: walkMinutes, tooFar: estIsImpossibleWalk \}\)/.test(gpR));
+  // Klaipėda is walkable, greater Klaipėda is not (Oliver, 1 Oct 2026).
+  const theatre = { lat: 55.7127, lon: 21.1314 }, castle = { lat: 55.7065, lon: 21.1277 }, melnrage = { lat: 55.7382, lon: 21.0834 }, giruliai = { lat: 55.7672, lon: 21.0911 };
+  ok("a walk inside the city centre is a walk", M.offTownWalk({ country: "LT", from: theatre, to: castle }) === false);
+  ok("a walk from the centre to Melnragė is not", M.offTownWalk({ country: "LT", from: theatre, to: melnrage }) === true);
+  ok("nor between two places outside it", M.offTownWalk({ country: "LT", from: melnrage, to: giruliai }) === true);
+  ok("a short hop out there still is", M.offTownWalk({ country: "LT", from: melnrage, to: { lat: 55.7390, lon: 21.0850 } }) === false);
+  ok("and nothing is decided without both ends, or in Denmark", M.offTownWalk({ country: "LT", from: theatre, to: null }) === false && M.offTownWalk({ country: "DK", from: theatre, to: melnrage }) === false);
+  ok("the guide's writer is told, in so many words", /Greater Klaipėda is not/.test(M.walkRule("LT")) && /even for a traveller who loves walking/.test(M.walkRule("LT")) && M.walkRule("DK") === "");
+  const ga = readFileSync(join(root, "src/utils/guideAbroad.js"), "utf8");
+  ok("on every prompt for a Lithuanian guide", /\$\{landRules\(land\)\}\$\{walkRule\(land\.code\)\}/.test(ga));
+  const gpW = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+  ok("and the guide relabels such a leg rather than trusting it", /const offTown = usedMode === "walking" && offTownWalk\(\{/.test(gpW) && /\|\| offTown;/.test(gpW) && /exact && !offTown \?/.test(gpW));
+  // Scan a Source reads more than events (Oliver, 1 Oct 2026).
   is("Scan a Source reads events, places to see, food and towns", M.SCAN_KINDS.map(k => k.id), ["festival", "free", "food", "town"]);
   ok("each asks for its own kind, in the page's country, and drops the tagline", /Lithuanian place to see/.test(M.scanPrompt("free", "Lithuanian")) && /drop the tagline/.test(M.scanPrompt("free", "Lithuanian")) && /"dates"/.test(M.scanPrompt("festival")) && !/"dates"/.test(M.scanPrompt("food")));
   ok("an unknown kind reads as events, as before", M.scanKindOf("moon").id === "festival");
   const appS = readFileSync(join(root, "src/App.jsx"), "utf8");
   ok("a tapped name drafts as the kind scanned", /setStudioType\(scanKindOf\(scanKind\)\.id\); setStudioTown\(it\.name\);/.test(appS));
   ok("and Queue all puts every name in the queue, as that kind, in the Studio's country", /Queue all \{scanResults\.length\}/.test(appS) && /fresh\.map\(name => \(\{ name, type, country: studioCountry \}\)\)/.test(appS));
+  ok("busyness is a Studio route, gated like the others", M.STUDIO_ONLY_ENDPOINTS.includes("busyness"));
+  const bz = readFileSync(join(root, "api/busyness.js"), "utf8");
+  ok("the BestTime key stays on the server", /process\.env\.BESTTIME_API_KEY_PRIVATE/.test(bz) && !/BESTTIME/.test(readFileSync(join(root, "src/App.jsx"), "utf8").replace(/\/\/.*$/gm, "")));
+  const appB = readFileSync(join(root, "src/App.jsx"), "utf8");
+  // Every page abroad waits for its first row (Oliver, 1 Oct 2026).
+  ok("every Lithuanian page waits for data, the planner for places", ["tips: hereCount(tipsOnly(essentials)) === 0,", "attractions: hereCount(freeEntrance) + hereCount(craftItems) === 0,", "food: hereCount(foodSpots) === 0,", "visits: hereCount(towns) === 0,", "ai: hereCount(freeEntrance) + hereCount(foodSpots) + hereCount(craftItems) === 0,"].every(line => appB.includes(line)) && /events: !\[\.\.\.events, \.\.\.majorEvents, \.\.\.calendarEvents\]\.some\(e => rowCountry\(e\) === PAGE_COUNTRY/.test(appB) && /const hereCount = \(rows\) => /.test(appB));
+  ok("and Explore is never one of them", !/\bhome: /.test(appB.slice(appB.indexOf("const emptyHere = {"), appB.indexOf("const hideAbroad"))));
+  ok("Studio fetches it through the renewing fetch", /studioFetch\(`\/api\/busyness`/.test(appB));
+  ok("Studio refuses a booking that would not work", /const bookFault = bookingProblem\(studioBooking\);/.test(appB) && /if \(cleanBooking\(studioBooking\)\) shaped\.__booking = studioBooking\.trim\(\);\s*else delete shaped\.__booking;/.test(appB));
+  ok("and shows the partner their code", /Deal code for the partner: <strong[^>]*>\{dealCode\(studioDraft\)\}<\/strong>/.test(appB));
+  const dp = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
+  ok("a guest sees the code only with the deal itself", /\{!view\.locked && dealCode\(item\) && \(/.test(dp));
+  ok("and booking and busyness need no account", /const book = cleanBooking\(item\.__booking\);/.test(dp) && !/signedIn && .*cleanBooking/.test(dp));
   // "why does it all say free?" (Oliver, 2 Oct 2026). "free" is the Studio's old
   // name for Attractions, from when the list was free entrances only.
   ok("the queue names an attraction an attraction, not 'free'", /\(\{entryKindLabel\(it\.type, it\.type\)\.toLowerCase\(\)\}/.test(appS) && !/\(\{it\.type\}\{it\.country/.test(appS));
@@ -80886,6 +81086,491 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const dpH = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
   ok("the entry page reads the place's clock", /offerView\(item\.__offer, \{ paid, zone: countryProfile\(rowCountry\(item\)\)\.zone \}\)/.test(dpH) && /data-testid="offer-hours"/.test(dpH));
   ok("and so does the Special deals page", /promoCard\(p, \{ paid, today, lang \}\)/.test(readFileSync(join(root, "src/components/PromotionsPage.jsx"), "utf8")));
+}
+
+// ── Batch 179: "I have X hours" ──
+// Oliver, 2 Oct 2026, of the AI feature to build: "Sure do that". A walk made
+// for this moment from the terminal or the tourist centre, the model putting
+// Gemlyx's own places in order and the rules checking every minute of it.
+{
+  const N = M.NP, zone = "Europe/Vilnius";
+  const tue1130 = new Date("2026-10-06T08:30:00Z");
+  const week = ["Monday: Closed", "Tuesday: 10:00 – 18:00", "Wednesday: 10:00 – 18:00", "Thursday: 10:00 – 18:00", "Friday: 10:00 – 18:00", "Saturday: 10:00 – 16:00", "Sunday: Closed"];
+  const rows = [
+    { id: 1, type: "free", payload: { name: "Theatre Square", country: "LT", __lat: 55.7078, __lon: 21.1316, tier: "Can't Miss Out" } },
+    { id: 2, type: "free", payload: { name: "Museum of Clocks", country: "LT", __lat: 55.7105, __lon: 21.1389, tier: "Highly Recommended", __hours: { hours: week } } },
+    { id: 3, type: "food", payload: { name: "Momo Grill", country: "LT", __lat: 55.7101, __lon: 21.1340, __hours: { hours: ["Tuesday: 11:00 – 22:00"] }, __offer: { text: "Free soda with a meal", until: "2026-12-31", days: [2], from: "12:00", to: "16:00" } } },
+    { id: 4, type: "free", payload: { name: "Melnragė beach", country: "LT", __lat: 55.7377, __lon: 21.0717 } },
+    { id: 5, type: "free", payload: { name: "Castle Museum", country: "LT", __lat: 55.7056, __lon: 21.1290, __hours: { hours: ["Tuesday: Closed"] } } },
+    { id: 6, type: "free", payload: { name: "A Danish place", __lat: 55.6, __lon: 12.5 } },
+    { id: 7, type: "food", payload: { name: "No hours bistro", country: "LT", __lat: 55.7090, __lon: 21.1320 } },
+  ];
+  const cands = N.nowCandidates(rows, { country: "LT", zone, now: tue1130 });
+  is("only this country's places with a coordinate are in the running", cands.map(c => c.id), ["free:1", "free:2", "food:3", "free:4", "free:5", "food:7"]);
+  ok("a square is outdoors whatever its name says, a museum indoors", cands.find(c => c.id === "free:1").indoor === false && cands.find(c => c.id === "free:2").indoor === true);
+  is("Google's weekday lines read, closed and open all day included", [N.windowsFor(week, 2), N.windowsFor(["Tuesday: 9 AM – 5 PM"], 2), N.windowsFor(["Tuesday: Open 24 hours"], 2), N.windowsFor(week, 1), N.windowsFor(["Tuesday: whenever"], 2)], [[[600, 1080]], [[540, 1020]], [[0, 1440]], [], null]);
+  const start = N.NOW_STARTS.LT.terminal;
+  const ctx = { country: "LT", start, startClock: M.OC.placeClock(tue1130, zone), budget: 180, margin: N.SHIP_MARGIN };
+  const walk = N.scheduleWalk([{ id: "free:5" }, { id: "food:7" }, { id: "food:3", why: "Lunch — with a free soda" }, { id: "free:1" }, { id: "made:up" }], cands, ctx);
+  is("closed today, hours unknown for a kitchen, or made up: none of them is in the walk", walk.stops.map(s => s.id), ["food:3", "free:1"]);
+  // 2 Oct 2026, "Partners on merit, labelled": nobody waits for a deal, and a
+  // deal that has not started by the time they arrive is not shown.
+  ok("nobody is held back to catch a deal, and one not yet on is not shown", walk.stops[0].arrive === 15 && walk.stops[0].deal === null);
+  is("and no dash comes out of the model", walk.stops[0].why, "Lunch, with a free soda");
+  ok("back at the ship with the margin kept", walk.back.at <= 180 - N.SHIP_MARGIN && walk.deadline === 150);
+  const far = N.scheduleWalk([{ id: "free:4" }], cands, { ...ctx, budget: 360 });
+  ok("a place outside the walkable centre is reached by Bolt, there and back", far.stops[0]?.ride === true && far.back.ride === true && N.rideApp("LT").name === "Bolt");
+  const rules = N.scheduleWalk(N.ruleOrder(cands, ctx), cands, ctx);
+  ok("with no model at all there is still a walk, and it holds", N.goodWalk(rules, 180) && rules.back.at <= rules.deadline);
+  is("everybody in the same half hour asks for the same walk", [N.slotOf(new Date("2026-10-06T08:44:10Z")), N.slotOf(new Date("2026-10-06T08:59:59Z"))], ["2026-10-06T08:30Z", "2026-10-06T08:30Z"]);
+  ok("and only this half hour or the last one is made", N.slotAccepted("2026-10-06T08:00Z", new Date("2026-10-06T08:44:10Z")) && !N.slotAccepted("2026-10-06T07:30Z", new Date("2026-10-06T08:44:10Z")) && !N.slotAccepted("tomorrow", new Date()));
+  const prompt = N.planPrompt(cands, { ...ctx, lang: "lt" });
+  ok("the model is told the places, the clock, the ship, the walking rule and the language", /free:2 \| Museum of Clocks/.test(prompt) && /11:30 local time/.test(prompt) && /off a cruise ship/.test(prompt) && /Greater Klaipėda is not/.test(prompt) && /in Lithuanian/.test(prompt));
+  is("its answer is read leniently and never trusted past the ids", N.readOrder('Sure! {"order":[{"id":"free:1","stay":30},{"oops":1}]}'), [{ id: "free:1", stay: 30 }]);
+  ok("a broken answer reads as none", N.readOrder("no json") === null && N.readOrder("{broken") === null);
+  ok("the walk opens in Maps on foot, start to start", /travelmode=walking&origin=55\.70526,21\.12217&destination=55\.70526,21\.12217/.test(N.walkMapsUrl(start, walk.stops)));
+  ok("the walkable centre is Theatre Square where it is, with the terminal inside it", Math.abs(M.WK.WALKABLE_CENTRES.LT[0].lat - 55.7078) < 0.001 && !!M.WK.centreOf("LT", start));
+  const api = readFileSync(join(root, "api/plan-now.js"), "utf8");
+  ok("the route is cached for its half hour and only then", /"public, s-maxage=1800, stale-while-revalidate=120"/.test(api) && /slotAccepted\(String\(q\.slot \|\| ""\), now\)/.test(api));
+  ok("the model only orders, and the rules decide", /tidyWalk\(withMustSee\(order, candidates, ctx\), candidates, ctx\)/.test(api) && /if \(!walk\) walk = tidyWalk\(withMustSee\(ruleOrder\(candidates, ctx\), candidates, ctx\), candidates, ctx\);/.test(api));
+  // The first deploy failed to start: config.js reads import.meta, and Vercel
+  // loads a route as CommonJS. No route may import it.
+  ok("no route imports the browser's config", readdirSync(join(root, "api")).filter(f => f.endsWith(".js")).every(f => !/from "\.\.\/src\/config\.js"/.test(readFileSync(join(root, "api", f), "utf8"))));
+  ok("and nothing the planner loads reads import.meta", ["nowPlanner", "walkable", "rideHail", "countries", "calendarDay", "offerClock"].every(f => !/import\.meta/.test(readFileSync(join(root, `src/utils/${f}.js`), "utf8"))));
+  ok("the planner imports only files a server can load", (readFileSync(join(root, "src/utils/nowPlanner.js"), "utf8").match(/^import .* from "(.*)";$/gm) || []).every(l => /\.js";$/.test(l)));
+  const page = readFileSync(join(root, "src/pages/KlaipedaDemo.jsx"), "utf8");
+  ok("and it sits on the Klaipėda walks page, starting where the QR was", /<NowPlanner country="LT" (lang=\{lang\} )?defaultFrom=/.test(page));
+  const np = readFileSync(join(root, "src/components/NowPlanner.jsx"), "utf8");
+  const nowKeys = [...np.matchAll(/"(now\.[a-zA-Z]+)"/g)].map(m => m[1]);
+  ok("every word on it is in four languages", nowKeys.length >= 15 && nowKeys.every(k => ["en", "da", "de", "lt"].every(l => !!M.UI_STRINGS[k]?.[l])));
+}
+
+// ── Batch 180: what four Klaipėda drafts showed ──
+// Oliver, 2 Oct 2026, pasting the traces of Sąjūdis Park, Malūnas Park, Danė
+// Square and Melnragė Park, and going to bed: "Look into these traces".
+{
+  const appSrc = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const same = [["Sąjūdis Park", "Sąjūdžio parkas"], ["Malūnas Park by the Pond", "Malūno parkas"], ["Danė Square", "Danės skveras"], ["Melnragė Park", "Melnragės parkas"], ["Theatre Square", "Teatro aikštė"], ["Museum of Clocks", "Laikrodžių muziejus"], ["Klaipėda Castle", "Klaipėdos pilis"]];
+  ok("Google's Lithuanian name for the place is the place", same.every(([a, b]) => M.sameAcrossLanguages(a, b) && M.listingMatchesSubject(a, "", b)));
+  const differ = [["Danė Square", "Danės gatvė"], ["Theatre Square", "Teatro gatvė"], ["Klaipėda Castle", "Klaipėdos parkas"], ["Sculpture Park", "Melnragės parkas"], ["Ribe Park", "Ribers parkas"]];
+  ok("and a different place, or a Danish one, is still refused", differ.every(([a, b]) => !M.sameAcrossLanguages(a, b)) && !M.sameAcrossLanguages("Kongens Have", "Kongens Nytorv"));
+  ok("a listing the research confirmed keeps its opening hours", /venueByResearch = refusedListing\.name;/.test(appSrc) && /const confirmedVenue = !!venueByResearch && !NAME_IS_A_STREET\.includes\(sType\) && fold\(String\(hoursData\.name \|\| ""\)\.trim\(\)\) === fold\(venueByResearch\);/.test(appSrc));
+  ok("abroad, a query that does not say where gets the town and the country", /const scopeQuery = \(q\) => \(draftInDenmark \|\| saysWhere\(q\) \? q : `\$\{q\} \$\{whereWords\.filter\(w => !fold\(q\)\.includes\(fold\(w\)\)\)\.join\(" "\)\}`\);/.test(appSrc) && /cfg\.queries\.map\(scopeQuery\)/.test(appSrc));
+  ok("and the place's own Lithuanian name gets a search of its own", /\.\.\.\(placesName && fold\(placesName\) !== fold\(name\) \? \[`\$\{placesName\} \$\{draftTown \|\| draftLand\.name\}`\] : \[\]\)/.test(appSrc));
+  ok("nobody hunts for a ticket to a park or a square abroad", /const needHunt = HUNTS_FOR_A_PRICE\.includes\(sType\) && !pricesAdmission\(priced\) && !openSpaceAbroad;/.test(appSrc) && /const openSpaceAbroad = !draftInDenmark && OPEN_SPACE\.test/.test(appSrc));
+  ok("a Klaipėda city bus stop is a bus stop, whatever Google files it as", M.busStopByName("Volungėlės st.") && M.busStopByName("Molo st.") && !M.busStopByName("Klaipeda Central Train Station"));
+  ok("the At a Glance read thinks little and answers in one go", /askOpenAI\(GLANCE_EXTRACT_PROMPT\(name, sType, glanceFields, rawResearch\), 4000, \{ effort: "low" \}\)/.test(appSrc));
+  const aic = readFileSync(join(root, "src/utils/aiClient.js"), "utf8");
+  ok("and a model that refuses the setting is asked again without it", /\.\.\.\(effort \? \{ reasoning_effort: effort \} : \{\}\)/.test(aic) && /out = await openAIOnce\(prompt, maxTokens, ""\)/.test(aic));
+  ok("the log no longer says Denmark about Lithuania", !/which corner of Denmark this is",/.test(appSrc) && /which corner of \$\{draftLand\.name\} this is/.test(appSrc));
+}
+
+// ── Batch 181: what the review of the last day's work found ──
+// Oliver, 2 Oct 2026: "Remember to also look at bug fixes, so looking through
+// all the work that has been done."
+{
+  const N = M.NP;
+  is("Google's once-written meridiem is read for the whole range", [
+    N.windowsFor(["Monday: 11:00 AM – 2:30 PM, 5:00 – 10:00 PM"], 1), N.windowsFor(["Monday: 1:00 – 5:00 PM"], 1),
+    N.windowsFor(["Monday: 11:00 – 2:30 PM"], 1), N.windowsFor(["Monday: 6:00 PM – 2:00 AM"], 1), N.windowsFor(["Monday: 10:00 – 18:00"], 1),
+  ], [[[660, 870], [1020, 1320]], [[780, 1020]], [[660, 870]], [[1080, 1560]], [[600, 1080]]]);
+  ok("so a dinner-only kitchen is shut at ten in the morning", N.openBetween(["Monday: 5:00 – 10:00 PM"], 1, 600, 660) === false);
+  const sea = { lat: 55.7178, lon: 21.0989 }, oldFerry = { lat: 55.7058, lon: 21.1129 }, terminal = N.NOW_STARTS.LT.terminal, castle = { lat: 55.7056, lon: 21.1290 };
+  ok("across the strait is not in the walkable centre", M.WK.acrossWater("LT", sea) && M.WK.acrossWater("LT", oldFerry) && !M.WK.acrossWater("LT", terminal) && !M.WK.acrossWater("LT", castle) && M.WK.centreOf("LT", sea) === null && !!M.WK.centreOf("LT", castle));
+  ok("and the walk leaves it out rather than walking there", N.nowCandidates([{ id: 9, type: "free", payload: { name: "Sea Museum", country: "LT", __lat: sea.lat, __lon: sea.lon } }], { country: "LT", zone: "Europe/Vilnius", now: new Date("2026-10-06T08:30:00Z") }).length === 0);
+  is("a number range keeps its hyphen whatever the model wrote", [N.stripDashes("Open 10 - 18 most days"), N.stripDashes("Open 10–18"), N.stripDashes("Quiet — mostly")], ["Open 10-18 most days", "Open 10-18", "Quiet, mostly"]);
+  const cands = N.nowCandidates([{ id: 3, type: "food", payload: { name: "Late lunch", country: "LT", __lat: 55.7101, __lon: 21.1340, __hours: { hours: ["Tuesday: 08:00 – 23:00"] }, __offer: { text: "Soda", until: "2026-12-31", from: "13:00", to: "16:00" } } }], { country: "LT", zone: "Europe/Vilnius", now: new Date("2026-10-06T12:00:00Z") });
+  const w = N.scheduleWalk([{ id: "food:3" }], cands, { country: "LT", start: terminal, startClock: { day: 2, minutes: 15 * 60 + 15 }, budget: 240, margin: 30 });
+  ok("a deal is not shown as on for a visit that can begin as it ends", w.stops[0] && w.stops[0].deal === null);
+  const api = readFileSync(join(root, "api/plan-now.js"), "utf8");
+  ok("the walk route answers one spelling of each request only", /if \(keys !== \(style \? "c,from,h,lang,slot,style" : "c,from,h,lang,slot"\)\) return json\(res, 400/.test(api) && /const style = q\.style === STROLL \? STROLL : "";/.test(api) && /Object\.prototype\.hasOwnProperty\.call\(starts, String\(q\.from \|\| ""\)\)/.test(api) && /\/\^\[0-9\]\$\/\.test\(String\(q\.h \|\| ""\)\)/.test(api));
+  const np = readFileSync(join(root, "src/components/NowPlanner.jsx"), "utf8");
+  ok("an answer for an older choice is dropped", /if \(asked\.current !== mine\) return;/.test(np));
+  const store = readFileSync(join(root, "src/utils/studioDraftStore.js"), "utf8");
+  const appR = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("a reload keeps the offer and its hours", /offerText: typeof e\.offerText === "string"/.test(store) && /offerDays: Array\.isArray\(e\.offerDays\)/.test(store) && /if \(saved\.offerFrom\) setStudioOfferFrom\(saved\.offerFrom\);/.test(appR) && /offerDays: studioOfferDays,/.test(appR));
+  ok("a Lithuanian square ends in a letter \\b cannot see", /\(\?<!\\p\{L\}\)\(park\|parkas/.test(appR) && new RegExp("(?<!\\p{L})(aikštė|gatvė)(?!\\p{L})", "iu").test("Atgimimo aikštė"));
+}
+
+// ── Batch 182: partners on merit, and entries in four languages ──
+// Oliver, 2 Oct 2026: "we need a system built so we can mix these studio
+// generated guides with the businesses who joins us", choosing "Partners on
+// merit, labelled"; and "Sure, you can do that" to translated entries.
+{
+  const N = M.NP, T = M.TR;
+  const base = { country: "LT", zone: "Europe/Vilnius", now: new Date("2026-10-06T10:30:00Z") };
+  const twin = (offer) => N.nowCandidates([
+    { id: 1, type: "food", payload: { name: "Partner", country: "LT", __lat: 55.7101, __lon: 21.1340, __hours: { hours: ["Tuesday: 08:00 – 23:00"] }, ...(offer ? { __offer: { text: "Free soda", until: "2026-12-31" } } : {}) } },
+    { id: 2, type: "food", payload: { name: "Other", country: "LT", __lat: 55.7090, __lon: 21.1320, __hours: { hours: ["Tuesday: 08:00 – 23:00"] } } },
+  ], base);
+  const ctx = { country: "LT", start: N.NOW_STARTS.LT.terminal, startClock: { day: 2, minutes: 13 * 60 + 30 }, budget: 180, margin: 30 };
+  is("a deal does not move a place up the walk", N.ruleOrder(twin(true), ctx).map(o => o.id), N.ruleOrder(twin(false), ctx).map(o => o.id));
+  ok("and the model is never told which places have one", !/DEAL|deal/.test(N.planPrompt(twin(true), { ...ctx, lang: "en" })));
+  const w = N.scheduleWalk([{ id: "food:1" }], twin(true), ctx);
+  ok("a partner that earns its stop shows its deal, marked as a partner", w.stops[0]?.deal?.text === "Free soda" && /uiT\("now\.partner", lang\)/.test(readFileSync(join(root, "src/components/NowPlanner.jsx"), "utf8")) && ["en", "da", "de", "lt"].every(l => !!M.UI_STRINGS["now.partner"]?.[l]));
+  const page = readFileSync(join(root, "src/pages/KlaipedaDemo.jsx"), "utf8");
+  ok("the hand-written walks are gone from the Klaipėda page", !/TRIPS|StopCard|tripFor/.test(page) && /<NowPlanner country="LT" lang=\{lang\} defaultFrom=\{from\} \/>/.test(page));
+
+  const row = { name: "Danė Square", desc: "A riverside square — busy on summer evenings.", ticketsGlance: "Free entry", priceNote: "Coffee from 3 EUR", website: "https://x.lt", blogBody: [{ type: "heading", content: "Being There" }, { type: "paragraph", content: "Boats moor here from 10:00." }, { type: "bullets", items: ["Bring a jacket", "Benches face the river"] }] };
+  const prose = T.proseOf(row);
+  is("the sentences a reader sees are what gets translated, and nothing else", Object.keys(prose).sort(), ["blogBody.1.content", "blogBody.2.items.0", "blogBody.2.items.1", "desc", "priceNote", "ticketsGlance"]);
+  ok("the prompt names the language in its own words and keeps names and numbers", /into dansk/.test(T.translatePrompt(prose, "da", { name: row.name })) && /Keep every number/.test(T.translatePrompt(prose, "lt")) && !/Danish|Lithuanian|German/.test(T.translatePrompt(prose, "da")));
+  const answer = JSON.stringify({ desc: "Et torv ved floden — travlt om sommeraftenen.", ticketsGlance: "Gratis adgang", priceNote: "Kaffe fra 4 EUR", "blogBody.1.content": "Både lægger til her fra 10:00.", "blogBody.2.items.0": "Tag en jakke med", website: "https://evil" });
+  const got = T.readTranslation(`Here you go: ${answer}`, prose);
+  ok("a translation that changes a price is refused for that field, the rest kept, no dashes", got && !got.priceNote && got.ticketsGlance === "Gratis adgang" && got["blogBody.1.content"] === "Både lægger til her fra 10:00." && !/—/.test(got.desc) && !got.website);
+  const stored = { ...row, __i18n: { fp: T.fingerprint(prose), at: "2026-10-02", da: got } };
+  const seen = M.TR.localizedEntry(stored, "da");
+  ok("a Danish reader sees Danish where there is Danish, and English where there is not", seen.ticketsGlance === "Gratis adgang" && seen.priceNote === "Coffee from 3 EUR" && seen.blogBody[1].content === "Både lægger til her fra 10:00." && seen.blogBody[2].items[1] === "Benches face the river" && seen.name === "Danė Square");
+  ok("and the stored row is never changed by showing it", stored.blogBody[1].content === "Boats moor here from 10:00." && M.TR.localizedEntry(stored, "en") === stored);
+  const edited = { ...stored, ticketsGlance: "Free entry, except during festivals" };
+  ok("an edit to the English makes the translation stale, so English shows until it is redone", M.TR.localizedEntry(edited, "da").ticketsGlance === "Free entry, except during festivals" && T.needsTranslation(edited) && !T.needsTranslation({ ...stored, __i18n: { ...stored.__i18n, de: got, lt: got } }));
+  const dp = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
+  ok("the entry page reads the reader's language", /const item = useMemo\(\(\) => localizedEntry\(itemIn, lang\), \[itemIn, lang\]\);/.test(dp));
+  const appT = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("publishing translates afterwards, on the row's own id", /const newId = isEditing \? editingId : \(await res\.json\(\)\.catch\(\(\) => null\)\)\?\.\[0\]\?\.id;/.test(appT) && /translateInBackground\(newId, shaped\.name\);/.test(appT) && /Prefer: isEditing \? "return=minimal" : "return=representation"/.test(appT));
+  ok("re-reading before writing, so an edit made meanwhile is never overwritten", /if \(!latest \|\| fingerprint\(proseOf\(latest\)\) !== tr\.fp\) return "changed";/.test(appT));
+  ok("the Studio can translate everything on its page that is missing", /onClick=\{translateAllHere\}/.test(appT) && /rowCountry\(r\?\.payload\) === PAGE_COUNTRY && needsTranslation\(r\.payload\)/.test(appT));
+  // The Lithuanian Studio's prompt wrapper turns "Danish" into "Lithuanian".
+  // The prompt names each language in itself, so there is nothing to turn.
+  ok("and the translation prompt survives the Lithuanian Studio's wrapper", ["da", "de", "lt"].every(l => M.localisePrompt(T.translatePrompt(prose, l), "LT").startsWith(T.translatePrompt(prose, l))));
+}
+
+// ── Batch 183: examples to show Klaipėda's tourism centre ──
+// Oliver, 2 Oct 2026: "Can you make a set of examples on the page that I can
+// show for the tourism center?" and "Guides and Offers alike. Make up
+// anything. Be clever. Have ideas that are realistic. So not 40% discount on
+// everything.."
+{
+  const X = M.KEX;
+  const appX = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const pageX = readFileSync(join(root, "src/pages/KlaipedaExamples.jsx"), "utf8");
+  ok("the examples have their own address, apart from the QR one, and stay out of search", X.KLAIPEDA_EXAMPLES_PATH === "/lithuania/examples" && X.KLAIPEDA_EXAMPLES_PATH !== M.KLAIPEDA_DEMO_PATH && /<Route path=\{KLAIPEDA_EXAMPLES_PATH\} element=\{<KlaipedaExamples \/>\} \/>/.test(appX) && /noindex/.test(pageX));
+  ok("the page says at the top that the businesses and offers are made up", /These are examples/.test(pageX) && /Every business, every offer and every number about them is made up/.test(pageX));
+  ok("and every made-up partner carries the Example mark, in the walk and in the list", /tag=\{\(s\) => isExamplePartner\(s\.id\) \? "Example" : null\}/.test(pageX) && /<Tag>Example<\/Tag>/.test(pageX) && X.EXAMPLE_PARTNERS.every(p => X.isExamplePartner(`${p.type}:${p.key}`)) && !X.isExamplePartner("free:castle"));
+  ok("no percentage off anything", X.EXAMPLE_PARTNERS.every(p => !/%|percent|discount/i.test(p.offer.text)));
+  ok("no partner is pointed at a real door: a street, never a house number", X.EXAMPLE_PARTNERS.every(p => /^[^\d]+ g\.$/.test(p.street)));
+  const runs = Object.fromEntries(X.EXAMPLE_WALKS.map(e => [e.id, X.runExample(e)]));
+  ok("every example walk is made by the live rules, with three stops or more and home in time", Object.values(runs).every(r => r.walk.stops.length >= 3 && r.walk.back.at <= r.walk.deadline));
+  // Corrected 3 Oct 2026: the castle is open on winter Saturdays and shut on
+  // Mondays. See the note on the Roman numerals in data/klaipedaDemo.js.
+  ok("a quiet Monday leaves the castle out, because it is closed on Mondays after mid September", X.runExample(X.EXAMPLE_WALKS.find(e => e.id === "monday")).left.some(l => l.name === "Castle Museum" && /Closed on Mondays/.test(l.reason)) && runs.saturday.walk.stops.some(s => s.name === "Castle Museum"));
+  const fishOn = (r) => r.walk.stops.find(s => s.id === "food:fish");
+  ok("the same lunch offer shows on a Tuesday and not on a Saturday, as it was set", fishOn(runs.tuesday)?.deal?.to === "15:00" && fishOn(runs.saturday) && fishOn(runs.saturday).deal === null);
+  ok("the coffee refill shows in its quiet hour", runs.thursday.walk.stops[0]?.id === "food:bakery" && !!runs.thursday.walk.stops[0].deal);
+  const digits = (s) => (String(s).match(/\d+/g) || []).sort().join(",");
+  const fields = X.EXAMPLE_GUIDES.flatMap(g => ["about", "find", "tip", "offer"].filter(f => g[f]).map(f => g[f]));
+  ok("every guide reads in four languages, and no translation loses or changes a number", fields.every(f => X.GUIDE_LANGS.every(l => typeof f[l] === "string" && f[l].length > 5 && digits(f[l]) === digits(f.en))));
+  const shown = JSON.stringify([X.EXAMPLE_PARTNERS, X.EXAMPLE_WALKS, X.EXAMPLE_GUIDES, X.GUIDE_LABELS]) + pageX.replace(/\/\/.*$/gm, "");
+  ok("no dashes and none of his banned words on it", !/[—–]| - /.test(shown) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(shown));
+  ok("the walk on the examples page is the live walk's own drawing", /export const WalkView = /.test(readFileSync(join(root, "src/components/NowPlanner.jsx"), "utf8")) && /<WalkView walk=\{walk\}/.test(readFileSync(join(root, "src/components/NowPlanner.jsx"), "utf8")));
+}
+
+// ── Batch 184: pages in a window, the reader's own walk, two ways round ──
+// Oliver, 2 Oct 2026: "The listings should maybe open a tiny window of their
+// page?", "If we make a time for how long we want to be each place, then make
+// able to remove one from their listing. And also, perhaps include the 'cannot
+// miss out on' feature", and of the QR codes "Can you imagine 30 people use
+// on, and they walk on top of oneanother".
+{
+  const N = M.NP, X = M.KEX;
+  const T = N.NOW_STARTS.LT.terminal;
+  const row = (id, name, lat, lon, extra = {}) => ({ id, type: "free", payload: { name, country: "LT", __lat: lat, __lon: lon, ...extra } });
+  const MON_FRI = ["Monday: 10:00 to 18:00", "Tuesday: 10:00 to 18:00", "Wednesday: 10:00 to 18:00", "Thursday: 10:00 to 18:00", "Friday: 10:00 to 18:00", "Saturday: Closed", "Sunday: Closed"];
+  const cands = N.nowCandidates([
+    row(1, "Square", 55.7078, 21.1316),
+    row(2, "Castle museum", 55.7059, 21.1289, { tier: "Can't Miss Out", __hours: { hours: MON_FRI } }),
+    row(3, "Ship", 55.7103, 21.1349),
+  ], { country: "LT", zone: "Europe/Vilnius", now: new Date("2026-10-13T07:30:00Z") });
+  const ctx = { country: "LT", start: T, startClock: { day: 2, minutes: 630 }, budget: 180, margin: 30 };
+  const order = N.withMustSee([{ id: "free:1" }, { id: "free:3" }], cands, ctx);
+  ok("a Can't Miss Out place the order left out is put in, where it adds least walking", order.length === 3 && order.some(o => o.id === "free:2") && N.scheduleWalk(order, cands, ctx).stops.some(s => s.id === "free:2" && s.tier === "Can't Miss Out"));
+  ok("and the model is told to keep them", /Can't Miss Out belongs in the walk/.test(N.planPrompt(cands, { ...ctx, lang: "en" })));
+  ok("a closed one is still left out, and the page can say when it opens", !N.scheduleWalk(order, cands, { ...ctx, startClock: { day: 6, minutes: 660 } }).stops.some(s => s.id === "free:2") && JSON.stringify(N.nextOpen(MON_FRI, { day: 6, minutes: 660 })) === JSON.stringify({ day: 1, minutes: 600 }));
+  const walk = N.scheduleWalk(order, cands, ctx);
+  const alt = N.reversedWalk(walk, cands, ctx);
+  ok("the second way round has the same places in the opposite order", alt && alt.stops.map(s => s.id).join() === [...walk.stops].reverse().map(s => s.id).join());
+  const withPlaces = { ...walk, places: N.placesOf(walk, cands) };
+  const cut = N.replanWalk(withPlaces, { removed: [walk.stops[0].id] }, ctx);
+  ok("taking a stop out runs the walk again, and everything after it comes earlier", cut.stops.length === walk.stops.length - 1 && cut.stops[0].arrive < walk.stops[1].arrive);
+  const longer = N.replanWalk(withPlaces, { stays: { [walk.stops[0].id]: walk.stops[0].stay + N.STAY_STEP } }, ctx);
+  ok("a longer stay moves the rest later by the same", longer.stops[1].arrive === walk.stops[1].arrive + N.STAY_STEP);
+  ok("and longer is not offered when it would push a stop out", !N.canStayLonger(withPlaces, { stays: { [walk.stops[0].id]: 120 } }, walk.stops[0].id, ctx));
+  const api = readFileSync(join(root, "api/plan-now.js"), "utf8");
+  ok("the route sends both ways round and what a phone needs to change the walk", /const alt = reversedWalk\(walk, candidates, ctx\);/.test(api) && /places: placesOf\(walk, candidates\), clock: startClock, budget,/.test(api) && (api.match(/withMustSee\(/g) || []).length === 2);
+  const np = readFileSync(join(root, "src/components/NowPlanner.jsx"), "utf8");
+  ok("each phone keeps one way round", /const walk = side === "1" && got\.alt \? \{ \.\.\.got, \.\.\.got\.alt \} : got;/.test(np) && /<EditableWalk walk=\{walk\}/.test(np));
+  const dp = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
+  ok("a sample page has no live check, no feedback and no reviews", /\{!sample && <button onClick=\{\(\) => checkLiveInfo\(item\)\}/.test(dp) && /\{!sample && <ArticleFeedback /.test(dp) && /\{!sample && <ReviewsSection /.test(dp));
+  const ids = new Set();
+  X.EXAMPLE_WALKS.forEach(e => { const r = X.runExample(e); [r.walk, r.alt].filter(Boolean).forEach(w => w.stops.forEach(s => ids.add(s.id))); r.left.forEach(l => ids.add(l.id)); });
+  X.EXAMPLE_PARTNERS.forEach(p => ids.add(`${p.type}:${p.key}`));
+  X.EXAMPLE_GUIDES.forEach(g => ids.add(g.page));
+  ok("every listing on the examples page opens a page", [...ids].every(id => X.pageFor(id)?.item?.name));
+  ok("Klaipėda and the four guide cards read in all four languages, every sentence", ["town", "free:castle", "free:clock", "free:sculpture", "food:fish"].every(id => { const it = X.pageFor(id).item; const pr = M.TR.proseOf(it); return ["lt", "de", "da"].every(l => { const loc = M.TR.localizedEntry(it, l); const lp = M.TR.proseOf(loc); return Object.keys(pr).every(k => lp[k] !== pr[k]); }); }));
+  ok("the castle is Can't Miss Out, and on a winter Monday the page says it opens Tuesday", X.runExample(X.EXAMPLE_WALKS.find(e => e.id === "monday")).left.some(l => l.mustSee && /Opens Tuesday 10:00/.test(l.reason)));
+  const pageX = readFileSync(join(root, "src/pages/KlaipedaExamples.jsx"), "utf8");
+  ok("the window is the app's own entry page, marked as an example", /<DetailPage windowed item=\{open\.item\}/.test(pageX) && /sample=\{isExamplePartner\(open\.id\) \? L\.madeUp : L\.page\}/.test(pageX));
+  const shownX = JSON.stringify(Object.values(X.EXAMPLE_PAGES).map(p => p.item)) + JSON.stringify(X.GUIDE_LABELS);
+  ok("no dashes and none of his banned words in the pages either", !/[—–]| - /.test(shownX) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(shownX));
+}
+
+// ── Batch 185: the Old Town walk, and what the weather changes ──
+// Oliver, 2 Oct 2026: "Shall there also be a 'walk around in old town'? Also,
+// I'd like you to put into the test a 'this is how it transforms during snow'
+// 'this is how it transform during rain' 'this is how it transforms when very
+// windy', etc."
+{
+  const N = M.NP, X = M.KEX;
+  const T = N.NOW_STARTS.LT.terminal;
+  const row = (id, name, lat, lon, extra = {}) => ({ id, type: "free", payload: { name, country: "LT", __lat: lat, __lon: lon, ...extra } });
+  const cands = N.nowCandidates([
+    row(1, "Theatre Square", 55.7078, 21.1316),
+    row(2, "Dark figure", 55.7066, 21.1268, { desc: "Rising out of the old castle harbour." }),
+    row(3, "Old museum", 55.7073, 21.1347, { __hours: { hours: ["Tuesday: 10:00 to 18:00"] } }),
+    row(4, "Sculpture Park", 55.7169, 21.1402),
+  ], { country: "LT", zone: "Europe/Vilnius", now: new Date("2026-10-13T07:30:00Z") });
+  const base = { country: "LT", start: T, startClock: { day: 2, minutes: 630 }, budget: 240, margin: 30 };
+  const order = [{ id: "free:2", stay: 30 }, { id: "free:1", stay: 30 }, { id: "free:3", stay: 45 }];
+  const dry = N.scheduleWalk(order, cands, { ...base, weather: { wet: false, snow: false, wind: 4 } });
+  const rain = N.scheduleWalk(order, cands, { ...base, weather: { wet: true, snow: false, wind: 6 } });
+  const snow = N.scheduleWalk(order, cands, { ...base, weather: { wet: true, snow: true, wind: 5 } });
+  const storm = N.scheduleWalk(order, cands, { ...base, weather: { wet: false, snow: false, wind: 17 } });
+  const stayOf = (w, id) => w.stops.find(s => s.id === id)?.stay;
+  ok("in the dry, a stop outdoors keeps the time it was given", stayOf(dry, "free:1") === 30 && stayOf(dry, "free:2") === 30);
+  ok("in rain, every stop outdoors is cut to 15 minutes and the museum keeps its time", stayOf(rain, "free:1") === 15 && stayOf(rain, "free:2") === 15 && stayOf(rain, "free:3") === 45);
+  ok("in snow, the same, and every walk between stops takes longer", stayOf(snow, "free:1") === 15 && snow.stops[0].leg > dry.stops[0].leg && snow.stops.every((s, i) => s.leg >= rain.stops[i].leg));
+  ok("in a storm wind, the place out on the harbour is left out and the rest stay", !storm.stops.some(s => s.id === "free:2") && storm.stops.some(s => s.id === "free:1") && N.STORM_WIND === 14);
+  ok("a stiff breeze under a near gale changes nothing", N.scheduleWalk(order, cands, { ...base, weather: { wind: 13 } }).stops.length === dry.stops.length);
+  is("the page says what the rules did, in words", [N.weatherChanges({ wet: true }), N.weatherChanges({ snow: true }), N.weatherChanges({ wind: 17 }), N.weatherChanges({})],
+    [["Outdoor stops kept to 15 minutes"], ["Walking takes 30% longer", "Outdoor stops kept to 15 minutes"], ["Walking takes 10% longer", "Outdoor stops kept to 20 minutes", "Places out on open water left out"], []]);
+  ok("the model is told about snow and a storm wind, and which places are out on the water", /snowing/.test(N.planPrompt(cands, { ...base, weather: { snow: true } })) && /storm wind/.test(N.planPrompt(cands, { ...base, weather: { wind: 17 } })) && /out on open water/.test(N.planPrompt(cands, { ...base })));
+  ok("and the rules alone put a harbour place last in a storm", N.ruleOrder(cands, { ...base, weather: { wind: 17 } }).slice(-1)[0].id === "free:2");
+  const api = readFileSync(join(root, "api/plan-now.js"), "utf8");
+  ok("the forecast is read for snow and for the strongest wind of the next three hours", /snow: \/snow\|sleet\/\.test\(symbol\)/.test(api) && /wind_speed/.test(api) && /weather, style, lang \}/.test(api));
+  // The Old Town walk.
+  const town = N.strollCandidates(cands, "LT");
+  ok("the Old Town walk keeps what is inside the Old Town and is not a museum", town.map(c => c.id).sort().join() === "free:1,free:2" && N.inOldTown("LT", { lat: 55.7078, lon: 21.1316 }) && !N.inOldTown("LT", { lat: 55.7169, lon: 21.1402 }));
+  ok("and keeps every stop short", N.scheduleWalk([{ id: "free:1", stay: 60 }], town, { ...base, style: N.STROLL }).stops[0].stay === N.STROLL_STAY);
+  ok("and is told to the model in words", /easy walk around the Old Town/.test(N.planPrompt(town, { ...base, style: N.STROLL })));
+  const np = readFileSync(join(root, "src/components/NowPlanner.jsx"), "utf8");
+  ok("the planner offers it where a country has an Old Town drawn, and asks for it in one spelling", /\{OLD_TOWN\[country\] && \(/.test(np) && /\$\{stroll \? `&style=\$\{STROLL\}` : ""\}/.test(np));
+  ok("and says what snow and a storm wind did to the walk", /uiT\(walk\.weather\?\.snow \? "now\.snow" : "now\.wet", lang\)/.test(np) && /uiT\("now\.windy", lang\)/.test(np));
+  // On the examples page.
+  const run = (id) => X.runExample(X.WEATHER_WALKS.find(w => w.id === id));
+  ok("the examples show the same morning in four kinds of weather", X.WEATHER_WALKS.map(w => w.id).join() === "dry,rain,snow,storm" && X.WEATHER_WALKS.every(w => run(w.id).walk.stops.length >= 4));
+  ok("and in the storm the Black Ghost and the ship are left out, and say why", ["The Black Ghost", "Meridianas"].every(n => run("storm").left.some(l => l.name === n && /open water/.test(l.reason))));
+  const old = X.runExample(X.EXAMPLE_WALKS.find(e => e.id === "oldtown"));
+  ok("the Old Town example stays inside the Old Town, with no museum", old.walk.stops.length >= 4 && old.walk.stops.every(s => N.inOldTown("LT", s) && s.kind !== "Museum"));
+}
+
+// ── Batch 186: a review of 183 to 185, and every real place in four languages ──
+// Oliver went to the gym, 2 Oct 2026, asking "anything you want to work on
+// while I go?"; these are what a read of the day's work found.
+{
+  const N = M.NP, X = M.KEX;
+  const T = N.NOW_STARTS.LT.terminal;
+  const cands = N.nowCandidates([
+    { id: 1, type: "free", payload: { name: "Square", country: "LT", __lat: 55.7078, __lon: 21.1316 } },
+    { id: 2, type: "free", payload: { name: "Old square", country: "LT", __lat: 55.7080, __lon: 21.1330, desc: "A quiet square. A few minutes from the harbour." } },
+  ], { country: "LT", zone: "Europe/Vilnius", now: new Date("2026-10-13T07:30:00Z") });
+  const ctx = { country: "LT", start: T, startClock: { day: 2, minutes: 630 }, budget: 180, margin: 30, weather: { wet: true } };
+  const walk = { ...N.scheduleWalk([{ id: "free:1", stay: 30 }], cands, ctx), places: N.placesOf(N.scheduleWalk([{ id: "free:1" }], cands, ctx), cands) };
+  ok("in rain, + is not offered on an outdoor stop held at its 15 minutes, since it would do nothing", !N.canStayLonger(walk, {}, "free:1", ctx) && N.canStayLonger(walk, {}, "free:1", { ...ctx, weather: {} }));
+  ok("a place that only mentions the harbour further down is not out on the water", cands.find(c => c.id === "free:2").exposed === false);
+  ok("the model writes each line about the place, since half walk it the other way", /half the visitors walk it the other way round/.test(N.planPrompt(cands, { ...ctx, lang: "en" })));
+  const np = readFileSync(join(root, "src/components/NowPlanner.jsx"), "utf8");
+  ok("taking out every stop still leaves the way to put them back", np.indexOf('data-testid="now-taken-out"') > np.indexOf('{uiT("now.route", lang)} ↗'));
+  const twoWays = X.EXAMPLE_WALKS.filter(e => X.runExample(e).alt);
+  ok("no example line that reads wrong the other way round", twoWays.length >= 3 && twoWays.every(e => e.order.every(o => !/\b(first|to finish|way back|for later|last look)\b/i.test(o.why || ""))));
+  ok("every real place's page reads in four languages", Object.entries(X.EXAMPLE_PAGES).filter(([id]) => !X.isExamplePartner(id)).every(([, p]) => ["lt", "de", "da"].every(l => !!p.item.__i18n?.[l] && M.TR.localizedEntry(p.item, l).desc !== p.item.desc)));
+  const pageX = readFileSync(join(root, "src/pages/KlaipedaExamples.jsx"), "utf8");
+  ok("an all day offer at a door that has closed is not shown as on", /const timing = doorShut \? "shut" : inWindow;/.test(pageX) && /shut: "Closed at this moment"/.test(pageX));
+}
+
+// ── Batch 187: the museums' days, read again ──
+// Oliver, 3 Oct 2026: "Is it also programmed to be aware of closing days?
+// Castle museum is closed monday you know.. friday is definetely the lively
+// part of the week where one can grab a beer, but monday is literally dead
+// silent".
+{
+  const X = M.KEX, N = M.NP;
+  const castle = X.pageFor("free:castle").item;
+  const day = (ex) => X.runExample(X.EXAMPLE_WALKS.find(e => e.id === ex));
+  const mon = day("monday");
+  ok("on a Monday the walk is made of what is open: no museum, and lunch still in it", mon.walk.stops.length >= 4 && !mon.walk.stops.some(s => /Museum/.test(s.name)) && mon.walk.stops.some(s => s.id === "food:fish"));
+  ok("and both museums it left out say when they open", ["Castle Museum", "Clock and Watch Museum"].every(n => mon.left.some(l => l.name === n && /Closed on Mondays at this time of year\. Opens Tuesday 10:00/.test(l.reason))));
+  const sat = day("saturday");
+  ok("on a winter Saturday the castle is open and in the walk, and so is lunch", sat.walk.stops.some(s => s.name === "Castle Museum") && sat.walk.stops.some(s => s.id === "food:fish"));
+  ok("the castle's own page says Tuesday to Saturday in every language", /Tuesday to Saturday/.test(castle.blogBody.map(b => b.content || "").join(" ")) && ["lt", "de", "da"].every(l => /antradienio iki šeštadienio|dienstags bis samstags|tirsdag til lørdag/.test(JSON.stringify(castle.__i18n[l]))));
+  ok("and no page still says the museums open on a Monday", !/Monday to Friday|montags bis freitags|mandag til fredag|darbo dienomis/.test(JSON.stringify(Object.values(X.EXAMPLE_PAGES).map(p => p.item))));
+  ok("the jazz cellar keeps Monday and Tuesday shut, as a quiet start to the week", N.windowsFor(X.EXAMPLE_PARTNERS.find(p => p.key === "jazz").hours, 1).length === 0 && N.windowsFor(X.EXAMPLE_PARTNERS.find(p => p.key === "jazz").hours, 5).length === 1);
+}
+
+// ── Batch 181b: what the review of the held security work found ──
+{
+  const appH = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the guide pass gets a token that is still good", /token: await freshPassToken\(\),[\s\S]{0,40}makeId: newVisitorId/.test(appH) && (appH.match(/token: await freshPassToken\(\)/g) || []).length === 2);
+  ok("and a renewed Studio session keeps the founder's id", /email: studioSession\.email, \.\.\.\(studioSession\.userId \? \{ userId: studioSession\.userId \} : \{\}\) \};/.test(appH));
+  ok("a signed-out reader is told to sign in, not that nothing is new", /if \(res\.status === 401\) \{ setLiveInfo\(prev => \(\{ \.\.\.prev, \[item\.name\]: uiT\("ai\.signIn", uiLang\) \}\)\)/.test(appH) && ["en", "da", "de", "lt"].every(l => !!M.UI_STRINGS["ai.signIn"]?.[l]));
+  const gpH = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+  ok("and so is somebody chatting on a shared guide", /uiT\(result\.status === 401 \? "ai\.signIn" : "guide\.chatFailed", uiLang\)/.test(gpH));
+  ok("the busyness forecast survives publishing a new entry", /if \(!isEditing && cleanBusy\(editedDraft\?\.__busy\)\) shaped\.__busy = editedDraft\.__busy;/.test(appH));
+  const rv = readFileSync(join(root, "src/components/ReviewsSection.jsx"), "utf8");
+  const sql = readFileSync(join(root, "SECURITY_LOCKDOWN_30SEP.sql"), "utf8");
+  ok("a review shows who wrote it, never which account", /const REVIEW_COLUMNS = "id,item_type,item_name,author,text,created_at";/.test(rv) && !/select=\*/.test(rv) && /revoke select on public\.gemlyx_reviews from anon, authenticated/.test(sql));
+  ok("and the boxes stop where the database does", /maxLength=\{60\}/.test(rv) && /maxLength=\{2000\}/.test(rv));
+  ok("every rule on the forms tables that is not an insert goes", /and cmd <> 'INSERT' loop/.test(sql));
+  ok("a camera original fits the media bucket", /file_size_limit = 20971520/.test(sql));
+  ok("a reload keeps the booking box too", /booking: typeof e\.booking === "string"/.test(readFileSync(join(root, "src/utils/studioDraftStore.js"), "utf8")));
+}
+
+// ── Batch 188: the security review of 3 Oct 2026 ──
+// Oliver, uploading gemlyx-security-2026-10-03.md: "we gotta adress the
+// security note", and choosing "Open, but capped" for the AI routes.
+{
+  const rd = (f) => readFileSync(join(root, f), "utf8");
+  const leaked = M.safeUpstreamError({ error: { message: "Incorrect API key provided: sk-proj-****************abcd. See the docs.", type: "invalid_request_error" } }, 401, "OpenAI");
+  ok("a provider's error comes back without any of the key in it, and keeps its type", !/abcd|sk-/.test(leaked.error.message) && leaked.error.type === "invalid_request_error");
+  ok("and the billing words the guide builder looks for survive", /credit balance is too low/.test(M.safeUpstreamError({ error: { message: "Your credit balance is too low to access the API." } }, 400).error.message));
+  ok("the Claude and OpenAI routes hand back only the cleaned error", (rd("api/anthropic.js").match(/safeUpstreamError\(/g) || []).length === 2 && /safeUpstreamError\(data, r\.status, "OpenAI"\)/.test(rd("api/openai.js")) && !/String\(err\)/.test(rd("api/anthropic.js")));
+  const pn = rd("api/plan-now.js");
+  ok("plan-now answers one spelling of its address only, raw", /if \(raw !== canonical\) return json\(res, 400/.test(pn) && /const raw = String\(req\.url \|\| ""\)/.test(pn) && /\/api\/plan-now\?c=\$\{country\}&from=\$\{from\}&h=\$\{hours\}&lang=\$\{lang\}&slot=\$\{encodeURIComponent\(slot\)\}/.test(rd("src/components/NowPlanner.jsx")));
+  ok("and reads published rows with the public key, never the service key", /const key = PUBLIC_SUPABASE_KEY;/.test(pn) && !/SUPABASE_SERVICE_ROLE_KEY/.test(pn));
+  ok("the public key on the server is the one in the page", rd("src/config.js").includes(M.PUBLIC_SUPABASE_KEY) && /"role":"anon"/.test(Buffer.from(M.PUBLIC_SUPABASE_KEY.split(".")[1], "base64").toString()));
+  ok("a forecast that could not be read is unknown, not dry", /const UNKNOWN_WEATHER = \{ known: false/.test(pn) && /forecast could not be read/.test(M.NP.planPrompt([], { country: "LT", start: M.NP.NOW_STARTS.LT.centre, startClock: { day: 2, minutes: 600 }, budget: 120, weather: { known: false } })));
+  ok("a founder's ticket answer stays out of the shared cache", /res\.setHeader\("Cache-Control", "private, max-age=900"\);/.test(rd("api/tickets.js")) && !/s-maxage=900, stale-while-revalidate=3600/.test(rd("api/tickets.js")));
+  ok("the ask route takes its place in the day under a lock before answering", /const took = await takeDaily\(\{ day, keys: \[\{ key: `ask:u:/.test(rd("api/ask.js")));
+  ok("the problem form mails ten a day per visitor and 300 in all", /limit: 10 \}, \{ key: "report:site", limit: 300 \}/.test(rd("api/report-problem.js")));
+  ok("the share pages carry the same headers as the rest of the site", (rd("middleware.js").match(/\.\.\.PAGE_HEADERS,/g) || []).length === 2 && /"x-frame-options": "DENY"/.test(rd("middleware.js")));
+  ok("no local env file can be committed", /^\.env\.\*$/m.test(rd(".gitignore")) && /^\.env\.\*$/m.test(readFileSync(join(root, "../.gitignore"), "utf8")));
+  const wf = readFileSync(join(root, "../.github/workflows/build-check.yml"), "utf8");
+  ok("the build check reads only, and runs actions pinned to their commits", /permissions:\n  contents: read/.test(wf) && /actions\/checkout@[0-9a-f]{40}/.test(wf) && /actions\/setup-node@[0-9a-f]{40}/.test(wf));
+  ok("the database knows the founder by account, never by email", /create or replace function public\.is_founder\(\)[\s\S]{0,200}auth\.uid\(\) = '467fb712/.test(rd("SECURITY_LOCKDOWN_30SEP.sql")) && !/auth\.jwt\(\) ->> 'email'\) = 'oliververhein/.test(rd("SECURITY_LOCKDOWN_30SEP.sql")));
+  ok("a failed content read is a failure, not an empty library", /if \(!res\.ok\) throw new Error\(`the content library answered/.test(rd("src/utils/liveContent.js")));
+  ok("a saved guide's link is 16 characters from the cryptographic source", /crypto\.getRandomValues\(bytes\)/.test(rd("src/pages/GuidePage.jsx")) && /const id = guideLinkId\(\);/.test(rd("src/pages/GuidePage.jsx")));
+  ok("translating everything says so when the places could not be read", /if \(!res\.ok \|\| !Array\.isArray\(rows\)\) \{ showToast\("🌐 Could not read the published places/.test(rd("src/App.jsx")));
+}
+
+// ── Batch 189: the talking sculptures, joined up ──
+// Oliver, 3 Oct 2026, going to bed: "try build some ideas and examples for how
+// the sculpture structure could function.. I'll look at it tomorrow."
+{
+  const S = M.SCU;
+  const ids = S.SCULPTURES.map(s => s.id);
+  ok("all 13 talking sculptures, each placed in Klaipėda", S.SCULPTURES.length === 13 && new Set(ids).size === 13 && S.SCULPTURES.every(s => s.lat > 55.70 && s.lat < 55.72 && s.lon > 21.10 && s.lon < 21.15));
+  ok("three of them across the water in Smiltynė, the rest on the mainland", S.SCULPTURES.filter(s => s.side === "smiltyne").map(s => s.id).sort().join() === "albatross,homestead,vessels" && S.SCULPTURES.every(s => s.side === "smiltyne" ? s.lon < 21.11 : s.lon > 21.12));
+  is("a count against the total, written with his hyphen", [S.progressLine(3), S.progressLine(13), S.progressLine(0)], ["3 of 13 - 10 still to go", "All 13 found", "0 of 13 - 13 still to go"]);
+  const n = S.nextFrom("annchen", ["annchen"]);
+  ok("the next one is the nearest not yet found, on the same side of the water", n && n.side === "city" && n.id !== "annchen" && S.SCULPTURES.filter(s => s.side === "city" && s.id !== "annchen").every(s => M.NP.walkMinutes(S.SCULPTURES[0], s) >= n.minutes));
+  ok("and once all on this side are found it says so rather than sending them over the water", S.nextFrom("albatross", ["homestead", "vessels"]) === null);
+  const t30 = S.trailFrom("kiss", 30), t90 = S.trailFrom("kiss", 90);
+  ok("a trail fits the minutes, longer time means more sculptures, and starts where they stand", t30.used <= 30 && t90.used <= 90 && t90.stops.length > t30.stops.length && t30.stops[0].id === "kiss");
+  ok("a trail leaves out what the visitor has already found", S.trailFrom("kiss", 90, ["ghost", "annchen"]).stops.every(s => s.id !== "ghost" && s.id !== "annchen") && /trailFrom\(scanned, minutes, found\)/.test(readFileSync(join(root, "src/pages/KlaipedaSculptures.jsx"), "utf8")));
+  ok("a trail never crosses the water on its own", t90.stops.every(s => s.side === "city") && S.trailFrom("albatross", 90).stops.every(s => s.side === "smiltyne"));
+  ok("from the mainland, the ferry is a walk and ten minutes over", S.ferryFrom("annchen")?.crossing === 10 && S.ferryFrom("annchen").walk > 0 && S.ferryFrom("albatross") === null);
+  const pg = readFileSync(join(root, "src/pages/KlaipedaSculptures.jsx"), "utf8");
+  ok("the sketch says what is real and what is made up, and plays nothing it does not have", /A working sketch/.test(pg) && /which this page does not play/.test(pg) && /Made-up numbers/.test(pg) && !/<audio/.test(pg));
+  ok("it has its own address, stays out of search, and the examples page links to it", S.KLAIPEDA_SCULPTURES_PATH === "/lithuania/sculptures" && /noindex/.test(pg) && /<Route path=\{KLAIPEDA_SCULPTURES_PATH\} element=\{<KlaipedaSculptures \/>\} \/>/.test(readFileSync(join(root, "src/App.jsx"), "utf8")) && /href=\{KLAIPEDA_SCULPTURES_PATH\}/.test(readFileSync(join(root, "src/pages/KlaipedaExamples.jsx"), "utf8")));
+  const shown = JSON.stringify(S.SCULPTURES) + JSON.stringify(S.EXAMPLE_WEEK) + pg.replace(/\/\/.*$/gm, "");
+  ok("no dashes and none of his banned words", !/[—–]/.test(shown) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(shown));
+}
+
+// ── Batch 190: no walking the same street twice ──
+// Oliver, 3 Oct 2026, of the centre walk opened in Google Maps: "we're going
+// in the right direction. But it looks messy".
+{
+  const N = M.NP, X = M.KEX;
+  const C = N.NOW_STARTS.LT.centre;
+  const row = (id, name, lat, lon, extra = {}) => ({ id, type: "free", payload: { name, country: "LT", __lat: lat, __lon: lon, ...extra } });
+  const cands = N.nowCandidates([
+    row(1, "Theatre Square", 55.7078, 21.13163),
+    row(2, "Castle", 55.70592, 21.12891),
+    row(3, "Ship", 55.71034, 21.13491),
+    row(4, "Corner", 55.7087, 21.1339),
+  ], { country: "LT", zone: "Europe/Vilnius", now: new Date("2026-10-15T11:00:00Z") });
+  const ctx = { country: "LT", start: C, startClock: { day: 4, minutes: 840 }, budget: 180, margin: 0 };
+  const messy = [{ id: "free:4", stay: 15 }, { id: "free:1", stay: 15 }, { id: "free:2", stay: 15 }, { id: "free:3", stay: 15 }];
+  const km = (a, b) => Math.hypot((a.lat - b.lat) * 111.2, (a.lon - b.lon) * 111.2 * Math.cos(a.lat * Math.PI / 180));
+  const loop = (ids) => { const byId = Object.fromEntries(cands.map(c => [c.id, c])); let d = 0, here = C; for (const id of ids) { d += km(here, byId[id]); here = byId[id]; } return d + km(here, C); };
+  const tidy = N.untangle(messy, cands, ctx).map(o => o.id);
+  is("the centre walk no longer goes down to the castle and back up to the ship", tidy, ["free:4", "free:3", "free:1", "free:2"]);
+  ok("and it is shorter, with the same places", loop(tidy) < loop(messy.map(o => o.id)) && [...tidy].sort().join() === messy.map(o => o.id).sort().join());
+  ok("an order already tidy is left as it is", N.untangle([{ id: "free:4" }, { id: "free:3" }, { id: "free:1" }, { id: "free:2" }], cands, ctx).map(o => o.id).join() === tidy.join());
+  ok("two places are left as they are, either way round is the same loop", N.untangle([{ id: "free:2" }, { id: "free:3" }], cands, ctx).map(o => o.id).join() === "free:2,free:3");
+  const walk = N.tidyWalk(messy, cands, ctx);
+  ok("the walk served is the tidy one, every place kept", walk.stops.map(s => s.id).join() === tidy.join());
+  // The ship opens at 15:00 in this test, so it only fits at the end, and
+  // the tidy order, which would go there first, is not used.
+  const late = N.nowCandidates([
+    row(1, "Theatre Square", 55.7078, 21.13163),
+    row(2, "Castle", 55.70592, 21.12891),
+    row(3, "Ship", 55.71034, 21.13491, { __hours: { hours: ["Thursday: 15:00 to 20:00"] } }),
+    row(4, "Corner", 55.7087, 21.1339),
+  ], { country: "LT", zone: "Europe/Vilnius", now: new Date("2026-10-15T11:00:00Z") });
+  const first = [{ id: "free:4", stay: 15 }, { id: "free:1", stay: 15 }, { id: "free:2", stay: 15 }, { id: "free:3", stay: 15 }];
+  const kept = N.tidyWalk(first, late, ctx);
+  ok("an opening hour wins over a tidier line on the map", N.untangle(first, late, ctx).map(o => o.id).join() !== first.map(o => o.id).join() && kept.stops.map(s => s.id).join() === "free:4,free:1,free:2,free:3");
+  const api = readFileSync(join(root, "api/plan-now.js"), "utf8");
+  ok("the live route untangles both the model's order and the rules' order", (api.match(/tidyWalk\(withMustSee\(/g) || []).length === 2);
+  const thursday = X.runExample(X.EXAMPLE_WALKS.find(e => e.id === "thursday"));
+  is("the Thursday example walks the ship before the square and the castle", thursday.walk.stops.map(s => s.id), ["food:bakery", "free:meridianas", "free:theatre", "free:castle"]);
+  const tuesday = X.runExample(X.EXAMPLE_WALKS.find(e => e.id === "tuesday"));
+  ok("a walk that was already tidy off the ship is unchanged", tuesday.walk.stops.map(s => s.id).join() === "free:ghost,free:castle,booking:amber,free:theatre,food:fish,free:meridianas");
+  ok("a meal may move by no more than three quarters of an hour", N.MEAL_SHIFT === 45 && /Math\.abs\(kept\.get\(s\.id\)\.arrive - s\.arrive\) <= MEAL_SHIFT/.test(readFileSync(join(root, "src/utils/nowPlanner.js"), "utf8")));
+  ok("no example still calls the History Museum next door to the castle", !/Next door/.test(JSON.stringify(X.WEATHER_WALKS)));
+}
+
+// ── Batch 191: Studio drafts in Lithuania, scoped to the town ──
+// Oliver's twelve Klaipėda runs of 3 Oct 2026 ("After usage reset"): Castle
+// Site came back about Trakai, the narrow-gauge station about Anykščiai, the
+// museums' own sites were refused under their Lithuanian names, and prices
+// read "4 EUR DKK".
+{
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("a Lithuanian draft that names no town is scoped to Klaipėda, and the log says so",
+    M.countryProfile("LT").homeTown === "Klaipėda" && !M.countryProfile("DK").homeTown
+    && /if \(!draftTown && !draftInDenmark && draftLand\.homeTown\) \{\s*draftTown = draftLand\.homeTown;/.test(app)
+    && /note\("Which town this draft is in"/.test(app));
+  ok("a town after a comma is the town, abroad", /const afterComma = !draftInDenmark && name\.includes\(","\)/.test(app));
+  ok("once a town is known, a query has to name the town, not only the country",
+    /const saysWhere = \(q\) => \(draftTown \? fold\(q\)\.includes\(fold\(draftTown\)\)/.test(app));
+  ok("Klaipėda has a point, so the coordinate and the journey can be checked against it",
+    !!M.townPointFor("Klaipėda") && !!M.townPointFor("Klaipeda") && M.coordFitsTown({ lat: 54.65, lon: 24.93 }, "Klaipėda").ok === false
+    && M.coordFitsTown({ lat: 55.7059, lon: 21.1289 }, "Klaipėda").ok === true);
+  is("a Lithuanian municipality is read as its town",
+    ["Klaipėdos m. sav.", "Neringos sav.", "Vilniaus m. sav.", "Kauno miesto savivaldybė", "Aalborg"].map(M.plainTownName),
+    ["Klaipėda", "Neringa", "Vilnius", "Kaunas", "Aalborg"]);
+  ok("so Theatre Square's town has a centre", !!M.townPointFor("Klaipėdos m. sav."));
+  const loc = readFileSync(join(root, "api/places-locate.js"), "utf8");
+  ok("Google's address gives the town before the municipality", /plainTownName\(after\) === after/.test(loc));
+  ok("abroad, Google is asked for the English name of the same listing too",
+    /if \(land\.code !== DEFAULT_COUNTRY && land\.googleLanguage !== "en"\)/.test(loc) && /places\.id,places\.displayName/.test(loc) && /\.\.\.nameEnOf\(p\)/.test(loc));
+  ok("the same words in another order are the same name",
+    M.sameWordsReordered("Museum of the History of Lithuania Minor", "History Museum of Lithuania Minor")
+    && !M.sameWordsReordered("Castle Museum", "Castle") && !M.sameWordsReordered("Old Town Square", "Theatre Square"));
+  ok("the Lithuanian name of the Lithuania Minor museum is the museum",
+    M.listingMatchesSubject("Museum of the History of Lithuania Minor", "Klaipėda", "Mažosios Lietuvos istorijos muziejus"));
+  ok("and a different place is still refused",
+    !M.listingMatchesSubject("Narrow-Gauge Railway Station", "Klaipėda", "Aukštaitijos siaurasis geležinkelis")
+    && !M.listingMatchesSubject("Castle Site", "Klaipėda", "Trakų istorijos muziejus"));
+  ok("the price check accepts the place's own site and Google's spelling",
+    /isAbout: \(pageText, url\) => sourceIsAboutPlace\(pageText, \{[\s\S]{0,200}alsoKnownAs: placesName[\s\S]{0,120}ownHost: placesWebsite/.test(app));
+  ok("and no price is written with a second currency", !/\$\{src\.price\} DKK/.test(app) && /const priceWithUnit = /.test(app));
+  const ltPage = "Muziejaus darbo laikas: antradieniais nuo 10 iki 18 val. Pirmadieniais ir sekmadieniais muziejus nedirba. Bilietų kainos: suaugusiems 4 Eur, moksleiviams, studentams ir senjorams 2 Eur. Paskutinį mėnesio sekmadienį lankytojams įėjimas nemokamas. Ekspozicija pasakoja apie Klaipėdos ir Mažosios Lietuvos istoriją nuo seniausių laikų iki XX amžiaus vidurio. Muziejuje yra ir edukacinių programų vaikams, kurias reikia užsisakyti iš anksto telefonu arba el. paštu. Grupėms taikomos nuolaidos.";
+  const lt = M.languageBarrier({ siteText: ltPage, country: "LT" });
+  ok("a Lithuanian page is read as Lithuanian, and the reader is told plainly",
+    lt.level === "local-only" && /runs in Lithuanian/.test(lt.note) && !/[—–]/.test(lt.note) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(lt.note));
+  is("with an English version nothing is said", M.languageBarrier({ siteText: `${ltPage} English`, country: "LT" }).level, "has-english");
+  is("and Denmark still reads only Danish", M.languageBarrier({ siteText: ltPage }).level, "unknown");
+  ok("a Klaipėda point is in Lithuania, not 'near Denmark'", /in Lithuania, where Gemlyx has no regions yet/.test(M.describeRegion(55.7059, 21.1289, true)));
+  ok("abroad, the fact check and the hours lookup name the town too, for restaurants as for museums",
+    /const NAME_IS_A_TOWN = \["town", "nightTown", "island", "essential"\];/.test(app)
+    && /places-hours\?name=\$\{encodeURIComponent\(!draftInDenmark && draftTown && !fold\(name\)\.includes\(fold\(draftTown\)\)/.test(app));
+  ok("a DKK threshold in a rule is scaled for a euro country, and Denmark's prompts are untouched",
+    /60 DKK is about €8/.test(M.studioPrompts ? M.studioPrompts("Momo", M.countryProfile("LT")).food : readFileSync(join(root, "src/utils/studioPrompts.js"), "utf8")));
+  ok("a Lithuanian supermarket is not a food place, and a restaurant with 'iki' in its name still is",
+    readFileSync(join(root, "src/utils/danishFood.js"), "utf8").includes('"maxima", "rimi", "norfa"]') && !/GROCERY_CHAINS = \[[^\]]*"iki"/.test(readFileSync(join(root, "src/utils/danishFood.js"), "utf8")));
+  ok("abroad, a town centre still lets the venue check run", /if \(\(!placed \|\| \(!draftInDenmark && placed\.precise === false\)\) && refusedListing\)/.test(app));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

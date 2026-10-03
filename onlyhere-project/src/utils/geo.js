@@ -1,6 +1,7 @@
 import { nextWeekdayTimestamp, arrivalRow } from "./helpers";
 import { workingProfile } from "./countries";
 import { nominatimJson } from "./nominatim";
+import { KLAIPEDA_STOPS } from "../data/klaipedaStops";
 
 // Empirically checks real late-night transit — not the AI's guess — for both a
 // weekday and a weekend night, since Danish night transport genuinely differs
@@ -323,6 +324,14 @@ const walkTo = async (lat, lon, place) => {
 // A walk time we could not measure is NOT treated as long. The lookup failing
 // says nothing about the path, which is the same rule the tiers already apply
 // to a Places call that errors.
+// ── A KLAIPĖDA BUS STOP IS A BUS STOP ───────────────────────────────
+// Google files many of Klaipėda's city bus stops as rail, so the 2 Oct 2026
+// runs called "Volungėlės st." and "Molo st." the nearest rail stop. A name
+// that is a stop in the city's own bus timetable (data/klaipedaStops.js) is a
+// bus stop, whatever the tier that found it.
+const BUS_STOP_NAMES = new Set(KLAIPEDA_STOPS.map(s => String(s[0]).trim().toLowerCase()));
+export const busStopByName = (name) => BUS_STOP_NAMES.has(String(name || "").trim().toLowerCase());
+
 export const LONG_WALK_MINUTES = 20;
 
 export const findRealNearestStop = async (lat, lon) => {
@@ -352,7 +361,7 @@ export const findRealNearestStop = async (lat, lon) => {
       name: place.name,
       walk: reach.walk,
       walkMinutes: reach.minutes ?? null,
-      kind: tier.kind === "any" ? kindFromName(place.name) : tier.kind,
+      kind: busStopByName(place.name) ? "bus" : tier.kind === "any" ? kindFromName(place.name) : tier.kind,
     };
     // No null guard: an unmeasured walk is walkMinutes null, and null is not
     // greater than 20, so a stop whose walk we could not measure is never

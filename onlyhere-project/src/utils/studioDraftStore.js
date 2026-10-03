@@ -158,6 +158,15 @@ export const packEditor = (e) => {
     ...base,
     text: typeof e.text === "string" ? e.text : null,
     photoName: typeof e.photoName === "string" ? e.photoName : null,
+    // The offer boxes. The restore has read offerText and offerUntil since
+    // they were added and this never kept them, so a reload lost the offer;
+    // the hours (2 Oct 2026) go with them.
+    offerText: typeof e.offerText === "string" ? e.offerText : "",
+    offerUntil: typeof e.offerUntil === "string" ? e.offerUntil : "",
+    offerDays: Array.isArray(e.offerDays) ? e.offerDays.filter(n => Number.isInteger(n) && n >= 0 && n <= 6) : [],
+    offerFrom: typeof e.offerFrom === "string" ? e.offerFrom : "",
+    offerTo: typeof e.offerTo === "string" ? e.offerTo : "",
+    booking: typeof e.booking === "string" ? e.booking : "",
   };
 };
 
@@ -237,6 +246,7 @@ export const storedKeys = () => [
   "v", "at", "queue", "results", "editor",
   "name", "type", "draft", "code", "frozenGeo",
   "identityWarning", "inventedWarning", "opened", "text", "photoName",
+  "offerText", "offerUntil", "offerDays", "offerFrom", "offerTo", "booking",
 ];
 
 export const FORBIDDEN_KEYS = ["editingId", "access_token", "refresh_token", "password"];

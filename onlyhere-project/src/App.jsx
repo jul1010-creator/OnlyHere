@@ -81,8 +81,13 @@ import { SupportPage } from "./components/SupportPage";
 // to it too and App.jsx imports AboutMePage.
 import { AffiliatesPage } from "./components/AffiliatesPage";
 import { KlaipedaDemo } from "./pages/KlaipedaDemo";
-import { COUNTRY_PROFILES, DEFAULT_COUNTRY, countryProfile, setWorkingCountry, countryParam, rowCountry, activeCountry, homePath } from "./utils/countries";
+import { KlaipedaExamples } from "./pages/KlaipedaExamples";
+import { KlaipedaSculptures } from "./pages/KlaipedaSculptures";
+import { COUNTRY_PROFILES, DEFAULT_COUNTRY, countryProfile, setWorkingCountry, countryParam, rowCountry, activeCountry, homePath, plainTownName } from "./utils/countries";
 import { KLAIPEDA_DEMO_PATH } from "./data/klaipedaDemo";
+import { KLAIPEDA_EXAMPLES_PATH } from "./data/klaipedaExamples";
+import { KLAIPEDA_SCULPTURES_PATH } from "./data/klaipedaSculptures";
+import { translateEntry, needsTranslation, fingerprint, proseOf } from "./utils/entryTranslate";
 import { TripLibraryPage } from "./components/TripLibraryPage";
 import { askForGuidePass, markGuideBuilt, todayRecord, usedTodayReason, copenhagenDay, cancelGuidePass } from "./utils/guideAllowance";
 import { LIBRARY_PATH } from "./utils/tripLibrary";
@@ -155,6 +160,7 @@ import { PageHero } from "./components/PageHero";
 import { LiveEventsHeaderStrip } from "./components/LiveEventsHeaderStrip";
 import { SCAN_KINDS, scanKindOf, scanPrompt } from "./utils/scanKinds";
 import { groupByMonth } from "./utils/calendarMonths";
+import { dealCode, cleanBooking, bookingProblem, cleanBusy } from "./utils/dealExtras";
 import { WeatherHeaderStrip, DenmarkClock } from "./components/WeatherHeaderStrip";
 import { StoreBadge } from "./components/StoreBadge";
 import { DateTimePicker } from "./components/DateTimePicker";
@@ -189,7 +195,7 @@ import { parsePretend, readPretend, writePretend, pretendBanner } from "./utils/
 import { cleanNotice, noticesNearby, noticeIsCurrent, noticeTitle, noticeWhen, readDismissed, writeDismissed, NOTICE_RADIUS_KM } from "./utils/nearbyNotices";
 import { sourceRulesBlock, directSourceSearches, overflowSourceSearch, discoverSourceSearch, discoverSourceNote, normaliseDomain, cleanNote, cleanPlace, blockCost, scopeTier, parseTypes, serialiseTypes, PARTS_OF_COUNTRY, ISLANDS_SCOPE, CONTENT_TYPES, TYPE_LABEL, srcForType, SRC_FOR_TYPE, PLACE_SOURCES, ESSENTIAL_CATEGORIES, sourceIsAboutPlace, nameIsDistinctive, isNeverOwnSite, isNeverASource } from "./utils/sourcePolicy";
 import { REGION_NAMES, regionAt, regionOf, kommuneNameAt, describeRegion, kommunerIn, danishAddressIn } from "./utils/regions";
-import { otherNameFor, variantsOf, containsName, samePlaceName, distinctiveWords } from "./utils/danishNames";
+import { otherNameFor, variantsOf, containsName, samePlaceName, distinctiveWords, fold } from "./utils/danishNames";
 import { listingMatchesSubject, describeListingRefusal } from "./utils/placeChoice";
 import { hashForTab, tabForHash, ownsTheAddress } from "./utils/tabUrl";
 import { venueVerdict, venueVia, describeVenue, VENUE_MAX_KM } from "./utils/venueMatch";
@@ -380,6 +386,7 @@ import { SWEEPS, sweepById, selectRows, applyCap, knownPlacesFor, proposeSweep, 
 import { BACKFILL_SORTS, BACKFILL_SORT_DEFAULT, sortForBackfill, tierSpread } from "./utils/tierBackfill";
 import { classifyFerry, ferryFindings, FERRY } from "./utils/transport";
 import { getSession, getStoredSession, captureRedirectSession, fetchSignupCarry, clearSignupCarry, signOut as authSignOut, deleteMyData } from "./utils/auth";
+import { setStudioRefresher } from "./utils/apiAuth";
 import { fetchCloudSaves, pushCloudSaves, mergeSaves, savedGuideRow, guideFromSavedRow, savedGuideHasLink, syncFailureNote, SYNC } from "./utils/userSaves";
 import { toggleBeen, isBeen, beenNote, withoutBeen, excludedBeen } from "./utils/beenThere";
 import { fetchBeen, pushBeen, mergeBeen, cleanBeen, BEEN_SETUP_SQL } from "./utils/beenSync";
@@ -1429,6 +1436,9 @@ function GemlyxApp() {
       const query = `${item.name} ${item.location || item.town || ""} Instagram Facebook official page latest update opening hours events 2026`;
       const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
       const data = await res.json();
+      // Signed out, the search answers 401. That is not "nothing new".
+      if (res.status === 401) { setLiveInfo(prev => ({ ...prev, [item.name]: uiT("ai.signIn", uiLang) })); setLiveInfoLoading(null); return; }
+      if (!res.ok) throw new Error(String(res.status));
       setLiveInfo(prev => ({ ...prev, [item.name]: data.answer || (data.results?.[0]?.snippet) || "No current updates found." }));
     } catch {
       setLiveInfo(prev => ({ ...prev, [item.name]: "Couldn't check right now — try again in a moment." }));
@@ -2227,6 +2237,27 @@ function GemlyxApp() {
   // Supabase access tokens expire (~1hr). Rather than failing the whole publish,
   // try trading the refresh_token for a fresh one first: silent, no re-typing
   // the password.
+  // ── A TOKEN THAT IS STILL GOOD WHEN THE SERVER READS IT ────────────
+  // The guide pass now refuses a token it cannot resolve, and a tab left open
+  // for an hour holds an expired one: the member, still shown as signed in,
+  // was told to sign in, and so was Oliver in Studio (review, 2 Oct 2026).
+  // So the token is renewed here, just before it is sent.
+  const tokenExpiresAt = (jwt) => {
+    try { return JSON.parse(atob(String(jwt).split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).exp * 1000 || 0; }
+    catch { return 0; }
+  };
+  const freshPassToken = async () => {
+    if (studioSession?.access_token) {
+      if (tokenExpiresAt(studioSession.access_token) - Date.now() < 120000) {
+        const renewed = await refreshStudioSession();
+        if (renewed?.access_token) return renewed.access_token;
+      }
+      return studioSession.access_token;
+    }
+    const s = await getSession().catch(() => null);
+    return s?.token || userSession?.token || "";
+  };
+
   const refreshStudioSession = async () => {
     if (!studioSession?.refresh_token) return null;
     try {
@@ -2251,7 +2282,9 @@ function GemlyxApp() {
         }
         return null;
       }
-      const session = { access_token: data.access_token, refresh_token: data.refresh_token, email: studioSession.email };
+      // userId kept: without it the founder check on the next reload sees an
+      // empty id and drops the session (review, 2 Oct 2026).
+      const session = { access_token: data.access_token, refresh_token: data.refresh_token, email: studioSession.email, ...(studioSession.userId ? { userId: studioSession.userId } : {}) };
       localStorage.setItem("gemlyx_studio_session", JSON.stringify(session));
       // The ref FIRST, and this is the whole point of it: setStudioSession will
       // not reach a loop that is already running, and the next row of that loop
@@ -2261,6 +2294,10 @@ function GemlyxApp() {
       return session;
     } catch { return null; }
   };
+  // The AI routes retry a refused Studio call once after this refresh. See
+  // utils/apiAuth.js. Re-registered every render so it closes over the
+  // current session.
+  useEffect(() => { setStudioRefresher(refreshStudioSession); });
 
   // ── ONE CALLER KNEW THE TOKEN EXPIRES, AND TWELVE DID NOT ──────────
   //
@@ -2681,6 +2718,62 @@ function GemlyxApp() {
     }
   };
 
+  // ── AN ENTRY IN FOUR LANGUAGES ──────────────────────────────────────
+  // Oliver, 2 Oct 2026: "How to we make the drafts other languages than
+  // English?" and then "Sure, you can do that". A published row gets Danish,
+  // German and Lithuanian versions of its sentences beside the English
+  // (utils/entryTranslate.js). Done after publishing rather than before, so
+  // publishing stays as quick as it was, and on the live row, re-read just
+  // before writing so an edit made meanwhile is never overwritten.
+  const [translateRun, setTranslateRun] = useState(null);
+  const translateRow = async (id) => {
+    const read = async () => {
+      const r = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${Number(id)}&select=payload`);
+      const rows = await r.json().catch(() => null);
+      return r.ok ? rows?.[0]?.payload || null : null;
+    };
+    const live = await read();
+    if (!live) return "error";
+    if (!needsTranslation(live)) return "current";
+    const where = [live.city || live.town || live.location || "", countryProfile(rowCountry(live)).name].filter(Boolean).join(", ");
+    const tr = await translateEntry(live, (prompt, max) => askClaude(prompt, max, "claude-sonnet-5", true), { where });
+    if (!tr) return "failed";
+    const latest = await read();
+    if (!latest || fingerprint(proseOf(latest)) !== tr.fp) return "changed";
+    const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${Number(id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
+      body: JSON.stringify({ payload: { ...latest, __i18n: tr } }),
+    });
+    return res.ok ? "done" : "error";
+  };
+  const translateInBackground = (id, name) => {
+    if (!id) return;
+    translateRow(id).then(result => {
+      if (result === "done") showToast(`🌐 ${name || "The entry"} is now in Danish, German and Lithuanian too.`, 3500);
+      else if (result === "failed" || result === "error") showToast(`🌐 ${name || "The entry"} could not be translated just now. "Translate places" tries again.`, 4500);
+    }).catch(() => {});
+  };
+  // Every published row on this page's country that has no translation of its
+  // current English, one at a time.
+  const translateAllHere = async () => {
+    if (translateRun?.busy) return;
+    const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=id,type,payload&published=eq.true&order=id.desc`);
+    const rows = await res.json().catch(() => null);
+    // A failed read is not "nothing to translate". Security review, 3 Oct
+    // 2026, finding 7.
+    if (!res.ok || !Array.isArray(rows)) { showToast("🌐 Could not read the published places just now. Try again in a moment.", 4500); return; }
+    const todo = rows.filter(r => rowCountry(r?.payload) === PAGE_COUNTRY && needsTranslation(r.payload));
+    setTranslateRun({ busy: true, done: 0, total: todo.length, failed: 0 });
+    let done = 0, failed = 0;
+    for (const r of todo) {
+      const result = await translateRow(r.id).catch(() => "error");
+      if (result === "done" || result === "current") done++; else failed++;
+      setTranslateRun({ busy: true, done, total: todo.length, failed });
+    }
+    setTranslateRun({ busy: false, done, total: todo.length, failed });
+  };
+
   const loadManageItems = async () => {
     if (!studioSession) return;
     setManageLoading(true);
@@ -2799,6 +2892,7 @@ function GemlyxApp() {
     setStudioOfferDays(Array.isArray(payload.__offer?.days) ? payload.__offer.days : []);
     setStudioOfferFrom(payload.__offer?.from || "");
     setStudioOfferTo(payload.__offer?.to || "");
+    setStudioBooking(payload.__booking || "");
     setDraftPasteError("");
     // The two bugs this function was carrying, studioFrozenGeo inheriting the
     // previous run's coordinate ("Stored at 0.000, 0.000") and editingId
@@ -2827,6 +2921,8 @@ function GemlyxApp() {
     setStudioOfferDays(Array.isArray(row.payload?.__offer?.days) ? row.payload.__offer.days : []);
     setStudioOfferFrom(row.payload?.__offer?.from || "");
     setStudioOfferTo(row.payload?.__offer?.to || "");
+    setStudioBooking(row.payload?.__booking || "");
+    setBusyFetch(null);
     const reelBlock = row.payload?.blogBody?.find(b => b.type === "instagram") || null;
     setStudioInstagramUrl(reelBlock?.url || "");
     // Read through the same gate the page reads, so what the tick says here is
@@ -3991,6 +4087,10 @@ Say which answer came from which source, so a fact from a vouched page and a fac
   const [studioOfferFrom, setStudioOfferFrom] = useState("");
   const [studioOfferTo, setStudioOfferTo] = useState("");
   const studioOfferFields = { text: studioOfferText, until: studioOfferUntil, days: studioOfferDays, from: studioOfferFrom, to: studioOfferTo };
+  // Where to book a table (a link or a phone number), beside the offer. See
+  // utils/dealExtras.js. The busyness forecast rides in the draft JSON itself.
+  const [studioBooking, setStudioBooking] = useState("");
+  const [busyFetch, setBusyFetch] = useState(null);
   const [studioInstagramUrl, setStudioInstagramUrl] = useState("");
   // ── AND WHETHER THAT REEL MAY BE SHOWN ──────────────────────────
   //
@@ -4030,6 +4130,11 @@ Say which answer came from which source, so a fact from a vouched page and a fac
     const draftLand = countryProfile(opts?.country || studioCountry);
     const draftInDenmark = draftLand.code === DEFAULT_COUNTRY;
     setWorkingCountry(draftLand.code);
+    // A price as the run log writes it. priceLabel already says "kr" or "EUR"
+    // when the page did, and the log used to add " DKK" after it anyway, so a
+    // Klaipėda museum read "4 EUR DKK". A bare figure gets this country's
+    // currency; one that names its own keeps it.
+    const priceWithUnit = (p) => (/[a-z]/i.test(String(p || "")) ? String(p) : `${p} ${draftLand.currency}`);
     // ── A BACKGROUND QUEUE RUN MUST NOT TOUCH THE EDITOR ───────────
     // Oliver, 7 Aug 2026: "whenever it is the next in queue, it can't publish
     // because the other is published."
@@ -4113,6 +4218,11 @@ Say which answer came from which source, so a fact from a vouched page and a fac
   // right and stays right. It kept only a sentence, so the second attempt could
   // not ask the different question a venue deserves. See utils/venueMatch.js.
   let refusedListing = null;
+  // The name of a refused listing that the research then confirmed (the venue
+  // step below). Google's hours listing under that same name is the same place,
+  // so it is not refused a second time: "Sąjūdžio parkas" confirmed by nine
+  // mentions in the research is Sąjūdis Park's listing, hours and all.
+  let venueByResearch = "";
     // ── WHERE IT IS, BEFORE ANYTHING IS SEARCHED ──────────────────────
     //
     // Oliver, 13 Aug 2026: "So when doing research, make maps be one of the
@@ -4161,7 +4271,29 @@ Say which answer came from which source, so a fact from a vouched page and a fac
       // deliberately NOT in it, for the reason written at the sources block.
       const existingRow = (manageItems || []).find(r => r?.type === sType && samePlaceName(r?.payload?.name, name));
       const knownRow = existingRow?.payload || null;
-      draftTown = knownRow?.town || knownRow?.city || knownRow?.location || hint?.town || townKeyFor(name) || "";
+      draftTown = plainTownName(knownRow?.town || knownRow?.city || knownRow?.location || hint?.town || townKeyFor(name) || "");
+      // ── ABROAD, A DRAFT THAT NAMES NO TOWN IS IN THE ONE WE COVER ──
+      //
+      // Oliver's twelve Klaipėda drafts, 3 Oct 2026, run with bare names.
+      // "Castle Site" came back about Trakai Island Castle and "Narrow-Gauge
+      // Railway Station" about the railway at Anykščiai: no town was known, so
+      // every search said only "Lithuania", and Google's refused guess was
+      // the place the research then read about anyway. In Denmark a bare name
+      // is still searched as it always was; abroad there is one town Gemlyx
+      // covers, and a draft that names no other is about that one.
+      // A town written after a comma is the town, abroad, where the table of
+      // towns holds only the one: "Hagen's Hill, Neringa".
+      const afterComma = !draftInDenmark && name.includes(",") ? plainTownName(name.slice(name.lastIndexOf(",") + 1)) : "";
+      if (!draftTown && afterComma && !/\d/.test(afterComma)) draftTown = afterComma;
+      if (!draftTown && !draftInDenmark && draftLand.homeTown) {
+        draftTown = draftLand.homeTown;
+        note("Which town this draft is in", {
+          provider: "fetch", outcome: "ok", used: true,
+          detail: `the name says no town, and ${draftLand.homeTown} is the one town Gemlyx covers in ${draftLand.name}`,
+          got: `scoped to ${draftLand.homeTown}: every search, the Google lookup and the coordinate check name it`,
+          why: `Searched against the whole of ${draftLand.name}, a name like "Castle Site" lands on whichever castle ranks first. A draft about somewhere else names its town, as in "${name}, Neringa".`,
+        });
+      }
       // The row's own stated island only. The kommune half is asked later, in
       // islandHere, because the kommune is not known until the coordinate is.
       knownIsland = namedIslandOf(knownRow || {}, "");
@@ -4244,7 +4376,7 @@ Say which answer came from which source, so a fact from a vouched page and a fac
       // only time it is worth anything.
       if (!coords) {
         try {
-          const pr = await studioFetch(`/api/places-locate?name=${encodeURIComponent(draftTown ? `${name}, ${draftTown}` : name)}${countryParam(draftLand.code)}`);
+          const pr = await studioFetch(`/api/places-locate?name=${encodeURIComponent(draftTown && !fold(name).includes(fold(draftTown)) ? `${name}, ${draftTown}` : name)}${countryParam(draftLand.code)}`);
           const pd = await pr.json();
           // ── RUNGSTED IS NOT RINGSTED ────────────────────────────
           //
@@ -4283,7 +4415,10 @@ Say which answer came from which source, so a fact from a vouched page and a fac
           // sources out. A missing region costs a weaker search. A wrong one
           // costs a whole draft about the wrong town, silently.
           const placesOk = pr.ok && !pd.error && Number.isFinite(pd.lat) && Number.isFinite(pd.lon);
-          const nameMatches = placesOk && listingMatchesSubject(name, draftTown, pd.name || pd.address, { theNameIsAStreet: NAME_IS_A_STREET.includes(sType) });
+          // Abroad, Google's English name for the same listing is asked too
+          // (places-locate), so "Pilies muziejus" can be the Castle Museum.
+          const nameMatches = placesOk && [pd.name || pd.address, pd.nameEn]
+            .some(n => n && listingMatchesSubject(name, draftTown, n, { theNameIsAStreet: NAME_IS_A_STREET.includes(sType) }));
           // ── AND THE NAME MATCHING IS NOT THE WHOLE QUESTION ──────
           //
           // TinderBox, 16 Sep 2026. Step 1: "55.6287, 12.6492 via Nominatim, on
@@ -4360,7 +4495,7 @@ Say which answer came from which source, so a fact from a vouched page and a fac
       }
       note("Where this place is", {
         provider: coords ? (via.startsWith("Google") ? "google" : "fetch") : "fetch",
-        detail: "run BEFORE the research, so the searches and the founder sources know which corner of Denmark this is",
+        detail: `run BEFORE the research, so the searches and the founder sources know which corner of ${draftLand.name} this is`,
         outcome: placed ? "ok" : "empty",
         got: placed
           ? `${placed.lat.toFixed(4)}, ${placed.lon.toFixed(4)} via ${via}, ${describeRegion(placed.lat, placed.lon, precise)}`
@@ -4449,13 +4584,22 @@ Say which answer came from which source, so a fact from a vouched page and a fac
       // town. Not appended per query, which is four places to forget it, but
       // substituted once for the name everything below is templated on.
       const NAME_IS_NOT_A_PLACE = ["nightStreet", "foodStreet"];
-      const subject = NAME_IS_NOT_A_PLACE.includes(sType) && draftTown
+      // ── AND ABROAD, EVERY NAME CARRIES ITS TOWN ──────────────────
+      // Oliver's Klaipėda runs, 3 Oct 2026: the fact check asked about "Castle
+      // Site" in Lithuania and read about Trakai. A restaurant name is no
+      // better: "Momo Grill" in Lithuania is a search about every Momo Grill.
+      // Outside Denmark the subject is the name and its town, unless the
+      // name already says the town. Types whose name IS a town are left as
+      // they are.
+      const NAME_IS_A_TOWN = ["town", "nightTown", "island", "essential"];
+      const subject = draftTown && !fold(name).includes(fold(draftTown))
+        && (NAME_IS_NOT_A_PLACE.includes(sType) || (!draftInDenmark && !NAME_IS_A_TOWN.includes(sType)))
         ? `${name} ${draftTown}`
         : name;
       let plannedQueries = [];
       const planResult = await withRetry(
         () => askOpenAI(
-          `Planning research for a ${draftLand.adjective} travel guide entry: "${subject}"${subject !== name ? ` (the street "${name}" in ${draftTown} — a street name alone is ambiguous in ${draftLand.name}, so every query you write must keep the town in it)` : ""} (type: ${sType}). List 2-3 SPECIFIC search queries that would find the most important facts for THIS particular place — not generic categories, actual search strings a researcher would type. Include at least one query aimed at finding a real downside or limitation, not just highlights. Respond with ONLY a JSON array of strings, nothing else.`,
+          `Planning research for a ${draftLand.adjective} travel guide entry: "${subject}"${subject !== name && NAME_IS_NOT_A_PLACE.includes(sType) ? ` (the street "${name}" in ${draftTown} — a street name alone is ambiguous in ${draftLand.name}, so every query you write must keep the town in it)` : ""} (type: ${sType}). List 2-3 SPECIFIC search queries that would find the most important facts for THIS particular place — not generic categories, actual search strings a researcher would type. Include at least one query aimed at finding a real downside or limitation, not just highlights. Respond with ONLY a JSON array of strings, nothing else.`,
           // BUG FIX: 300 was almost certainly the actual cause of the "Empty
           // response from OpenAI" errors on town/event drafts and Discover runs —
           // gpt-5.6-sol is a reasoning model, and 300 tokens is tight enough that
@@ -4527,7 +4671,25 @@ Say which answer came from which source, so a fact from a vouched page and a fac
         shopPlace: "butikker gågade butikscenter åbningstider",
         booking: "værksted booking priser åbningstider",
       }[sType] || "praktisk information åbningstider";
-      const allQueries = [...cfg.queries, ...plannedQueries, ...(daName ? [`${daName} ${daWords}`] : [])];
+      // ── AND ABROAD, EVERY QUERY SAYS WHERE ──────────────────────────
+      // Four Klaipėda runs on 2 Oct 2026 read pages about parks in Detroit,
+      // Wichita and Los Angeles, because "Sąjūdis Park entry price tickets"
+      // says nothing about Lithuania and a search engine fills the gap with
+      // America. Outside Denmark a query without the town or the country gets
+      // both, and the place's own Lithuanian name, once Google has given it,
+      // gets a query of its own, which is how the Lithuanian pages are reached.
+      // ── AND WHERE MEANS THE TOWN, ONCE THERE IS ONE ─────────────────
+      // A query that said only "Lithuania" counted as scoped, so "Castle Site
+      // Lithuania" went out and Trakai came back (Oliver's runs, 3 Oct 2026).
+      // With a town known, a query has to name the town, and gets whichever of
+      // town and country it is missing.
+      const whereWords = [draftTown, draftLand.name].filter(Boolean);
+      const saysWhere = (q) => (draftTown ? fold(q).includes(fold(draftTown)) : whereWords.some(w => fold(q).includes(fold(w))));
+      const abroadQueries = draftInDenmark ? [] : [
+        ...(placesName && fold(placesName) !== fold(name) ? [`${placesName} ${draftTown || draftLand.name}`] : []),
+      ];
+      const scopeQuery = (q) => (draftInDenmark || saysWhere(q) ? q : `${q} ${whereWords.filter(w => !fold(q).includes(fold(w))).join(" ")}`);
+      const allQueries = [...cfg.queries.map(scopeQuery), ...plannedQueries.map(scopeQuery), ...abroadQueries, ...(daName ? [`${daName} ${daWords}`] : [])];
       let context = "";
       let candidateUrls = [];
       // ── WHAT EACH CANDIDATE PAGE SAYS IT IS ───────────────────────
@@ -4887,7 +5049,13 @@ Say which answer came from which source, so a fact from a vouched page and a fac
       // postcode tier geocodes. And it lands on Google's own point for the
       // building, where a postcode lands on the middle of a postal district and
       // marks itself imprecise.
-      if (!placed && refusedListing) {
+      // ── ABROAD, A TOWN CENTRE STILL ASKS FOR THE VENUE ──────────────
+      // A Klaipėda draft that names no town is scoped to Klaipėda (see "Which
+      // town this draft is in"), so when Google's listing is refused the town
+      // centre places it, imprecisely. Hagen's Hill was placed by this check
+      // on 3 Oct 2026 with no town at all; a town centre must not stop it now.
+      // Denmark keeps exactly the rule it had.
+      if ((!placed || (!draftInDenmark && placed.precise === false)) && refusedListing) {
         try {
           // The distance is measured here and handed in as a number, so the
           // rule stays pure. townPointFor holds 34 towns and misses most of the
@@ -4911,6 +5079,7 @@ Say which answer came from which source, so a fact from a vouched page and a fac
             // every later check looking for the hall instead of the fair. The
             // town is taken, because that is the thing the draft was missing.
             if (refusedListing.town && !draftTown) draftTown = refusedListing.town;
+            venueByResearch = refusedListing.name;
           }
           note("Where this place is, the venue", {
             provider: "google",
@@ -5047,7 +5216,7 @@ Say which answer came from which source, so a fact from a vouched page and a fac
               ? `${found.address} appeared ${found.mentions === 1 ? "once" : `${found.mentions} times`} in the research, giving ${placed.lat.toFixed(4)}, ${placed.lon.toFixed(4)}, ${describeRegion(placed.lat, placed.lon, placed.precise)}`
               : found
                 ? `found "${found.address}" in the research but nothing geocoded from it`
-                : "no Danish postal address anywhere in the research, so this draft stays unplaced",
+                : draftInDenmark ? "no Danish postal address anywhere in the research, so this draft stays unplaced" : `the postal address tier is Danish only, so outside Denmark this draft stays unplaced`,
             why: placed ? "" : "Without a coordinate there is no region, no nearest stop, and no place-scoped source.",
             used: !!placed,
           });
@@ -6002,7 +6171,7 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
       // asking for, so that is what the list says.
       if (PLACES_WITH_A_LISTING.includes(sType)) {
         try {
-          const hoursRes = await studioFetch(`/api/places-hours?name=${encodeURIComponent(name)}${frozenGeo ? `&lat=${frozenGeo.lat}&lon=${frozenGeo.lon}` : ""}${countryParam(draftLand.code)}`);
+          const hoursRes = await studioFetch(`/api/places-hours?name=${encodeURIComponent(!draftInDenmark && draftTown && !fold(name).includes(fold(draftTown)) ? `${name}, ${draftTown}` : name)}${frozenGeo ? `&lat=${frozenGeo.lat}&lon=${frozenGeo.lon}` : ""}${countryParam(draftLand.code)}`);
           const hoursData = await hoursRes.json();
           // ── AN ERROR BODY IS NOT AN ANSWER ──────────────────────────
           // Overnight audit, 12 Aug. Neither hoursRes.ok nor hoursData.error was
@@ -6054,7 +6223,8 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
           // verified hours. And the types most likely to be refused here, the
           // areas and the events, are exactly the ones that now get the dedicated
           // official-site search above, so the two cover each other.
-          if (!listingMatchesSubject(name, draftTown, hoursData.name, { theNameIsAStreet: NAME_IS_A_STREET.includes(sType) })) {
+          const confirmedVenue = !!venueByResearch && !NAME_IS_A_STREET.includes(sType) && fold(String(hoursData.name || "").trim()) === fold(venueByResearch);
+          if (!confirmedVenue && !listingMatchesSubject(name, draftTown, hoursData.name, { theNameIsAStreet: NAME_IS_A_STREET.includes(sType) })) {
             note("Opening hours and address", {
               provider: "google", detail: "Places Text Search for the business listing",
               outcome: "empty", used: false,
@@ -6810,7 +6980,16 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
           // its answer, thirteen hundred lines down, were two hand-written
           // lists of the same idea and only one of them existed.
           const HUNTS_FOR_A_PRICE = TYPES_WITH_A_DOOR.filter(t => t !== "booking");
-          const needHunt = HUNTS_FOR_A_PRICE.includes(sType) && !pricesAdmission(priced);
+          // Not for an open space abroad. Four Klaipėda runs on 2 Oct 2026 sent
+          // the ticket agent after a park or a square, and it came back with a
+          // festival in the Netherlands and a park in Michigan. Nobody sells a
+          // ticket to Danė Square. Denmark keeps the hunt as it was, because
+          // there a word like "park" also names places that do charge.
+          // Letter boundaries, not \b: \b is ASCII only, so a word ending in ė
+          // ("Atgimimo aikštė") never matched it.
+          const OPEN_SPACE = /(?<!\p{L})(park|parkas|square|skveras|aikštė|aikste|beach|paplūdimys|papludimys|promenade|krantinė|quay|dune|kopa|street|gatvė)(?!\p{L})/iu;
+          const openSpaceAbroad = !draftInDenmark && OPEN_SPACE.test(`${name} ${placesName || ""}`) && !/muziej|museum|zoo|aquarium|delfinarium|dolphin/i.test(`${name} ${placesName || ""}`);
+          const needHunt = HUNTS_FOR_A_PRICE.includes(sType) && !pricesAdmission(priced) && !openSpaceAbroad;
           if (needHunt) {
             try {
               // sType, so an attraction is asked about its own billetter page
@@ -6953,17 +7132,17 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
         // Measured off the operator's own pages, which have just been read for
         // exactly this reason, and never inferred from the town, the scale or
         // the name. No operator page means no claim. See utils/languageBarrier.js.
-        const lang = languageBarrier({ siteText: scrapedSiteText, siteUrls: Object.keys(pagesByUrl || {}) });
+        const lang = languageBarrier({ siteText: scrapedSiteText, siteUrls: Object.keys(pagesByUrl || {}), country: draftLand.code });
         note("What language this runs in", {
           provider: "fetch",
           detail: "the operator's own pages, read for a language and for an English version of themselves",
           outcome: lang.level === "unknown" ? "empty" : "ok",
-          got: lang.level === "danish-only"
-            ? "the organiser publishes in Danish only, so the reader is told to expect Danish"
+          got: lang.level === "danish-only" || lang.level === "local-only"
+            ? `the organiser publishes in ${draftLand.code === "LT" ? "Lithuanian" : "Danish"} only, so the reader is told to expect it`
             : lang.level === "has-english"
               ? "the organiser publishes an English version, so nothing is said"
               : lang.why,
-          used: lang.level === "danish-only",
+          used: lang.level === "danish-only" || lang.level === "local-only",
         });
         entryLanguage = lang;
         // ── AND A SILENT ONE IS THE WHOLE COMPLAINT ─────────────────
@@ -7848,7 +8027,10 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
       if (glanceFields.length && rawResearch) {
         try {
           setStudioStage({ label: "Reading the At a Glance values out of the research", percent: 88 });
-          const gRes = await askOpenAI(GLANCE_EXTRACT_PROMPT(name, sType, glanceFields, rawResearch), 1200);
+          // Low effort and room to answer in one go: the 2 Oct 2026 runs spent
+          // 57 to 262 seconds here, thinking about a lookup and then running
+          // out of room and being asked again.
+          const gRes = await askOpenAI(GLANCE_EXTRACT_PROMPT(name, sType, glanceFields, rawResearch), 4000, { effort: "low" });
           const gRead = gRes?.error ? { ok: false, values: {}, why: gRes.error } : readGlanceExtract(gRes?.text, glanceFields);
           if (gRead.ok) {
             // The fifth argument is the pages this run actually OPENED, kept apart
@@ -8330,7 +8512,19 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
             // could not be read. The operator sets a price and a ticket seller
             // takes the money; everybody else is repeating it. See priceSource.
             mayDecide: priceDecider,
-            isAbout: (pageText, url) => sourceIsAboutPlace(pageText, { name: t?.name, town: t?.town || t?.city || t?.location, url, theNameIsAStreet: NAME_IS_A_STREET.includes(sType) }),
+            // ── AND THE PLACE'S OWN SITE, BY ITS OWN NAME ──────────
+            // Oliver's Klaipėda runs, 3 Oct 2026: "mlimuziejus.lt states 4
+            // EUR but the page is not about Museum of the History of
+            // Lithuania Minor". That is the museum's own site, which writes
+            // its name in Lithuanian. The source filter above already passes
+            // the place's own host and Google's spelling; this test now does
+            // the same.
+            isAbout: (pageText, url) => sourceIsAboutPlace(pageText, {
+              name: t?.name, town: t?.town || t?.city || t?.location, url,
+              alsoKnownAs: placesName && placesName !== t?.name ? [placesName] : [],
+              ownHost: placesWebsite || t?.website || "",
+              theNameIsAStreet: NAME_IS_A_STREET.includes(sType),
+            }),
           });
           // ── AND A REFUSAL IS NOT A SOURCE ────────
           //
@@ -8361,7 +8555,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
               provider: "fetch",
               detail: "the page whose own text carries the figure in this draft",
               outcome: "empty", used: false,
-              got: `${domainOf(src.url)} states ${src.price} DKK but the page is not about ${t?.name || "this entry"}, so it is not a source for it. Nothing recorded rather than a citation that leads nowhere.`,
+              got: `${domainOf(src.url)} states ${priceWithUnit(src.price)} but the page is not about ${t?.name || "this entry"}, so it is not a source for it. Nothing recorded rather than a citation that leads nowhere.`,
             });
           } else if (src) {
             t.__priceSource = { url: src.url, host: domainOf(src.url), price: src.price, at: new Date().toISOString() };
@@ -8369,7 +8563,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
               provider: "fetch",
               detail: "the page whose own text carries the figure in this draft",
               outcome: "ok", used: true,
-              got: `${src.price} DKK is on ${domainOf(src.url)}${src.ranked ? ", the highest-ranked page read that states it" : " (a page outside the ranked list)"}: ${src.url.slice(0, 120)}`,
+              got: `${priceWithUnit(src.price)} is on ${domainOf(src.url)}${src.ranked ? ", the highest-ranked page read that states it" : " (a page outside the ranked list)"}: ${src.url.slice(0, 120)}`,
             });
           } else if (pt.checked && pt.draft.length) {
             note("Where the price came from", {
@@ -11052,7 +11246,11 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
     if (typeof saved.text === "string" && saved.text.trim()) setStudioDraftText(saved.text);
     if (saved.photoName) setStudioPhotoName(saved.photoName);
     if (saved.offerText) setStudioOfferText(saved.offerText);
+    if (saved.booking) setStudioBooking(saved.booking);
     if (saved.offerUntil) setStudioOfferUntil(saved.offerUntil);
+    if (Array.isArray(saved.offerDays) && saved.offerDays.length) setStudioOfferDays(saved.offerDays);
+    if (saved.offerFrom) setStudioOfferFrom(saved.offerFrom);
+    if (saved.offerTo) setStudioOfferTo(saved.offerTo);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -11083,6 +11281,10 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
         photoName: studioPhotoName,
         offerText: studioOfferText,
         offerUntil: studioOfferUntil,
+        offerDays: studioOfferDays,
+        offerFrom: studioOfferFrom,
+        offerTo: studioOfferTo,
+        booking: studioBooking,
       } : null;
       const { store } = packStore({ queue: draftQueue, results: queueResults, editor }, Date.now());
       let storage = null;
@@ -11095,7 +11297,7 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
     return () => clearTimeout(t);
   }, [studioSession, draftQueue, queueResults, editingId, studioDraft, studioDraftText,
       studioType, studioTown, studioResult, studioFrozenGeo, studioIdentityWarning,
-      studioInventedWarning, studioPhotoName, studioOfferText, studioOfferUntil]);
+      studioInventedWarning, studioPhotoName, studioOfferText, studioOfferUntil, studioOfferDays, studioOfferFrom, studioOfferTo, studioBooking]);
 
   // Dropping the finished list is a deliberate act, so it needs a button. It is
   // also the only advice problemNote can give when storage is full.
@@ -14219,6 +14421,22 @@ ${researchRules("festival", ev)}`
       }
       if (offerFromFields) shaped.__offer = offerFromFields;
       else delete shaped.__offer;
+      // Book a table, from its box, on the same rule: the box is the truth,
+      // and an empty box removes it.
+      {
+        const bookFault = bookingProblem(studioBooking);
+        if (bookFault) {
+          setPublishStatus(null);
+          setDraftEditError(`Not published. ${bookFault}`);
+          return;
+        }
+        if (cleanBooking(studioBooking)) shaped.__booking = studioBooking.trim();
+        else delete shaped.__booking;
+        // The busyness forecast is a paid lookup kept in the draft, and
+        // shapeForLive's allow-list does not carry it, so a new entry lost it at
+        // publish (review, 2 Oct 2026). Carried across here, checked.
+        if (!isEditing && cleanBusy(editedDraft?.__busy)) shaped.__busy = editedDraft.__busy;
+      }
 
       // ── AND A CLAIM WHERE BEING WRONG HURTS SOMEBODY ────────────
       //
@@ -14780,7 +14998,8 @@ ${researchRules("festival", ev)}`
       const body = isEditing ? JSON.stringify({ payload: shaped }) : JSON.stringify({ type: studioType, payload: shaped, published: true });
       const res = await supaFetch(url, {
         method: isEditing ? "PATCH" : "POST",
-        headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
+        // The new row's id comes back, so its translation can be written to it.
+        headers: { "Content-Type": "application/json", Prefer: isEditing ? "return=minimal" : "return=representation" },
         body,
       });
       if (!res.ok) {
@@ -14793,6 +15012,9 @@ ${researchRules("festival", ev)}`
       } else {
         setPublishStatus("sent");
         setPublishErrorDetail(null);
+        // The translations, after the row is safe (see translateRow).
+        const newId = isEditing ? editingId : (await res.json().catch(() => null))?.[0]?.id;
+        translateInBackground(newId, shaped.name);
         // ── HAND OVER THE NEXT FINISHED DRAFT (Oliver, Aug 6: "when I have
         // drafted one of them, the other that has been researched will pop
         // up") ────────────────────────────────────────────────────
@@ -15365,6 +15587,20 @@ ${houseDistanceSays(houseBaseArea, dayPoints(day, stayResolve))}` : ""}`;
   // on Sign up; everything that opens this sheet WITHOUT naming an action now
   // opens on Sign in.
   const [authMode, setAuthMode] = useState("in");
+  // ── THE PERKS NEED AN ACCOUNT ────────────────────────────────────
+  // Oliver, 30 Sep 2026: "we probably need to require account-making for
+  // enabling all the perks", on both sites: the guide builder, the chat, the
+  // deal text, reviews and the trip library. Every AI call behind them is also
+  // refused by the server without a confirmed account (utils/aiGate.js), so this
+  // is the polite half: it asks before the request would be turned away. The
+  // Studio login counts as signed in.
+  const needsAccountFor = (reason) => {
+    if (userSession || studioSession) return false;
+    // On Sign in, with Create one tap away: a returning member must not land
+    // on a create-account form (the rule the review gate follows).
+    setAuthReason(reason); setAuthMode("in"); setAuthOpen(true);
+    return true;
+  };
   // A password reset link comes back as a signed-in session, so the sheet's
   // usual "open only when signed out" condition would hide the one screen the
   // person followed the link to reach. Held separately for that reason.
@@ -17165,6 +17401,7 @@ ${houseDistanceSays(houseBaseArea, dayPoints(day, stayResolve))}` : ""}`;
     return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
   };
   const generateGuide = async (overrideConvoText, modeOverride) => {
+    if (needsAccountFor("plan")) return;
     // ── ON ANOTHER COUNTRY'S PAGE ─────────────────────────────────────
     // Phase 3 of LITHUANIA_PLAN_29SEP.md. Every AI call below goes through
     // forLand (utils/guideAbroad.js), which swaps "Denmark", "Danish" and
@@ -17278,7 +17515,7 @@ ${houseDistanceSays(houseBaseArea, dayPoints(day, stayResolve))}` : ""}`;
     const allowance = await askForGuidePass({
       fetchImpl: (...args) => fetch(...args),
       storage: guideStore(),
-      token: studioSession?.access_token || userSession?.token || "",
+      token: await freshPassToken(),
       makeId: newVisitorId,
     }).finally(() => { guidePassPendingRef.current = false; });
     if (!allowance.ok) {
@@ -19332,7 +19569,7 @@ If the conversation only covers a single day or a few stops with no explicit day
         const back = await cancelGuidePass({
           fetchImpl: (...args) => fetch(...args),
           storage: guideStore(),
-          token: studioSession?.access_token || userSession?.token || "",
+          token: await freshPassToken(),
         });
         setGuideError(back.refunded
           ? "Stopped. It did not count as today's guide."
@@ -19376,6 +19613,7 @@ If the conversation only covers a single day or a few stops with no explicit day
   const savedHere = PAGE_ABROAD ? savedPlaces.filter(p => lookupRealPlace(p?.name)) : savedPlaces;
   const buildAbroad = () => {
     if (guideModal === "loading") return;
+    if (needsAccountFor("plan")) return;
     const who = intakeTravelers.trim();
     const counted = who ? partyOf(who) : null;
     const parts = abroadBriefParts({
@@ -21878,6 +22116,7 @@ If the conversation only covers a single day or a few stops with no explicit day
     const forced = typeof forcedMsg === "string" ? forcedMsg.trim() : null;
     const msg = forced || aiInput.trim();
     if (!msg || aiLoading) return;
+    if (needsAccountFor("plan")) return;
     if (!forced) setAiInput("");
     setAiMessages(prev => [...prev, { role: "user", text: msg, hidden: !!opts.hidden }]);
     setAiLoading(true);
@@ -24272,7 +24511,7 @@ ${languageBlock()}`;
                         panel by accident is somebody who typed /#studio. */}
                     {!String(FOUNDER_IDS || "").trim() && (
                       <div style={{ fontSize: 10.5, color: "#FFB347", lineHeight: 1.6, marginBottom: 12, border: "1px solid #FFB34755", borderRadius: 9, padding: "9px 11px" }}>
-                        VITE_FOUNDER_IDS is not set, so any Gemlyx account can open Studio. Set it in Vercel to your Supabase user id before the beta, and set GEMLYX_FOUNDER_IDS beside it.
+                        VITE_FOUNDER_IDS is not set, so Studio falls back to your own account id only. Set it in Vercel to your Supabase user id, and set GEMLYX_FOUNDER_IDS beside it.
                       </div>
                     )}
                     <input value={loginEmail} onChange={e => setLoginEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && studioLogin()}
@@ -24354,6 +24593,10 @@ ${languageBlock()}`;
                         <button onClick={() => { setManageOpen(v => !v); if (!manageOpen) loadManageItems(); }}
                           style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
                           {manageOpen ? "Hide" : "📋 Manage Published"}
+                        </button>
+                        <button onClick={translateAllHere} disabled={!!translateRun?.busy} data-testid="translate-places"
+                          style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: translateRun?.busy ? "default" : "pointer" }}>
+                          🌐 {translateRun?.busy ? `Translating ${translateRun.done} of ${translateRun.total}` : translateRun ? `Translated ${translateRun.done} of ${translateRun.total}${translateRun.failed ? ` - ${translateRun.failed} to retry` : ""}` : "Translate places"}
                         </button>
                         <button onClick={() => { setFactsPanelOpen(v => !v); if (!factsPanelOpen) loadSavedFacts(); }}
                           style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
@@ -28975,6 +29218,51 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           </div>
                         )}
 
+                        {/* ── BOOK A TABLE, THE DEAL CODE, AND HOW BUSY ───────
+                            Oliver, 1 Oct 2026, for the Klaipėda pilot: cruise
+                            passengers with a few hours, so convenience first.
+                            See utils/dealExtras.js. */}
+                        <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, margin: "12px 0 5px" }}>BOOK A TABLE (a link or a phone number)</div>
+                        <input value={studioBooking} onChange={e => setStudioBooking(e.target.value)}
+                          placeholder="https://restaurant.lt/booking or +370 600 00000"
+                          style={{ width: "100%", border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 12px", fontSize: 12, outline: "none", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif", boxSizing: "border-box" }} />
+                        {bookingProblem(studioBooking) && (
+                          <div style={{ fontSize: 10.5, color: "#FFB347", lineHeight: 1.55, marginTop: 6 }}>{bookingProblem(studioBooking)}</div>
+                        )}
+                        {studioOfferText.trim() && studioDraft?.name && (
+                          <div style={{ fontSize: 11, color: C.light, lineHeight: 1.55, marginTop: 8 }}>
+                            Deal code for the partner: <strong style={{ color: C.gold, letterSpacing: 1 }}>{dealCode(studioDraft)}</strong>. Guests show it at the counter.
+                          </div>
+                        )}
+                        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
+                          <button onClick={async () => {
+                            let draft = studioDraft;
+                            try { draft = JSON.parse(studioDraftText); } catch { /* the last good draft */ }
+                            const name = String(draft?.name || "").trim();
+                            const address = [draft?.address || draft?.street || draft?.location, draft?.city || draft?.town].filter(Boolean).join(", ");
+                            if (!name || !address) { setBusyFetch("This entry needs a name and an address before BestTime can find it."); return; }
+                            setBusyFetch("Asking BestTime…");
+                            try {
+                              const res = await studioFetch(`/api/busyness`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, address }) });
+                              const data = await res.json().catch(() => null);
+                              if (!data?.ok) { setBusyFetch(data?.error || `BestTime did not answer (${res.status}).`); return; }
+                              const next = { ...draft, __busy: data.busy };
+                              setStudioDraft(next);
+                              setStudioDraftText(JSON.stringify(next, null, 2));
+                              setBusyFetch(`Forecast stored, dated ${data.busy.fetchedAt}. Save the entry to keep it.`);
+                            } catch {
+                              setBusyFetch("Could not reach the server just now.");
+                            }
+                          }}
+                            style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "6px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                            Fetch how busy it usually is
+                          </button>
+                          {studioDraft?.__busy?.fetchedAt && !busyFetch && (
+                            <span style={{ fontSize: 10.5, color: C.muted }}>Forecast from {studioDraft.__busy.fetchedAt}</span>
+                          )}
+                          {busyFetch && <span style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5 }}>{busyFetch}</span>}
+                        </div>
+
                         {/* ── A SUCCESS BANNER MAY NOT BE A DEAD END ──────────
                             The green line REPLACED the button, so spotting a
                             typo one second after publishing left no way to send
@@ -29809,8 +30097,9 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           {/* ── GEMLYX PROMOTIONS ── see utils/promotions.js. Open to
               everybody on another country's page (OPEN_ABROAD), locked on the
               Danish one exactly as the entry page locks it. */}
-          {tab === "promotions" && <PromotionsPage promos={promotions} title={uiT("nav.promotions", uiLang)}
-            paid={OPEN_ABROAD || hasPaidPlan(userProfile)} lang={uiLang} onOpen={(p) => openStopDetail(p)} />}
+          {tab === "promotions" && <PromotionsPage promos={promotions} lang={uiLang} title={uiT("nav.promotions", uiLang)}
+            paid={(OPEN_ABROAD && !!userSession) || hasPaidPlan(userProfile)}
+            onOpen={(p) => { if (OPEN_ABROAD && needsAccountFor("deal")) return; openStopDetail(p); }} />}
           {tab === "shopping" && <ShoppingPage shops={shops} places={shopPlaces} title={uiT("nav.shopping", uiLang)}
             onOpen={(row) => setShopDetail(row)} />}
           {tab === "attractions" && (() => {
@@ -33898,7 +34187,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           live control it held, bookableOnly, already has its own pill on the
           Attractions page and is untouched. */}
 
-      <DetailPage windowed={entryWindowed} lang={uiLang} paid={OPEN_ABROAD || hasPaidPlan(userProfile)} signedIn={OPEN_ABROAD || !!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={eventDetail} onClose={closeEntry} kind="event" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={eventDetail && isPlaceSaved("event", eventDetail.id)} onToggleSave={eventDetail ? () => toggleSavePlace("event", eventDetail, eventDetail.town) : null} hasBeen={!!eventDetail && isBeenHere("event", eventDetail.id)} onToggleBeen={eventDetail ? () => toggleBeenHere("event", eventDetail, eventDetail.town) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
+      <DetailPage windowed={entryWindowed} lang={uiLang} paid={(OPEN_ABROAD && !!userSession) || hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={(why) => { setAuthReason(typeof why === "string" ? why : "review"); setAuthMode("in"); setAuthOpen(true); }} item={eventDetail} onClose={closeEntry} kind="event" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={eventDetail && isPlaceSaved("event", eventDetail.id)} onToggleSave={eventDetail ? () => toggleSavePlace("event", eventDetail, eventDetail.town) : null} hasBeen={!!eventDetail && isBeenHere("event", eventDetail.id)} onToggleBeen={eventDetail ? () => toggleBeenHere("event", eventDetail, eventDetail.town) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
       {/* onOpenEvent powers the new "What's on in <town>" section: tapping a
           festival closes the town page and opens that event's real entry, so the
           traveler lands on the full page with dates, tickets and directions
@@ -33908,11 +34197,11 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           town one. onOpenEvent closes this page before opening the event, which
           is the same handoff a town does, because two stacked detail views is a
           state this app has been in before and it is not recoverable by Back. */}
-      <DetailPage windowed={entryWindowed} lang={uiLang} paid={OPEN_ABROAD || hasPaidPlan(userProfile)} signedIn={OPEN_ABROAD || !!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={islandDetail} onClose={closeEntry} kind="island" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={islandDetail && isPlaceSaved("island", islandDetail.id)} onToggleSave={islandDetail ? () => toggleSavePlace("island", islandDetail, islandDetail.region) : null} hasBeen={!!islandDetail && isBeenHere("island", islandDetail.id)} onToggleBeen={islandDetail ? () => toggleBeenHere("island", islandDetail, islandDetail.region) : null} onOpenEvent={(e) => { setIslandDetail(null); setEventDetail(e); }} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
-      <DetailPage windowed={entryWindowed} lang={uiLang} paid={OPEN_ABROAD || hasPaidPlan(userProfile)} signedIn={OPEN_ABROAD || !!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={townDetail} onClose={closeEntry} kind="town" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={townDetail && isPlaceSaved("town", townDetail.id)} onToggleSave={townDetail ? () => toggleSavePlace("town", townDetail, townDetail.region) : null} hasBeen={!!townDetail && isBeenHere("town", townDetail.id)} onToggleBeen={townDetail ? () => toggleBeenHere("town", townDetail, townDetail.region) : null} onOpenEvent={(e) => { setTownDetail(null); setEventDetail(e); }} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
-      <DetailPage windowed={entryWindowed} lang={uiLang} paid={OPEN_ABROAD || hasPaidPlan(userProfile)} signedIn={OPEN_ABROAD || !!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={nightlifeDetail} onClose={closeEntry} kind="nightlife" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={nightlifeDetail && isPlaceSaved("nightlife", nightlifeDetail.id)} onToggleSave={nightlifeDetail ? () => toggleSavePlace("nightlife", nightlifeDetail, nightlifeDetail.location) : null} hasBeen={!!nightlifeDetail && isBeenHere("nightlife", nightlifeDetail.id)} onToggleBeen={nightlifeDetail ? () => toggleBeenHere("nightlife", nightlifeDetail, nightlifeDetail.location) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
-      <DetailPage windowed={entryWindowed} lang={uiLang} paid={OPEN_ABROAD || hasPaidPlan(userProfile)} signedIn={OPEN_ABROAD || !!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={shopDetail} onClose={closeEntry} kind="shop" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={shopDetail && isPlaceSaved("shop", shopDetail.id)} onToggleSave={shopDetail ? () => toggleSavePlace("shop", shopDetail, shopDetail.town || shopDetail.location) : null} hasBeen={!!shopDetail && isBeenHere("shop", shopDetail.id)} onToggleBeen={shopDetail ? () => toggleBeenHere("shop", shopDetail, shopDetail.town || shopDetail.location) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
-      <DetailPage windowed={entryWindowed} lang={uiLang} paid={OPEN_ABROAD || hasPaidPlan(userProfile)} signedIn={OPEN_ABROAD || !!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={freeDetail} onClose={closeEntry} kind="free" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={freeDetail && isPlaceSaved("free", freeDetail.id)} onToggleSave={freeDetail ? () => toggleSavePlace("free", freeDetail, freeDetail.city) : null} hasBeen={!!freeDetail && isBeenHere("free", freeDetail.id)} onToggleBeen={freeDetail ? () => toggleBeenHere("free", freeDetail, freeDetail.city) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
+      <DetailPage windowed={entryWindowed} lang={uiLang} paid={(OPEN_ABROAD && !!userSession) || hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={(why) => { setAuthReason(typeof why === "string" ? why : "review"); setAuthMode("in"); setAuthOpen(true); }} item={islandDetail} onClose={closeEntry} kind="island" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={islandDetail && isPlaceSaved("island", islandDetail.id)} onToggleSave={islandDetail ? () => toggleSavePlace("island", islandDetail, islandDetail.region) : null} hasBeen={!!islandDetail && isBeenHere("island", islandDetail.id)} onToggleBeen={islandDetail ? () => toggleBeenHere("island", islandDetail, islandDetail.region) : null} onOpenEvent={(e) => { setIslandDetail(null); setEventDetail(e); }} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
+      <DetailPage windowed={entryWindowed} lang={uiLang} paid={(OPEN_ABROAD && !!userSession) || hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={(why) => { setAuthReason(typeof why === "string" ? why : "review"); setAuthMode("in"); setAuthOpen(true); }} item={townDetail} onClose={closeEntry} kind="town" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={townDetail && isPlaceSaved("town", townDetail.id)} onToggleSave={townDetail ? () => toggleSavePlace("town", townDetail, townDetail.region) : null} hasBeen={!!townDetail && isBeenHere("town", townDetail.id)} onToggleBeen={townDetail ? () => toggleBeenHere("town", townDetail, townDetail.region) : null} onOpenEvent={(e) => { setTownDetail(null); setEventDetail(e); }} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
+      <DetailPage windowed={entryWindowed} lang={uiLang} paid={(OPEN_ABROAD && !!userSession) || hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={(why) => { setAuthReason(typeof why === "string" ? why : "review"); setAuthMode("in"); setAuthOpen(true); }} item={nightlifeDetail} onClose={closeEntry} kind="nightlife" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={nightlifeDetail && isPlaceSaved("nightlife", nightlifeDetail.id)} onToggleSave={nightlifeDetail ? () => toggleSavePlace("nightlife", nightlifeDetail, nightlifeDetail.location) : null} hasBeen={!!nightlifeDetail && isBeenHere("nightlife", nightlifeDetail.id)} onToggleBeen={nightlifeDetail ? () => toggleBeenHere("nightlife", nightlifeDetail, nightlifeDetail.location) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
+      <DetailPage windowed={entryWindowed} lang={uiLang} paid={(OPEN_ABROAD && !!userSession) || hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={(why) => { setAuthReason(typeof why === "string" ? why : "review"); setAuthMode("in"); setAuthOpen(true); }} item={shopDetail} onClose={closeEntry} kind="shop" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={shopDetail && isPlaceSaved("shop", shopDetail.id)} onToggleSave={shopDetail ? () => toggleSavePlace("shop", shopDetail, shopDetail.town || shopDetail.location) : null} hasBeen={!!shopDetail && isBeenHere("shop", shopDetail.id)} onToggleBeen={shopDetail ? () => toggleBeenHere("shop", shopDetail, shopDetail.town || shopDetail.location) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
+      <DetailPage windowed={entryWindowed} lang={uiLang} paid={(OPEN_ABROAD && !!userSession) || hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={(why) => { setAuthReason(typeof why === "string" ? why : "review"); setAuthMode("in"); setAuthOpen(true); }} item={freeDetail} onClose={closeEntry} kind="free" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={freeDetail && isPlaceSaved("free", freeDetail.id)} onToggleSave={freeDetail ? () => toggleSavePlace("free", freeDetail, freeDetail.city) : null} hasBeen={!!freeDetail && isBeenHere("free", freeDetail.id)} onToggleBeen={freeDetail ? () => toggleBeenHere("free", freeDetail, freeDetail.city) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
       {/* ── The assistant that follows him (Oliver, 6 Aug: "some sort of
           assistant for the admin /#studio guy? That will always be with me?
           Even when I'm on the blogs")  ────────────────────────────────
@@ -34078,7 +34367,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           onSaved={() => refreshLiveContent()} />;
       })()}
 
-      <DetailPage windowed={entryWindowed} lang={uiLang} paid={OPEN_ABROAD || hasPaidPlan(userProfile)} signedIn={OPEN_ABROAD || !!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={foodDetail} onClose={closeEntry} kind="food" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={foodDetail && isPlaceSaved("food", foodDetail.id)} onToggleSave={foodDetail ? () => toggleSavePlace("food", foodDetail, foodDetail.location) : null} hasBeen={!!foodDetail && isBeenHere("food", foodDetail.id)} onToggleBeen={foodDetail ? () => toggleBeenHere("food", foodDetail, foodDetail.location) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
+      <DetailPage windowed={entryWindowed} lang={uiLang} paid={(OPEN_ABROAD && !!userSession) || hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={(why) => { setAuthReason(typeof why === "string" ? why : "review"); setAuthMode("in"); setAuthOpen(true); }} item={foodDetail} onClose={closeEntry} kind="food" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={foodDetail && isPlaceSaved("food", foodDetail.id)} onToggleSave={foodDetail ? () => toggleSavePlace("food", foodDetail, foodDetail.location) : null} hasBeen={!!foodDetail && isBeenHere("food", foodDetail.id)} onToggleBeen={foodDetail ? () => toggleBeenHere("food", foodDetail, foodDetail.location) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
 
       {/* Per Oliver ("get rid of the popup"): once a guide finishes building, we
           navigate straight to the full-page GuidePage instead of showing a
@@ -35282,6 +35571,14 @@ export default function Gemlyx() {
           would add to their site before the app is made to work outside
           Denmark. See data/klaipedaDemo.js. */}
       <Route path={KLAIPEDA_DEMO_PATH} element={<KlaipedaDemo />} />
+      {/* ── KLAIPĖDA, EXAMPLES TO SHOW THE TOURISM CENTRE ───────
+          Oliver, 2 Oct 2026: "Guides and Offers alike. Make up anything."
+          Real places, made-up partners, the live walk rules. Linked from
+          nowhere and noindex. See data/klaipedaExamples.js. */}
+      <Route path={KLAIPEDA_EXAMPLES_PATH} element={<KlaipedaExamples />} />
+      {/* The talking sculptures, joined up: a working sketch, Oliver, 3 Oct
+          2026. Linked only from the examples page. See data/klaipedaSculptures.js. */}
+      <Route path={KLAIPEDA_SCULPTURES_PATH} element={<KlaipedaSculptures />} />
       {/* ── TRIPS OTHER PEOPLE KEPT ────────────────────────────
           One component for both, because the list and a trip from it are the
           same page at two depths, and the trip renders through GuidePage the

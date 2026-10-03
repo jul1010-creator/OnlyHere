@@ -41,14 +41,14 @@ const whoIs = async (headers, serviceKey, fetchImpl) => {
   const h = headers || {};
   const auth = String((typeof h.get === "function" ? h.get("authorization") : h.authorization) || "");
   const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
-  if (!token || !serviceKey) return { userId: "", email: "" };
+  if (!token || !serviceKey) return { userId: "", email: "", confirmed: false };
   try {
     const r = await fetchImpl(`${SUPABASE_URL}/auth/v1/user`, { headers: { apikey: serviceKey, Authorization: `Bearer ${token}` } });
-    if (!r.ok) return { userId: "", email: "" };
+    if (!r.ok) return { userId: "", email: "", confirmed: false };
     const u = await r.json();
-    return { userId: u?.id ? String(u.id) : "", email: String(u?.email || "") };
+    return { userId: u?.id ? String(u.id) : "", email: String(u?.email || ""), confirmed: !!(u?.email_confirmed_at || u?.confirmed_at) };
   } catch {
-    return { userId: "", email: "" };
+    return { userId: "", email: "", confirmed: false };
   }
 };
 
@@ -136,6 +136,19 @@ export const decide = async ({ headers, body, env, fetchImpl, now = new Date(), 
     if (got.answer === "ok") return { status: 200, json: { ok: true, day, pass: body.retry, retry: true } };
     const reason = reasonOfKey(got.answer) || "retries";
     return { status: 429, json: { ok: false, day, reason, message: refusalText(reason) } };
+  }
+
+  // ── A NEW GUIDE NEEDS AN ACCOUNT ──────────────────────────────────
+  // Oliver, 30 Sep 2026: accounts for the perks, the planner among them. And
+  // Fable's audit the same night: a pass handed to anybody also took a slot
+  // from the day's total, so somebody with enough addresses could use up
+  // Gemlyx's whole day without building anything. Asked here, before any
+  // counter moves, and only of a fresh pass: a retry or a stop carries a pass
+  // this route already signed. GEMLYX_GUIDES_WITHOUT_ACCOUNT=1 turns it off.
+  const needAccount = String(env.GEMLYX_GUIDES_WITHOUT_ACCOUNT || "") !== "1";
+  if (needAccount && !(who.userId && who.confirmed)) {
+    const reason = who.userId ? "confirm" : "account";
+    return { status: 401, json: { ok: false, day, reason, message: refusalText(reason) } };
   }
 
   const keys = allowanceKeys({ visitor, ipHash, userId: who.userId }, limits);

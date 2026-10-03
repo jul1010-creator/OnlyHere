@@ -27,6 +27,8 @@
 // of this product that fails at the exact moment somebody is telling us
 // something else is broken.
 import { requestIsFromSite, NOT_FROM_SITE } from "../src/utils/apiGuard.js";
+import { takeDaily, visitorKey } from "../src/utils/aiGate.js";
+import { copenhagenDay } from "../src/utils/guideAllowance.js";
 
 const TO = "hello@gemlyxtravel.com";
 // The domain Resend verifies. A sender outside it is refused by Resend, so this
@@ -83,6 +85,22 @@ export default async function handler(req, res) {
   // Nothing to send is not an error worth failing a form over, but it is not a
   // send either, and saying so keeps the caller honest about what happened.
   if (!message) return res.status(200).json({ ok: true, emailed: false, why: "nothing to send" });
+
+  // ── A LIMIT ON THE MAIL ───────────────────────────────────────────
+  // Security review, 3 Oct 2026, finding 14: a script could send this form
+  // in a loop and use up the Resend quota. Ten a day from one visitor and 300
+  // for the whole site; past that, or with the counter out of reach, nothing
+  // is mailed. The one caller left is the optional reason given when an
+  // account is deleted (App.jsx sendDeleteReason); support messages and
+  // problem reports go to gemlyx_support instead.
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+  const took = serviceKey ? await takeDaily({
+    day: copenhagenDay(new Date()),
+    keys: [{ key: visitorKey(req.headers, serviceKey.slice(-16)).replace(/^ai:v:/, "report:v:"), limit: 10 }, { key: "report:site", limit: 300 }],
+    supabaseUrl: process.env.SUPABASE_URL || "https://vpxfahjnerkkkoueovhl.supabase.co",
+    serviceKey,
+  }) : { closed: true };
+  if (!took.ok) return res.status(200).json({ ok: true, emailed: false, why: took.closed ? "limit not reachable" : "daily limit" });
 
   const key = process.env.RESEND_API_KEY || "";
   if (!key) {
