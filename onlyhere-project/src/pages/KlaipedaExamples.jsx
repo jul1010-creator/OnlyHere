@@ -117,7 +117,7 @@ export const KlaipedaExamples = () => {
 
         {/* ── WALKS ───────────────────────────────────────────── */}
         <H2>A walk for the time they have</H2>
-        <Lead>A visitor scans the QR code at the terminal or the tourist centre and taps how long they have. Gemlyx makes one walk from what is open then, shows the offers that are on then, and gets them back in time. Places rated Can't Miss Out go in whenever they are open. Each phone gets one of two ways round, so a full ship splits in half instead of moving as one crowd.</Lead>
+        <Lead>A visitor scans the QR code at the terminal or the tourist centre and taps how long they have. Gemlyx makes one walk from what is open then, shows the offers that are on then, and gets them back in time. Places rated Can't Miss Out go in whenever they are open, and the stops are put in the order that walks least, so the walk does not double back. Each phone gets one of two ways round, so a full ship splits in half instead of moving as one crowd.</Lead>
 
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }} role="tablist" aria-label="Example walks">
           {EXAMPLE_WALKS.map(w => (
