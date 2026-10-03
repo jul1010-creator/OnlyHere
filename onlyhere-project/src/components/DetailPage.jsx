@@ -712,7 +712,7 @@ export const DetailPage = ({ item: itemIn, onClose, kind, liveInfo, liveInfoLoad
             //
             // Absent unless it was measured: no operator page read means no
             // row, not a reassuring one.
-            ...(item.__language?.level === "danish-only" && item.__language?.note
+            ...((item.__language?.level === "danish-only" || item.__language?.level === "local-only") && item.__language?.note
               ? [{ icon: "🗣", label: "Language", value: item.__language.note }]
               : []),
             { icon: "⛺", label: "Camping", value: item.camping },
