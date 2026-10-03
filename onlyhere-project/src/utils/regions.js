@@ -48,6 +48,7 @@
 import { KOMMUNER, K } from "../data/kommuner";
 import { fold, samePlaceName } from "./danishNames";
 import { KM_LAT, KM_LON } from "../data/mapShapes";
+import { COUNTRY_PROFILES, DEFAULT_COUNTRY, isInCountry } from "./countries";
 
 // Built FROM the kommune table rather than written beside it, so there is one
 // statement of which kommune is where. A second list would be the fifth
@@ -350,7 +351,13 @@ export const danishAddressIn = (text) => {
 // guessing.
 export const describeRegion = (lat, lon, precise) => {
   const k = kommuneAt(lat, lon);
-  if (!k) return "no coordinate near Denmark, so no region";
+  if (!k) {
+    // A Klaipėda point is not "near Denmark" and is not a failure either:
+    // Lithuania has no regions in Gemlyx yet. Said as what it is.
+    const land = Object.values(COUNTRY_PROFILES).find(c => c.code !== DEFAULT_COUNTRY && isInCountry({ lat, lon }, c.code));
+    if (land) return `in ${land.name}, where Gemlyx has no regions yet${precise === false ? ", from an approximate coordinate" : ""}`;
+    return "no coordinate near Denmark, so no region";
+  }
   const where = k[K.region] ? `${k[K.region]} (${k[K.name]} Kommune)` : `${k[K.name]} Kommune, which has no sub-region`;
   return precise === false ? `${where}, from an approximate coordinate` : where;
 };

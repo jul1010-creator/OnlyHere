@@ -24,7 +24,7 @@ import { nightlifeStreets } from "../data/nightlifeStreets";
 import { foodSpots } from "../data/food";
 import { detectLegMode, haversineKm, isFerryText } from "./helpers";
 import { containsName, variantsOf, distinctiveWords, fold } from "./danishNames";
-import { workingProfile } from "./countries";
+import { workingProfile, plainTownName } from "./countries";
 
 // Looks up a stop name against everything real Gemlyx already knows, so a
 // guide can show real price/hours/type instead of just repeating the AI's
@@ -323,10 +323,17 @@ export const MAX_TOWN_KM = 50;
 // English spellings, because a stop in "Kobenhavn" and a stop in "Copenhagen"
 // are the same claim and TOWN_COORDS is keyed on one of them.
 export const townPointFor = (town) => {
-  for (const v of variantsOf(String(town || ""))) {
+  // A Lithuanian municipality ("Klaipėdos m. sav.") is read as its town.
+  for (const v of variantsOf(plainTownName(town))) {
     const key = townKeyFor(v);
     if (key && TOWN_COORDS[key]) return { key, lat: TOWN_COORDS[key][0], lon: TOWN_COORDS[key][1] };
   }
+  // The same name with its accents written differently: "Klaipeda" and
+  // "Klaipéda" (as Oliver typed it on 3 Oct 2026) are Klaipėda. Whole names
+  // only, so nothing here can match a town inside a longer word.
+  const plain = fold(plainTownName(town));
+  const same = plain ? Object.keys(TOWN_COORDS).find(k => fold(k) === plain) : null;
+  if (same) return { key: same, lat: TOWN_COORDS[same][0], lon: TOWN_COORDS[same][1] };
   return null;
 };
 

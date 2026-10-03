@@ -111,6 +111,41 @@ export const looksDanishPage = (text) => {
   return hits / words >= DANISH_PAGE_RATIO;
 };
 
+// ── AND THE SAME, IN LITHUANIAN ─────────────────────────────────────
+// Oliver's Klaipėda runs, 3 Oct 2026: six of twelve read the operator's own
+// page and reported it "not clearly in one language", because the only
+// language this file knew was Danish. The same rule as above: function and
+// ticketing words only, never the letters, so "Klaipėda" in an English field
+// is never counted. Words that are also English words are left out.
+export const LITHUANIAN_MARKERS = [
+  "ir", "arba", "nėra", "yra", "taip", "pat", "nuo", "iki", "kur", "kas",
+  "kaina", "kainos", "bilietas", "bilietai", "bilieto", "bilietų", "nemokamai", "nemokamas",
+  "suaugusiems", "suaugusiųjų", "vaikams", "moksleiviams", "studentams", "senjorams", "pensininkams",
+  "lankytojams", "lankytojai", "darbo", "laikas", "valandos", "nedirba", "uždaryta", "atidaryta",
+  "pirmadienis", "antradienis", "trečiadienis", "ketvirtadienis", "penktadienis", "šeštadienis", "sekmadienis",
+  "pirmadieniais", "antradieniais", "sekmadieniais", "šventinėmis", "dienomis",
+];
+
+const MARKERS_FOR = { DK: DANISH_MARKERS, LT: LITHUANIAN_MARKERS };
+const LANGUAGE_NAME = { DK: "Danish", LT: "Lithuanian" };
+
+// The page test for any country this file knows. Denmark's is looksDanishPage,
+// unchanged.
+export const looksLocalPage = (text, country = "DK") => {
+  const markers = MARKERS_FOR[String(country || "DK").toUpperCase()];
+  if (!markers) return false;
+  if (markers === DANISH_MARKERS) return looksDanishPage(text);
+  const t = String(text || "");
+  const words = (t.match(/\p{L}+/gu) || []).length;
+  if (words < 60) return false;
+  let hits = 0;
+  for (const w of markers) {
+    const re = new RegExp(`(?<![\\p{L}])${w}(?![\\p{L}])`, "giu");
+    hits += (t.match(re) || []).length;
+  }
+  return hits / words >= DANISH_PAGE_RATIO;
+};
+
 // ── AN ENGLISH VERSION, STATED BY THE SITE ITSELF ───────────────────
 // Three shapes, because the pipeline holds three different things depending on
 // how a page was read. api/scan-source returns extracted TEXT and no HTML, so
@@ -134,14 +169,27 @@ export const hasEnglishVersion = ({ html = "", urls = [], text = "" } = {}) =>
 // Three outcomes and two of them say nothing, which is the important part. The
 // order matters: the page has to be judged Danish BEFORE the English switch is
 // looked for, because on an English page the word "English" is not a switch.
-export const languageBarrier = ({ siteText = "", siteHtml = "", siteUrls = [] } = {}) => {
+export const languageBarrier = ({ siteText = "", siteHtml = "", siteUrls = [], country = "DK" } = {}) => {
   const read = String(siteText || "").trim() || String(siteHtml || "").trim();
   if (!read) return { level: "unknown", note: "", why: "the operator's own site was not read, so nothing here is measured" };
-  if (!looksDanishPage(read)) {
+  const code = String(country || "DK").toUpperCase();
+  const local = code === "DK" ? looksDanishPage(read) : looksLocalPage(read, code);
+  if (!local) {
     return { level: "unknown", note: "", why: "the operator's page was read but is not clearly in one language" };
   }
   if (hasEnglishVersion({ html: siteHtml, urls: siteUrls, text: read })) {
     return { level: "has-english", note: "", why: "the operator's own site publishes an English version" };
+  }
+  // Abroad the sentence names the language and says what was measured, and
+  // nothing about whether people there speak English, which nothing here
+  // measured.
+  if (code !== "DK") {
+    const lang = LANGUAGE_NAME[code] || "the local language";
+    return {
+      level: "local-only",
+      note: `This one runs in ${lang}. The operator's own site has no English version, so expect the signs and the information on the spot in ${lang}.`,
+      why: `the operator's own site is in ${lang} and publishes no English version`,
+    };
   }
   return {
     level: "danish-only",

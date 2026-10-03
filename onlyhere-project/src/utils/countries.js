@@ -56,7 +56,38 @@ export const COUNTRY_PROFILES = {
     wikiLanguage: "lt",
     hub: "Vilnius",
     hubPoint: { lat: 54.6872, lon: 25.2797 },
+    // ── THE ONE TOWN GEMLYX COVERS HERE, FOR NOW ────────────────────
+    // Oliver's twelve Klaipėda drafts of 3 Oct 2026, which he ran with bare
+    // names: "Castle Site" was written about Trakai Island Castle and
+    // "Narrow-Gauge Railway Station" about the railway at Anykščiai, because
+    // a draft that names no town was searched against the whole of Lithuania.
+    // A Studio draft for this country that names no town is scoped to this
+    // one, and the run log says it was. Denmark has none, so a Danish draft
+    // behaves exactly as before.
+    homeTown: "Klaipėda",
   },
+};
+
+// ── A LITHUANIAN MUNICIPALITY IS NOT A TOWN NAME ────────────────────
+// Google writes a Klaipėda address "Teatro g., Klaipėda, 91248 Klaipėdos m.
+// sav.": the town, then the postcode and the municipality, in the genitive.
+// The Theatre Square run of 3 Oct 2026 took "Klaipėdos m. sav." for the town
+// and then could not find a centre for it. This turns the municipality into
+// the town it is named after: "m." is a city, "r." a district around one, and
+// either way the name before it is the town's, in the genitive. Anything that
+// is not a municipality comes back as it went in, so a Danish town is
+// untouched.
+export const plainTownName = (town) => {
+  const t = String(town || "").trim();
+  const m = t.match(/^(.+?)\s+(?:(?:m|r)\.\s*)?sav\.?$|^(.+?)\s+(?:miesto|rajono)?\s*savivaldybė$/i);
+  if (!m) return t;
+  const gen = (m[1] || m[2] || "").trim();
+  // The genitive endings Lithuanian town names take: Klaipėdos, Neringos and
+  // Palangos from -a, Vilniaus from -us, Kauno from -as.
+  if (/os$/i.test(gen)) return gen.replace(/os$/i, "a");
+  if (/aus$/i.test(gen)) return gen.replace(/aus$/i, "us");
+  if (/o$/i.test(gen)) return gen.replace(/o$/i, "as");
+  return gen;
 };
 
 export const countryProfile = (code) => COUNTRY_PROFILES[code] || COUNTRY_PROFILES[DEFAULT_COUNTRY];

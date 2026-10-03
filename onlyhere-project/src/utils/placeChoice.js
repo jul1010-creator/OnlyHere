@@ -259,9 +259,22 @@ export const listingMatchesSubject = (typed, town, listing, { theNameIsAStreet =
   if (!got || !clean(typed)) return false;
   if (theNameIsAStreet) return streetListingMatches(typed, town, got);
   if (sameSubject(typed, got)) return true;
+  if (sameWordsReordered(typed, got)) return true;
   if (sameAcrossLanguages(typed, got)) return true;
   const core = subjectCore(typed, town);
   return core !== clean(typed) && sameSubject(core, got);
+};
+
+// ── THE SAME WORDS IN ANOTHER ORDER ─────────────────────────────────
+// "Museum of the History of Lithuania Minor" and "History Museum of Lithuania
+// Minor" are one name written two ways, and Google writes the second. Every
+// word has to be on both sides and nothing added, once "the", "of" and "and"
+// are set aside, so "Castle Museum" is still not "Castle".
+const LINK_WORDS = new Set(["the", "of", "and", "a", "an"]);
+const wordSet = (v) => [...new Set(fold(clean(v)).split(/[^\p{L}\p{N}]+/u).filter(w => w && !LINK_WORDS.has(w)))].sort();
+export const sameWordsReordered = (typed, listing) => {
+  const a = wordSet(typed), b = wordSet(listing);
+  return a.length >= 2 && a.length === b.length && a.every((w, i) => w === b[i]);
 };
 
 // ── THE SAME PLACE, NAMED IN ENGLISH AND IN LITHUANIAN ──────────────
@@ -289,12 +302,12 @@ const KINDS = [
   ["street", "gatve", "g"],
   ["beach", "papludimys"],
   ["church", "baznycia", "cathedral", "katedra"],
-  ["castle", "pilis", "piliaviete"],
+  ["castle", "pilis", "pilies", "piliaviete"],
   ["dune", "kopa", "kopos"],
   ["market", "turgus", "turgaviete"],
 ];
 const KIND_OF = new Map(KINDS.flatMap((ws, i) => ws.map(w => [w, i])));
-const FILLER = new Set(["the", "of", "by", "at", "and", "in", "on", "ir", "prie", "klaipeda", "klaipedos", "lithuania", "lietuva"]);
+const FILLER = new Set(["the", "of", "by", "at", "and", "in", "on", "ir", "prie", "klaipeda", "klaipedos", "lithuania", "lietuva", "lietuvos"]);
 const nameParts = (v) => {
   const kinds = new Set(), words = [];
   fold(clean(v)).split(/[^\p{L}\p{N}]+/u).filter(Boolean).forEach(w => {
@@ -311,6 +324,9 @@ const LT_STEMS = {
   sculpture: "skulptur", sculptures: "skulptur", history: "istorij", historical: "istorij",
   sea: "jur", maritime: "jur", art: "men", arts: "men", old: "sen", town: "miest", city: "miest",
   blacksmith: "kalv", blacksmiths: "kalv", forge: "kalv", lighthouse: "svyturi",
+  // "Mažosios Lietuvos istorijos muziejus" is the Museum of the History of
+  // Lithuania Minor (Oliver's runs, 3 Oct 2026).
+  minor: "mazos",
   amber: "ginatar", fishermen: "zvej", fishing: "zvej", ferry: "kelt", harbour: "uost", port: "uost",
 };
 const sameStem = (a, b) => {
