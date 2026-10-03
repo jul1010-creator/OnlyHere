@@ -449,6 +449,73 @@ export const nextOpen = (lines, { day, minutes }) => {
   return null;
 };
 
+// ── NO WALKING THE SAME STREET TWICE ────────────────────────────────
+// Oliver, 3 Oct 2026, of the centre walk opened in Google Maps: "we're going
+// in the right direction. But it looks messy". It went from the centre to
+// Theatre Square, down to the castle, back up to the ship and back to the
+// centre, so the same streets were walked twice. Whoever made the order, the
+// model or the rules, it is then made shorter, start to start, two ways until
+// neither helps: two legs that cross are uncrossed, and a place sitting out of
+// the way is moved to where it adds the least. The new order is used only
+// when the rules keep every place the first one kept and no meal moves more
+// than MEAL_SHIFT minutes, so an opening hour or a band starting at 20:00
+// still wins over a tidier line on the map.
+const loopKm = (start, pts) => {
+  let km = 0, here = start;
+  for (const p of pts) { km += kmApart(here, p); here = p; }
+  return km + kmApart(here, start);
+};
+
+export const untangle = (order, candidates, ctx) => {
+  const { start } = ctx;
+  const byId = new Map(candidates.map(c => [c.id, c]));
+  let list = (Array.isArray(order) ? order : []).filter(o => o && byId.has(o.id));
+  // Two places or fewer make the same loop either way round.
+  if (list.length < 3) return list;
+  const length = (l) => loopKm(start, l.map(o => byId.get(o.id)));
+  let best = length(list);
+  for (let round = 0, better = true; better && round < 50; round++) {
+    better = false;
+    const tries = [];
+    for (let i = 0; i < list.length - 1; i++) {
+      for (let j = i + 1; j < list.length; j++) {
+        // Uncross: the places from i to j walked the other way.
+        if (!(i === 0 && j === list.length - 1)) tries.push([...list.slice(0, i), ...list.slice(i, j + 1).reverse(), ...list.slice(j + 1)]);
+      }
+    }
+    for (let i = 0; i < list.length; i++) {
+      for (let j = 0; j < list.length; j++) {
+        if (i === j) continue;
+        // Move one place from i to j.
+        const l = list.slice();
+        const [o] = l.splice(i, 1);
+        l.splice(j, 0, o);
+        tries.push(l);
+      }
+    }
+    for (const l of tries) {
+      const km = length(l);
+      if (km < best - 0.005) { best = km; list = l; better = true; }
+    }
+  }
+  return list;
+};
+
+export const MEAL_SHIFT = 45;
+const walkedKm = (w, start) => loopKm(start, w.stops);
+
+export const tidyWalk = (order, candidates, ctx) => {
+  const first = scheduleWalk(order, candidates, ctx);
+  const tidy = untangle(order, candidates, ctx);
+  const same = tidy.length === (order || []).length && tidy.every((o, i) => o.id === order[i].id);
+  if (same) return first;
+  const second = scheduleWalk(tidy, candidates, ctx);
+  const kept = new Map(second.stops.map(s => [s.id, s]));
+  const keepsAll = first.stops.every(s => kept.has(s.id));
+  const mealStays = keepsAll && first.stops.every(s => s.kind !== "Food" || Math.abs(kept.get(s.id).arrive - s.arrive) <= MEAL_SHIFT);
+  return mealStays && walkedKm(second, ctx.start) < walkedKm(first, ctx.start) - 0.005 ? second : first;
+};
+
 // ── THE SAME PLACES THE OTHER WAY ROUND ─────────────────────────────
 // Oliver, 2 Oct 2026, of the QR codes: "Can you imagine 30 people use on, and
 // they walk on top of oneanother". Everybody in a half hour gets the same
