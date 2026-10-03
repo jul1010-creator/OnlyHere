@@ -1,0 +1,9 @@
+# The repository root. The app has its own list in onlyhere-project/.gitignore.
+# Local env files hold real keys and must never be committed (security review,
+# 3 Oct 2026, finding 10).
+.env
+.env.*
+!.env.example
+.vercel
+node_modules
+.DS_Store
