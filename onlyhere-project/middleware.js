@@ -168,9 +168,22 @@ const fetchShell = async (origin) => {
   } catch { return null; }
 };
 
+// ── THE SAME HEADERS AS EVERY OTHER PAGE ────────────────────────────
+// A page this file writes itself does not pass through vercel.json's header
+// list, so the share pages carried none of them and could be framed by any
+// site. Security review, 3 Oct 2026, finding 5. Kept in step with vercel.json
+// by the suite.
+const PAGE_HEADERS = {
+  "strict-transport-security": "max-age=63072000; includeSubDomains",
+  "x-content-type-options": "nosniff",
+  "referrer-policy": "strict-origin-when-cross-origin",
+  "x-frame-options": "DENY",
+};
+
 const cardResponse = (html) => new Response(html, {
   status: 200,
   headers: {
+    ...PAGE_HEADERS,
     "content-type": "text/html; charset=utf-8",
     // Without Vary a CDN is free to hand one link's HTML to the next person
     // who opens a different one.
@@ -349,13 +362,21 @@ export default async function middleware(request) {
     // out instead — which Facebook and WhatsApp then cache against that URL for
     // hours. A timeout converts the one failure mode catch cannot see into one
     // it can.
+    // By its id through gemlyx_guide(), the only way the table is read since
+    // 1 Oct 2026 (see GuidePage.jsx).
     const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/gemlyx_guides?select=payload&id=eq.${encodeURIComponent(id)}`,
-      { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }, signal: AbortSignal.timeout(2500) },
+      `${SUPABASE_URL}/rest/v1/rpc/gemlyx_guide`,
+      { method: "POST", headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify({ p_id: String(id) }), signal: AbortSignal.timeout(2500) },
     );
-    if (!res.ok) return next();
-    const rows = await res.json();
-    const guide = (Array.isArray(rows) && rows[0]?.payload) || null;
+    let got = await res.json().catch(() => null);
+    // Before the SQL has made gemlyx_guide(), the old row read (see GuidePage.jsx).
+    if (res.status === 404 || got?.code === "PGRST202") {
+      const old = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_guides?select=payload&id=eq.${encodeURIComponent(String(id))}`,
+        { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }, signal: AbortSignal.timeout(2500) });
+      const rows = old.ok ? await old.json().catch(() => null) : null;
+      got = Array.isArray(rows) && rows[0]?.payload ? rows[0].payload : null;
+    } else if (!res.ok) return next();
+    const guide = (got && typeof got === "object" && !Array.isArray(got) && !got.code) ? got : null;
     if (!guide) return next();
 
     // The real built index.html, so the response is a working page and not a
@@ -379,6 +400,7 @@ export default async function middleware(request) {
       {
         status: 200,
         headers: {
+          ...PAGE_HEADERS,
           "content-type": "text/html; charset=utf-8",
           // Without Vary a CDN is free to hand one link's HTML to the next
           // person who opens a different one.
