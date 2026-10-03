@@ -83,7 +83,7 @@ import { AffiliatesPage } from "./components/AffiliatesPage";
 import { KlaipedaDemo } from "./pages/KlaipedaDemo";
 import { KlaipedaExamples } from "./pages/KlaipedaExamples";
 import { KlaipedaSculptures } from "./pages/KlaipedaSculptures";
-import { COUNTRY_PROFILES, DEFAULT_COUNTRY, countryProfile, setWorkingCountry, countryParam, rowCountry, activeCountry, homePath } from "./utils/countries";
+import { COUNTRY_PROFILES, DEFAULT_COUNTRY, countryProfile, setWorkingCountry, countryParam, rowCountry, activeCountry, homePath, plainTownName } from "./utils/countries";
 import { KLAIPEDA_DEMO_PATH } from "./data/klaipedaDemo";
 import { KLAIPEDA_EXAMPLES_PATH } from "./data/klaipedaExamples";
 import { KLAIPEDA_SCULPTURES_PATH } from "./data/klaipedaSculptures";
@@ -4130,6 +4130,11 @@ Say which answer came from which source, so a fact from a vouched page and a fac
     const draftLand = countryProfile(opts?.country || studioCountry);
     const draftInDenmark = draftLand.code === DEFAULT_COUNTRY;
     setWorkingCountry(draftLand.code);
+    // A price as the run log writes it. priceLabel already says "kr" or "EUR"
+    // when the page did, and the log used to add " DKK" after it anyway, so a
+    // Klaipėda museum read "4 EUR DKK". A bare figure gets this country's
+    // currency; one that names its own keeps it.
+    const priceWithUnit = (p) => (/[a-z]/i.test(String(p || "")) ? String(p) : `${p} ${draftLand.currency}`);
     // ── A BACKGROUND QUEUE RUN MUST NOT TOUCH THE EDITOR ───────────
     // Oliver, 7 Aug 2026: "whenever it is the next in queue, it can't publish
     // because the other is published."
@@ -4266,7 +4271,29 @@ Say which answer came from which source, so a fact from a vouched page and a fac
       // deliberately NOT in it, for the reason written at the sources block.
       const existingRow = (manageItems || []).find(r => r?.type === sType && samePlaceName(r?.payload?.name, name));
       const knownRow = existingRow?.payload || null;
-      draftTown = knownRow?.town || knownRow?.city || knownRow?.location || hint?.town || townKeyFor(name) || "";
+      draftTown = plainTownName(knownRow?.town || knownRow?.city || knownRow?.location || hint?.town || townKeyFor(name) || "");
+      // ── ABROAD, A DRAFT THAT NAMES NO TOWN IS IN THE ONE WE COVER ──
+      //
+      // Oliver's twelve Klaipėda drafts, 3 Oct 2026, run with bare names.
+      // "Castle Site" came back about Trakai Island Castle and "Narrow-Gauge
+      // Railway Station" about the railway at Anykščiai: no town was known, so
+      // every search said only "Lithuania", and Google's refused guess was
+      // the place the research then read about anyway. In Denmark a bare name
+      // is still searched as it always was; abroad there is one town Gemlyx
+      // covers, and a draft that names no other is about that one.
+      // A town written after a comma is the town, abroad, where the table of
+      // towns holds only the one: "Hagen's Hill, Neringa".
+      const afterComma = !draftInDenmark && name.includes(",") ? plainTownName(name.slice(name.lastIndexOf(",") + 1)) : "";
+      if (!draftTown && afterComma && !/\d/.test(afterComma)) draftTown = afterComma;
+      if (!draftTown && !draftInDenmark && draftLand.homeTown) {
+        draftTown = draftLand.homeTown;
+        note("Which town this draft is in", {
+          provider: "fetch", outcome: "ok", used: true,
+          detail: `the name says no town, and ${draftLand.homeTown} is the one town Gemlyx covers in ${draftLand.name}`,
+          got: `scoped to ${draftLand.homeTown}: every search, the Google lookup and the coordinate check name it`,
+          why: `Searched against the whole of ${draftLand.name}, a name like "Castle Site" lands on whichever castle ranks first. A draft about somewhere else names its town, as in "${name}, Neringa".`,
+        });
+      }
       // The row's own stated island only. The kommune half is asked later, in
       // islandHere, because the kommune is not known until the coordinate is.
       knownIsland = namedIslandOf(knownRow || {}, "");
@@ -4349,7 +4376,7 @@ Say which answer came from which source, so a fact from a vouched page and a fac
       // only time it is worth anything.
       if (!coords) {
         try {
-          const pr = await studioFetch(`/api/places-locate?name=${encodeURIComponent(draftTown ? `${name}, ${draftTown}` : name)}${countryParam(draftLand.code)}`);
+          const pr = await studioFetch(`/api/places-locate?name=${encodeURIComponent(draftTown && !fold(name).includes(fold(draftTown)) ? `${name}, ${draftTown}` : name)}${countryParam(draftLand.code)}`);
           const pd = await pr.json();
           // ── RUNGSTED IS NOT RINGSTED ────────────────────────────
           //
@@ -4388,7 +4415,10 @@ Say which answer came from which source, so a fact from a vouched page and a fac
           // sources out. A missing region costs a weaker search. A wrong one
           // costs a whole draft about the wrong town, silently.
           const placesOk = pr.ok && !pd.error && Number.isFinite(pd.lat) && Number.isFinite(pd.lon);
-          const nameMatches = placesOk && listingMatchesSubject(name, draftTown, pd.name || pd.address, { theNameIsAStreet: NAME_IS_A_STREET.includes(sType) });
+          // Abroad, Google's English name for the same listing is asked too
+          // (places-locate), so "Pilies muziejus" can be the Castle Museum.
+          const nameMatches = placesOk && [pd.name || pd.address, pd.nameEn]
+            .some(n => n && listingMatchesSubject(name, draftTown, n, { theNameIsAStreet: NAME_IS_A_STREET.includes(sType) }));
           // ── AND THE NAME MATCHING IS NOT THE WHOLE QUESTION ──────
           //
           // TinderBox, 16 Sep 2026. Step 1: "55.6287, 12.6492 via Nominatim, on
@@ -4639,12 +4669,17 @@ Say which answer came from which source, so a fact from a vouched page and a fac
       // America. Outside Denmark a query without the town or the country gets
       // both, and the place's own Lithuanian name, once Google has given it,
       // gets a query of its own, which is how the Lithuanian pages are reached.
+      // ── AND WHERE MEANS THE TOWN, ONCE THERE IS ONE ─────────────────
+      // A query that said only "Lithuania" counted as scoped, so "Castle Site
+      // Lithuania" went out and Trakai came back (Oliver's runs, 3 Oct 2026).
+      // With a town known, a query has to name the town, and gets whichever of
+      // town and country it is missing.
       const whereWords = [draftTown, draftLand.name].filter(Boolean);
-      const saysWhere = (q) => whereWords.some(w => fold(q).includes(fold(w)));
+      const saysWhere = (q) => (draftTown ? fold(q).includes(fold(draftTown)) : whereWords.some(w => fold(q).includes(fold(w))));
       const abroadQueries = draftInDenmark ? [] : [
         ...(placesName && fold(placesName) !== fold(name) ? [`${placesName} ${draftTown || draftLand.name}`] : []),
       ];
-      const scopeQuery = (q) => (draftInDenmark || saysWhere(q) ? q : `${q} ${whereWords.join(" ")}`);
+      const scopeQuery = (q) => (draftInDenmark || saysWhere(q) ? q : `${q} ${whereWords.filter(w => !fold(q).includes(fold(w))).join(" ")}`);
       const allQueries = [...cfg.queries.map(scopeQuery), ...plannedQueries.map(scopeQuery), ...abroadQueries, ...(daName ? [`${daName} ${daWords}`] : [])];
       let context = "";
       let candidateUrls = [];
@@ -5005,7 +5040,13 @@ Say which answer came from which source, so a fact from a vouched page and a fac
       // postcode tier geocodes. And it lands on Google's own point for the
       // building, where a postcode lands on the middle of a postal district and
       // marks itself imprecise.
-      if (!placed && refusedListing) {
+      // ── ABROAD, A TOWN CENTRE STILL ASKS FOR THE VENUE ──────────────
+      // A Klaipėda draft that names no town is scoped to Klaipėda (see "Which
+      // town this draft is in"), so when Google's listing is refused the town
+      // centre places it, imprecisely. Hagen's Hill was placed by this check
+      // on 3 Oct 2026 with no town at all; a town centre must not stop it now.
+      // Denmark keeps exactly the rule it had.
+      if ((!placed || (!draftInDenmark && placed.precise === false)) && refusedListing) {
         try {
           // The distance is measured here and handed in as a number, so the
           // rule stays pure. townPointFor holds 34 towns and misses most of the
@@ -7082,17 +7123,17 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
         // Measured off the operator's own pages, which have just been read for
         // exactly this reason, and never inferred from the town, the scale or
         // the name. No operator page means no claim. See utils/languageBarrier.js.
-        const lang = languageBarrier({ siteText: scrapedSiteText, siteUrls: Object.keys(pagesByUrl || {}) });
+        const lang = languageBarrier({ siteText: scrapedSiteText, siteUrls: Object.keys(pagesByUrl || {}), country: draftLand.code });
         note("What language this runs in", {
           provider: "fetch",
           detail: "the operator's own pages, read for a language and for an English version of themselves",
           outcome: lang.level === "unknown" ? "empty" : "ok",
-          got: lang.level === "danish-only"
-            ? "the organiser publishes in Danish only, so the reader is told to expect Danish"
+          got: lang.level === "danish-only" || lang.level === "local-only"
+            ? `the organiser publishes in ${draftLand.code === "LT" ? "Lithuanian" : "Danish"} only, so the reader is told to expect it`
             : lang.level === "has-english"
               ? "the organiser publishes an English version, so nothing is said"
               : lang.why,
-          used: lang.level === "danish-only",
+          used: lang.level === "danish-only" || lang.level === "local-only",
         });
         entryLanguage = lang;
         // ── AND A SILENT ONE IS THE WHOLE COMPLAINT ─────────────────
@@ -8462,7 +8503,19 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
             // could not be read. The operator sets a price and a ticket seller
             // takes the money; everybody else is repeating it. See priceSource.
             mayDecide: priceDecider,
-            isAbout: (pageText, url) => sourceIsAboutPlace(pageText, { name: t?.name, town: t?.town || t?.city || t?.location, url, theNameIsAStreet: NAME_IS_A_STREET.includes(sType) }),
+            // ── AND THE PLACE'S OWN SITE, BY ITS OWN NAME ──────────
+            // Oliver's Klaipėda runs, 3 Oct 2026: "mlimuziejus.lt states 4
+            // EUR but the page is not about Museum of the History of
+            // Lithuania Minor". That is the museum's own site, which writes
+            // its name in Lithuanian. The source filter above already passes
+            // the place's own host and Google's spelling; this test now does
+            // the same.
+            isAbout: (pageText, url) => sourceIsAboutPlace(pageText, {
+              name: t?.name, town: t?.town || t?.city || t?.location, url,
+              alsoKnownAs: placesName && placesName !== t?.name ? [placesName] : [],
+              ownHost: placesWebsite || t?.website || "",
+              theNameIsAStreet: NAME_IS_A_STREET.includes(sType),
+            }),
           });
           // ── AND A REFUSAL IS NOT A SOURCE ────────
           //
@@ -8493,7 +8546,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
               provider: "fetch",
               detail: "the page whose own text carries the figure in this draft",
               outcome: "empty", used: false,
-              got: `${domainOf(src.url)} states ${src.price} DKK but the page is not about ${t?.name || "this entry"}, so it is not a source for it. Nothing recorded rather than a citation that leads nowhere.`,
+              got: `${domainOf(src.url)} states ${priceWithUnit(src.price)} but the page is not about ${t?.name || "this entry"}, so it is not a source for it. Nothing recorded rather than a citation that leads nowhere.`,
             });
           } else if (src) {
             t.__priceSource = { url: src.url, host: domainOf(src.url), price: src.price, at: new Date().toISOString() };
@@ -8501,7 +8554,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
               provider: "fetch",
               detail: "the page whose own text carries the figure in this draft",
               outcome: "ok", used: true,
-              got: `${src.price} DKK is on ${domainOf(src.url)}${src.ranked ? ", the highest-ranked page read that states it" : " (a page outside the ranked list)"}: ${src.url.slice(0, 120)}`,
+              got: `${priceWithUnit(src.price)} is on ${domainOf(src.url)}${src.ranked ? ", the highest-ranked page read that states it" : " (a page outside the ranked list)"}: ${src.url.slice(0, 120)}`,
             });
           } else if (pt.checked && pt.draft.length) {
             note("Where the price came from", {
