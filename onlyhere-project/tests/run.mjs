@@ -81132,7 +81132,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("the walkable centre is Theatre Square where it is, with the terminal inside it", Math.abs(M.WK.WALKABLE_CENTRES.LT[0].lat - 55.7078) < 0.001 && !!M.WK.centreOf("LT", start));
   const api = readFileSync(join(root, "api/plan-now.js"), "utf8");
   ok("the route is cached for its half hour and only then", /"public, s-maxage=1800, stale-while-revalidate=120"/.test(api) && /slotAccepted\(String\(q\.slot \|\| ""\), now\)/.test(api));
-  ok("the model only orders, and the rules decide", /scheduleWalk\(withMustSee\(order, candidates, ctx\), candidates, ctx\)/.test(api) && /if \(!walk\) walk = scheduleWalk\(withMustSee\(ruleOrder\(candidates, ctx\), candidates, ctx\), candidates, ctx\);/.test(api));
+  ok("the model only orders, and the rules decide", /tidyWalk\(withMustSee\(order, candidates, ctx\), candidates, ctx\)/.test(api) && /if \(!walk\) walk = tidyWalk\(withMustSee\(ruleOrder\(candidates, ctx\), candidates, ctx\), candidates, ctx\);/.test(api));
   // The first deploy failed to start: config.js reads import.meta, and Vercel
   // loads a route as CommonJS. No route may import it.
   ok("no route imports the browser's config", readdirSync(join(root, "api")).filter(f => f.endsWith(".js")).every(f => !/from "\.\.\/src\/config\.js"/.test(readFileSync(join(root, "api", f), "utf8"))));
@@ -81473,6 +81473,51 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("it has its own address, stays out of search, and the examples page links to it", S.KLAIPEDA_SCULPTURES_PATH === "/lithuania/sculptures" && /noindex/.test(pg) && /<Route path=\{KLAIPEDA_SCULPTURES_PATH\} element=\{<KlaipedaSculptures \/>\} \/>/.test(readFileSync(join(root, "src/App.jsx"), "utf8")) && /href=\{KLAIPEDA_SCULPTURES_PATH\}/.test(readFileSync(join(root, "src/pages/KlaipedaExamples.jsx"), "utf8")));
   const shown = JSON.stringify(S.SCULPTURES) + JSON.stringify(S.EXAMPLE_WEEK) + pg.replace(/\/\/.*$/gm, "");
   ok("no dashes and none of his banned words", !/[—–]/.test(shown) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(shown));
+}
+
+// ── Batch 190: no walking the same street twice ──
+// Oliver, 3 Oct 2026, of the centre walk opened in Google Maps: "we're going
+// in the right direction. But it looks messy".
+{
+  const N = M.NP, X = M.KEX;
+  const C = N.NOW_STARTS.LT.centre;
+  const row = (id, name, lat, lon, extra = {}) => ({ id, type: "free", payload: { name, country: "LT", __lat: lat, __lon: lon, ...extra } });
+  const cands = N.nowCandidates([
+    row(1, "Theatre Square", 55.7078, 21.13163),
+    row(2, "Castle", 55.70592, 21.12891),
+    row(3, "Ship", 55.71034, 21.13491),
+    row(4, "Corner", 55.7087, 21.1339),
+  ], { country: "LT", zone: "Europe/Vilnius", now: new Date("2026-10-15T11:00:00Z") });
+  const ctx = { country: "LT", start: C, startClock: { day: 4, minutes: 840 }, budget: 180, margin: 0 };
+  const messy = [{ id: "free:4", stay: 15 }, { id: "free:1", stay: 15 }, { id: "free:2", stay: 15 }, { id: "free:3", stay: 15 }];
+  const km = (a, b) => Math.hypot((a.lat - b.lat) * 111.2, (a.lon - b.lon) * 111.2 * Math.cos(a.lat * Math.PI / 180));
+  const loop = (ids) => { const byId = Object.fromEntries(cands.map(c => [c.id, c])); let d = 0, here = C; for (const id of ids) { d += km(here, byId[id]); here = byId[id]; } return d + km(here, C); };
+  const tidy = N.untangle(messy, cands, ctx).map(o => o.id);
+  is("the centre walk no longer goes down to the castle and back up to the ship", tidy, ["free:4", "free:3", "free:1", "free:2"]);
+  ok("and it is shorter, with the same places", loop(tidy) < loop(messy.map(o => o.id)) && [...tidy].sort().join() === messy.map(o => o.id).sort().join());
+  ok("an order already tidy is left as it is", N.untangle([{ id: "free:4" }, { id: "free:3" }, { id: "free:1" }, { id: "free:2" }], cands, ctx).map(o => o.id).join() === tidy.join());
+  ok("two places are left as they are, either way round is the same loop", N.untangle([{ id: "free:2" }, { id: "free:3" }], cands, ctx).map(o => o.id).join() === "free:2,free:3");
+  const walk = N.tidyWalk(messy, cands, ctx);
+  ok("the walk served is the tidy one, every place kept", walk.stops.map(s => s.id).join() === tidy.join());
+  // The ship opens at 15:00 in this test, so it only fits at the end, and
+  // the tidy order, which would go there first, is not used.
+  const late = N.nowCandidates([
+    row(1, "Theatre Square", 55.7078, 21.13163),
+    row(2, "Castle", 55.70592, 21.12891),
+    row(3, "Ship", 55.71034, 21.13491, { __hours: { hours: ["Thursday: 15:00 to 20:00"] } }),
+    row(4, "Corner", 55.7087, 21.1339),
+  ], { country: "LT", zone: "Europe/Vilnius", now: new Date("2026-10-15T11:00:00Z") });
+  const first = [{ id: "free:4", stay: 15 }, { id: "free:1", stay: 15 }, { id: "free:2", stay: 15 }, { id: "free:3", stay: 15 }];
+  const kept = N.tidyWalk(first, late, ctx);
+  ok("an opening hour wins over a tidier line on the map", N.untangle(first, late, ctx).map(o => o.id).join() !== first.map(o => o.id).join() && kept.stops.map(s => s.id).join() === "free:4,free:1,free:2,free:3");
+  const api = readFileSync(join(root, "api/plan-now.js"), "utf8");
+  ok("the live route untangles both the model's order and the rules' order", (api.match(/tidyWalk\(withMustSee\(/g) || []).length === 2);
+  const thursday = X.runExample(X.EXAMPLE_WALKS.find(e => e.id === "thursday"));
+  is("the Thursday example walks the ship before the square and the castle", thursday.walk.stops.map(s => s.id), ["food:bakery", "free:meridianas", "free:theatre", "free:castle"]);
+  const tuesday = X.runExample(X.EXAMPLE_WALKS.find(e => e.id === "tuesday"));
+  ok("a walk that was already tidy off the ship is unchanged", tuesday.walk.stops.map(s => s.id).join() === "free:ghost,free:castle,booking:amber,free:theatre,food:fish,free:meridianas");
+  ok("a meal may move by no more than three quarters of an hour", N.MEAL_SHIFT === 45 && /Math\.abs\(kept\.get\(s\.id\)\.arrive - s\.arrive\) <= MEAL_SHIFT/.test(readFileSync(join(root, "src/utils/nowPlanner.js"), "utf8")));
+  ok("no example still calls the History Museum next door to the castle", !/Next door/.test(JSON.stringify(X.WEATHER_WALKS)));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
