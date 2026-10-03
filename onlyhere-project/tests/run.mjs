@@ -407,13 +407,13 @@ writeFileSync(entry, `
   export { denmarkClock, sunElevation, isNightThere, SUNSET_ELEVATION } from ${JSON.stringify(join(root, "src/utils/denmarkTime.js"))};
   export { weatherIcon } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { readTheDay, skyFor } from ${JSON.stringify(join(root, "src/components/WeatherHeaderStrip.jsx"))};
-  export { COUNTRY_PROFILES, DEFAULT_COUNTRY, countryProfile, rowCountry, countryFromPath, activeCountry, isInCountry, setWorkingCountry, workingCountry, workingProfile, countryParam, homePath, countryKey } from ${JSON.stringify(join(root, "src/utils/countries.js"))};
+  export { COUNTRY_PROFILES, DEFAULT_COUNTRY, countryProfile, rowCountry, countryFromPath, activeCountry, isInCountry, setWorkingCountry, workingCountry, workingProfile, countryParam, homePath, countryKey, plainTownName } from ${JSON.stringify(join(root, "src/utils/countries.js"))};
   export { shapeForLive, madeHeading, isPublisherNote, PUBLISHER_NOTE, cleanCredit } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
   export { longestEcho, echoWords, isNameEcho, echoInDraft, describeEcho, ECHO_RUN } from ${JSON.stringify(join(root, "src/utils/echoCheck.js"))};
-  export { CHOICE_LIMIT, cleanCandidates, sameSubject, sameCandidate, needsChoosing, choicesFor, describeChoosing, applyChoice, choiceNote, subjectCore, listingMatchesSubject, streetListingMatches, describeListingRefusal, sameAcrossLanguages } from ${JSON.stringify(join(root, "src/utils/placeChoice.js"))};
+  export { CHOICE_LIMIT, cleanCandidates, sameSubject, sameCandidate, needsChoosing, choicesFor, describeChoosing, applyChoice, choiceNote, subjectCore, listingMatchesSubject, streetListingMatches, describeListingRefusal, sameAcrossLanguages, sameWordsReordered } from ${JSON.stringify(join(root, "src/utils/placeChoice.js"))};
   export { headingSkeleton, skeletonKey, openingKey, spreadBy, skeletonSpread, openingSpread, describeSameness, samenessReport } from ${JSON.stringify(join(root, "src/utils/sameness.js"))};
   export { moneyTraceable, COMPRESSION_GLANCE, glanceShapeProblem, EXTRACTABLE_GLANCE, EDITORIAL_GLANCE, NEVER_EXTRACT, CLOSED_OR_DERIVED, glanceFieldsFor, numbersTraceable, freeClaimTraceable, saysFreeOnly, statesAnAmount, GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, describeGlance, staleUncertainties, describeStale } from ${JSON.stringify(join(root, "src/utils/glanceExtract.js"))};
-  export { DANISH_MARKERS, danishWordsIn, looksUntranslated, looksDanishPage, hasEnglishVersion, languageBarrier } from ${JSON.stringify(join(root, "src/utils/languageBarrier.js"))};
+  export { DANISH_MARKERS, LITHUANIAN_MARKERS, looksLocalPage, danishWordsIn, looksUntranslated, looksDanishPage, hasEnglishVersion, languageBarrier } from ${JSON.stringify(join(root, "src/utils/languageBarrier.js"))};
   export { readerLanguage, languageName, answerInLanguage, languageBlock, nativeBlock } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
   export { keepLanguageOf } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
   export { readerView } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
@@ -9334,7 +9334,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // partOf: "" and part: "". The Studio exists to make first drafts, and the
   // first draft of a place was the one handed no context at all.
   ok("a first draft falls back past the row it does not have",
-     /draftTown = knownRow\?\.town \|\| knownRow\?\.city \|\| knownRow\?\.location \|\| hint\?\.town \|\| townKeyFor\(name\) \|\| "";/.test(app5));
+     /draftTown = plainTownName\(knownRow\?\.town \|\| knownRow\?\.city \|\| knownRow\?\.location \|\| hint\?\.town \|\| townKeyFor\(name\) \|\| ""\);/.test(app5));
   // ── AND IT IS DECLARED WHERE THE GEOCODER CAN SEE IT ─────────────
   // It was `const draftTown` INSIDE the founder-source block, which closes
   // about two hundred lines before the geocode fallback that reads it. Oliver's
@@ -26378,14 +26378,14 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
 
   // AND IT REACHES THE READER. Measured, stamped, stored, shown.
   ok("the language is measured off the operator's own pages",
-    /languageBarrier\(\{ siteText: scrapedSiteText, siteUrls: Object\.keys\(pagesByUrl \|\| \{\}\) \}\)/.test(appK));
+    /languageBarrier\(\{ siteText: scrapedSiteText, siteUrls: Object\.keys\(pagesByUrl \|\| \{\}\), country: draftLand\.code \}\)/.test(appK));
   ok("and stamped on the row like the ticket source is", /t\.__language = \{ level: entryLanguage\.level/.test(appK));
   const shapeK = readFileSync(join(root, "src/utils/studioContent.js"), "utf8");
   ok("it survives to what gets stored", /__language: \{ level: t\.__language\.level/.test(shapeK));
   ok("but only when it was measured", /t\.__language\.level !== "unknown"/.test(shapeK));
   const detailK = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
   ok("and an event page shows it", /icon: "🗣", label: "Language", value: item\.__language\.note/.test(detailK));
-  ok("absent unless there is a barrier to report", /item\.__language\?\.level === "danish-only" && item\.__language\?\.note/.test(detailK));
+  ok("absent unless there is a barrier to report", /\(item\.__language\?\.level === "danish-only" \|\| item\.__language\?\.level === "local-only"\) && item\.__language\?\.note/.test(detailK));
 }
 
 
@@ -49499,7 +49499,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // Wired, with a subject the caller actually holds.
   {
     const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
-    ok("the caller passes a subject test", /priceSource\([\s\S]{0,600}?isAbout:/.test(app));
+    ok("the caller passes a subject test", /priceSource\([\s\S]{0,1200}?isAbout:/.test(app));
     ok("built from sourceIsAboutPlace rather than a second matcher", /isAbout: \(pageText, url\) => sourceIsAboutPlace\(/.test(app));
     ok("and an off-subject hit stores nothing", /src && src\.offSubject/.test(app));
   }
@@ -55360,7 +55360,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("the refusal message still promises no coordinate",
       /no address, no hours, no coordinate/.test(readFileSync(join(root, "src/utils/placeChoice.js"), "utf8")));
     ok("and the coordinate now asks the same question the listing does",
-      /listingMatchesSubject\(name, draftTown, pd\.name \|\| pd\.address, \{ theNameIsAStreet: NAME_IS_A_STREET\.includes\(sType\) \}\)/.test(app));
+      /\[pd\.name \|\| pd\.address, pd\.nameEn\]\s*\.some\(n => n && listingMatchesSubject\(name, draftTown, n, \{ theNameIsAStreet: NAME_IS_A_STREET\.includes\(sType\) \}\)\)/.test(app));
     // ── AND BOTH ASK IT THE SAME WAY ──────────────────────────────
     // The bug this block records is one call site asking and the other not.
     // The repeat of that bug is one call site asking the STREET question and
@@ -55380,7 +55380,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // Copenhagen Airport for a festival in Odense.
     ok("and finiteness alone no longer admits one",
       /const placesOk = pr\.ok && !pd\.error && Number\.isFinite/.test(app)
-      && /const nameMatches = placesOk && listingMatchesSubject/.test(app)
+      && /const nameMatches = placesOk && \[pd\.name/.test(app)
       && /const placesAbout = nameMatches && fit\.ok;/.test(app));
     // BOTH CALL SITES, or the pair drifts again. The hours step had it first.
     is("both Google answers are checked against the subject",
@@ -69378,7 +69378,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   {
     const appS = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
     ok("the venue tier exists", /Where this place is, the venue/.test(appS));
-    const tier = appS.slice(appS.indexOf("if (!placed && refusedListing) {"),
+    const tier = appS.slice(appS.indexOf("if ((!placed || (!draftInDenmark && placed.precise === false)) && refusedListing) {"),
                             appS.indexOf("const found = danishAddressIn(context);"));
     ok("the tier is findable", tier.length > 400);
     // BEFORE the postcode tier: it is free where that one geocodes, and it
@@ -69400,7 +69400,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     // Pass one's own rule is untouched: this is a second question, not a looser
     // version of the first.
     ok("and pass one still refuses on the name",
-       /const nameMatches = placesOk && listingMatchesSubject\(name, draftTown, pd\.name \|\| pd\.address/.test(appS));
+       /const nameMatches = placesOk && \[pd\.name \|\| pd\.address, pd\.nameEn\]\s*\.some\(n => n && listingMatchesSubject\(name, draftTown, n/.test(appS));
     // ── AND ON THE TOWN, WHICH IS THE SECOND QUESTION ────────────
     // TinderBox is a festival in Odense and the name matched something called
     // Tinderbox at Copenhagen Airport, 140 km away. Kobenhavns Oktoberfest
@@ -80477,7 +80477,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
 
   const loc = readFileSync(join(root, "api/places-locate.js"), "utf8"), hrs = readFileSync(join(root, "api/places-hours.js"), "utf8"), dir = readFileSync(join(root, "api/directions.js"), "utf8"), pho = readFileSync(join(root, "api/commons-photo.js"), "utf8");
   ok("every Google route reads a known country or falls back to Denmark", [loc, hrs, dir].every(f => /COUNTRY_PROFILES\[String\(req\.query\.country \|\| ""\)\.toUpperCase\(\)\] \|\| COUNTRY_PROFILES\[DEFAULT_COUNTRY\]/.test(f)));
-  ok("places-locate asks Google in the country's language and region", /languageCode: land\.googleLanguage, regionCode: land\.googleRegion/.test(loc));
+  ok("places-locate asks Google in the country's language and region", /languageCode, regionCode: land\.googleRegion/.test(loc) && /const r = await ask\(land\.googleLanguage\);/.test(loc));
   ok("and reads a Lithuanian postcode as well as a Danish one", /\/\^\(\?:\[A-Z\]\{2\}-\)\?\\d\{4,5\}\\s\+\(\.\+\)\$\//.test(loc));
   ok("photos come from the country's own Wikipedia", /const localWiki = `\$\{land\.wikiLanguage\}\.wikipedia\.org`;/.test(pho));
   ok("the geocoder asks in the working country", /const land = workingProfile\(\);/.test(readFileSync(join(root, "src/utils/geo.js"), "utf8")));
@@ -81155,7 +81155,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const differ = [["Danė Square", "Danės gatvė"], ["Theatre Square", "Teatro gatvė"], ["Klaipėda Castle", "Klaipėdos parkas"], ["Sculpture Park", "Melnragės parkas"], ["Ribe Park", "Ribers parkas"]];
   ok("and a different place, or a Danish one, is still refused", differ.every(([a, b]) => !M.sameAcrossLanguages(a, b)) && !M.sameAcrossLanguages("Kongens Have", "Kongens Nytorv"));
   ok("a listing the research confirmed keeps its opening hours", /venueByResearch = refusedListing\.name;/.test(appSrc) && /const confirmedVenue = !!venueByResearch && !NAME_IS_A_STREET\.includes\(sType\) && fold\(String\(hoursData\.name \|\| ""\)\.trim\(\)\) === fold\(venueByResearch\);/.test(appSrc));
-  ok("abroad, a query that does not say where gets the town and the country", /const scopeQuery = \(q\) => \(draftInDenmark \|\| saysWhere\(q\) \? q : `\$\{q\} \$\{whereWords\.join\(" "\)\}`\);/.test(appSrc) && /cfg\.queries\.map\(scopeQuery\)/.test(appSrc));
+  ok("abroad, a query that does not say where gets the town and the country", /const scopeQuery = \(q\) => \(draftInDenmark \|\| saysWhere\(q\) \? q : `\$\{q\} \$\{whereWords\.filter\(w => !fold\(q\)\.includes\(fold\(w\)\)\)\.join\(" "\)\}`\);/.test(appSrc) && /cfg\.queries\.map\(scopeQuery\)/.test(appSrc));
   ok("and the place's own Lithuanian name gets a search of its own", /\.\.\.\(placesName && fold\(placesName\) !== fold\(name\) \? \[`\$\{placesName\} \$\{draftTown \|\| draftLand\.name\}`\] : \[\]\)/.test(appSrc));
   ok("nobody hunts for a ticket to a park or a square abroad", /const needHunt = HUNTS_FOR_A_PRICE\.includes\(sType\) && !pricesAdmission\(priced\) && !openSpaceAbroad;/.test(appSrc) && /const openSpaceAbroad = !draftInDenmark && OPEN_SPACE\.test/.test(appSrc));
   ok("a Klaipėda city bus stop is a bus stop, whatever Google files it as", M.busStopByName("Volungėlės st.") && M.busStopByName("Molo st.") && !M.busStopByName("Klaipeda Central Train Station"));
@@ -81518,6 +81518,52 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("a walk that was already tidy off the ship is unchanged", tuesday.walk.stops.map(s => s.id).join() === "free:ghost,free:castle,booking:amber,free:theatre,food:fish,free:meridianas");
   ok("a meal may move by no more than three quarters of an hour", N.MEAL_SHIFT === 45 && /Math\.abs\(kept\.get\(s\.id\)\.arrive - s\.arrive\) <= MEAL_SHIFT/.test(readFileSync(join(root, "src/utils/nowPlanner.js"), "utf8")));
   ok("no example still calls the History Museum next door to the castle", !/Next door/.test(JSON.stringify(X.WEATHER_WALKS)));
+}
+
+// ── Batch 191: Studio drafts in Lithuania, scoped to the town ──
+// Oliver's twelve Klaipėda runs of 3 Oct 2026 ("After usage reset"): Castle
+// Site came back about Trakai, the narrow-gauge station about Anykščiai, the
+// museums' own sites were refused under their Lithuanian names, and prices
+// read "4 EUR DKK".
+{
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("a Lithuanian draft that names no town is scoped to Klaipėda, and the log says so",
+    M.countryProfile("LT").homeTown === "Klaipėda" && !M.countryProfile("DK").homeTown
+    && /if \(!draftTown && !draftInDenmark && draftLand\.homeTown\) \{\s*draftTown = draftLand\.homeTown;/.test(app)
+    && /note\("Which town this draft is in"/.test(app));
+  ok("a town after a comma is the town, abroad", /const afterComma = !draftInDenmark && name\.includes\(","\)/.test(app));
+  ok("once a town is known, a query has to name the town, not only the country",
+    /const saysWhere = \(q\) => \(draftTown \? fold\(q\)\.includes\(fold\(draftTown\)\)/.test(app));
+  ok("Klaipėda has a point, so the coordinate and the journey can be checked against it",
+    !!M.townPointFor("Klaipėda") && !!M.townPointFor("Klaipeda") && M.coordFitsTown({ lat: 54.65, lon: 24.93 }, "Klaipėda").ok === false
+    && M.coordFitsTown({ lat: 55.7059, lon: 21.1289 }, "Klaipėda").ok === true);
+  is("a Lithuanian municipality is read as its town",
+    ["Klaipėdos m. sav.", "Neringos sav.", "Vilniaus m. sav.", "Kauno miesto savivaldybė", "Aalborg"].map(M.plainTownName),
+    ["Klaipėda", "Neringa", "Vilnius", "Kaunas", "Aalborg"]);
+  ok("so Theatre Square's town has a centre", !!M.townPointFor("Klaipėdos m. sav."));
+  const loc = readFileSync(join(root, "api/places-locate.js"), "utf8");
+  ok("Google's address gives the town before the municipality", /plainTownName\(after\) === after/.test(loc));
+  ok("abroad, Google is asked for the English name of the same listing too",
+    /if \(land\.code !== DEFAULT_COUNTRY && land\.googleLanguage !== "en"\)/.test(loc) && /places\.id,places\.displayName/.test(loc) && /\.\.\.nameEnOf\(p\)/.test(loc));
+  ok("the same words in another order are the same name",
+    M.sameWordsReordered("Museum of the History of Lithuania Minor", "History Museum of Lithuania Minor")
+    && !M.sameWordsReordered("Castle Museum", "Castle") && !M.sameWordsReordered("Old Town Square", "Theatre Square"));
+  ok("the Lithuanian name of the Lithuania Minor museum is the museum",
+    M.listingMatchesSubject("Museum of the History of Lithuania Minor", "Klaipėda", "Mažosios Lietuvos istorijos muziejus"));
+  ok("and a different place is still refused",
+    !M.listingMatchesSubject("Narrow-Gauge Railway Station", "Klaipėda", "Aukštaitijos siaurasis geležinkelis")
+    && !M.listingMatchesSubject("Castle Site", "Klaipėda", "Trakų istorijos muziejus"));
+  ok("the price check accepts the place's own site and Google's spelling",
+    /isAbout: \(pageText, url\) => sourceIsAboutPlace\(pageText, \{[\s\S]{0,200}alsoKnownAs: placesName[\s\S]{0,120}ownHost: placesWebsite/.test(app));
+  ok("and no price is written with a second currency", !/\$\{src\.price\} DKK/.test(app) && /const priceWithUnit = /.test(app));
+  const ltPage = "Muziejaus darbo laikas: antradieniais nuo 10 iki 18 val. Pirmadieniais ir sekmadieniais muziejus nedirba. Bilietų kainos: suaugusiems 4 Eur, moksleiviams, studentams ir senjorams 2 Eur. Paskutinį mėnesio sekmadienį lankytojams įėjimas nemokamas. Ekspozicija pasakoja apie Klaipėdos ir Mažosios Lietuvos istoriją nuo seniausių laikų iki XX amžiaus vidurio. Muziejuje yra ir edukacinių programų vaikams, kurias reikia užsisakyti iš anksto telefonu arba el. paštu. Grupėms taikomos nuolaidos.";
+  const lt = M.languageBarrier({ siteText: ltPage, country: "LT" });
+  ok("a Lithuanian page is read as Lithuanian, and the reader is told plainly",
+    lt.level === "local-only" && /runs in Lithuanian/.test(lt.note) && !/[—–]/.test(lt.note) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(lt.note));
+  is("with an English version nothing is said", M.languageBarrier({ siteText: `${ltPage} English`, country: "LT" }).level, "has-english");
+  is("and Denmark still reads only Danish", M.languageBarrier({ siteText: ltPage }).level, "unknown");
+  ok("a Klaipėda point is in Lithuania, not 'near Denmark'", /in Lithuania, where Gemlyx has no regions yet/.test(M.describeRegion(55.7059, 21.1289, true)));
+  ok("abroad, a town centre still lets the venue check run", /if \(\(!placed \|\| \(!draftInDenmark && placed\.precise === false\)\) && refusedListing\)/.test(app));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
