@@ -4584,13 +4584,22 @@ Say which answer came from which source, so a fact from a vouched page and a fac
       // town. Not appended per query, which is four places to forget it, but
       // substituted once for the name everything below is templated on.
       const NAME_IS_NOT_A_PLACE = ["nightStreet", "foodStreet"];
-      const subject = NAME_IS_NOT_A_PLACE.includes(sType) && draftTown
+      // ── AND ABROAD, EVERY NAME CARRIES ITS TOWN ──────────────────
+      // Oliver's Klaipėda runs, 3 Oct 2026: the fact check asked about "Castle
+      // Site" in Lithuania and read about Trakai. A restaurant name is no
+      // better: "Momo Grill" in Lithuania is a search about every Momo Grill.
+      // Outside Denmark the subject is the name and its town, unless the
+      // name already says the town. Types whose name IS a town are left as
+      // they are.
+      const NAME_IS_A_TOWN = ["town", "nightTown", "island", "essential"];
+      const subject = draftTown && !fold(name).includes(fold(draftTown))
+        && (NAME_IS_NOT_A_PLACE.includes(sType) || (!draftInDenmark && !NAME_IS_A_TOWN.includes(sType)))
         ? `${name} ${draftTown}`
         : name;
       let plannedQueries = [];
       const planResult = await withRetry(
         () => askOpenAI(
-          `Planning research for a ${draftLand.adjective} travel guide entry: "${subject}"${subject !== name ? ` (the street "${name}" in ${draftTown} — a street name alone is ambiguous in ${draftLand.name}, so every query you write must keep the town in it)` : ""} (type: ${sType}). List 2-3 SPECIFIC search queries that would find the most important facts for THIS particular place — not generic categories, actual search strings a researcher would type. Include at least one query aimed at finding a real downside or limitation, not just highlights. Respond with ONLY a JSON array of strings, nothing else.`,
+          `Planning research for a ${draftLand.adjective} travel guide entry: "${subject}"${subject !== name && NAME_IS_NOT_A_PLACE.includes(sType) ? ` (the street "${name}" in ${draftTown} — a street name alone is ambiguous in ${draftLand.name}, so every query you write must keep the town in it)` : ""} (type: ${sType}). List 2-3 SPECIFIC search queries that would find the most important facts for THIS particular place — not generic categories, actual search strings a researcher would type. Include at least one query aimed at finding a real downside or limitation, not just highlights. Respond with ONLY a JSON array of strings, nothing else.`,
           // BUG FIX: 300 was almost certainly the actual cause of the "Empty
           // response from OpenAI" errors on town/event drafts and Discover runs —
           // gpt-5.6-sol is a reasoning model, and 300 tokens is tight enough that
@@ -6162,7 +6171,7 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
       // asking for, so that is what the list says.
       if (PLACES_WITH_A_LISTING.includes(sType)) {
         try {
-          const hoursRes = await studioFetch(`/api/places-hours?name=${encodeURIComponent(name)}${frozenGeo ? `&lat=${frozenGeo.lat}&lon=${frozenGeo.lon}` : ""}${countryParam(draftLand.code)}`);
+          const hoursRes = await studioFetch(`/api/places-hours?name=${encodeURIComponent(!draftInDenmark && draftTown && !fold(name).includes(fold(draftTown)) ? `${name}, ${draftTown}` : name)}${frozenGeo ? `&lat=${frozenGeo.lat}&lon=${frozenGeo.lon}` : ""}${countryParam(draftLand.code)}`);
           const hoursData = await hoursRes.json();
           // ── AN ERROR BODY IS NOT AN ANSWER ──────────────────────────
           // Overnight audit, 12 Aug. Neither hoursRes.ok nor hoursData.error was
