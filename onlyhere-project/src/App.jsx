@@ -82,9 +82,11 @@ import { SupportPage } from "./components/SupportPage";
 import { AffiliatesPage } from "./components/AffiliatesPage";
 import { KlaipedaDemo } from "./pages/KlaipedaDemo";
 import { KlaipedaExamples } from "./pages/KlaipedaExamples";
+import { KlaipedaSculptures } from "./pages/KlaipedaSculptures";
 import { COUNTRY_PROFILES, DEFAULT_COUNTRY, countryProfile, setWorkingCountry, countryParam, rowCountry, activeCountry, homePath } from "./utils/countries";
 import { KLAIPEDA_DEMO_PATH } from "./data/klaipedaDemo";
 import { KLAIPEDA_EXAMPLES_PATH } from "./data/klaipedaExamples";
+import { KLAIPEDA_SCULPTURES_PATH } from "./data/klaipedaSculptures";
 import { translateEntry, needsTranslation, fingerprint, proseOf } from "./utils/entryTranslate";
 import { TripLibraryPage } from "./components/TripLibraryPage";
 import { askForGuidePass, markGuideBuilt, todayRecord, usedTodayReason, copenhagenDay, cancelGuidePass } from "./utils/guideAllowance";
@@ -35512,6 +35514,9 @@ export default function Gemlyx() {
           Real places, made-up partners, the live walk rules. Linked from
           nowhere and noindex. See data/klaipedaExamples.js. */}
       <Route path={KLAIPEDA_EXAMPLES_PATH} element={<KlaipedaExamples />} />
+      {/* The talking sculptures, joined up: a working sketch, Oliver, 3 Oct
+          2026. Linked only from the examples page. See data/klaipedaSculptures.js. */}
+      <Route path={KLAIPEDA_SCULPTURES_PATH} element={<KlaipedaSculptures />} />
       {/* ── TRIPS OTHER PEOPLE KEPT ────────────────────────────
           One component for both, because the list and a trip from it are the
           same page at two depths, and the trip renders through GuidePage the
