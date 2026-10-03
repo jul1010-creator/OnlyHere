@@ -304,6 +304,7 @@ writeFileSync(entry, `
   export * as NP from ${JSON.stringify(join(root, "src/utils/nowPlanner.js"))};
   export * as TR from ${JSON.stringify(join(root, "src/utils/entryTranslate.js"))};
   export * as KEX from ${JSON.stringify(join(root, "src/data/klaipedaExamples.js"))};
+  export * as SCU from ${JSON.stringify(join(root, "src/data/klaipedaSculptures.js"))};
   export * as OC from ${JSON.stringify(join(root, "src/utils/offerClock.js"))};
   export * as WK from ${JSON.stringify(join(root, "src/utils/walkable.js"))};
   export { offTownWalk, centreOf, walkRule, kmApart, WALKABLE_CENTRES } from ${JSON.stringify(join(root, "src/utils/walkable.js"))};
@@ -81448,6 +81449,30 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("a failed content read is a failure, not an empty library", /if \(!res\.ok\) throw new Error\(`the content library answered/.test(rd("src/utils/liveContent.js")));
   ok("a saved guide's link is 16 characters from the cryptographic source", /crypto\.getRandomValues\(bytes\)/.test(rd("src/pages/GuidePage.jsx")) && /const id = guideLinkId\(\);/.test(rd("src/pages/GuidePage.jsx")));
   ok("translating everything says so when the places could not be read", /if \(!res\.ok \|\| !Array\.isArray\(rows\)\) \{ showToast\("🌐 Could not read the published places/.test(rd("src/App.jsx")));
+}
+
+// ── Batch 189: the talking sculptures, joined up ──
+// Oliver, 3 Oct 2026, going to bed: "try build some ideas and examples for how
+// the sculpture structure could function.. I'll look at it tomorrow."
+{
+  const S = M.SCU;
+  const ids = S.SCULPTURES.map(s => s.id);
+  ok("all 13 talking sculptures, each placed in Klaipėda", S.SCULPTURES.length === 13 && new Set(ids).size === 13 && S.SCULPTURES.every(s => s.lat > 55.70 && s.lat < 55.72 && s.lon > 21.10 && s.lon < 21.15));
+  ok("three of them across the water in Smiltynė, the rest on the mainland", S.SCULPTURES.filter(s => s.side === "smiltyne").map(s => s.id).sort().join() === "albatross,homestead,vessels" && S.SCULPTURES.every(s => s.side === "smiltyne" ? s.lon < 21.11 : s.lon > 21.12));
+  is("a count against the total, written with his hyphen", [S.progressLine(3), S.progressLine(13), S.progressLine(0)], ["3 of 13 - 10 still to go", "All 13 found", "0 of 13 - 13 still to go"]);
+  const n = S.nextFrom("annchen", ["annchen"]);
+  ok("the next one is the nearest not yet found, on the same side of the water", n && n.side === "city" && n.id !== "annchen" && S.SCULPTURES.filter(s => s.side === "city" && s.id !== "annchen").every(s => M.NP.walkMinutes(S.SCULPTURES[0], s) >= n.minutes));
+  ok("and once all on this side are found it says so rather than sending them over the water", S.nextFrom("albatross", ["homestead", "vessels"]) === null);
+  const t30 = S.trailFrom("kiss", 30), t90 = S.trailFrom("kiss", 90);
+  ok("a trail fits the minutes, longer time means more sculptures, and starts where they stand", t30.used <= 30 && t90.used <= 90 && t90.stops.length > t30.stops.length && t30.stops[0].id === "kiss");
+  ok("a trail leaves out what the visitor has already found", S.trailFrom("kiss", 90, ["ghost", "annchen"]).stops.every(s => s.id !== "ghost" && s.id !== "annchen") && /trailFrom\(scanned, minutes, found\)/.test(readFileSync(join(root, "src/pages/KlaipedaSculptures.jsx"), "utf8")));
+  ok("a trail never crosses the water on its own", t90.stops.every(s => s.side === "city") && S.trailFrom("albatross", 90).stops.every(s => s.side === "smiltyne"));
+  ok("from the mainland, the ferry is a walk and ten minutes over", S.ferryFrom("annchen")?.crossing === 10 && S.ferryFrom("annchen").walk > 0 && S.ferryFrom("albatross") === null);
+  const pg = readFileSync(join(root, "src/pages/KlaipedaSculptures.jsx"), "utf8");
+  ok("the sketch says what is real and what is made up, and plays nothing it does not have", /A working sketch/.test(pg) && /which this page does not play/.test(pg) && /Made-up numbers/.test(pg) && !/<audio/.test(pg));
+  ok("it has its own address, stays out of search, and the examples page links to it", S.KLAIPEDA_SCULPTURES_PATH === "/lithuania/sculptures" && /noindex/.test(pg) && /<Route path=\{KLAIPEDA_SCULPTURES_PATH\} element=\{<KlaipedaSculptures \/>\} \/>/.test(readFileSync(join(root, "src/App.jsx"), "utf8")) && /href=\{KLAIPEDA_SCULPTURES_PATH\}/.test(readFileSync(join(root, "src/pages/KlaipedaExamples.jsx"), "utf8")));
+  const shown = JSON.stringify(S.SCULPTURES) + JSON.stringify(S.EXAMPLE_WEEK) + pg.replace(/\/\/.*$/gm, "");
+  ok("no dashes and none of his banned words", !/[—–]/.test(shown) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(shown));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
