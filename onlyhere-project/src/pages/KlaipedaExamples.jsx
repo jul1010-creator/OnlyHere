@@ -21,6 +21,7 @@ import {
   EXAMPLE_WALKS, WEATHER_WALKS, EXAMPLE_PARTNERS, EXAMPLE_GUIDES, GUIDE_LANGS, GUIDE_LANG_NAMES, GUIDE_LABELS, PARTNER_WEEK,
   runExample, isExamplePartner, pageFor,
 } from "../data/klaipedaExamples";
+import { KLAIPEDA_SCULPTURES_PATH } from "../data/klaipedaSculptures";
 
 const WARN = "#FFB347";
 const DAY_LONG = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -104,6 +105,15 @@ export const KlaipedaExamples = () => {
             The museums, squares and sculptures are real, with hours as they are this autumn. Every business, every offer and every number about them is made up, to show how it would work.
           </div>
         </div>
+
+        <a href={KLAIPEDA_SCULPTURES_PATH} data-testid="examples-sculptures-link"
+          style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "13px 15px", margin: "-18px 0 34px", textDecoration: "none" }}>
+          <span>
+            <span style={{ display: "block", fontSize: 14.5, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text }}>The talking sculptures, joined up</span>
+            <span style={{ display: "block", fontSize: 12, color: C.muted, marginTop: 2 }}>A working sketch for the centre's 13 sculptures</span>
+          </span>
+          <span style={{ color: C.gold, fontWeight: 700 }}>›</span>
+        </a>
 
         {/* ── WALKS ───────────────────────────────────────────── */}
         <H2>A walk for the time they have</H2>
