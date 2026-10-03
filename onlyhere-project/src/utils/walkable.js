@@ -80,3 +80,8 @@ export const offTownWalk = ({ country, from, to, km = null } = {}) => {
 export const WALK_RULES = {
   LT: "WALKING. Klaipėda's Old Town and city centre are walkable. Greater Klaipėda is not: beyond the centre, places such as Melnragė, Giruliai, Smiltynė and the Curonian Spit, Karklė and the towns further out are far apart, and many of the ways between them have no pavement or no street at all. Never plan a walk from the centre to one of them, or between two of them, even for a traveller who loves walking. Use the bus, a Bolt, a car or, for Smiltynė, the ferry, and say which. Walking inside one of those places, once there, is fine.",
 };
+
+export const walkRule = (code) => {
+  const r = WALK_RULES[String(code || "").toUpperCase()];
+  return r ? `\n\n${r}` : "";
+};

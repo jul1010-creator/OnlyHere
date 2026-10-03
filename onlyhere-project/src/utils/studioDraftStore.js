@@ -166,6 +166,7 @@ export const packEditor = (e) => {
     offerDays: Array.isArray(e.offerDays) ? e.offerDays.filter(n => Number.isInteger(n) && n >= 0 && n <= 6) : [],
     offerFrom: typeof e.offerFrom === "string" ? e.offerFrom : "",
     offerTo: typeof e.offerTo === "string" ? e.offerTo : "",
+    booking: typeof e.booking === "string" ? e.booking : "",
   };
 };
 
@@ -245,7 +246,7 @@ export const storedKeys = () => [
   "v", "at", "queue", "results", "editor",
   "name", "type", "draft", "code", "frozenGeo",
   "identityWarning", "inventedWarning", "opened", "text", "photoName",
-  "offerText", "offerUntil", "offerDays", "offerFrom", "offerTo",
+  "offerText", "offerUntil", "offerDays", "offerFrom", "offerTo", "booking",
 ];
 
 export const FORBIDDEN_KEYS = ["editingId", "access_token", "refresh_token", "password"];

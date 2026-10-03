@@ -67,7 +67,7 @@ export const askClaude = async (promptIn, maxTokens = 500, model = "claude-sonne
       // model had already read the prompt still costs money, and a cost meter
       // that only counts successes flatters the number it exists to report.
       recordModelCall("claude", model, data?.usage);
-      if (!res.ok) { console.warn("Claude call failed:", res.status, data.error?.message || data); return { error: data.error?.message || `Request failed (${res.status})` }; }
+      if (!res.ok) { console.warn("Claude call failed:", res.status, data.error?.message || data); return { error: data.error?.message || (typeof data.error === "string" ? data.error : "") || `Request failed (${res.status})`, status: res.status }; }
       const text = data.content?.filter(b => b.type === "text").map(b => b.text).join("").trim();
       if (!text) {
         console.warn("Claude returned no text block.", { stop_reason: data.stop_reason, blockTypes: data.content?.map(b => b.type), usage: data.usage });

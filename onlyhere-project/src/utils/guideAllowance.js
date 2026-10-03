@@ -116,6 +116,8 @@ export const reasonOfKey = (key) => {
 // instead of a dead end.
 export const REFUSAL_TEXT = Object.freeze({
   used: "You have already built today's guide. You can build a new one tomorrow.",
+  account: "Sign in to plan a trip. It is free with an account.",
+  confirm: "Confirm your email first. The link is in your inbox.",
   network: "Several guides have already been built from this network today. You can build a new one tomorrow.",
   retries: "This guide could not be finished today. You can build a new one tomorrow.",
   site: "Gemlyx has built all the guides it can for today. You can build one tomorrow.",
@@ -241,7 +243,7 @@ export const askForGuidePass = async ({ fetchImpl, storage, token = "", makeId, 
   } catch {
     return { ok: true, open: "unreachable" };
   }
-  if (res.status === 429 && data && data.ok === false) {
+  if ((res.status === 429 || res.status === 401) && data && data.ok === false) {
     // Already built today is remembered, so the review screen can say so
     // before the next click rather than after it.
     if (data.reason === "used" || data.reason === "retries") writeToday(storage, { day, finished: true, reason: data.reason });

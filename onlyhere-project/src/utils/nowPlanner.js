@@ -349,7 +349,8 @@ const HHMM = (m) => `${String(Math.floor(((m % 1440) + 1440) % 1440 / 60)).padSt
 export const planPrompt = (candidates, ctx) => {
   const { country = "LT", start, startClock, budget, margin = 0, temp = null, lang = "en", style = "" } = ctx;
   const w = ctx.weather || { wet: ctx.wet };
-  const sky = w.snow ? "snowing, so favour places indoors, keep outdoor stops short and expect slow walking"
+  const sky = w.known === false ? "unknown, the forecast could not be read, so mix places indoors and out"
+    : w.snow ? "snowing, so favour places indoors, keep outdoor stops short and expect slow walking"
     : w.wet ? "wet, so favour places indoors" : "dry";
   const gale = Number(w.wind) >= STORM_WIND ? ", and a storm wind, so keep away from the harbour, the quays and anywhere out on open water" : "";
   const list = candidates.slice(0, 40).map(c => {

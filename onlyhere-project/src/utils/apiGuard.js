@@ -61,7 +61,21 @@ export const ALLOWED_ORIGINS = [
 //
 // So the host has to begin with one of his own project names. only-here-three is
 // the original deployment, still resolving, and the one his friend tested on.
-const PREVIEW = /^https:\/\/(only-here-three|onlyhere|gemlyx)[a-z0-9-]*\.vercel\.app$/i;
+//
+// ── AND NOW NOT EVEN THAT ───────────────────────────────────────────
+// Security review, 3 Oct 2026, finding 12: "begins with onlyhere" still let in
+// anybody who named their own Vercel project onlyhere-anything. So a vercel.app
+// host is allowed in two cases only: the original deployment by its
+// exact name, or the address of THIS deployment as Vercel itself reports it to
+// the function (VERCEL_URL, VERCEL_BRANCH_URL). A preview calling its own API
+// carries exactly that address, so testing on a preview still works.
+const VERCEL_ALIASES = ["https://only-here-three.vercel.app"];
+const envOf = () => { try { return (typeof process !== "undefined" && process.env) || {}; } catch { return {}; } };
+export const ownDeployments = (env = envOf()) =>
+  [env.VERCEL_URL, env.VERCEL_BRANCH_URL, env.VERCEL_PROJECT_PRODUCTION_URL]
+    .map(h => String(h || "").trim().toLowerCase())
+    .filter(Boolean)
+    .map(h => `https://${h.replace(/^https?:\/\//, "")}`);
 
 export const originOf = (value) => {
   const v = String(value || "").trim();
@@ -69,10 +83,10 @@ export const originOf = (value) => {
   try { return new URL(v).origin; } catch { return ""; }
 };
 
-export const isAllowedOrigin = (value) => {
-  const o = originOf(value);
+export const isAllowedOrigin = (value, env = envOf()) => {
+  const o = originOf(value).toLowerCase();
   if (!o) return false;
-  return ALLOWED_ORIGINS.includes(o) || PREVIEW.test(o);
+  return ALLOWED_ORIGINS.includes(o) || VERCEL_ALIASES.includes(o) || ownDeployments(env).includes(o);
 };
 
 // ── THE CHECK ITSELF ────────────────────────────────────────────────
@@ -116,6 +130,9 @@ export const STUDIO_ONLY_ENDPOINTS = [
   // fetches any address it is handed, so it is gated like scan-source rather
   // than left as an open proxy.
   "find-email",
+  // 1 Oct 2026. BestTime forecasts, paid per request, for the busyness line
+  // on an entry. Studio fetches it about once a month per place.
+  "busyness",
 ];
 
 // Resolve a bearer token with Supabase. Lifted from api/ask.js rather than
@@ -147,14 +164,17 @@ export const resolveUser = async (headers, { supabaseUrl, serviceKey, fetchImpl 
   }
 };
 
-// ── AND OPTIONALLY, ONLY HIM ────────────────────────────────────────
-// Any signed-in account passes today, because Studio is already behind a login and
-// nobody else has one. GEMLYX_FOUNDER_IDS narrows it to named accounts the day he
-// wants that, without a code change: unset means "any authenticated user", which
-// is the state that works right now rather than the state that locks him out on a
-// deploy he makes at four in the morning.
+// ── ONLY HIM ────────────────────────────────────────────────────────
+// GEMLYX_FOUNDER_IDS names the accounts that count as the founder. It used to
+// be that an EMPTY list let every signed-in account through, which was safe
+// only while nobody else could sign up. Travellers have accounts now, so a
+// deploy that lost the variable would have opened every Studio endpoint to all
+// of them (Fable's audit, 30 Sep 2026). An empty list now means Oliver's own
+// account and nobody else: never wider than intended, and still not a lockout
+// on a four in the morning deploy.
+export const FOUNDER_FALLBACK_ID = "467fb712-e3e9-4d43-b1b8-e4e1bb32b76d";
 export const isFounder = (userId, allowList) => {
   const list = String(allowList || "").split(",").map(s => s.trim()).filter(Boolean);
-  if (!list.length) return true;
-  return list.includes(String(userId || ""));
+  const ids = list.length ? list : [FOUNDER_FALLBACK_ID];
+  return !!userId && ids.includes(String(userId));
 };

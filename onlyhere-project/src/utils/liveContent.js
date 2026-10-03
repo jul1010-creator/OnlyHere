@@ -143,8 +143,12 @@ const doLoad = async () => {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=*&published=eq.true&order=id.desc`, {
       headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
     });
+    // An error from Supabase is a failure, not an empty library: thrown, so
+    // the catch below records it and the captions can say so. Security review,
+    // 3 Oct 2026, finding 7.
+    if (!res.ok) throw new Error(`the content library answered ${res.status}`);
     const rows = await res.json();
-    if (!Array.isArray(rows)) { console.warn("gemlyx_content fetch did not return an array:", rows); return; }
+    if (!Array.isArray(rows)) throw new Error("the content library did not send a list");
     if (rows.length === 0) return;
     const dupeNames = [];
     // Town rows carrying a coordinate this refused. Not "rows with no

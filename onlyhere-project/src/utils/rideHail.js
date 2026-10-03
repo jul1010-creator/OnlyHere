@@ -12,3 +12,15 @@
 export const RIDE_APPS = {
   LT: { name: "Bolt", url: "https://bolt.eu/" },
 };
+
+// A walk of this many minutes or more gets the line. Twenty, the same figure
+// the guide already treats as the longest sensible walk between two stops.
+export const RIDE_FROM_MINUTES = 20;
+
+export const rideFor = ({ country = "", minutes = null, tooFar = false } = {}) => {
+  const app = RIDE_APPS[String(country || "").toUpperCase()];
+  if (!app) return null;
+  const m = Number(minutes);
+  if (!tooFar && !(Number.isFinite(m) && m >= RIDE_FROM_MINUTES)) return null;
+  return app;
+};

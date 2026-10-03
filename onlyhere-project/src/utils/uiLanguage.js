@@ -387,6 +387,9 @@ export const UI_STRINGS = {
   "guide.changeStop":   { en: "Change this stop",  da: "Skift dette stop",     de: "Diesen Stopp ändern", lt: "Pakeisti šį sustojimą" },
   "guide.askPlaceholder": { en: "Ask about this trip, or anything else…", da: "Spørg om turen, eller om noget helt andet…", de: "Frag zu dieser Reise oder zu etwas ganz anderem…", lt: "Klauskite apie šią kelionę ar bet ką kita…" },
   "guide.chatFailed":   { en: "Sorry, I couldn't get an answer just now, try again in a moment.", da: "Beklager, jeg kunne ikke få et svar lige nu. Prøv igen om et øjeblik.", de: "Sorry, ich habe gerade keine Antwort bekommen. Versuch es gleich noch einmal.", lt: "Atsiprašome, šiuo metu nepavyko gauti atsakymo, bandykite po akimirkos." },
+  // A signed-out reader asking for something only an account gets (review,
+  // 2 Oct 2026: they were told "No current updates found" instead).
+  "ai.signIn":          { en: "Sign in to use this. It is free with an account.", da: "Log ind for at bruge dette. Det er gratis med en konto.", de: "Melde dich an, um das zu nutzen. Mit einem Konto ist es kostenlos.", lt: "Prisijunkite, kad galėtumėte tuo naudotis. Su paskyra tai nemokama." },
   "guide.noUpdates":    { en: "No current updates found.", da: "Ingen aktuelle opdateringer fundet.", de: "Keine aktuellen Updates gefunden.", lt: "Naujausių pakeitimų nerasta." },
   "guide.checkFailed":  { en: "Couldn't check right now. Try again in a moment.", da: "Kunne ikke tjekke lige nu. Prøv igen om et øjeblik.", de: "Konnte gerade nicht nachsehen. Versuch es gleich noch einmal.", lt: "Šiuo metu nepavyko patikrinti. Bandykite po akimirkos." },
   "guide.straightLine": { en: "Straight line distance, not a measured route, so treat it as the shape of the day rather than as a timetable.", da: "Afstanden er i lige linje og ikke en målt rute, så se det som dagens form frem for som en køreplan.", de: "Luftlinie statt gemessener Route, also lies es als Form des Tages und nicht als Fahrplan.", lt: "Atstumas tiesia linija, o ne išmatuotas maršrutas, todėl vertinkite jį kaip dienos kontūrą, o ne tvarkaraštį." },
@@ -495,6 +498,12 @@ export const UI_STRINGS = {
   // and an "and", and none of the three languages has one.
   "auth.whyGuide":      { en: "The guide itself is free and yours to read right now. An account is what keeps it, on this phone and every other one.", da: "Selve guiden er gratis og din at læse med det samme. En konto er det, der gemmer den, på denne telefon og alle andre.", de: "Der Reiseführer selbst ist kostenlos und du kannst ihn sofort lesen. Ein Konto ist das, was ihn behält, auf diesem Handy und auf jedem anderen.", lt: "Pats gidas nemokamas ir jau dabar jūsų. Paskyra jį išsaugo šiame telefone ir visuose kituose." },
   "auth.whyReview":     { en: "Reviews of our writing need an account, so we know a real person is behind each one. Reporting something out of date needs nothing at all, and that button is right there for everybody.", da: "Anmeldelser af det, vi skriver, kræver en konto, så vi ved, at der er et rigtigt menneske bag hver enkelt. At melde noget forældet kræver ingenting, og den knap står der til alle.", de: "Bewertungen unserer Texte brauchen ein Konto, damit wir wissen, dass hinter jeder ein echter Mensch steht. Etwas als veraltet zu melden braucht gar nichts, und der Knopf steht für alle da.", lt: "Mūsų tekstų vertinimams reikia paskyros, kad žinotume, jog už kiekvieno stovi tikras žmogus. Pranešti apie pasenusią informaciją galima be jokios paskyros, ir tas mygtukas prieinamas visiems." },
+  "auth.planTrip":      { en: "Plan your trip", da: "Planlæg din tur", de: "Plane deine Reise", lt: "Suplanuokite kelionę" },
+  "auth.signInPlan":    { en: "Sign in to plan", da: "Log ind for at planlægge", de: "Anmelden, um zu planen", lt: "Prisijunkite, kad galėtumėte planuoti" },
+  "auth.whyPlan":       { en: "The planner is free with an account.", da: "Planlæggeren er gratis med en konto.", de: "Der Planer ist mit einem Konto kostenlos.", lt: "Su paskyra planuoklis nemokamas." },
+  "auth.seeDeal":       { en: "See the deal", da: "Se tilbuddet", de: "Angebot ansehen", lt: "Peržiūrėti pasiūlymą" },
+  "auth.signInDeal":    { en: "Sign in to see the deal", da: "Log ind for at se tilbuddet", de: "Anmelden, um das Angebot zu sehen", lt: "Prisijunkite, kad pamatytumėte pasiūlymą" },
+  "auth.whyDeal":       { en: "Deals are free for everyone with an account.", da: "Tilbuddene er gratis for alle med en konto.", de: "Angebote sind für alle mit Konto kostenlos.", lt: "Pasiūlymai nemokami visiems, turintiems paskyrą." },
   "auth.whyDefault":    { en: "An account keeps your saved places and guides on every device instead of just this one.", da: "En konto gemmer dine steder og guider på alle dine enheder i stedet for kun denne.", de: "Ein Konto behält deine gespeicherten Orte und Reiseführer auf allen Geräten statt nur auf diesem.", lt: "Paskyra išsaugo jūsų vietas ir gidus visuose įrenginiuose, ne tik šiame." },
   "auth.newpassLead":   { en: "Type it twice and you are back in. This link works once, so if it fails, ask for a new one.", da: "Skriv den to gange, så er du inde igen. Linket virker én gang, så bed om et nyt, hvis det ikke går.", de: "Gib es zweimal ein und du bist wieder drin. Der Link funktioniert einmal, frag also nach einem neuen, wenn es nicht klappt.", lt: "Įveskite jį du kartus, ir vėl būsite prisijungę. Ši nuoroda veikia vieną kartą, todėl jei nepavyks, paprašykite naujos." },
   // The count goes in FRONT of these, which is why the sentence starts at the
@@ -694,6 +703,21 @@ export const UI_STRINGS = {
   "search.events":      { en: "Search events", da: "Søg i begivenheder", de: "Veranstaltungen suchen", lt: "Ieškoti renginių" },
   "search.food":        { en: "Search food", da: "Søg i mad", de: "Essen suchen", lt: "Ieškoti maisto" },
   "search.towns":       { en: "Search a town, a region, anything…", da: "Søg efter en by, en landsdel, hvad som helst…", de: "Suche eine Stadt, eine Region, irgendetwas…", lt: "Ieškokite miesto, regiono ar bet ko…" },
+  // Next to a deal, 1 Oct 2026: the code to show at the counter, where to book
+  // a table, and how busy the place usually is at this hour. {code} and {time}
+  // are filled in by the caller.
+  "deal.code":     { en: "Show this code: {code}", da: "Vis denne kode: {code}", de: "Zeig diesen Code: {code}", lt: "Parodykite šį kodą: {code}" },
+  "deal.book":     { en: "Book a table", da: "Book et bord", de: "Tisch reservieren", lt: "Rezervuoti staliuką" },
+  "deal.call":     { en: "Call to book", da: "Ring og book", de: "Anrufen und reservieren", lt: "Skambinti ir rezervuoti" },
+  "busy.quiet":    { en: "Usually quiet now", da: "Normalt roligt nu", de: "Gerade meist ruhig", lt: "Dabar paprastai ramu" },
+  "busy.some":     { en: "Usually a little busy now", da: "Normalt lidt travlt nu", de: "Gerade meist etwas voll", lt: "Dabar paprastai šiek tiek žmonių" },
+  "busy.busy":     { en: "Usually busy now", da: "Normalt travlt nu", de: "Gerade meist voll", lt: "Dabar paprastai daug žmonių" },
+  "busy.quieter":  { en: "quieter from {time}", da: "roligere fra {time}", de: "ruhiger ab {time}", lt: "ramiau nuo {time}" },
+  // The Klaipėda walks, for people off a cruise ship (1 Oct 2026).
+  "trips.onToday":   { en: "On today in Klaipėda", da: "I dag i Klaipėda", de: "Heute in Klaipėda", lt: "Šiandien Klaipėdoje" },
+  "trips.deals":     { en: "Special deals in town", da: "Særlige tilbud i byen", de: "Sonderangebote in der Stadt", lt: "Specialūs pasiūlymai mieste" },
+  "ride.far":        { en: "Too far to walk? {app} works here. Order a car in the app and see the price first.", da: "For langt at gå? {app} findes her. Bestil en bil i appen og se prisen først.", de: "Zu weit zu Fuß? {app} gibt es hier. Bestell ein Auto in der App und sieh den Preis vorher.", lt: "Per toli eiti pėsčiomis? Čia veikia {app}. Užsisakykite automobilį programėlėje ir pirmiausia pamatysite kainą." },
+  "trips.intro":       { en: "Walks for the time you have, on foot from the ship. Gemlyx is opening Lithuania, starting here.", da: "Gåture til den tid, du har, til fods fra skibet. Gemlyx åbner i Litauen og begynder her.", de: "Spaziergänge für die Zeit, die du hast, zu Fuß vom Schiff. Gemlyx startet in Litauen, und zwar hier.", lt: "Pasivaikščiojimai pagal turimą laiką, pėsčiomis nuo laivo. Gemlyx pradeda Lietuvoje būtent čia." },
   // The list controls and the Events page's own words, 1 Oct 2026, when the
   // Events page became Activities with Events and Calendar. {n} is the count
   // shown and {total} the count before the filters.

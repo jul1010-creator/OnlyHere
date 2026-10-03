@@ -42,6 +42,7 @@ import { PAID_PLANS_LIVE } from "../config";
 import { t as uiT } from "./uiLanguage";
 import { OFFER_WEEK, cleanDays, cleanClock, minutesOf, placeClock, windowOf, timingAt } from "./offerClock";
 export { OFFER_WEEK, cleanClock, placeClock };
+import { activeCountry, DEFAULT_COUNTRY } from "./countries";
 
 const clean = (v) => stripDashes(String(v ?? "").replace(/\s+/g, " ").trim());
 
@@ -211,6 +212,10 @@ export const offerView = (offer, { paid = false, today = new Date(), zone = "" }
 // the offer is the same promise with deniability.
 export const OFFER_LOCKED_LABEL = "Gemlyx offer";
 export const OFFER_LOCKED_NOTE = "Only for paying users.";
+// 30 Sep 2026: on another country's page a deal is for anyone with a free
+// account, so the locked card says what unlocks it.
+export const OFFER_SIGNUP_NOTE = "Sign up to see the deal.";
+export const offerLockedNote = (code = activeCountry()) => (code === DEFAULT_COUNTRY ? OFFER_LOCKED_NOTE : OFFER_SIGNUP_NOTE);
 
 // ── AND THE SENTENCE THAT HAS TO GO UNDER IT ────────────────────────
 //
