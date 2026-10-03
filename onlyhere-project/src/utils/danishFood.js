@@ -94,12 +94,16 @@ export const foreignCuisineIn = (text) => {
 
 // Grocery words read off the category and name, and the Danish chains read off
 // the name alone, so "successor to Irma" in a category does not do the work.
-const GROCERY = ["supermarket", "supermarkets", "supermarked", "supermarkeder", "supermarket chain", "grocery", "groceries",
+const GROCERY = ["supermarket", "supermarkets", "supermarked", "supermarkeder", "prekybos centras", "supermarket chain", "grocery", "groceries",
   "grocer", "grocers", "grocery store", "dagligvare", "dagligvarer", "dagligvarebutik", "convenience store", "discount store", "hypermarket"];
 // Spar is left out: it is also the Danish word for "save", and a Spar Kro is
 // a kro. Written folded (ø as o), since fold() is what they are matched on.
 const GROCERY_CHAINS = ["netto", "fotex", "bilka", "rema 1000", "lidl", "aldi", "kvickly", "superbrugsen",
-  "dagli brugsen", "lovbjerg", "meny", "min kobmand", "7 eleven", "irma", "coop 365"];
+  "dagli brugsen", "lovbjerg", "meny", "min kobmand", "7 eleven", "irma", "coop 365",
+  // And Lithuania's, for the Klaipėda Food page, where the same rule holds:
+  // a supermarket is not a food place. Not IKI, because iki is also the
+  // Lithuanian for "until" and sits in restaurant names.
+  "maxima", "rimi", "norfa"];
 export const groceryIn = (row) => {
   const hay = fold(`${row?.category || ""} ${row?.name || ""}`);
   const name = fold(String(row?.name || ""));
