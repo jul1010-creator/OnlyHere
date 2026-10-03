@@ -3,6 +3,10 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App.jsx'
 import ErrorBoundary from './ErrorBoundary.jsx'
+import { installApiAuth } from './utils/apiAuth'
+
+// The account on every AI call, before anything renders. See utils/apiAuth.js.
+installApiAuth()
 
 // BrowserRouter added here — App.jsx now renders a <Routes> table ("/" for the
 // existing app, "/guide/:guideId" for the new shareable full-page guide view)

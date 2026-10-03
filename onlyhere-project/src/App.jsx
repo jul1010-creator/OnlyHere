@@ -158,6 +158,7 @@ import { PageHero } from "./components/PageHero";
 import { LiveEventsHeaderStrip } from "./components/LiveEventsHeaderStrip";
 import { SCAN_KINDS, scanKindOf, scanPrompt } from "./utils/scanKinds";
 import { groupByMonth } from "./utils/calendarMonths";
+import { dealCode, cleanBooking, bookingProblem, cleanBusy } from "./utils/dealExtras";
 import { WeatherHeaderStrip, DenmarkClock } from "./components/WeatherHeaderStrip";
 import { StoreBadge } from "./components/StoreBadge";
 import { DateTimePicker } from "./components/DateTimePicker";
@@ -383,6 +384,7 @@ import { SWEEPS, sweepById, selectRows, applyCap, knownPlacesFor, proposeSweep, 
 import { BACKFILL_SORTS, BACKFILL_SORT_DEFAULT, sortForBackfill, tierSpread } from "./utils/tierBackfill";
 import { classifyFerry, ferryFindings, FERRY } from "./utils/transport";
 import { getSession, getStoredSession, captureRedirectSession, fetchSignupCarry, clearSignupCarry, signOut as authSignOut, deleteMyData } from "./utils/auth";
+import { setStudioRefresher } from "./utils/apiAuth";
 import { fetchCloudSaves, pushCloudSaves, mergeSaves, savedGuideRow, guideFromSavedRow, savedGuideHasLink, syncFailureNote, SYNC } from "./utils/userSaves";
 import { toggleBeen, isBeen, beenNote, withoutBeen, excludedBeen } from "./utils/beenThere";
 import { fetchBeen, pushBeen, mergeBeen, cleanBeen, BEEN_SETUP_SQL } from "./utils/beenSync";
@@ -1432,6 +1434,9 @@ function GemlyxApp() {
       const query = `${item.name} ${item.location || item.town || ""} Instagram Facebook official page latest update opening hours events 2026`;
       const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
       const data = await res.json();
+      // Signed out, the search answers 401. That is not "nothing new".
+      if (res.status === 401) { setLiveInfo(prev => ({ ...prev, [item.name]: uiT("ai.signIn", uiLang) })); setLiveInfoLoading(null); return; }
+      if (!res.ok) throw new Error(String(res.status));
       setLiveInfo(prev => ({ ...prev, [item.name]: data.answer || (data.results?.[0]?.snippet) || "No current updates found." }));
     } catch {
       setLiveInfo(prev => ({ ...prev, [item.name]: "Couldn't check right now — try again in a moment." }));
@@ -2230,6 +2235,27 @@ function GemlyxApp() {
   // Supabase access tokens expire (~1hr). Rather than failing the whole publish,
   // try trading the refresh_token for a fresh one first: silent, no re-typing
   // the password.
+  // ── A TOKEN THAT IS STILL GOOD WHEN THE SERVER READS IT ────────────
+  // The guide pass now refuses a token it cannot resolve, and a tab left open
+  // for an hour holds an expired one: the member, still shown as signed in,
+  // was told to sign in, and so was Oliver in Studio (review, 2 Oct 2026).
+  // So the token is renewed here, just before it is sent.
+  const tokenExpiresAt = (jwt) => {
+    try { return JSON.parse(atob(String(jwt).split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).exp * 1000 || 0; }
+    catch { return 0; }
+  };
+  const freshPassToken = async () => {
+    if (studioSession?.access_token) {
+      if (tokenExpiresAt(studioSession.access_token) - Date.now() < 120000) {
+        const renewed = await refreshStudioSession();
+        if (renewed?.access_token) return renewed.access_token;
+      }
+      return studioSession.access_token;
+    }
+    const s = await getSession().catch(() => null);
+    return s?.token || userSession?.token || "";
+  };
+
   const refreshStudioSession = async () => {
     if (!studioSession?.refresh_token) return null;
     try {
@@ -2254,7 +2280,9 @@ function GemlyxApp() {
         }
         return null;
       }
-      const session = { access_token: data.access_token, refresh_token: data.refresh_token, email: studioSession.email };
+      // userId kept: without it the founder check on the next reload sees an
+      // empty id and drops the session (review, 2 Oct 2026).
+      const session = { access_token: data.access_token, refresh_token: data.refresh_token, email: studioSession.email, ...(studioSession.userId ? { userId: studioSession.userId } : {}) };
       localStorage.setItem("gemlyx_studio_session", JSON.stringify(session));
       // The ref FIRST, and this is the whole point of it: setStudioSession will
       // not reach a loop that is already running, and the next row of that loop
@@ -2264,6 +2292,10 @@ function GemlyxApp() {
       return session;
     } catch { return null; }
   };
+  // The AI routes retry a refused Studio call once after this refresh. See
+  // utils/apiAuth.js. Re-registered every render so it closes over the
+  // current session.
+  useEffect(() => { setStudioRefresher(refreshStudioSession); });
 
   // ── ONE CALLER KNEW THE TOKEN EXPIRES, AND TWELVE DID NOT ──────────
   //
@@ -2726,7 +2758,10 @@ function GemlyxApp() {
     if (translateRun?.busy) return;
     const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=id,type,payload&published=eq.true&order=id.desc`);
     const rows = await res.json().catch(() => null);
-    const todo = (Array.isArray(rows) ? rows : []).filter(r => rowCountry(r?.payload) === PAGE_COUNTRY && needsTranslation(r.payload));
+    // A failed read is not "nothing to translate". Security review, 3 Oct
+    // 2026, finding 7.
+    if (!res.ok || !Array.isArray(rows)) { showToast("🌐 Could not read the published places just now. Try again in a moment.", 4500); return; }
+    const todo = rows.filter(r => rowCountry(r?.payload) === PAGE_COUNTRY && needsTranslation(r.payload));
     setTranslateRun({ busy: true, done: 0, total: todo.length, failed: 0 });
     let done = 0, failed = 0;
     for (const r of todo) {
@@ -2855,6 +2890,7 @@ function GemlyxApp() {
     setStudioOfferDays(Array.isArray(payload.__offer?.days) ? payload.__offer.days : []);
     setStudioOfferFrom(payload.__offer?.from || "");
     setStudioOfferTo(payload.__offer?.to || "");
+    setStudioBooking(payload.__booking || "");
     setDraftPasteError("");
     // The two bugs this function was carrying, studioFrozenGeo inheriting the
     // previous run's coordinate ("Stored at 0.000, 0.000") and editingId
@@ -2883,6 +2919,8 @@ function GemlyxApp() {
     setStudioOfferDays(Array.isArray(row.payload?.__offer?.days) ? row.payload.__offer.days : []);
     setStudioOfferFrom(row.payload?.__offer?.from || "");
     setStudioOfferTo(row.payload?.__offer?.to || "");
+    setStudioBooking(row.payload?.__booking || "");
+    setBusyFetch(null);
     const reelBlock = row.payload?.blogBody?.find(b => b.type === "instagram") || null;
     setStudioInstagramUrl(reelBlock?.url || "");
     // Read through the same gate the page reads, so what the tick says here is
@@ -4047,6 +4085,10 @@ Say which answer came from which source, so a fact from a vouched page and a fac
   const [studioOfferFrom, setStudioOfferFrom] = useState("");
   const [studioOfferTo, setStudioOfferTo] = useState("");
   const studioOfferFields = { text: studioOfferText, until: studioOfferUntil, days: studioOfferDays, from: studioOfferFrom, to: studioOfferTo };
+  // Where to book a table (a link or a phone number), beside the offer. See
+  // utils/dealExtras.js. The busyness forecast rides in the draft JSON itself.
+  const [studioBooking, setStudioBooking] = useState("");
+  const [busyFetch, setBusyFetch] = useState(null);
   const [studioInstagramUrl, setStudioInstagramUrl] = useState("");
   // ── AND WHETHER THAT REEL MAY BE SHOWN ──────────────────────────
   //
@@ -11140,6 +11182,7 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
     if (typeof saved.text === "string" && saved.text.trim()) setStudioDraftText(saved.text);
     if (saved.photoName) setStudioPhotoName(saved.photoName);
     if (saved.offerText) setStudioOfferText(saved.offerText);
+    if (saved.booking) setStudioBooking(saved.booking);
     if (saved.offerUntil) setStudioOfferUntil(saved.offerUntil);
     if (Array.isArray(saved.offerDays) && saved.offerDays.length) setStudioOfferDays(saved.offerDays);
     if (saved.offerFrom) setStudioOfferFrom(saved.offerFrom);
@@ -11177,6 +11220,7 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
         offerDays: studioOfferDays,
         offerFrom: studioOfferFrom,
         offerTo: studioOfferTo,
+        booking: studioBooking,
       } : null;
       const { store } = packStore({ queue: draftQueue, results: queueResults, editor }, Date.now());
       let storage = null;
@@ -11189,7 +11233,7 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
     return () => clearTimeout(t);
   }, [studioSession, draftQueue, queueResults, editingId, studioDraft, studioDraftText,
       studioType, studioTown, studioResult, studioFrozenGeo, studioIdentityWarning,
-      studioInventedWarning, studioPhotoName, studioOfferText, studioOfferUntil, studioOfferDays, studioOfferFrom, studioOfferTo]);
+      studioInventedWarning, studioPhotoName, studioOfferText, studioOfferUntil, studioOfferDays, studioOfferFrom, studioOfferTo, studioBooking]);
 
   // Dropping the finished list is a deliberate act, so it needs a button. It is
   // also the only advice problemNote can give when storage is full.
@@ -14313,6 +14357,22 @@ ${researchRules("festival", ev)}`
       }
       if (offerFromFields) shaped.__offer = offerFromFields;
       else delete shaped.__offer;
+      // Book a table, from its box, on the same rule: the box is the truth,
+      // and an empty box removes it.
+      {
+        const bookFault = bookingProblem(studioBooking);
+        if (bookFault) {
+          setPublishStatus(null);
+          setDraftEditError(`Not published. ${bookFault}`);
+          return;
+        }
+        if (cleanBooking(studioBooking)) shaped.__booking = studioBooking.trim();
+        else delete shaped.__booking;
+        // The busyness forecast is a paid lookup kept in the draft, and
+        // shapeForLive's allow-list does not carry it, so a new entry lost it at
+        // publish (review, 2 Oct 2026). Carried across here, checked.
+        if (!isEditing && cleanBusy(editedDraft?.__busy)) shaped.__busy = editedDraft.__busy;
+      }
 
       // ── AND A CLAIM WHERE BEING WRONG HURTS SOMEBODY ────────────
       //
@@ -15463,6 +15523,20 @@ ${houseDistanceSays(houseBaseArea, dayPoints(day, stayResolve))}` : ""}`;
   // on Sign up; everything that opens this sheet WITHOUT naming an action now
   // opens on Sign in.
   const [authMode, setAuthMode] = useState("in");
+  // ── THE PERKS NEED AN ACCOUNT ────────────────────────────────────
+  // Oliver, 30 Sep 2026: "we probably need to require account-making for
+  // enabling all the perks", on both sites: the guide builder, the chat, the
+  // deal text, reviews and the trip library. Every AI call behind them is also
+  // refused by the server without a confirmed account (utils/aiGate.js), so this
+  // is the polite half: it asks before the request would be turned away. The
+  // Studio login counts as signed in.
+  const needsAccountFor = (reason) => {
+    if (userSession || studioSession) return false;
+    // On Sign in, with Create one tap away: a returning member must not land
+    // on a create-account form (the rule the review gate follows).
+    setAuthReason(reason); setAuthMode("in"); setAuthOpen(true);
+    return true;
+  };
   // A password reset link comes back as a signed-in session, so the sheet's
   // usual "open only when signed out" condition would hide the one screen the
   // person followed the link to reach. Held separately for that reason.
@@ -17263,6 +17337,7 @@ ${houseDistanceSays(houseBaseArea, dayPoints(day, stayResolve))}` : ""}`;
     return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
   };
   const generateGuide = async (overrideConvoText, modeOverride) => {
+    if (needsAccountFor("plan")) return;
     // ── ON ANOTHER COUNTRY'S PAGE ─────────────────────────────────────
     // Phase 3 of LITHUANIA_PLAN_29SEP.md. Every AI call below goes through
     // forLand (utils/guideAbroad.js), which swaps "Denmark", "Danish" and
@@ -17376,7 +17451,7 @@ ${houseDistanceSays(houseBaseArea, dayPoints(day, stayResolve))}` : ""}`;
     const allowance = await askForGuidePass({
       fetchImpl: (...args) => fetch(...args),
       storage: guideStore(),
-      token: studioSession?.access_token || userSession?.token || "",
+      token: await freshPassToken(),
       makeId: newVisitorId,
     }).finally(() => { guidePassPendingRef.current = false; });
     if (!allowance.ok) {
@@ -19430,7 +19505,7 @@ If the conversation only covers a single day or a few stops with no explicit day
         const back = await cancelGuidePass({
           fetchImpl: (...args) => fetch(...args),
           storage: guideStore(),
-          token: studioSession?.access_token || userSession?.token || "",
+          token: await freshPassToken(),
         });
         setGuideError(back.refunded
           ? "Stopped. It did not count as today's guide."
@@ -19474,6 +19549,7 @@ If the conversation only covers a single day or a few stops with no explicit day
   const savedHere = PAGE_ABROAD ? savedPlaces.filter(p => lookupRealPlace(p?.name)) : savedPlaces;
   const buildAbroad = () => {
     if (guideModal === "loading") return;
+    if (needsAccountFor("plan")) return;
     const who = intakeTravelers.trim();
     const counted = who ? partyOf(who) : null;
     const parts = abroadBriefParts({
@@ -21976,6 +22052,7 @@ If the conversation only covers a single day or a few stops with no explicit day
     const forced = typeof forcedMsg === "string" ? forcedMsg.trim() : null;
     const msg = forced || aiInput.trim();
     if (!msg || aiLoading) return;
+    if (needsAccountFor("plan")) return;
     if (!forced) setAiInput("");
     setAiMessages(prev => [...prev, { role: "user", text: msg, hidden: !!opts.hidden }]);
     setAiLoading(true);
@@ -24370,7 +24447,7 @@ ${languageBlock()}`;
                         panel by accident is somebody who typed /#studio. */}
                     {!String(FOUNDER_IDS || "").trim() && (
                       <div style={{ fontSize: 10.5, color: "#FFB347", lineHeight: 1.6, marginBottom: 12, border: "1px solid #FFB34755", borderRadius: 9, padding: "9px 11px" }}>
-                        VITE_FOUNDER_IDS is not set, so any Gemlyx account can open Studio. Set it in Vercel to your Supabase user id before the beta, and set GEMLYX_FOUNDER_IDS beside it.
+                        VITE_FOUNDER_IDS is not set, so Studio falls back to your own account id only. Set it in Vercel to your Supabase user id, and set GEMLYX_FOUNDER_IDS beside it.
                       </div>
                     )}
                     <input value={loginEmail} onChange={e => setLoginEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && studioLogin()}
@@ -29077,6 +29154,51 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           </div>
                         )}
 
+                        {/* ── BOOK A TABLE, THE DEAL CODE, AND HOW BUSY ───────
+                            Oliver, 1 Oct 2026, for the Klaipėda pilot: cruise
+                            passengers with a few hours, so convenience first.
+                            See utils/dealExtras.js. */}
+                        <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, margin: "12px 0 5px" }}>BOOK A TABLE (a link or a phone number)</div>
+                        <input value={studioBooking} onChange={e => setStudioBooking(e.target.value)}
+                          placeholder="https://restaurant.lt/booking or +370 600 00000"
+                          style={{ width: "100%", border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 12px", fontSize: 12, outline: "none", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif", boxSizing: "border-box" }} />
+                        {bookingProblem(studioBooking) && (
+                          <div style={{ fontSize: 10.5, color: "#FFB347", lineHeight: 1.55, marginTop: 6 }}>{bookingProblem(studioBooking)}</div>
+                        )}
+                        {studioOfferText.trim() && studioDraft?.name && (
+                          <div style={{ fontSize: 11, color: C.light, lineHeight: 1.55, marginTop: 8 }}>
+                            Deal code for the partner: <strong style={{ color: C.gold, letterSpacing: 1 }}>{dealCode(studioDraft)}</strong>. Guests show it at the counter.
+                          </div>
+                        )}
+                        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
+                          <button onClick={async () => {
+                            let draft = studioDraft;
+                            try { draft = JSON.parse(studioDraftText); } catch { /* the last good draft */ }
+                            const name = String(draft?.name || "").trim();
+                            const address = [draft?.address || draft?.street || draft?.location, draft?.city || draft?.town].filter(Boolean).join(", ");
+                            if (!name || !address) { setBusyFetch("This entry needs a name and an address before BestTime can find it."); return; }
+                            setBusyFetch("Asking BestTime…");
+                            try {
+                              const res = await studioFetch(`/api/busyness`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, address }) });
+                              const data = await res.json().catch(() => null);
+                              if (!data?.ok) { setBusyFetch(data?.error || `BestTime did not answer (${res.status}).`); return; }
+                              const next = { ...draft, __busy: data.busy };
+                              setStudioDraft(next);
+                              setStudioDraftText(JSON.stringify(next, null, 2));
+                              setBusyFetch(`Forecast stored, dated ${data.busy.fetchedAt}. Save the entry to keep it.`);
+                            } catch {
+                              setBusyFetch("Could not reach the server just now.");
+                            }
+                          }}
+                            style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "6px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                            Fetch how busy it usually is
+                          </button>
+                          {studioDraft?.__busy?.fetchedAt && !busyFetch && (
+                            <span style={{ fontSize: 10.5, color: C.muted }}>Forecast from {studioDraft.__busy.fetchedAt}</span>
+                          )}
+                          {busyFetch && <span style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5 }}>{busyFetch}</span>}
+                        </div>
+
                         {/* ── A SUCCESS BANNER MAY NOT BE A DEAD END ──────────
                             The green line REPLACED the button, so spotting a
                             typo one second after publishing left no way to send
@@ -29911,8 +30033,9 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           {/* ── GEMLYX PROMOTIONS ── see utils/promotions.js. Open to
               everybody on another country's page (OPEN_ABROAD), locked on the
               Danish one exactly as the entry page locks it. */}
-          {tab === "promotions" && <PromotionsPage promos={promotions} title={uiT("nav.promotions", uiLang)}
-            paid={OPEN_ABROAD || hasPaidPlan(userProfile)} lang={uiLang} onOpen={(p) => openStopDetail(p)} />}
+          {tab === "promotions" && <PromotionsPage promos={promotions} lang={uiLang} title={uiT("nav.promotions", uiLang)}
+            paid={(OPEN_ABROAD && !!userSession) || hasPaidPlan(userProfile)}
+            onOpen={(p) => { if (OPEN_ABROAD && needsAccountFor("deal")) return; openStopDetail(p); }} />}
           {tab === "shopping" && <ShoppingPage shops={shops} places={shopPlaces} title={uiT("nav.shopping", uiLang)}
             onOpen={(row) => setShopDetail(row)} />}
           {tab === "attractions" && (() => {
@@ -34000,7 +34123,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           live control it held, bookableOnly, already has its own pill on the
           Attractions page and is untouched. */}
 
-      <DetailPage windowed={entryWindowed} lang={uiLang} paid={OPEN_ABROAD || hasPaidPlan(userProfile)} signedIn={OPEN_ABROAD || !!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={eventDetail} onClose={closeEntry} kind="event" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={eventDetail && isPlaceSaved("event", eventDetail.id)} onToggleSave={eventDetail ? () => toggleSavePlace("event", eventDetail, eventDetail.town) : null} hasBeen={!!eventDetail && isBeenHere("event", eventDetail.id)} onToggleBeen={eventDetail ? () => toggleBeenHere("event", eventDetail, eventDetail.town) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
+      <DetailPage windowed={entryWindowed} lang={uiLang} paid={(OPEN_ABROAD && !!userSession) || hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={(why) => { setAuthReason(typeof why === "string" ? why : "review"); setAuthMode("in"); setAuthOpen(true); }} item={eventDetail} onClose={closeEntry} kind="event" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={eventDetail && isPlaceSaved("event", eventDetail.id)} onToggleSave={eventDetail ? () => toggleSavePlace("event", eventDetail, eventDetail.town) : null} hasBeen={!!eventDetail && isBeenHere("event", eventDetail.id)} onToggleBeen={eventDetail ? () => toggleBeenHere("event", eventDetail, eventDetail.town) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
       {/* onOpenEvent powers the new "What's on in <town>" section: tapping a
           festival closes the town page and opens that event's real entry, so the
           traveler lands on the full page with dates, tickets and directions
@@ -34010,11 +34133,11 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           town one. onOpenEvent closes this page before opening the event, which
           is the same handoff a town does, because two stacked detail views is a
           state this app has been in before and it is not recoverable by Back. */}
-      <DetailPage windowed={entryWindowed} lang={uiLang} paid={OPEN_ABROAD || hasPaidPlan(userProfile)} signedIn={OPEN_ABROAD || !!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={islandDetail} onClose={closeEntry} kind="island" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={islandDetail && isPlaceSaved("island", islandDetail.id)} onToggleSave={islandDetail ? () => toggleSavePlace("island", islandDetail, islandDetail.region) : null} hasBeen={!!islandDetail && isBeenHere("island", islandDetail.id)} onToggleBeen={islandDetail ? () => toggleBeenHere("island", islandDetail, islandDetail.region) : null} onOpenEvent={(e) => { setIslandDetail(null); setEventDetail(e); }} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
-      <DetailPage windowed={entryWindowed} lang={uiLang} paid={OPEN_ABROAD || hasPaidPlan(userProfile)} signedIn={OPEN_ABROAD || !!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={townDetail} onClose={closeEntry} kind="town" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={townDetail && isPlaceSaved("town", townDetail.id)} onToggleSave={townDetail ? () => toggleSavePlace("town", townDetail, townDetail.region) : null} hasBeen={!!townDetail && isBeenHere("town", townDetail.id)} onToggleBeen={townDetail ? () => toggleBeenHere("town", townDetail, townDetail.region) : null} onOpenEvent={(e) => { setTownDetail(null); setEventDetail(e); }} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
-      <DetailPage windowed={entryWindowed} lang={uiLang} paid={OPEN_ABROAD || hasPaidPlan(userProfile)} signedIn={OPEN_ABROAD || !!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={nightlifeDetail} onClose={closeEntry} kind="nightlife" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={nightlifeDetail && isPlaceSaved("nightlife", nightlifeDetail.id)} onToggleSave={nightlifeDetail ? () => toggleSavePlace("nightlife", nightlifeDetail, nightlifeDetail.location) : null} hasBeen={!!nightlifeDetail && isBeenHere("nightlife", nightlifeDetail.id)} onToggleBeen={nightlifeDetail ? () => toggleBeenHere("nightlife", nightlifeDetail, nightlifeDetail.location) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
-      <DetailPage windowed={entryWindowed} lang={uiLang} paid={OPEN_ABROAD || hasPaidPlan(userProfile)} signedIn={OPEN_ABROAD || !!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={shopDetail} onClose={closeEntry} kind="shop" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={shopDetail && isPlaceSaved("shop", shopDetail.id)} onToggleSave={shopDetail ? () => toggleSavePlace("shop", shopDetail, shopDetail.town || shopDetail.location) : null} hasBeen={!!shopDetail && isBeenHere("shop", shopDetail.id)} onToggleBeen={shopDetail ? () => toggleBeenHere("shop", shopDetail, shopDetail.town || shopDetail.location) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
-      <DetailPage windowed={entryWindowed} lang={uiLang} paid={OPEN_ABROAD || hasPaidPlan(userProfile)} signedIn={OPEN_ABROAD || !!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={freeDetail} onClose={closeEntry} kind="free" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={freeDetail && isPlaceSaved("free", freeDetail.id)} onToggleSave={freeDetail ? () => toggleSavePlace("free", freeDetail, freeDetail.city) : null} hasBeen={!!freeDetail && isBeenHere("free", freeDetail.id)} onToggleBeen={freeDetail ? () => toggleBeenHere("free", freeDetail, freeDetail.city) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
+      <DetailPage windowed={entryWindowed} lang={uiLang} paid={(OPEN_ABROAD && !!userSession) || hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={(why) => { setAuthReason(typeof why === "string" ? why : "review"); setAuthMode("in"); setAuthOpen(true); }} item={islandDetail} onClose={closeEntry} kind="island" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={islandDetail && isPlaceSaved("island", islandDetail.id)} onToggleSave={islandDetail ? () => toggleSavePlace("island", islandDetail, islandDetail.region) : null} hasBeen={!!islandDetail && isBeenHere("island", islandDetail.id)} onToggleBeen={islandDetail ? () => toggleBeenHere("island", islandDetail, islandDetail.region) : null} onOpenEvent={(e) => { setIslandDetail(null); setEventDetail(e); }} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
+      <DetailPage windowed={entryWindowed} lang={uiLang} paid={(OPEN_ABROAD && !!userSession) || hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={(why) => { setAuthReason(typeof why === "string" ? why : "review"); setAuthMode("in"); setAuthOpen(true); }} item={townDetail} onClose={closeEntry} kind="town" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={townDetail && isPlaceSaved("town", townDetail.id)} onToggleSave={townDetail ? () => toggleSavePlace("town", townDetail, townDetail.region) : null} hasBeen={!!townDetail && isBeenHere("town", townDetail.id)} onToggleBeen={townDetail ? () => toggleBeenHere("town", townDetail, townDetail.region) : null} onOpenEvent={(e) => { setTownDetail(null); setEventDetail(e); }} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
+      <DetailPage windowed={entryWindowed} lang={uiLang} paid={(OPEN_ABROAD && !!userSession) || hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={(why) => { setAuthReason(typeof why === "string" ? why : "review"); setAuthMode("in"); setAuthOpen(true); }} item={nightlifeDetail} onClose={closeEntry} kind="nightlife" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={nightlifeDetail && isPlaceSaved("nightlife", nightlifeDetail.id)} onToggleSave={nightlifeDetail ? () => toggleSavePlace("nightlife", nightlifeDetail, nightlifeDetail.location) : null} hasBeen={!!nightlifeDetail && isBeenHere("nightlife", nightlifeDetail.id)} onToggleBeen={nightlifeDetail ? () => toggleBeenHere("nightlife", nightlifeDetail, nightlifeDetail.location) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
+      <DetailPage windowed={entryWindowed} lang={uiLang} paid={(OPEN_ABROAD && !!userSession) || hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={(why) => { setAuthReason(typeof why === "string" ? why : "review"); setAuthMode("in"); setAuthOpen(true); }} item={shopDetail} onClose={closeEntry} kind="shop" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={shopDetail && isPlaceSaved("shop", shopDetail.id)} onToggleSave={shopDetail ? () => toggleSavePlace("shop", shopDetail, shopDetail.town || shopDetail.location) : null} hasBeen={!!shopDetail && isBeenHere("shop", shopDetail.id)} onToggleBeen={shopDetail ? () => toggleBeenHere("shop", shopDetail, shopDetail.town || shopDetail.location) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
+      <DetailPage windowed={entryWindowed} lang={uiLang} paid={(OPEN_ABROAD && !!userSession) || hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={(why) => { setAuthReason(typeof why === "string" ? why : "review"); setAuthMode("in"); setAuthOpen(true); }} item={freeDetail} onClose={closeEntry} kind="free" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={freeDetail && isPlaceSaved("free", freeDetail.id)} onToggleSave={freeDetail ? () => toggleSavePlace("free", freeDetail, freeDetail.city) : null} hasBeen={!!freeDetail && isBeenHere("free", freeDetail.id)} onToggleBeen={freeDetail ? () => toggleBeenHere("free", freeDetail, freeDetail.city) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
       {/* ── The assistant that follows him (Oliver, 6 Aug: "some sort of
           assistant for the admin /#studio guy? That will always be with me?
           Even when I'm on the blogs")  ────────────────────────────────
@@ -34180,7 +34303,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           onSaved={() => refreshLiveContent()} />;
       })()}
 
-      <DetailPage windowed={entryWindowed} lang={uiLang} paid={OPEN_ABROAD || hasPaidPlan(userProfile)} signedIn={OPEN_ABROAD || !!userSession} onNeedAccount={() => { setAuthReason("review"); setAuthMode("in"); setAuthOpen(true); }} item={foodDetail} onClose={closeEntry} kind="food" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={foodDetail && isPlaceSaved("food", foodDetail.id)} onToggleSave={foodDetail ? () => toggleSavePlace("food", foodDetail, foodDetail.location) : null} hasBeen={!!foodDetail && isBeenHere("food", foodDetail.id)} onToggleBeen={foodDetail ? () => toggleBeenHere("food", foodDetail, foodDetail.location) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
+      <DetailPage windowed={entryWindowed} lang={uiLang} paid={(OPEN_ABROAD && !!userSession) || hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={(why) => { setAuthReason(typeof why === "string" ? why : "review"); setAuthMode("in"); setAuthOpen(true); }} item={foodDetail} onClose={closeEntry} kind="food" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={foodDetail && isPlaceSaved("food", foodDetail.id)} onToggleSave={foodDetail ? () => toggleSavePlace("food", foodDetail, foodDetail.location) : null} hasBeen={!!foodDetail && isBeenHere("food", foodDetail.id)} onToggleBeen={foodDetail ? () => toggleBeenHere("food", foodDetail, foodDetail.location) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
 
       {/* Per Oliver ("get rid of the popup"): once a guide finishes building, we
           navigate straight to the full-page GuidePage instead of showing a
