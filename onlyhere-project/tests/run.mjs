@@ -13922,7 +13922,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     is("no other type has its name replaced",
        others.filter(t => (perType[t] || []).some(q => q.includes("${subject}"))), []);
     ok("and the subject is the street plus its town",
-       /const subject = NAME_IS_NOT_A_PLACE\.includes\(sType\) && draftTown\s*\?\s*`\$\{name\} \$\{draftTown\}`\s*:\s*name;/.test(app));
+       /const subject = draftTown && !fold\(name\)\.includes\(fold\(draftTown\)\)\s*&& \(NAME_IS_NOT_A_PLACE\.includes\(sType\) \|\| \(!draftInDenmark && !NAME_IS_A_TOWN\.includes\(sType\)\)\)\s*\?\s*`\$\{name\} \$\{draftTown\}`\s*:\s*name;/.test(app));
     // The planner writes queries too, and it was told the bare name.
     ok("the query planner is told the town as well",
        // Batch 159: the draft's country adjective, "Danish" for a Danish draft.
@@ -81563,6 +81563,13 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   is("with an English version nothing is said", M.languageBarrier({ siteText: `${ltPage} English`, country: "LT" }).level, "has-english");
   is("and Denmark still reads only Danish", M.languageBarrier({ siteText: ltPage }).level, "unknown");
   ok("a Klaipėda point is in Lithuania, not 'near Denmark'", /in Lithuania, where Gemlyx has no regions yet/.test(M.describeRegion(55.7059, 21.1289, true)));
+  ok("abroad, the fact check and the hours lookup name the town too, for restaurants as for museums",
+    /const NAME_IS_A_TOWN = \["town", "nightTown", "island", "essential"\];/.test(app)
+    && /places-hours\?name=\$\{encodeURIComponent\(!draftInDenmark && draftTown && !fold\(name\)\.includes\(fold\(draftTown\)\)/.test(app));
+  ok("a DKK threshold in a rule is scaled for a euro country, and Denmark's prompts are untouched",
+    /60 DKK is about €8/.test(M.studioPrompts ? M.studioPrompts("Momo", M.countryProfile("LT")).food : readFileSync(join(root, "src/utils/studioPrompts.js"), "utf8")));
+  ok("a Lithuanian supermarket is not a food place, and a restaurant with 'iki' in its name still is",
+    readFileSync(join(root, "src/utils/danishFood.js"), "utf8").includes('"maxima", "rimi", "norfa"]') && !/GROCERY_CHAINS = \[[^\]]*"iki"/.test(readFileSync(join(root, "src/utils/danishFood.js"), "utf8")));
   ok("abroad, a town centre still lets the venue check run", /if \(\(!placed \|\| \(!draftInDenmark && placed\.precise === false\)\) && refusedListing\)/.test(app));
 }
 
