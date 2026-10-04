@@ -52,7 +52,9 @@ const legLine = async (a, b) => {
     const d = await r.json();
     line = Array.isArray(d?.polyline) && d.polyline.length > 1 ? d.polyline : null;
   } catch { /* drawn straight and faint below */ }
-  legCache.set(key, line);
+  // Only a line is kept. A failed call is asked again next time, so one
+  // passing error does not leave a leg faint for the rest of the visit.
+  if (line) legCache.set(key, line);
   return line;
 };
 
@@ -62,17 +64,36 @@ const reducedMotion = () => {
 
 export const GoogleWalkMap = ({ walk, height = 300 }) => {
   const box = useRef(null);
+  // ONE map for the life of the page. Google bills every map it creates, and
+  // making a new one each time a visitor picks another walk would bill each
+  // pick. A new walk clears the pins and lines and draws its own on this map.
+  const mapRef = useRef(null);
+  // It turns once per page, on the first walk shown, and not again when the
+  // visitor picks another: by then they are reading, not watching.
+  const turned = useRef(false);
+  const moved = useRef(false);
   const [failed, setFailed] = useState(false);
+
+  // A touch anywhere on the map, before or during the turn, ends it for good.
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return undefined;
+    const touched = () => { moved.current = true; };
+    ["pointerdown", "wheel", "touchstart", "keydown"].forEach(e => el.addEventListener(e, touched, { passive: true }));
+    return () => ["pointerdown", "wheel", "touchstart", "keydown"].forEach(e => el.removeEventListener(e, touched));
+  }, [failed]);
 
   useEffect(() => {
     if (!googleMapsReady() || !walkLegs(walk).length) return undefined;
-    let gone = false, raf = 0, map = null, moved = false;
+    let gone = false, raf = 0, idle = null;
     const drawn = [];
-    const stop = () => { if (raf) cancelAnimationFrame(raf); raf = 0; };
-    const el = box.current;
-    // A touch before the map has settled counts too: it never starts turning.
-    const touched = () => { moved = true; stop(); };
-    ["pointerdown", "wheel", "touchstart", "keydown"].forEach(e => el?.addEventListener(e, touched, { passive: true }));
+    const stop = () => {
+      if (!raf) return;
+      cancelAnimationFrame(raf); raf = 0;
+      // Stopped part way round, it is set back to north rather than left at
+      // whatever angle it had reached.
+      try { mapRef.current?.moveCamera({ heading: 0 }); } catch { /* map gone */ }
+    };
 
     (async () => {
       try {
@@ -83,9 +104,34 @@ export const GoogleWalkMap = ({ walk, height = 300 }) => {
         const at = (p) => ({ lat: Number(p.lat), lng: Number(p.lon) });
         const bounds = new maps.LatLngBounds();
         [walk.start, ...walk.stops].forEach(p => bounds.extend(at(p)));
-        map = new Map(box.current, {
-          mapId: GOOGLE_MAP_ID, center: bounds.getCenter(), zoom: 15,
-          disableDefaultUI: true, zoomControl: true, gestureHandling: "cooperative",
+        if (!mapRef.current) {
+          mapRef.current = new Map(box.current, {
+            mapId: GOOGLE_MAP_ID, center: bounds.getCenter(), zoom: 15,
+            disableDefaultUI: true, zoomControl: true, gestureHandling: "cooperative",
+          });
+        }
+        const map = mapRef.current;
+
+        // ── THE TURN WAITS FOR THE MAP, NOT FOR THE LINES ──────────────
+        // The first version listened for "idle" only after the walking lines
+        // had come back from api/directions. By then the map had usually
+        // already gone idle, the event never came again, and it neither tilted
+        // nor turned. The listener goes on before anything slow is asked.
+        idle = maps.event.addListenerOnce(map, "idle", () => {
+          if (gone) return;
+          map.moveCamera({ tilt: SPIN_TILT, heading: 0 });
+          if (turned.current || moved.current || reducedMotion()) return;
+          turned.current = true;
+          const t0 = performance.now();
+          const turn = (now) => {
+            if (gone) return;
+            if (moved.current) { raf = 0; return; }
+            const heading = headingAt(now - t0);
+            if (heading === null) { map.moveCamera({ heading: 0 }); raf = 0; return; }
+            map.moveCamera({ heading });
+            raf = requestAnimationFrame(turn);
+          };
+          raf = requestAnimationFrame(turn);
         });
         map.fitBounds(bounds, 36);
 
@@ -109,22 +155,6 @@ export const GoogleWalkMap = ({ walk, height = 300 }) => {
             strokeColor: C.gold, strokeOpacity: measured ? 0.9 : 0.35, strokeWeight: measured ? 4 : 2,
           }));
         });
-
-        // Once the map has settled on the walk, tilt it and turn once.
-        maps.event.addListenerOnce(map, "idle", () => {
-          if (gone) return;
-          map.moveCamera({ tilt: SPIN_TILT, heading: 0 });
-          if (moved || reducedMotion()) return;
-          const t0 = performance.now();
-          const turn = (now) => {
-            if (gone) return;
-            const heading = headingAt(now - t0);
-            if (heading === null) { map.moveCamera({ heading: 0 }); raf = 0; return; }
-            map.moveCamera({ heading });
-            raf = requestAnimationFrame(turn);
-          };
-          raf = requestAnimationFrame(turn);
-        });
       } catch {
         if (!gone) setFailed(true);
       }
@@ -133,8 +163,8 @@ export const GoogleWalkMap = ({ walk, height = 300 }) => {
     return () => {
       gone = true;
       stop();
-      ["pointerdown", "wheel", "touchstart", "keydown"].forEach(e => el?.removeEventListener(e, touched));
-      drawn.forEach(d => { try { if ("setMap" in d) d.setMap(null); else d.map = null; } catch { /* already gone */ } });
+      try { idle?.remove(); } catch { /* already fired */ }
+      drawn.forEach(d => { try { if (typeof d.setMap === "function") d.setMap(null); else d.map = null; } catch { /* already gone */ } });
     };
   }, [walk]);
 
