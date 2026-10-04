@@ -4283,8 +4283,11 @@ Say which answer came from which source, so a fact from a vouched page and a fac
       // covers, and a draft that names no other is about that one.
       // A town written after a comma is the town, abroad, where the table of
       // towns holds only the one: "Hagen's Hill, Neringa".
+      // Only a known town or a single capitalised word: "Restaurant X, Old
+      // Town" names a quarter, not a town, and is left to the home town below.
       const afterComma = !draftInDenmark && name.includes(",") ? plainTownName(name.slice(name.lastIndexOf(",") + 1)) : "";
-      if (!draftTown && afterComma && !/\d/.test(afterComma)) draftTown = afterComma;
+      const looksLikeATown = !!afterComma && (!!townPointFor(afterComma) || /^\p{Lu}[\p{L}-]+$/u.test(afterComma));
+      if (!draftTown && looksLikeATown) draftTown = afterComma;
       if (!draftTown && !draftInDenmark && draftLand.homeTown) {
         draftTown = draftLand.homeTown;
         note("Which town this draft is in", {
@@ -4376,7 +4379,7 @@ Say which answer came from which source, so a fact from a vouched page and a fac
       // only time it is worth anything.
       if (!coords) {
         try {
-          const pr = await studioFetch(`/api/places-locate?name=${encodeURIComponent(draftTown && !fold(name).includes(fold(draftTown)) ? `${name}, ${draftTown}` : name)}${countryParam(draftLand.code)}`);
+          const pr = await studioFetch(`/api/places-locate?name=${encodeURIComponent(draftTown && !containsName(name, draftTown) ? `${name}, ${draftTown}` : name)}${countryParam(draftLand.code)}`);
           const pd = await pr.json();
           // ── RUNGSTED IS NOT RINGSTED ────────────────────────────
           //
@@ -4592,7 +4595,7 @@ Say which answer came from which source, so a fact from a vouched page and a fac
       // name already says the town. Types whose name IS a town are left as
       // they are.
       const NAME_IS_A_TOWN = ["town", "nightTown", "island", "essential"];
-      const subject = draftTown && !fold(name).includes(fold(draftTown))
+      const subject = draftTown && !containsName(name, draftTown)
         && (NAME_IS_NOT_A_PLACE.includes(sType) || (!draftInDenmark && !NAME_IS_A_TOWN.includes(sType)))
         ? `${name} ${draftTown}`
         : name;
@@ -6171,7 +6174,7 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
       // asking for, so that is what the list says.
       if (PLACES_WITH_A_LISTING.includes(sType)) {
         try {
-          const hoursRes = await studioFetch(`/api/places-hours?name=${encodeURIComponent(!draftInDenmark && draftTown && !fold(name).includes(fold(draftTown)) ? `${name}, ${draftTown}` : name)}${frozenGeo ? `&lat=${frozenGeo.lat}&lon=${frozenGeo.lon}` : ""}${countryParam(draftLand.code)}`);
+          const hoursRes = await studioFetch(`/api/places-hours?name=${encodeURIComponent(!draftInDenmark && draftTown && !containsName(name, draftTown) ? `${name}, ${draftTown}` : name)}${frozenGeo ? `&lat=${frozenGeo.lat}&lon=${frozenGeo.lon}` : ""}${countryParam(draftLand.code)}`);
           const hoursData = await hoursRes.json();
           // ── AN ERROR BODY IS NOT AN ANSWER ──────────────────────────
           // Overnight audit, 12 Aug. Neither hoursRes.ok nor hoursData.error was
