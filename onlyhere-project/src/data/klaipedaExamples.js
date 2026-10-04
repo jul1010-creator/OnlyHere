@@ -989,10 +989,32 @@ EXAMPLE_PARTNERS.forEach(p => {
   EXAMPLE_PAGES[id] = page({
     kind,
     row: { id: `x-${p.key}`, name: p.name, location: `${p.street}, Klaipėda`, town: "Klaipėda", __lat: p.lat, __lon: p.lon, mapHint: `${p.street}, Klaipėda`, __offer: { ...p.offer, until: UNTIL }, ...rest },
-    en: { desc, ...(tip ? { tip } : {}), body: [["h", "Being There"], ["p", `${p.what} on ${p.street}. Made up for this page, like its offer.`]] },
+    en: { desc, ...(tip ? { tip } : {}), body: [["h", "Being There"], ["p", `${p.what} on ${p.street}${p.street.endsWith(".") ? "" : "."} Made up for this page, like its offer.`]] },
   });
 });
 
 // Which page a listing opens. A walk stop, an offer and a guide card all
 // carry the same id the walk uses ("free:castle"); the town is "town".
 export const pageFor = (id) => EXAMPLE_PAGES[id] || null;
+
+// ── THE SAME PARTNERS ON THE SPECIAL DEALS PAGE ────────────────────
+// Oliver, 4 Oct 2026, of /lithuania: "it's not updated to 'special deals'",
+// then "Put in a few examples I can show". The gold button only turns into
+// Special deals when a deal is live, and no Klaipėda business has one yet. So
+// until one does, the page shows these made-up partners, each one marked
+// Example, under a line that says they are made up. The first real deal
+// replaces all of them (App.jsx). The rows are the example pages' own rows,
+// so a card opens the same page the examples page opens.
+// Which list each kind of page opens from, as utils/promotions.js names them.
+const PROMO_SRC = { food: "food", nightlife: "nightlife", shop: "shop", free: "free", craft: "craft" };
+export const examplePromotionPools = () => {
+  const pools = {};
+  EXAMPLE_PARTNERS.forEach(p => {
+    const id = `${p.type}:${p.key}`;
+    const pg = pageFor(id);
+    const src = pg && PROMO_SRC[pg.kind];
+    if (!src) return;
+    (pools[src] = pools[src] || []).push({ ...pg.item, _exampleId: id, _kind: pg.kind });
+  });
+  return pools;
+};
