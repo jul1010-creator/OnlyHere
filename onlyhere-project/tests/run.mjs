@@ -413,6 +413,7 @@ writeFileSync(entry, `
   export { CHOICE_LIMIT, cleanCandidates, sameSubject, sameCandidate, needsChoosing, choicesFor, describeChoosing, applyChoice, choiceNote, subjectCore, listingMatchesSubject, streetListingMatches, describeListingRefusal, sameAcrossLanguages, sameWordsReordered } from ${JSON.stringify(join(root, "src/utils/placeChoice.js"))};
   export { headingSkeleton, skeletonKey, openingKey, spreadBy, skeletonSpread, openingSpread, describeSameness, samenessReport } from ${JSON.stringify(join(root, "src/utils/sameness.js"))};
   export { moneyTraceable, COMPRESSION_GLANCE, glanceShapeProblem, EXTRACTABLE_GLANCE, EDITORIAL_GLANCE, NEVER_EXTRACT, CLOSED_OR_DERIVED, glanceFieldsFor, numbersTraceable, freeClaimTraceable, saysFreeOnly, statesAnAmount, GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, describeGlance, staleUncertainties, describeStale } from ${JSON.stringify(join(root, "src/utils/glanceExtract.js"))};
+  export { fromRoutes, durationWords, distanceWords as routeDistanceWords } from ${JSON.stringify(join(root, "api/directions.js"))};
   export { DANISH_MARKERS, LITHUANIAN_MARKERS, looksLocalPage, danishWordsIn, looksUntranslated, looksDanishPage, hasEnglishVersion, languageBarrier } from ${JSON.stringify(join(root, "src/utils/languageBarrier.js"))};
   export { readerLanguage, languageName, answerInLanguage, languageBlock, nativeBlock } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
   export { keepLanguageOf } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
@@ -81489,6 +81490,53 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("a Lithuanian supermarket is not a food place, and a restaurant with 'iki' in its name still is",
     readFileSync(join(root, "src/utils/danishFood.js"), "utf8").includes('"maxima", "rimi", "norfa"]') && !/GROCERY_CHAINS = \[[^\]]*"iki"/.test(readFileSync(join(root, "src/utils/danishFood.js"), "utf8")));
   ok("abroad, a town centre still lets the venue check run", /if \(\(!placed \|\| \(!draftInDenmark && placed\.precise === false\)\) && refusedListing\)/.test(app));
+}
+
+// ── Batch 194: the Routes API in front of the legacy Directions API ──
+// Oliver, 4 Oct 2026: "why don't we use some of these cool APIs?" Directions
+// is legacy since March 2025. The Routes API answers first, in the same shape.
+{
+  const dir = readFileSync(join(root, "api/directions.js"), "utf8");
+  is("durations read the way the Directions API wrote them",
+    [60, 1440, 4920, 7200, 93600, 20].map(M.durationWords), ["1 min", "24 mins", "1 hour 22 mins", "2 hours", "1 day 2 hours", "1 min"]);
+  is("and distances", [350, 1240, 145300].map(M.routeDistanceWords), ["350 m", "1.2 km", "145 km"]);
+  const reply = {
+    routes: [{
+      legs: [{
+        duration: "5280s", distanceMeters: 142300,
+        steps: [
+          { travelMode: "WALK", staticDuration: "300s", distanceMeters: 400 },
+          { travelMode: "TRANSIT", staticDuration: "3600s", distanceMeters: 60000,
+            transitDetails: {
+              stopDetails: { departureStop: { name: "Hou Havn" }, arrivalStop: { name: "Sælvig Havn" } },
+              localizedValues: { departureTime: { time: { text: "10:15" } }, arrivalTime: { time: { text: "11:15" } } },
+              transitLine: { nameShort: "Samsø Linjen", agencies: [{ name: "Samsø Rederi", uri: "https://samsoe-rederi.dk" }], vehicle: { type: "FERRY" } },
+              stopCount: 1,
+            } },
+        ],
+      }],
+      polyline: { encodedPolyline: "_p~iF~ps|U_ulLnnqC_mqNvxq`@" },
+    }],
+    geocodingResults: { origin: { placeId: "abc", type: ["locality", "political"] }, destination: { placeId: "def", type: ["establishment"] } },
+  };
+  const got = M.fromRoutes(reply);
+  ok("a Routes reply comes out in the shape every caller already reads",
+    got.durationText === "1 hour 28 mins" && got.durationMinutes === 88 && got.distanceText === "142 km" && got.distanceMeters === 142300
+    && got.via === "routes" && Array.isArray(got.polyline) && got.polyline.length === 3);
+  ok("the walk step keeps its mode name", got.steps[0].mode === "walking" && got.steps[0].mins === 5);
+  ok("a named ferry, its operator and its link come through",
+    got.hasFerry && !got.ferryUnnamed && got.ferries[0].line === "Samsø Linjen" && got.ferries[0].from === "Hou Havn"
+    && got.steps[1].agencies[0].url === "https://samsoe-rederi.dk" && got.steps[1].departure === "10:15");
+  ok("and the place ids the Maps link opens", got.placeIds.destination === "def" && got.placeTypes.origin.includes("locality"));
+  const car = M.fromRoutes({ routes: [{ legs: [{ duration: "14580s", distanceMeters: 305000, steps: [{ travelMode: "DRIVE", staticDuration: "2700s", distanceMeters: 12000, navigationInstruction: { maneuver: "FERRY", instructions: "Take the ferry" } }] }] }] });
+  ok("a car on a ferry is still a ferry, unnamed", car.hasFerry && car.ferryUnnamed);
+  is("no route is the word transport.js reads as Google looked and found nothing", M.fromRoutes({}).error, "ZERO_RESULTS");
+  is("and a place Google could not find says so",
+    M.fromRoutes({ geocodingResults: { origin: { geocoderStatus: { code: 5, message: "NOT_FOUND" } } } }).error, "NOT_FOUND");
+  ok("a refused Routes call falls back to the Directions call",
+    /const routed = await askRoutes\(/.test(dir) && /if \(routed\) return res\.status\(200\)\.json\(routed\);/.test(dir)
+    && /if \(!r\.ok\) return null;/.test(dir) && /via: "directions",/.test(dir));
+  ok("it stays on the cheapest tier: basic fields, no traffic", /routingPreference = "TRAFFIC_UNAWARE"/.test(dir) && !/TRAFFIC_AWARE"/.test(dir) && /"X-Goog-FieldMask": ROUTES_FIELDS/.test(dir));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
