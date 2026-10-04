@@ -20,6 +20,7 @@ import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_KEY } from "../src/utils/supabaseP
 import { COUNTRY_PROFILES } from "../src/utils/countries.js";
 import { placeClock } from "../src/utils/offerClock.js";
 import { walkWeatherFrom } from "../src/utils/walkWeather.js";
+import { ferryWait } from "../src/utils/walkable.js";
 import {
   NOW_STARTS, NOW_HOURS, NOW_LANGS, SHIP_MARGIN, slotAccepted, slotOf, slotDate,
   nowCandidates, ruleOrder, planPrompt, readOrder, goodWalk,
@@ -131,7 +132,9 @@ export default async function handler(req, res) {
   const weather = await weatherAt(start);
   const all = nowCandidates(rows, { country, zone, now: at });
   const candidates = style ? strollCandidates(all, country) : all;
-  const ctx = { country, start, startClock, budget, margin, wet: weather.wet, temp: weather.temp, weather, style, lang };
+  // The ferry's wait by the month in Klaipėda (walkable.js, FERRIES).
+  const month = (() => { try { return Number(new Intl.DateTimeFormat("en", { timeZone: zone, month: "numeric" }).format(at)); } catch { return 0; } })();
+  const ctx = { country, start, startClock, budget, margin, wet: weather.wet, temp: weather.temp, weather, style, lang, ferryWait: ferryWait(country, month) };
 
   let walk = null, made = "rules";
   if (candidates.length && startClock.minutes >= AI_FROM && startClock.minutes < AI_TO) {
