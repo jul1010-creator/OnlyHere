@@ -19,6 +19,7 @@ import { requestIsFromSite, NOT_FROM_SITE } from "../src/utils/apiGuard.js";
 import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_KEY } from "../src/utils/supabasePublic.js";
 import { COUNTRY_PROFILES } from "../src/utils/countries.js";
 import { placeClock } from "../src/utils/offerClock.js";
+import { walkWeatherFrom } from "../src/utils/walkWeather.js";
 import {
   NOW_STARTS, NOW_HOURS, NOW_LANGS, SHIP_MARGIN, slotAccepted, slotOf, slotDate,
   nowCandidates, ruleOrder, planPrompt, readOrder, goodWalk,
@@ -44,20 +45,9 @@ const weatherAt = async (p) => {
     const r = await fetch(`https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=${p.lat.toFixed(3)}&lon=${p.lon.toFixed(3)}`,
       { headers: { "User-Agent": "Gemlyx/1.0 (gemlyxtravel.com)" }, signal: AbortSignal.timeout(2500) });
     if (!r.ok) return UNKNOWN_WEATHER;
-    const j = await r.json();
-    const next = (j?.properties?.timeseries || []).slice(0, 3);
-    const rain = next.reduce((n, t) => n + (Number(t?.data?.next_1_hours?.details?.precipitation_amount) || 0), 0);
-    const symbol = String(next[0]?.data?.next_1_hours?.summary?.symbol_code || "");
-    const temp = Number(next[0]?.data?.instant?.details?.air_temperature);
-    // The strongest wind of the next three hours, in metres a second, so a
-    // gale forecast for the middle of the walk counts.
-    const wind = Math.max(0, ...next.map(t => Number(t?.data?.instant?.details?.wind_speed) || 0));
-    return {
-      wet: rain >= 0.5 || /rain|sleet|snow/.test(symbol),
-      snow: /snow|sleet/.test(symbol),
-      wind: Math.round(wind),
-      temp: Number.isFinite(temp) ? temp : null,
-    };
+    const w = walkWeatherFrom(await r.json());
+    if (!w) return UNKNOWN_WEATHER;
+    return { wet: w.wet, snow: w.snow, wind: w.wind, temp: w.temp };
   } catch { return UNKNOWN_WEATHER; }
 };
 

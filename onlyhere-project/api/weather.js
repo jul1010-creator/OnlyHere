@@ -300,6 +300,7 @@ async function climateNormals(lat, lon, dateStr) {
 }
 
 import { requestIsFromSite, NOT_FROM_SITE } from "../src/utils/apiGuard.js";
+import { walkWeatherFrom } from "../src/utils/walkWeather.js";
 
 export default async function handler(req, res) {
   // ── SECURITY, 17 AUG 2026 ─────────────────────────────────────────
@@ -314,6 +315,21 @@ export default async function handler(req, res) {
   const lat = Number(req.query.lat), lon = Number(req.query.lon);
   if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
     return res.status(400).json({ error: "Missing 'lat' or 'lon' query params" });
+  }
+
+  // ── THE NEXT THREE HOURS, AS THE WALK PLANNER READS THEM ──────────
+  // For the examples page's "Right now" walk. The same reader plan-now uses,
+  // so what the page shows is what a visitor's walk would be made for.
+  if (mode === "walk") {
+    try {
+      const r = await fetch(`https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=${lat.toFixed(3)}&lon=${lon.toFixed(3)}`,
+        { headers: { "User-Agent": "Gemlyx/1.0 (gemlyxtravel.com)" }, signal: AbortSignal.timeout(4000) });
+      const w = r.ok ? walkWeatherFrom(await r.json()) : null;
+      res.setHeader("Cache-Control", "public, s-maxage=600, stale-while-revalidate=300");
+      return res.status(200).json(w || { known: false });
+    } catch {
+      return res.status(200).json({ known: false });
+    }
   }
 
   if (mode === "normals") {
