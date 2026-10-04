@@ -81132,7 +81132,10 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("so a dinner-only kitchen is shut at ten in the morning", N.openBetween(["Monday: 5:00 – 10:00 PM"], 1, 600, 660) === false);
   const sea = { lat: 55.7178, lon: 21.0989 }, oldFerry = { lat: 55.7058, lon: 21.1129 }, terminal = N.NOW_STARTS.LT.terminal, castle = { lat: 55.7056, lon: 21.1290 };
   ok("across the strait is not in the walkable centre", M.WK.acrossWater("LT", sea) && M.WK.acrossWater("LT", oldFerry) && !M.WK.acrossWater("LT", terminal) && !M.WK.acrossWater("LT", castle) && M.WK.centreOf("LT", sea) === null && !!M.WK.centreOf("LT", castle));
-  ok("and the walk leaves it out rather than walking there", N.nowCandidates([{ id: 9, type: "free", payload: { name: "Sea Museum", country: "LT", __lat: sea.lat, __lon: sea.lon } }], { country: "LT", zone: "Europe/Vilnius", now: new Date("2026-10-06T08:30:00Z") }).length === 0);
+  // Batch 201, 4 Oct 2026: kept now, marked across, and only ever reached on
+  // the ferry (legBetween), never on foot along the strait.
+  const seaRow = N.nowCandidates([{ id: 9, type: "free", payload: { name: "Sea Museum", country: "LT", __lat: sea.lat, __lon: sea.lon } }], { country: "LT", zone: "Europe/Vilnius", now: new Date("2026-10-06T08:30:00Z") });
+  ok("and the walk never walks there: it takes the ferry", seaRow.length === 1 && seaRow[0].across === true && !!N.legBetween(terminal, sea, { country: "LT" }).ferry);
   is("a number range keeps its hyphen whatever the model wrote", [N.stripDashes("Open 10 - 18 most days"), N.stripDashes("Open 10–18"), N.stripDashes("Quiet — mostly")], ["Open 10-18 most days", "Open 10-18", "Quiet, mostly"]);
   const cands = N.nowCandidates([{ id: 3, type: "food", payload: { name: "Late lunch", country: "LT", __lat: 55.7101, __lon: 21.1340, __hours: { hours: ["Tuesday: 08:00 – 23:00"] }, __offer: { text: "Soda", until: "2026-12-31", from: "13:00", to: "16:00" } } }], { country: "LT", zone: "Europe/Vilnius", now: new Date("2026-10-06T12:00:00Z") });
   const w = N.scheduleWalk([{ id: "food:3" }], cands, { country: "LT", start: terminal, startClock: { day: 2, minutes: 15 * 60 + 15 }, budget: 240, margin: 30 });
@@ -81301,7 +81304,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("the model is told about snow and a storm wind, and which places are out on the water", /snowing/.test(N.planPrompt(cands, { ...base, weather: { snow: true } })) && /storm wind/.test(N.planPrompt(cands, { ...base, weather: { wind: 17 } })) && /out on open water/.test(N.planPrompt(cands, { ...base })));
   ok("and the rules alone put a harbour place last in a storm", N.ruleOrder(cands, { ...base, weather: { wind: 17 } }).slice(-1)[0].id === "free:2");
   const api = readFileSync(join(root, "api/plan-now.js"), "utf8");
-  ok("the forecast is read for snow and for the strongest wind of the next three hours", /snow: \/snow\|sleet\/\.test\(symbol\)/.test(readFileSync(join(root, "src/utils/walkWeather.js"), "utf8")) && /wind_speed/.test(readFileSync(join(root, "src/utils/walkWeather.js"), "utf8")) && /walkWeatherFrom/.test(api) && /weather, style, lang \}/.test(api));
+  ok("the forecast is read for snow and for the strongest wind of the next three hours", /snow: \/snow\|sleet\/\.test\(symbol\)/.test(readFileSync(join(root, "src/utils/walkWeather.js"), "utf8")) && /wind_speed/.test(readFileSync(join(root, "src/utils/walkWeather.js"), "utf8")) && /walkWeatherFrom/.test(api) && /weather, style, lang, ferryWait: ferryWait\(country, month\) \}/.test(api));
   // The Old Town walk.
   const town = N.strollCandidates(cands, "LT");
   ok("the Old Town walk keeps what is inside the Old Town and is not a museum", town.map(c => c.id).sort().join() === "free:1,free:2" && N.inOldTown("LT", { lat: 55.7078, lon: 21.1316 }) && !N.inOldTown("LT", { lat: 55.7169, lon: 21.1402 }));
@@ -81723,6 +81726,66 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   // Every new line of this batch keeps to his writing rules.
   const fresh = ["src/utils/mapsGate.js", "src/utils/toolTurn.js", "src/utils/aiGate.js", "api/build-pass.js"].map(f => readFileSync(join(root, f), "utf8")).join("\n");
   ok("no dashes and none of his banned words in the new text", !/[—–]/.test(fresh.replace(/\/\/ ── .*$/gm, "")) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(fresh));
+}
+
+// ── Batch 201: Lithuanian place names, Klaipėda links, the Smiltynė ferry ──
+// Oliver, 4 Oct 2026, at work, choosing all four from the work list.
+{
+  // The place's own name.
+  const appL = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("an abroad draft keeps Google's local name when it is a different name", /if \(!draftInDenmark && pd\.name && \(pd\.nameEn \|\| \/\[ąčęėįšųūž\]\/i\.test\(pd\.name\)\)\) placesLocal = String\(pd\.name\)\.trim\(\);/.test(appL) && /if \(t && typeof t === "object" && placesLocal && fold\(placesLocal\) !== fold\(t\.name \|\| name\)\) t\.localName = placesLocal;/.test(appL));
+  const base = { name: "Castle Site", desc: "Ruins of the castle.", city: "Klaipėda", region: "Lithuania" };
+  ok("a Lithuanian row publishes its own name", M.shapeForLive("free", { ...base, country: "LT", localName: "Klaipėdos piliavietė" }).localName === "Klaipėdos piliavietė");
+  ok("a Danish row never carries one", !("localName" in M.shapeForLive("free", { ...base, localName: "Slotsruinen" })));
+  const prose = { desc: "Ruins of the castle." };
+  const lt = M.TR.translatePrompt(prose, "lt", { name: "Castle Site", where: "Klaipėda, Lithuania", localName: "Klaipėdos piliavietė" });
+  ok("the Lithuanian translation is told the local name and to decline it", lt.includes('own Lithuanian name is "Klaipėdos piliavietė"') && /declined as Lithuanian grammar needs/.test(lt) && !/Keep every proper name exactly as written/.test(lt));
+  const da = M.TR.translatePrompt(prose, "da", { name: "Castle Site", localName: "Klaipėdos piliavietė" });
+  ok("Danish and German write it the way a guidebook in that language would", /the way a Danish guidebook would/.test(da) && /the way a German guidebook would/.test(M.TR.translatePrompt(prose, "de", { localName: "X" })));
+  ok("without a local name the old rule stands", /Keep every proper name exactly as written/.test(M.TR.translatePrompt(prose, "lt", { name: "Castle Site" })));
+  const fp = M.TR.fingerprint(M.TR.proseOf(base));
+  const done = { fp, da: { desc: "x" }, de: { desc: "x" }, lt: { desc: "x" } };
+  ok("a local name added since asks for the translation again", !M.TR.needsTranslation({ ...base, __i18n: done }) && M.TR.needsTranslation({ ...base, localName: "Klaipėdos piliavietė", __i18n: done }) && !M.TR.needsTranslation({ ...base, localName: "Klaipėdos piliavietė", __i18n: { ...done, ln: "Klaipėdos piliavietė" } }));
+  const dp = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
+  ok("the page shows the local name, as the title in Lithuanian, under it otherwise", /const top = local && lang === "lt" \? local : item\.name;/.test(dp) && /data-testid="local-name"/.test(dp));
+
+  // The Klaipėda links.
+  const kex = readFileSync(join(root, "src/data/klaipedaExamples.js"), "utf8");
+  ok("no example cites a klaipedatravel.lt page that now redirects to a general one", !/klaipedatravel\.lt\/en\/place\/(jv|ta)\//.test(kex) && kex.includes("top-10-places-to-visit-in-klaipeda/the-black-ghost-sculpture") && kex.includes("top-10-places-to-visit-in-klaipeda/theatre-square"));
+
+  // The ferry.
+  const N = M.NP, W = M.WK;
+  const terminal = N.NOW_STARTS.LT.terminal, sea = { lat: 55.7178, lon: 21.0989 }, vessels = { lat: 55.71301, lon: 21.10553 };
+  ok("both landings sit either side of the strait", !W.acrossWater("LT", W.FERRIES.LT.near) && W.acrossWater("LT", W.FERRIES.LT.far));
+  is("the wait is the whole gap between two ferries, the longer one when the month is unknown", [W.ferryWait("LT", 7), W.ferryWait("LT", 10), W.ferryWait("LT"), W.ferryWait("DK", 7)], [30, 60, 60, null]);
+  const over = N.legBetween(terminal, sea, { country: "LT", ferryWait: 30 });
+  ok("a leg over the strait is walk, wait, crossing, walk", !!over.ferry && over.minutes === over.ferry.walkTo + 30 + 10 + over.ferry.walkFrom && over.ride === false);
+  const backLeg = N.legBetween(sea, terminal, { country: "LT", ferryWait: 30 });
+  ok("and back the same way", !!backLeg.ferry && backLeg.minutes === over.minutes);
+  ok("two places on the far side are a walk", !N.legBetween(sea, vessels, { country: "LT" }).ferry && !N.legBetween(sea, vessels, { country: "LT" }).ride);
+  ok("a crossing that needs a Bolt at one end is not a walk", N.legBetween({ lat: 55.7337, lon: 21.0882 }, sea, { country: "LT" }).minutes >= 9999);
+  const rows = [
+    { id: 1, type: "free", payload: { name: "Lithuanian Sea Museum", country: "LT", tier: "Highly Recommended", __lat: sea.lat, __lon: sea.lon, desc: "Aquarium and seals.", __hours: { hours: ["Monday: 10:00 – 18:00"] } } },
+    { id: 2, type: "free", payload: { name: "Theatre Square", country: "LT", __lat: 55.7078, __lon: 21.1316, desc: "The main square." } },
+  ];
+  const cands = N.nowCandidates(rows, { country: "LT", zone: "Europe/Vilnius", now: new Date("2026-07-06T07:30:00Z") });
+  const ctx = (h, wait) => ({ country: "LT", start: terminal, startClock: { day: 1, minutes: 600 }, budget: h * 60, margin: 30, weather: { wet: false, snow: false, wind: 2 }, ferryWait: wait });
+  const long = N.scheduleWalk([{ id: "free:1" }, { id: "free:2" }], cands, ctx(5, 30));
+  const short = N.scheduleWalk([{ id: "free:1" }, { id: "free:2" }], cands, ctx(2, 60));
+  ok("a long enough walk takes the ferry and says so", long.stops[0]?.id === "free:1" && !!long.stops[0].ferry && !!long.stops[1]?.ferry);
+  ok("a short one leaves the far side out rather than missing the ship", !short.stops.some(s => s.id === "free:1"));
+  const prompt = N.planPrompt(cands, ctx(4, 30));
+  ok("the model is told it is across the water and by ferry", /ACROSS THE WATER, by the old ferry to Smiltynė: about \d+ min from the start with the wait, the same back, so keep these together/.test(prompt));
+  const np = readFileSync(join(root, "src/components/NowPlanner.jsx"), "utf8");
+  ok("the walk shows a ferry leg in its parts, with the timetable a tap away", /s\.ferry \? <FerryLeg ferry=\{s\.ferry\}/.test(np) && /walk\.back\.ferry \? <FerryLeg/.test(np) && /uiT\("now\.ferryTimes", lang\)/.test(np));
+  const cut = (src, a, b) => src.slice(src.indexOf(a), src.indexOf(b, src.indexOf(a)));
+  const wk = readFileSync(join(root, "src/utils/walkable.js"), "utf8"), et = readFileSync(join(root, "src/utils/entryTranslate.js"), "utf8"), npl = readFileSync(join(root, "src/utils/nowPlanner.js"), "utf8");
+  const shown = [
+    cut(dp, "The name on the sign, abroad", "THE ADD-TO-TRIP ROW"), cut(np, "A leg that crosses the strait", "const readerLang"),
+    cut(wk, "AND THE FERRY THAT CROSSES IT", "export const acrossWater"), cut(et, "THE PLACE'S OWN NAME", "export const translatePrompt"),
+    cut(npl, "ACROSS THE STRAIT ON THE OLD FERRY", "export const slotOf"),
+  ].join("\n").replace(/── /g, "");
+  ok("no dashes and none of his banned words in the new text", shown.length > 2000 && !/[—–]/.test(shown) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(shown));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
