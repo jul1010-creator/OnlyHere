@@ -160,7 +160,7 @@ import { PageHero } from "./components/PageHero";
 import { LiveEventsHeaderStrip } from "./components/LiveEventsHeaderStrip";
 import { SCAN_KINDS, scanKindOf, scanPrompt } from "./utils/scanKinds";
 import { groupByMonth } from "./utils/calendarMonths";
-import { dealCode, cleanBooking, bookingProblem, cleanBusy } from "./utils/dealExtras";
+import { cleanBooking, bookingProblem, cleanBusy } from "./utils/dealExtras";
 import { WeatherHeaderStrip, DenmarkClock } from "./components/WeatherHeaderStrip";
 import { StoreBadge } from "./components/StoreBadge";
 import { DateTimePicker } from "./components/DateTimePicker";
@@ -29281,21 +29281,17 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           </div>
                         )}
 
-                        {/* ── BOOK A TABLE, THE DEAL CODE, AND HOW BUSY ───────
+                        {/* ── BOOK A TABLE, AND HOW BUSY ─────────────────────
                             Oliver, 1 Oct 2026, for the Klaipėda pilot: cruise
                             passengers with a few hours, so convenience first.
-                            See utils/dealExtras.js. */}
+                            See utils/dealExtras.js. The deal code that sat
+                            here went on 5 Oct 2026 (see there). */}
                         <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, margin: "12px 0 5px" }}>BOOK A TABLE (a link or a phone number)</div>
                         <input value={studioBooking} onChange={e => setStudioBooking(e.target.value)}
                           placeholder="https://restaurant.lt/booking or +370 600 00000"
                           style={{ width: "100%", border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 12px", fontSize: 12, outline: "none", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif", boxSizing: "border-box" }} />
                         {bookingProblem(studioBooking) && (
                           <div style={{ fontSize: 10.5, color: "#FFB347", lineHeight: 1.55, marginTop: 6 }}>{bookingProblem(studioBooking)}</div>
-                        )}
-                        {studioOfferText.trim() && studioDraft?.name && (
-                          <div style={{ fontSize: 11, color: C.light, lineHeight: 1.55, marginTop: 8 }}>
-                            Deal code for the partner: <strong style={{ color: C.gold, letterSpacing: 1 }}>{dealCode(studioDraft)}</strong>. Guests show it at the counter.
-                          </div>
                         )}
                         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
                           <button onClick={async () => {
