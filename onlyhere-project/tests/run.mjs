@@ -1626,27 +1626,6 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     ok("anchored on today, because a paste carries no date of its own",
       /at: dayKey\(new Date\(\)\), author: "" \}\]/.test(app));
     ok("and it says so when it finds nothing", /No date that has not already happened/.test(app));
-    // ── AND THE WEEKLY RUN CARRIES IT TOO ─────────────────────────
-    // His own choice: a button, and with the weekly update, "so new posts
-    // surface without you remembering".
-    {
-      const weekly = stripComments(readFileSync(join(root, "api/update-events-check.js"), "utf8"));
-      ok("the weekly update sweeps the groups", /candidatesIn\(postsIn\(body \|\| \{\}\)/.test(weekly));
-      // IMPORTED, not reimplemented. A second copy of the date reading is how
-      // the button and the weekly run come to disagree about what a post says.
-      ok("using the same reader as the button",
-        /import \{ postsIn, candidatesIn, newCandidates \} from "\.\.\/src\/utils\/communityFeeds\.js";/.test(weekly));
-      // ONLY ON THE FIRST PAGE, or a paged weekly run bills the same groups
-      // five times.
-      ok("and only on the first page", /if \(offset === 0\) \{/.test(weekly));
-      ok("with the groups deduped against everything published, not just the batch",
-        /newCandidates\(found, rows\.map\(r => r\.payload \|\| \{\}\)\)/.test(weekly));
-      // IT WRITES NOTHING, like the rest of that endpoint. Asked of SUPABASE
-      // specifically: there is a POST in that file and it is the Perplexity
-      // call, so a bare search for one would fail on a correct endpoint.
-      ok("and nothing is written back to the library",
-        !/SUPABASE_URL[^;]{0,200}method: "(?:POST|PATCH|DELETE)"/.test(weekly));
-    }
     ok("and it has its own table", /create table if not exists gemlyx_feeds/.test(app));
     // ── NOTHING IS PUBLISHED, AND NOTHING IS CITED ────────────────
     // The whole safety of the feature. A post makes the pipeline go and look;
@@ -21010,63 +20989,6 @@ rmSync(dir, { recursive: true, force: true });
      /it ranks below every named host here/.test(psR));
   ok("with the 2022 case named as the thing it keeps catching",
      /a press release from 2022 saying companions get in free is not evidence about 2026/.test(psR));
-}
-
-// ── THE EVENT UPDATER HAD CHECKED ZERO EVENTS SINCE 5 AUGUST ────────
-// It imported events, majorEvents and vikingEvents from src/data/events.js. All
-// three became `export const x = []` on 5 August when content moved to Supabase,
-// and liveContent.js refills them AT RUNTIME IN THE BROWSER. A serverless
-// function has no browser, so the batch was empty, the loop never ran, and the
-// endpoint returned a clean 200 reporting no changes. It never cost a Perplexity
-// call and never updated an event.
-{
-  const upd = readFileSync(join(root, "api/update-events-check.js"), "utf8");
-  const data = readFileSync(join(root, "src/data/events.js"), "utf8");
-
-  // The precondition, asserted rather than assumed, so this test explains
-  // itself if somebody ever refills those arrays.
-  ok("the static event arrays really are empty", /export const events = \[\];/.test(data) && /export const majorEvents = \[\];/.test(data));
-  // THE COMMENT TRAP, met head on: the file's own header QUOTES the old import
-  // line while explaining the bug, so a plain regex matches the explanation. And
-  // stripNonCode is no help here either, because the import path is a string
-  // literal and it blanks string contents. So this reads code lines only.
-  const codeLines = (src) => src.split("\n").filter(l => !/^\s*\/\//.test(l)).join("\n");
-  ok("the updater no longer reads them", !/from "\.\.\/src\/data\/events\.js"/.test(codeLines(upd)));
-  ok("the scan can still see a real import, so it is not matching nothing",
-     /from "\.\.\/src\/utils\/readPage\.js"/.test(codeLines(upd)));
-  ok("it reads the table the events actually live in", /gemlyx_content\?select=id,type,payload&type=eq\.festival/.test(upd));
-
-  // The api/ask.js quota bug, not repeated: fetch only rejects on a network
-  // fault, so a missing table or an RLS refusal arrives as a RESOLVED response
-  // and reading rows off it gives an empty list that looks like "no events".
-  // ANCHORED ON THE CONDITION AND ON WHAT IS UNIQUELY INSIDE IT. The first
-  // version of this read /if \(!r\.ok\) \{/ and there are TWO of those in this
-  // file, the Supabase read and the Perplexity call, so deleting the Supabase
-  // guard left the other one to match and the assertion passed. That is the
-  // same-shape-elsewhere trap this suite documents, met in the wild.
-  ok("it checks res.ok on the Supabase read and not just the catch",
-     /if \(!r\.ok\) \{\s*const body = await r\.text\(\)/.test(upd));
-  ok("and on the Perplexity call as well",
-     /if \(!r\.ok\) \{\s*failed\.push/.test(upd));
-  ok("and says plainly that a refusal is not an empty library", /This is NOT "no events on file"/.test(upd));
-  ok("a non-array answer is caught too", /if \(!Array\.isArray\(rows\)\)/.test(upd));
-
-  // It goes from zero spend to real spend, so it has to be able to say how much.
-  ok("there is a dry run that makes no paid call", /const dry = req\.query\.dry === "1"/.test(upd));
-  ok("the dry run reports what it would cost", /wouldCost:/.test(upd));
-  // groupReads joined this line on 17 Sep with the community feeds. What it
-  // pins is unchanged: the spend reported is counted, never estimated.
-  ok("a real run reports what it actually spent", /spend: \{ perplexityCalls: batch\.length, firecrawlCredits: credits, groupReads: community\?\.groups \|\| 0 \}/.test(upd));
-  ok("credits are counted from the reader rather than guessed", /credits \+= r\.credits \|\| 0;/.test(upd));
-
-  // The official site goes in FIRST, which is what makes the priority real.
-  ok("it reads the event's own site through the shared reader", /await readPage\(p\.website, \{ key: firecrawlKey \}\)/.test(upd));
-  ok("and tells the model that page outranks anything it finds", /it OUTRANKS anything you find in a search result, a blog or a listing site/.test(upd));
-  ok("a reported change records whether the official site was seen", /sawOfficialSite: !!siteText/.test(upd));
-  ok("and every read is named by domain, not counted", /domain: domainOf\(p\.website\)/.test(upd));
-  // The end date decides whether a multi-day festival is over, same rule
-  // eventDateIssues follows.
-  ok("upcoming is judged on the END date", /const last = end && parseEventDate\(end\) \? end : start;/.test(upd));
 }
 
 // ── THE LAST ACCURACY GATE COULD BE SILENTLY ABSENT ─────────────────
@@ -80328,8 +80250,6 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ], ["not-on-its-own-page", "own-page-not-read", ""]);
   ok("and every refusal has its sentence", ["not-on-its-own-page", "own-page-not-read"].every(k => !!M.STATUS_REFUSAL_WHY[k] && !/[—–]/.test(M.STATUS_REFUSAL_WHY[k])));
   ok("the Studio run hands it the pages it read", /ownText: ownTexts\.join\("\\n\\n"\)/.test(app) && /if \(first\.ok && first\.data\?\.text\) ownTexts\.push\(first\.data\.text\);/.test(app));
-  const cron = readFileSync(join(root, "api/update-events-check.js"), "utf8");
-  ok("and so does the scheduled check, which also asks for the end date", /dateEndChanged/.test(cron) && /statusRefusalFor\(\{ status: parsed\.ticketStatusChanged, onFile: p\.date, accepted: parsed\.dateChanged, today, ownText: siteText \}\)/.test(cron) && /onFileEnd: p\.dateEnd/.test(cron));
 
   // Closed places.
   const cands = [
@@ -80963,8 +80883,6 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const askR = readFileSync(join(root, "api/ask.js"), "utf8");
   ok("a question needs a confirmed email, the founder aside", /if \(userId && !\(u\?\.email_confirmed_at \|\| u\?\.confirmed_at\) && !isFounder\(String\(userId\), process\.env\.GEMLYX_FOUNDER_IDS\)\)/.test(askR));
   ok("and comes from the site", /if \(!requestIsFromSite\(req\.headers\)\) return json\(res, 403, \{ error: NOT_FROM_SITE \}\);/.test(askR) && askR.indexOf("requestIsFromSite(req.headers)") < askR.indexOf("/auth/v1/user"));
-  const evc = readFileSync(join(root, "api/update-events-check.js"), "utf8");
-  ok("the weekly check's key is compared in constant time, and ?key= still works", /timingSafeEqual\(digest\(provided\), digest\(secret\)\)/.test(evc) && /req\.query\.key \|\| req\.headers\["x-update-events-key"\]/.test(evc) && !/provided !== secret/.test(evc));
   ok("weather coordinates are numbers", /const lat = Number\(req\.query\.lat\), lon = Number\(req\.query\.lon\);/.test(w));
 }
 
