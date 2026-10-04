@@ -85,7 +85,7 @@ import { KlaipedaExamples } from "./pages/KlaipedaExamples";
 import { KlaipedaSculptures } from "./pages/KlaipedaSculptures";
 import { COUNTRY_PROFILES, DEFAULT_COUNTRY, countryProfile, setWorkingCountry, countryParam, rowCountry, activeCountry, homePath, plainTownName } from "./utils/countries";
 import { KLAIPEDA_DEMO_PATH } from "./data/klaipedaDemo";
-import { KLAIPEDA_EXAMPLES_PATH } from "./data/klaipedaExamples";
+import { KLAIPEDA_EXAMPLES_PATH, examplePromotionPools } from "./data/klaipedaExamples";
 import { KLAIPEDA_SCULPTURES_PATH } from "./data/klaipedaSculptures";
 import { translateEntry, needsTranslation, fingerprint, proseOf } from "./utils/entryTranslate";
 import { TripLibraryPage } from "./components/TripLibraryPage";
@@ -2750,6 +2750,8 @@ function GemlyxApp() {
   // publishing stays as quick as it was, and on the live row, re-read just
   // before writing so an edit made meanwhile is never overwritten.
   const [translateRun, setTranslateRun] = useState(null);
+  // The made-up partner open from the Special deals examples, 4 Oct 2026.
+  const [exampleDeal, setExampleDeal] = useState(null);
   const translateRow = async (id) => {
     const read = async () => {
       const r = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${Number(id)}&select=payload`);
@@ -21699,10 +21701,17 @@ If the conversation only covers a single day or a few stops with no explicit day
   // should we get a 'Gemlyx promotions' navigation?" Every live offer, read
   // off the entries themselves (utils/promotions.js), next to Cheap gems. Same
   // rule as Shopping: out of the menu while no offer is live, except in Studio.
-  const promotions = livePromotions({
+  const livePromos = livePromotions({
     free: freeEntrance, craft: craftItems, food: foodSpots, nightlife: nightlifeSpots,
     shop: shops, shopPlace: shopPlaces, event: [...events, ...majorEvents], town: towns,
   });
+  // ── AND IN KLAIPĖDA, EXAMPLES UNTIL THE FIRST REAL ONE ───────────
+  // Oliver, 4 Oct 2026: "Put in a few examples I can show." While no
+  // Lithuanian business has a deal live, the Lithuanian page shows the made-up
+  // partners from the examples page, each marked Example (PromotionsPage), so
+  // the gold button reads Special deals. The first real deal replaces them all.
+  const exampleDeals = PAGE_COUNTRY === "LT" && !livePromos.some(p => rowCountry(p) === "LT");
+  const promotions = exampleDeals ? livePromotions(examplePromotionPools()) : livePromos;
   const hidePromotions = liveLoaded && !libraryFailed && !isStudio && promotions.length === 0;
   // ── AND ON ANOTHER COUNTRY'S PAGE, ONLY WHAT IT HAS ──────────────
   // Phase 2 of LITHUANIA_PLAN_29SEP.md, the same rule as Shopping above: a
@@ -30152,8 +30161,10 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               everybody on another country's page (OPEN_ABROAD), locked on the
               Danish one exactly as the entry page locks it. */}
           {tab === "promotions" && <PromotionsPage promos={promotions} lang={uiLang} title={uiT("nav.promotions", uiLang)}
-            paid={(OPEN_ABROAD && !!userSession) || hasPaidPlan(userProfile)}
-            onOpen={(p) => { if (OPEN_ABROAD && needsAccountFor("deal")) return; openStopDetail(p); }} />}
+            examples={exampleDeals}
+            paid={exampleDeals || (OPEN_ABROAD && !!userSession) || hasPaidPlan(userProfile)}
+            onOpen={(p) => { if (p._exampleId) { setExampleDeal(p); return; } if (OPEN_ABROAD && needsAccountFor("deal")) return; openStopDetail(p); }} />}
+
           {tab === "shopping" && <ShoppingPage shops={shops} places={shopPlaces} title={uiT("nav.shopping", uiLang)}
             onOpen={(row) => setShopDetail(row)} />}
           {tab === "attractions" && (() => {
@@ -34256,6 +34267,14 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
       <DetailPage windowed={entryWindowed} lang={uiLang} paid={(OPEN_ABROAD && !!userSession) || hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={(why) => { setAuthReason(typeof why === "string" ? why : "review"); setAuthMode("in"); setAuthOpen(true); }} item={nightlifeDetail} onClose={closeEntry} kind="nightlife" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={nightlifeDetail && isPlaceSaved("nightlife", nightlifeDetail.id)} onToggleSave={nightlifeDetail ? () => toggleSavePlace("nightlife", nightlifeDetail, nightlifeDetail.location) : null} hasBeen={!!nightlifeDetail && isBeenHere("nightlife", nightlifeDetail.id)} onToggleBeen={nightlifeDetail ? () => toggleBeenHere("nightlife", nightlifeDetail, nightlifeDetail.location) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
       <DetailPage windowed={entryWindowed} lang={uiLang} paid={(OPEN_ABROAD && !!userSession) || hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={(why) => { setAuthReason(typeof why === "string" ? why : "review"); setAuthMode("in"); setAuthOpen(true); }} item={shopDetail} onClose={closeEntry} kind="shop" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={shopDetail && isPlaceSaved("shop", shopDetail.id)} onToggleSave={shopDetail ? () => toggleSavePlace("shop", shopDetail, shopDetail.town || shopDetail.location) : null} hasBeen={!!shopDetail && isBeenHere("shop", shopDetail.id)} onToggleBeen={shopDetail ? () => toggleBeenHere("shop", shopDetail, shopDetail.town || shopDetail.location) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
       <DetailPage windowed={entryWindowed} lang={uiLang} paid={(OPEN_ABROAD && !!userSession) || hasPaidPlan(userProfile)} signedIn={!!userSession} onNeedAccount={(why) => { setAuthReason(typeof why === "string" ? why : "review"); setAuthMode("in"); setAuthOpen(true); }} item={freeDetail} onClose={closeEntry} kind="free" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={freeDetail && isPlaceSaved("free", freeDetail.id)} onToggleSave={freeDetail ? () => toggleSavePlace("free", freeDetail, freeDetail.city) : null} hasBeen={!!freeDetail && isBeenHere("free", freeDetail.id)} onToggleBeen={freeDetail ? () => toggleBeenHere("free", freeDetail, freeDetail.city) : null} onOpenNearby={openStopDetail} savedCount={savedPlaces.length} onPlanFromSaved={planFromSavedPlaces} />
+      {/* A made-up partner from the Special deals examples opens its example
+          page, marked made up, the way the examples page opens it. Out here
+          with the other entry pages, not inside the tab: the tab strip is
+          moved sideways, and a window inside it opened off the screen. */}
+      {exampleDeal && (
+        <DetailPage windowed item={exampleDeal} kind={exampleDeal._kind || "free"}
+          onClose={() => setExampleDeal(null)} lang={uiLang} paid sample={uiT("deals.exampleMadeUp", uiLang)} />
+      )}
       {/* ── The assistant that follows him (Oliver, 6 Aug: "some sort of
           assistant for the admin /#studio guy? That will always be with me?
           Even when I'm on the blogs")  ────────────────────────────────
