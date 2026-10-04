@@ -121,11 +121,27 @@ export const fromRoutes = (data) => {
   // NOT_FOUND and ZERO_RESULTS both mean Google looked and found no route.
   if (!leg) return { error: notFound ? "NOT_FOUND" : "ZERO_RESULTS", via: "routes" };
   const rawSteps = Array.isArray(leg.steps) ? leg.steps : [];
-  const steps = rawSteps.map(s => {
-    const secs = secondsOf(s.staticDuration);
+  // ── ONE WALK IS ONE STEP, AS IT WAS ──────────────────────────────
+  // The Routes API gives a walk as one step per turn; the Directions API gave
+  // one step per stretch. journey.js drops any step under half a minute, so
+  // six short turns added up to no walking at all and the time was counted
+  // as waiting (found in review, 4 Oct 2026). Consecutive steps of the same
+  // mode are added together first, in seconds and metres, then rounded.
+  const merged = [];
+  rawSteps.forEach(s => {
+    const prev = merged[merged.length - 1];
+    if (!s.transitDetails && prev && !prev.transitDetails && prev.travelMode === s.travelMode) {
+      prev.secs += secondsOf(s.staticDuration) || 0;
+      prev.meters += Number(s.distanceMeters) || 0;
+      return;
+    }
+    merged.push({ ...s, secs: secondsOf(s.staticDuration) || 0, meters: Number(s.distanceMeters) || 0 });
+  });
+  const steps = merged.map(s => {
+    const secs = s.secs;
     const td = s.transitDetails;
     if (!td) {
-      return { mode: MODE_BACK[s.travelMode] || String(s.travelMode || "").toLowerCase(), duration: Number.isFinite(secs) ? durationWords(secs) : "", mins: Number.isFinite(secs) ? Math.round(secs / 60) : 0, distance: Number.isFinite(Number(s.distanceMeters)) ? distanceWords(s.distanceMeters) : "" };
+      return { mode: MODE_BACK[s.travelMode] || String(s.travelMode || "").toLowerCase(), duration: durationWords(secs), mins: Math.round(secs / 60), distance: distanceWords(s.meters) };
     }
     const tl = td.transitLine || {};
     return {
@@ -142,8 +158,8 @@ export const fromRoutes = (data) => {
       to: td.stopDetails?.arrivalStop?.name || "",
       departure: td.localizedValues?.departureTime?.time?.text || "",
       arrival: td.localizedValues?.arrivalTime?.time?.text || "",
-      duration: Number.isFinite(secs) ? durationWords(secs) : "",
-      mins: Number.isFinite(secs) ? Math.round(secs / 60) : 0,
+      duration: durationWords(secs),
+      mins: Math.round(secs / 60),
       stops: td.stopCount,
     };
   });
