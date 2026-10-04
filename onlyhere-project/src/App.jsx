@@ -356,7 +356,7 @@ import { FigureAgePanel } from "./components/FigureAgePanel";
 import { GEM_TYPE, gemsForChat, gemsChatBlock } from "./utils/cheapGems";
 import { NOTE_TYPE, notesFor, notesForGuide, notesBlock } from "./utils/founderNotes";
 import { reelLive, reelCount } from "./utils/reelGate";
-import { toolUsesIn, toolResultsFor, queriesIn, nothingToSearch } from "./utils/toolTurn";
+import { toolUsesIn, toolResultsFor, queriesIn, nothingToSearch, SEARCH_FAILED } from "./utils/toolTurn";
 import { founderNotes } from "./data/founderNotes";
 import { linkPatch } from "./utils/affiliateAudit";
 import { EntryLink } from "./components/EntryLink";
@@ -827,8 +827,15 @@ const RESEARCH_SQL = `create table if not exists gemlyx_research (
   primary key (name, type)
 );
 alter table gemlyx_research enable row level security;
+-- Security review, 4 Oct 2026, finding 2: writes are the founder's alone,
+-- the rule SECURITY_LOCKDOWN_30SEP.sql set. Run that file first; it makes
+-- public.is_founder(), and without it this stops with an error rather than
+-- opening the table.
 drop policy if exists "auth all gemlyx_research" on gemlyx_research;
-create policy "auth all gemlyx_research" on gemlyx_research for all to authenticated using (true) with check (true);`;
+drop policy if exists "read gemlyx_research" on gemlyx_research;
+drop policy if exists "founder writes gemlyx_research" on gemlyx_research;
+create policy "read gemlyx_research" on gemlyx_research for select using (public.is_founder());
+create policy "founder writes gemlyx_research" on gemlyx_research for all to authenticated using (public.is_founder()) with check (public.is_founder());`;
 
 const SOURCES_SQL = `create table if not exists gemlyx_sources (
   id bigserial primary key,
@@ -847,10 +854,15 @@ alter table gemlyx_sources add column if not exists country text not null defaul
 -- Dropped first so the whole script is safe to run again. Supabase runs the
 -- editor as one transaction, so a "policy already exists" error rolls back
 -- everything, including the column add above.
-drop policy if exists "read gemlyx_sources" on gemlyx_sources;
-create policy "read gemlyx_sources" on gemlyx_sources for select to anon using (true);
+-- Security review, 4 Oct 2026, finding 2: writes are the founder's alone,
+-- the rule SECURITY_LOCKDOWN_30SEP.sql set. Run that file first; it makes
+-- public.is_founder(), and without it this stops with an error rather than
+-- opening the table.
 drop policy if exists "auth all gemlyx_sources" on gemlyx_sources;
-create policy "auth all gemlyx_sources" on gemlyx_sources for all to authenticated using (true) with check (true);`;
+drop policy if exists "read gemlyx_sources" on gemlyx_sources;
+drop policy if exists "founder writes gemlyx_sources" on gemlyx_sources;
+create policy "read gemlyx_sources" on gemlyx_sources for select using (true);
+create policy "founder writes gemlyx_sources" on gemlyx_sources for all to authenticated using (public.is_founder()) with check (public.is_founder());`;
 
 // ── THE COMMUNITY GROUPS HE WATCHES ─────────────────────────────────
 //
@@ -889,8 +901,15 @@ alter table gemlyx_feeds alter column group_id drop not null;
 -- 30 Sep 2026: which country's Studio a group belongs to. Every row before it is Danish.
 alter table gemlyx_feeds add column if not exists country text not null default 'DK';
 
+-- Security review, 4 Oct 2026, finding 2: writes are the founder's alone,
+-- the rule SECURITY_LOCKDOWN_30SEP.sql set. Run that file first; it makes
+-- public.is_founder(), and without it this stops with an error rather than
+-- opening the table.
 drop policy if exists "auth all gemlyx_feeds" on gemlyx_feeds;
-create policy "auth all gemlyx_feeds" on gemlyx_feeds for all to authenticated using (true) with check (true);`;
+drop policy if exists "read gemlyx_feeds" on gemlyx_feeds;
+drop policy if exists "founder writes gemlyx_feeds" on gemlyx_feeds;
+create policy "read gemlyx_feeds" on gemlyx_feeds for select using (public.is_founder());
+create policy "founder writes gemlyx_feeds" on gemlyx_feeds for all to authenticated using (public.is_founder()) with check (public.is_founder());`;
 
 // ── AND WHAT THE LOCALS ARE DOING, WHILE IT IS STILL ON ─────────────
 //
@@ -930,10 +949,15 @@ alter table gemlyx_notices add column if not exists headline_da text;
 alter table gemlyx_notices add column if not exists body_da text;
 alter table gemlyx_notices enable row level security;
 
-drop policy if exists "read gemlyx_notices" on gemlyx_notices;
-create policy "read gemlyx_notices" on gemlyx_notices for select to anon using (true);
+-- Security review, 4 Oct 2026, finding 2: writes are the founder's alone,
+-- the rule SECURITY_LOCKDOWN_30SEP.sql set. Run that file first; it makes
+-- public.is_founder(), and without it this stops with an error rather than
+-- opening the table.
 drop policy if exists "auth all gemlyx_notices" on gemlyx_notices;
-create policy "auth all gemlyx_notices" on gemlyx_notices for all to authenticated using (true) with check (true);`;
+drop policy if exists "read gemlyx_notices" on gemlyx_notices;
+drop policy if exists "founder writes gemlyx_notices" on gemlyx_notices;
+create policy "read gemlyx_notices" on gemlyx_notices for select using (true);
+create policy "founder writes gemlyx_notices" on gemlyx_notices for all to authenticated using (public.is_founder()) with check (public.is_founder());`;
 
 // `where` is whatever the caller knows about the place: usually a name, and a
 // whole entry where one exists. A source scoped to a town is left OUT when
@@ -2979,7 +3003,7 @@ function GemlyxApp() {
   // inside the actual writing for every visitor after their next load.
   // ONE-TIME SETUP (Supabase dashboard → SQL editor) if uploads 404:
   //   insert into storage.buckets (id, name, public) values ('gemlyx-media','gemlyx-media', true);
-  //   create policy "auth upload gemlyx-media" on storage.objects for insert to authenticated with check (bucket_id = 'gemlyx-media');
+  //   the founder-only upload policy is in SECURITY_LOCKDOWN_30SEP.sql (writes are his alone since 30 Sep).
   //   create policy "public read gemlyx-media" on storage.objects for select using (bucket_id = 'gemlyx-media');
   const [mediaEditId, setMediaEditId] = useState(null);
   // The photo request mail being drafted, for one row at a time. See
@@ -4781,7 +4805,7 @@ Say which answer came from which source, so a fact from a vouched page and a fac
       // SETUP (Supabase SQL editor) if the table doesn't exist yet:
       //   create table if not exists gemlyx_research (name text not null, type text not null, notes text, urls jsonb, created_at timestamptz default now(), primary key (name, type));
       //   alter table gemlyx_research enable row level security;
-      //   create policy "auth all gemlyx_research" on gemlyx_research for all to authenticated using (true) with check (true);
+      //   then the founder-only policies in RESEARCH_SQL (writes are his alone since 30 Sep).
       try {
         const memRes = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_research?name=eq.${encodeURIComponent(name)}&type=eq.${encodeURIComponent(sType)}&select=*`);
         if (!memRes.ok) {
@@ -22975,11 +22999,16 @@ ${languageBlock()}`;
           // seconds of a traveller's wait, not four.
           const answers = await Promise.all(queriesIn(out.content).map(async (query) => {
             if (!query) return "";
+            // A refused, broken or unreachable search is told to the model as
+            // a failure, never as "nothing found" (security review, 4 Oct
+            // 2026, finding 6). See utils/toolTurn.js.
             try {
               const searchRes = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+              if (!searchRes.ok) return SEARCH_FAILED;
               const searchData = await searchRes.json();
+              if (searchData?.error) return SEARCH_FAILED;
               return searchData.answer || (searchData.results || []).map(r => `${r.title}: ${r.snippet}`).join(" | ") || "";
-            } catch { return ""; }   // answered as "no results", never left unanswered
+            } catch { return SEARCH_FAILED; }
           }));
           msgs = [
             ...msgs,
