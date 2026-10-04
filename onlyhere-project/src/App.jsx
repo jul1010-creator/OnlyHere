@@ -4234,6 +4234,11 @@ Say which answer came from which source, so a fact from a vouched page and a fac
     // for that. Google Places answered "Jomfru Ane Gade, 9000 Aalborg" at 0.8
     // seconds and the answer was used to build a log string and dropped.
     let placesName = "";
+    // The place's own name in its own language, abroad only: Google's local
+    // listing name, kept when Google also gave a different English name or the
+    // name is written with Lithuanian letters. See entryTranslate.js for what
+    // reads it. (Oliver, 4 Oct 2026: Lithuanian place names, from the work list.)
+    let placesLocal = "";
     // Why the coordinate was refused, so the note below can say it. Empty when
     // Google simply had nothing, which is a different fact.
     let placesRefused = "";
@@ -4496,6 +4501,7 @@ Say which answer came from which source, so a fact from a vouched page and a fac
             // KEPT, not only logged. This is the spelling the rest of the internet
             // uses, and the relevance filter is the one thing that needs it.
             if (pd.name) placesName = String(pd.name).trim();
+            if (!draftInDenmark && pd.name && (pd.nameEn || /[ąčęėįšųūž]/i.test(pd.name))) placesLocal = String(pd.name).trim();
             if (pd.town && !draftTown) draftTown = pd.town;
           } else if (placesOk) {
             placesRefused = describeListingRefusal(name, draftTown, pd.name || pd.address);
@@ -9733,6 +9739,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
       }
 
       if (t && typeof t === "object" && !draftInDenmark) t.country = draftLand.code;
+      if (t && typeof t === "object" && placesLocal && fold(placesLocal) !== fold(t.name || name)) t.localName = placesLocal;
       ui(setStudioDraft, t);
       ui(setStudioDraftText, JSON.stringify(t, null, 2));
       ui(setDraftEditError, null);
