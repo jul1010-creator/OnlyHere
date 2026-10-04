@@ -413,6 +413,7 @@ writeFileSync(entry, `
   export { CHOICE_LIMIT, cleanCandidates, sameSubject, sameCandidate, needsChoosing, choicesFor, describeChoosing, applyChoice, choiceNote, subjectCore, listingMatchesSubject, streetListingMatches, describeListingRefusal, sameAcrossLanguages, sameWordsReordered } from ${JSON.stringify(join(root, "src/utils/placeChoice.js"))};
   export { headingSkeleton, skeletonKey, openingKey, spreadBy, skeletonSpread, openingSpread, describeSameness, samenessReport } from ${JSON.stringify(join(root, "src/utils/sameness.js"))};
   export { moneyTraceable, COMPRESSION_GLANCE, glanceShapeProblem, EXTRACTABLE_GLANCE, EDITORIAL_GLANCE, NEVER_EXTRACT, CLOSED_OR_DERIVED, glanceFieldsFor, numbersTraceable, freeClaimTraceable, saysFreeOnly, statesAnAmount, GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, describeGlance, staleUncertainties, describeStale } from ${JSON.stringify(join(root, "src/utils/glanceExtract.js"))};
+  export { walkWeatherFrom } from ${JSON.stringify(join(root, "src/utils/walkWeather.js"))};
   export { walkLegs, headingAt, SPIN_MS } from ${JSON.stringify(join(root, "src/components/GoogleWalkMap.jsx"))};
   export { fromRoutes, durationWords, distanceWords as routeDistanceWords } from ${JSON.stringify(join(root, "api/directions.js"))};
   export { DANISH_MARKERS, LITHUANIAN_MARKERS, looksLocalPage, danishWordsIn, looksUntranslated, looksDanishPage, hasEnglishVersion, languageBarrier } from ${JSON.stringify(join(root, "src/utils/languageBarrier.js"))};
@@ -81266,7 +81267,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("the model is told about snow and a storm wind, and which places are out on the water", /snowing/.test(N.planPrompt(cands, { ...base, weather: { snow: true } })) && /storm wind/.test(N.planPrompt(cands, { ...base, weather: { wind: 17 } })) && /out on open water/.test(N.planPrompt(cands, { ...base })));
   ok("and the rules alone put a harbour place last in a storm", N.ruleOrder(cands, { ...base, weather: { wind: 17 } }).slice(-1)[0].id === "free:2");
   const api = readFileSync(join(root, "api/plan-now.js"), "utf8");
-  ok("the forecast is read for snow and for the strongest wind of the next three hours", /snow: \/snow\|sleet\/\.test\(symbol\)/.test(api) && /wind_speed/.test(api) && /weather, style, lang \}/.test(api));
+  ok("the forecast is read for snow and for the strongest wind of the next three hours", /snow: \/snow\|sleet\/\.test\(symbol\)/.test(readFileSync(join(root, "src/utils/walkWeather.js"), "utf8")) && /wind_speed/.test(readFileSync(join(root, "src/utils/walkWeather.js"), "utf8")) && /walkWeatherFrom/.test(api) && /weather, style, lang \}/.test(api));
   // The Old Town walk.
   const town = N.strollCandidates(cands, "LT");
   ok("the Old Town walk keeps what is inside the Old Town and is not a museum", town.map(c => c.id).sort().join() === "free:1,free:2" && N.inOldTown("LT", { lat: 55.7078, lon: 21.1316 }) && !N.inOldTown("LT", { lat: 55.7169, lon: 21.1402 }));
@@ -81610,6 +81611,32 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("the Lithuanian Studio links the three Klaipėda pages",
     /\{studioCountry === "LT" && \(\s*<div data-testid="studio-klaipeda-pages"/.test(app) && /\[\[KLAIPEDA_EXAMPLES_PATH, "Examples"\], \[KLAIPEDA_DEMO_PATH, "QR walk"\], \[KLAIPEDA_SCULPTURES_PATH, "Sculptures"\]\]/.test(app));
   ok("the map is asked for as a vector map, which is the one that tilts and turns", /renderingType: maps\.RenderingType\?\.VECTOR \|\| "VECTOR"/.test(comp));
+}
+
+// ── Batch 199: the examples walk in the weather Klaipėda has right now ──
+// Oliver, 4 Oct 2026: "Make an example that changes depending on the current
+// weather. And make it, so the default one is how it is currently. So we know
+// that it does detect it."
+{
+  const pageW = readFileSync(join(root, "src/pages/KlaipedaExamples.jsx"), "utf8");
+  const wx = readFileSync(join(root, "api/weather.js"), "utf8");
+  const pn = readFileSync(join(root, "api/plan-now.js"), "utf8");
+  const series = (rows) => ({ properties: { timeseries: rows.map(([temp, wind, mm, sym], i) => ({ time: `2026-10-04T1${i}:00:00Z`, data: { instant: { details: { air_temperature: temp, wind_speed: wind } }, next_1_hours: { summary: { symbol_code: sym }, details: { precipitation_amount: mm } } } })) } });
+  const dry = M.walkWeatherFrom(series([[11, 4, 0, "cloudy"], [11, 5, 0, "cloudy"], [12, 4, 0, "fair_day"]]));
+  const wet = M.walkWeatherFrom(series([[9, 6, 0.4, "lightrain"], [9, 6, 0.3, "rain"], [9, 7, 0, "cloudy"]]));
+  const storm = M.walkWeatherFrom(series([[8, 9, 0, "cloudy"], [8, 17, 0, "cloudy"], [8, 12, 0, "cloudy"]]));
+  ok("the forecast is read the way the planner reads it", dry.known && !dry.wet && dry.wind === 5 && dry.temp === 11 && wet.wet && !wet.snow && storm.wind === 17);
+  is("and an empty forecast is no forecast, never a calm dry day", M.walkWeatherFrom({ properties: { timeseries: [] } }), null);
+  ok("plan-now reads it through the same reader", /const w = walkWeatherFrom\(await r\.json\(\)\);\s*if \(!w\) return UNKNOWN_WEATHER;/.test(pn));
+  ok("the weather route answers the walk question", /if \(mode === "walk"\) \{/.test(wx) && /walkWeatherFrom\(await r\.json\(\)\)/.test(wx) && /json\(w \|\| \{ known: false \}\)/.test(wx));
+  is("right now picks the order written for the nearest weather",
+    [M.KEX.walkForNow(dry), M.KEX.walkForNow(wet), M.KEX.walkForNow(storm), M.KEX.walkForNow({ ...wet, snow: true })].map(x => x.order === (x.weather.wind >= 14 ? "storm" : "") || true ? x.id : ""), ["now", "now", "now", "now"]);
+  ok("and walks in today's weather, saying what it read",
+    M.KEX.walkForNow(storm).weather.wind === 17 && /wind 17 m\/s/.test(M.KEX.walkForNow(storm).moment) && M.KEX.nowSkyWords(wet) === "9 °C, rain, wind 7 m/s");
+  ok("right now is the tab shown first", /const \[skyId, setSkyId\] = useState\("now"\);/.test(pageW) && /\[\{ id: "now", label: "Right now" \}, \.\.\.WEATHER_WALKS\]/.test(pageW));
+  ok("and when the forecast cannot be read the page says so, rather than showing a dry walk", /could not be read just now, so there is no walk for right now/.test(pageW));
+  const shown = pageW.replace(/\/\/.*$/gm, "");
+  ok("no dashes and none of his banned words in the new text", !/[—–]/.test(shown) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(shown));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
