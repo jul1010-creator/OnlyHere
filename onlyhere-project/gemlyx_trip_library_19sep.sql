@@ -1,3 +1,9 @@
+-- ── DO NOT RUN THIS FILE ANY MORE ───────────────────────────────────
+-- Security review, 4 Oct 2026, finding 2. The policies below open the tables
+-- wider than the lockdown allows, and running this after SECURITY_LOCKDOWN_30SEP.sql
+-- would undo the lockdown. The Studio's own "Copy the SQL" scripts and
+-- LIBRARY_SETUP_SQL now carry the founder-only rules; use those.
+--
 -- Gemlyx: recently used trips, published stripped of the traveller.
 -- 19 Sep 2026. Safe to re-run. This file is a copy of LIBRARY_SETUP_SQL in
 -- src/utils/tripLibrary.js, which is where it lives in the codebase.

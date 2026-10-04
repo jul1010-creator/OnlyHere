@@ -1,3 +1,9 @@
+-- ── DO NOT RUN THIS FILE ANY MORE ───────────────────────────────────
+-- Security review, 4 Oct 2026, finding 2. The policies below open the tables
+-- wider than the lockdown allows, and running this after SECURITY_LOCKDOWN_30SEP.sql
+-- would undo the lockdown. The Studio's own "Copy the SQL" scripts and
+-- LIBRARY_SETUP_SQL now carry the founder-only rules; use those.
+--
 -- The three outstanding scripts from the 17 Sep handoff, in one paste.
 -- Safe to run as often as you like: every statement is guarded, and the
 -- policies are dropped before they are created, so Supabase will not roll the
