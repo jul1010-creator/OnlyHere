@@ -81607,6 +81607,8 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("the map's waiting listener is removed when the walk changes, and a stopped turn goes back to north",
     /idle = maps\.event\.addListenerOnce\(map, "idle"/.test(comp) && /idle\?\.remove\(\)/.test(comp) && /moveCamera\(\{ heading: 0 \}\); \} catch/.test(comp));
   ok("a failed walking line is asked again rather than kept faint", /if \(line\) legCache\.set\(key, line\);/.test(comp));
+  ok("the Lithuanian Studio links the three Klaipėda pages",
+    /\{studioCountry === "LT" && \(\s*<div data-testid="studio-klaipeda-pages"/.test(app) && /\[\[KLAIPEDA_EXAMPLES_PATH, "Examples"\], \[KLAIPEDA_DEMO_PATH, "QR walk"\], \[KLAIPEDA_SCULPTURES_PATH, "Sculptures"\]\]/.test(app));
   ok("the map is asked for as a vector map, which is the one that tilts and turns", /renderingType: maps\.RenderingType\?\.VECTOR \|\| "VECTOR"/.test(comp));
 }
 
