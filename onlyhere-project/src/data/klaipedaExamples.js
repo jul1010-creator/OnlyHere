@@ -21,7 +21,7 @@
 // hour, a price for a thing they already do, a service a visitor needs. No
 // percentage off everything.
 
-import { NOW_STARTS, SHIP_MARGIN, MUST_SEE, STROLL, nowCandidates, tidyWalk, windowsFor, withMustSee, nextOpen, reversedWalk, placesOf, strollCandidates, weatherRules } from "../utils/nowPlanner";
+import { NOW_STARTS, SHIP_MARGIN, MUST_SEE, STROLL, STORM_WIND, nowCandidates, tidyWalk, windowsFor, withMustSee, nextOpen, reversedWalk, placesOf, strollCandidates, weatherRules } from "../utils/nowPlanner";
 import { fingerprint, proseOf } from "../utils/entryTranslate";
 
 export const KLAIPEDA_EXAMPLES_PATH = "/lithuania/examples";
@@ -276,6 +276,29 @@ export const WEATHER_WALKS = [
       { id: "free:meridianas", stay: 15, why: "The town's ship on the Danė." },
     ] },
 ];
+
+// Klaipėda's weather point, the one the weather card uses (data/mapShapes.js).
+export const KLAIPEDA_SKY = { lat: 55.7033, lon: 21.1443 };
+const clockOf = (iso) => {
+  try { return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Vilnius" }); } catch { return ""; }
+};
+export const nowSkyWords = (w) => [
+  Number.isFinite(Number(w?.temp)) && w?.temp !== null ? `${Math.round(Number(w.temp))} °C` : "",
+  w?.snow ? "snow" : w?.wet ? "rain" : "dry",
+  `wind ${Math.round(Number(w?.wind) || 0)} m/s`,
+].filter(Boolean).join(", ");
+// The Tuesday morning, in today's weather. The order comes from the weather
+// example nearest to it; the weather itself is today's.
+export const walkForNow = (w) => {
+  const base = Number(w?.wind) >= STORM_WIND ? "storm" : w?.snow ? "snow" : w?.wet ? "rain" : "dry";
+  const b = WEATHER_WALKS.find(x => x.id === base) || WEATHER_WALKS[0];
+  const at = clockOf(w?.at);
+  return {
+    ...b, id: "now", label: "Right now", title: "In Klaipėda's weather right now",
+    moment: `Tuesday 10:30, in the weather forecast for Klaipėda${at ? ` at ${at}` : ""}: ${nowSkyWords(w)}`,
+    weather: { wet: !!w?.wet, snow: !!w?.snow, wind: Math.round(Number(w?.wind) || 0) },
+  };
+};
 
 // ── GUIDES IN FOUR LANGUAGES ────────────────────────────────────────
 // What a published entry reads like, in the reader's language. The three
