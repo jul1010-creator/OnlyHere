@@ -107,6 +107,12 @@ export const GoogleWalkMap = ({ walk, height = 300 }) => {
         if (!mapRef.current) {
           mapRef.current = new Map(box.current, {
             mapId: GOOGLE_MAP_ID, center: bounds.getCenter(), zoom: 15,
+            // ASKED FOR IN CODE, not left to the Map ID's own setting. Read off
+            // the live page, 4 Oct 2026: the Map ID was set up as a raster map,
+            // getRenderingType() said RASTER, and a raster map ignores tilt and
+            // heading, so the walk neither tilted nor turned. The option wins
+            // over the cloud setting.
+            renderingType: maps.RenderingType?.VECTOR || "VECTOR",
             disableDefaultUI: true, zoomControl: true, gestureHandling: "cooperative",
           });
         }
