@@ -413,6 +413,7 @@ writeFileSync(entry, `
   export { CHOICE_LIMIT, cleanCandidates, sameSubject, sameCandidate, needsChoosing, choicesFor, describeChoosing, applyChoice, choiceNote, subjectCore, listingMatchesSubject, streetListingMatches, describeListingRefusal, sameAcrossLanguages, sameWordsReordered } from ${JSON.stringify(join(root, "src/utils/placeChoice.js"))};
   export { headingSkeleton, skeletonKey, openingKey, spreadBy, skeletonSpread, openingSpread, describeSameness, samenessReport } from ${JSON.stringify(join(root, "src/utils/sameness.js"))};
   export { moneyTraceable, COMPRESSION_GLANCE, glanceShapeProblem, EXTRACTABLE_GLANCE, EDITORIAL_GLANCE, NEVER_EXTRACT, CLOSED_OR_DERIVED, glanceFieldsFor, numbersTraceable, freeClaimTraceable, saysFreeOnly, statesAnAmount, GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, describeGlance, staleUncertainties, describeStale } from ${JSON.stringify(join(root, "src/utils/glanceExtract.js"))};
+  export { walkLegs, headingAt, SPIN_MS } from ${JSON.stringify(join(root, "src/components/GoogleWalkMap.jsx"))};
   export { fromRoutes, durationWords, distanceWords as routeDistanceWords } from ${JSON.stringify(join(root, "api/directions.js"))};
   export { DANISH_MARKERS, LITHUANIAN_MARKERS, looksLocalPage, danishWordsIn, looksUntranslated, looksDanishPage, hasEnglishVersion, languageBarrier } from ${JSON.stringify(join(root, "src/utils/languageBarrier.js"))};
   export { readerLanguage, languageName, answerInLanguage, languageBlock, nativeBlock } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
@@ -81537,6 +81538,36 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
     /const routed = await askRoutes\(/.test(dir) && /if \(routed\) return res\.status\(200\)\.json\(routed\);/.test(dir)
     && /if \(!r\.ok\) return null;/.test(dir) && /via: "directions",/.test(dir));
   ok("it stays on the cheapest tier: basic fields, no traffic", /routingPreference = "TRAFFIC_UNAWARE"/.test(dir) && !/TRAFFIC_AWARE"/.test(dir) && /"X-Goog-FieldMask": ROUTES_FIELDS/.test(dir));
+}
+
+// ── Batch 195: the walk on Google's own map, turning once ──
+// Oliver, 4 Oct 2026, of a camera loop Google's AI gave him: "kind of a cool
+// feature", and "Sure" to trying it on the Klaipėda examples page.
+{
+  const comp = readFileSync(join(root, "src/components/GoogleWalkMap.jsx"), "utf8");
+  const loader = readFileSync(join(root, "src/utils/googleMapsLoader.js"), "utf8");
+  const pageG = readFileSync(join(root, "src/pages/KlaipedaExamples.jsx"), "utf8");
+  const walk = { start: { lat: 55.70837, lon: 21.13358 }, stops: [{ lat: 55.7087, lon: 21.1339 }, { lat: 55.71034, lon: 21.13491 }] };
+  const legs = M.walkLegs(walk);
+  ok("the legs run start to start through every stop", legs.length === 3 && legs[0][0] === walk.start && legs[2][1] === walk.start);
+  ok("and a walk with nothing to draw draws nothing", M.walkLegs({ start: walk.start, stops: [] }).length === 0 && M.walkLegs(null).length === 0);
+  ok("one turn, timed by the clock and not the frame", M.headingAt(0) === 0 && Math.abs(M.headingAt(M.SPIN_MS / 2) - 180) < 1e-9 && M.headingAt(M.SPIN_MS) === null);
+  ok("it stops when touched, and never starts after a touch", /\["pointerdown", "wheel", "touchstart", "keydown"\]/.test(comp) && /if \(moved \|\| reducedMotion\(\)\) return;/.test(comp));
+  ok("and does not move for anyone who asked for less motion", /prefers-reduced-motion: reduce/.test(comp));
+  ok("the lines are Google's own walking routes, on Google's map", /\/api\/directions\?origin=\$\{a\.lat\},\$\{a\.lon\}&destination=\$\{b\.lat\},\$\{b\.lon\}&mode=walking/.test(comp) && /mapId: GOOGLE_MAP_ID/.test(comp));
+  ok("a leg Google could not measure is drawn faint, never confident", /strokeOpacity: measured \? 0\.9 : 0\.35/.test(comp));
+  ok("a separate browser key, never the server one", /import\.meta\.env\.VITE_GOOGLE_MAPS_BROWSER_KEY/.test(loader) && !/GOOGLE_MAPS_KEY\b/.test(loader.replace(/\/\/.*$/gm, "").replace(/VITE_GOOGLE_MAPS_BROWSER_KEY/g, "")) && !/process\.env/.test(loader));
+  ok("without the key and a Map ID nothing loads", /if \(!googleMapsReady\(\)\) return Promise\.reject/.test(loader) && /if \(!googleMapsReady\(\) \|\| failed \|\| !walkLegs\(walk\)\.length\) return null;/.test(comp));
+  ok("the examples page shows it for the walk on screen", /<GoogleWalkMap walk=\{shownWalk\} \/>/.test(pageG));
+  const vj = JSON.parse(readFileSync(join(root, "vercel.json"), "utf8"));
+  const csp = vj.headers[0].headers.find(h => h.key === "Content-Security-Policy-Report-Only").value;
+  ok("the browser policy allows Google's map scripts", /script-src[^;]*https:\/\/maps\.googleapis\.com/.test(csp) && /connect-src[^;]*https:\/\/maps\.googleapis\.com/.test(csp));
+  // Security review 4 Oct 2026, finding 13.
+  const sp = readFileSync(join(root, "src/utils/sourcePolicy.js"), "utf8"), ps = readFileSync(join(root, "src/utils/pageScan.js"), "utf8");
+  ok("a shared platform is never a place's own site, for prices or for sources",
+    /host === normaliseDomain\(ownHost\) && !isNeverOwnSite\(/.test(sp) && /const registered = isNeverOwnSite\(placesWebsite\) \? "" : hostOf\(placesWebsite\);/.test(ps));
+  const shown = comp.replace(/\/\/.*$/gm, "") + loader.replace(/\/\/.*$/gm, "");
+  ok("no dashes and none of his banned words", !/[—–]/.test(shown) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(shown));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
