@@ -13903,7 +13903,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     is("no other type has its name replaced",
        others.filter(t => (perType[t] || []).some(q => q.includes("${subject}"))), []);
     ok("and the subject is the street plus its town",
-       /const subject = draftTown && !fold\(name\)\.includes\(fold\(draftTown\)\)\s*&& \(NAME_IS_NOT_A_PLACE\.includes\(sType\) \|\| \(!draftInDenmark && !NAME_IS_A_TOWN\.includes\(sType\)\)\)\s*\?\s*`\$\{name\} \$\{draftTown\}`\s*:\s*name;/.test(app));
+       /const subject = draftTown && !containsName\(name, draftTown\)\s*&& \(NAME_IS_NOT_A_PLACE\.includes\(sType\) \|\| \(!draftInDenmark && !NAME_IS_A_TOWN\.includes\(sType\)\)\)\s*\?\s*`\$\{name\} \$\{draftTown\}`\s*:\s*name;/.test(app));
     // The planner writes queries too, and it was told the bare name.
     ok("the query planner is told the town as well",
        // Batch 159: the draft's country adjective, "Danish" for a Danish draft.
@@ -81485,7 +81485,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("a Klaipėda point is in Lithuania, not 'near Denmark'", /in Lithuania, where Gemlyx has no regions yet/.test(M.describeRegion(55.7059, 21.1289, true)));
   ok("abroad, the fact check and the hours lookup name the town too, for restaurants as for museums",
     /const NAME_IS_A_TOWN = \["town", "nightTown", "island", "essential"\];/.test(app)
-    && /places-hours\?name=\$\{encodeURIComponent\(!draftInDenmark && draftTown && !fold\(name\)\.includes\(fold\(draftTown\)\)/.test(app));
+    && /places-hours\?name=\$\{encodeURIComponent\(!draftInDenmark && draftTown && !containsName\(name, draftTown\)/.test(app));
   ok("a DKK threshold in a rule is scaled for a euro country, and Denmark's prompts are untouched",
     /60 DKK is about €8/.test(M.studioPrompts ? M.studioPrompts("Momo", M.countryProfile("LT")).food : readFileSync(join(root, "src/utils/studioPrompts.js"), "utf8")));
   ok("a Lithuanian supermarket is not a food place, and a restaurant with 'iki' in its name still is",
@@ -81552,7 +81552,13 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("the legs run start to start through every stop", legs.length === 3 && legs[0][0] === walk.start && legs[2][1] === walk.start);
   ok("and a walk with nothing to draw draws nothing", M.walkLegs({ start: walk.start, stops: [] }).length === 0 && M.walkLegs(null).length === 0);
   ok("one turn, timed by the clock and not the frame", M.headingAt(0) === 0 && Math.abs(M.headingAt(M.SPIN_MS / 2) - 180) < 1e-9 && M.headingAt(M.SPIN_MS) === null);
-  ok("it stops when touched, and never starts after a touch", /\["pointerdown", "wheel", "touchstart", "keydown"\]/.test(comp) && /if \(moved \|\| reducedMotion\(\)\) return;/.test(comp));
+  ok("it stops when touched, and never starts after a touch", /\["pointerdown", "wheel", "touchstart", "keydown"\]/.test(comp) && /if \(turned\.current \|\| moved\.current \|\| reducedMotion\(\)\) return;/.test(comp) && /if \(moved\.current\) \{ raf = 0; return; \}/.test(comp));
+  // Found on the live page, 4 Oct 2026: the "idle" listener went on after the
+  // walking lines came back, by when the map had gone idle, so it never turned.
+  ok("the turn waits for the map, not for the walking lines",
+    comp.indexOf('maps.event.addListenerOnce(map, "idle"') > 0 && comp.indexOf('maps.event.addListenerOnce(map, "idle"') < comp.indexOf("await Promise.all(legs.map("));
+  ok("one map for the page, so picking another walk is not another billed map load",
+    /if \(!mapRef\.current\) \{\s*mapRef\.current = new Map\(/.test(comp) && (comp.match(/new Map\(box\.current/g) || []).length === 1);
   ok("and does not move for anyone who asked for less motion", /prefers-reduced-motion: reduce/.test(comp));
   ok("the lines are Google's own walking routes, on Google's map", /\/api\/directions\?origin=\$\{a\.lat\},\$\{a\.lon\}&destination=\$\{b\.lat\},\$\{b\.lon\}&mode=walking/.test(comp) && /mapId: GOOGLE_MAP_ID/.test(comp));
   ok("a leg Google could not measure is drawn faint, never confident", /strokeOpacity: measured \? 0\.9 : 0\.35/.test(comp));
@@ -81568,6 +81574,39 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
     /host === normaliseDomain\(ownHost\) && !isNeverOwnSite\(/.test(sp) && /const registered = isNeverOwnSite\(placesWebsite\) \? "" : hostOf\(placesWebsite\);/.test(ps));
   const shown = comp.replace(/\/\/.*$/gm, "") + loader.replace(/\/\/.*$/gm, "");
   ok("no dashes and none of his banned words", !/[—–]/.test(shown) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(shown));
+}
+
+// ── Batch 196: what the review of 190 to 195 found ──
+// A read-only review of the day's batches, 4 Oct 2026, confirmed six bugs by
+// running them. Each is pinned here.
+{
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const np = readFileSync(join(root, "src/utils/nowPlanner.js"), "utf8");
+  const comp = readFileSync(join(root, "src/components/GoogleWalkMap.jsx"), "utf8");
+  const reply = { routes: [{ legs: [{ duration: "1500s", distanceMeters: 4000, steps: [
+    { travelMode: "WALK", staticDuration: "20s", distanceMeters: 20 },
+    { travelMode: "WALK", staticDuration: "28s", distanceMeters: 30 },
+    { travelMode: "WALK", staticDuration: "25s", distanceMeters: 25 },
+    { travelMode: "TRANSIT", staticDuration: "600s", distanceMeters: 3800, transitDetails: { stopDetails: {}, transitLine: { vehicle: { type: "BUS" } } } },
+    { travelMode: "WALK", staticDuration: "29s", distanceMeters: 30 },
+    { travelMode: "WALK", staticDuration: "29s" },
+  ] }] }] };
+  const got = M.fromRoutes(reply);
+  ok("a walk given turn by turn comes back as one walk, so it is not counted as waiting",
+    got.steps.length === 3 && got.steps[0].mode === "walking" && got.steps[0].mins === 1 && got.steps[2].mins === 1 && got.steps[2].distance === "30 m");
+  ok("a tidier order may not lose a partner's offer", /const dealsStay = mealStays && first\.stops\.every\(s => !s\.deal \|\| !!kept\.get\(s\.id\)\?\.deal\);/.test(np));
+  ok("two words in another order are not enough: the church is not the village",
+    !M.sameWordsReordered("Hvalsø Kirke", "Kirke Hvalsø") && !M.listingMatchesSubject("Hvalsø Kirke", "", "Kirke Hvalsø")
+    && M.sameWordsReordered("Museum of the History of Lithuania Minor", "History Museum of Lithuania Minor"));
+  ok("a town inside the name is matched as a word, so Ho is not found in Hotel",
+    (app.match(/!containsName\(name, draftTown\)/g) || []).length === 3 && !/!fold\(name\)\.includes\(fold\(draftTown\)\)/.test(app));
+  is("municipalities whose genitive is not a guess",
+    ["Panevėžio m. sav.", "Rokiškio r. sav.", "Šiaulių m. sav.", "Marijampolės sav.", "Biržų r. sav."].map(M.plainTownName),
+    ["Panevėžys", "Rokiškis", "Šiauliai", "Marijampolė", "Biržai"]);
+  ok("a quarter after a comma is not a town", /const looksLikeATown = !!afterComma && \(!!townPointFor\(afterComma\) \|\| /.test(app));
+  ok("the map's waiting listener is removed when the walk changes, and a stopped turn goes back to north",
+    /idle = maps\.event\.addListenerOnce\(map, "idle"/.test(comp) && /idle\?\.remove\(\)/.test(comp) && /moveCamera\(\{ heading: 0 \}\); \} catch/.test(comp));
+  ok("a failed walking line is asked again rather than kept faint", /if \(line\) legCache\.set\(key, line\);/.test(comp));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
