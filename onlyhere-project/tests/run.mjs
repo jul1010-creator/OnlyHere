@@ -181,7 +181,8 @@ writeFileSync(entry, `
   export { startLog, endLog, note, decide, recentLogs, summariseLog, formatLog, formatLogs, logChips, OUTCOMES } from ${JSON.stringify(join(root, "src/utils/runLog.js"))};
   export { fieldProvenance, correctionProvenance, entrySources, untracedFields, describeProvenance, readerCorrection, readerCorrections, isCheckerVoice, readerUncertainty, readerUncertainties, READER_UNCERTAINTY_LIMIT } from ${JSON.stringify(join(root, "src/utils/provenance.js"))};
   export { ALLOWED_ORIGINS, originOf, isAllowedOrigin, requestIsFromSite, NOT_FROM_SITE, STUDIO_ONLY_ENDPOINTS, resolveUser, isFounder } from ${JSON.stringify(join(root, "src/utils/apiGuard.js"))};
-  export { gateAi, shapeAnthropic, shapeOpenAI, shapePerplexity, searchCeiling, AI_CEILINGS, readAiLimits, visitorKey, visitorAddress, takeDaily } from ${JSON.stringify(join(root, "src/utils/aiGate.js"))};
+  export { gateAi, shapeAnthropic, shapeOpenAI, shapePerplexity, searchCeiling, AI_CEILINGS, readAiLimits, visitorKey, visitorAddress, takeDaily, AI_OFF, addressBlock, limitOf } from ${JSON.stringify(join(root, "src/utils/aiGate.js"))};
+  export { gateMaps, readMapsLimits, MAPS_BUSY, MAPS_DONE } from ${JSON.stringify(join(root, "src/utils/mapsGate.js"))};
   export { cleanErrorMessage, safeUpstreamError } from ${JSON.stringify(join(root, "src/utils/upstreamError.js"))};
   export { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_KEY } from ${JSON.stringify(join(root, "src/utils/supabasePublic.js"))};
   export { sitePath, AI_PATHS } from ${JSON.stringify(join(root, "src/utils/apiAuth.js"))};
@@ -316,7 +317,7 @@ writeFileSync(entry, `
   export { SECTIONS as DIR_SECTIONS, ROW_KINDS, kindOf as dirKindOf, directoryLinks, pathWord, ferryDoorIn, DIRECTORY_PROMPT, rowsFromDirectory, directoryProblems, staysIn, eatsIn, islandSaysBlock, ISLAND_SAYS } from ${JSON.stringify(join(root, "src/utils/islandDirectory.js"))};
   export { GEM_TYPE, GEM_KINDS, GEM_SECTION, WHERE_LABEL, RECHECK_DAYS, STALE_DAYS, isCouponSite, isOwnSite, shapeGem, gemProblems, gemLive, gemsView, checkedLabel, checkedAgo, isDataSite, gemWhere, gemCategory, isForStudents, gemMatches, gemFilterOptions, GEM_CATEGORIES, GEM_CATEGORY_LABEL, gemSearches, gemSearchesFor, ownPagesIn, pageAsResult, MAX_OWN_PAGES, GEMS_PROMPT, settleGems, gemRunNotes, gemsForGuide, gemHeading, SAID_CHECKS, saidLine, saidWords, gemsForChat, gemsChatBlock, MAX_CHAT_GEMS, isForeignStore, AUDIENCES, AUDIENCE_LABEL, audienceIn, partySays, gemFitsParty, gemNearest, gemsToLocate, gemBranchesFound, gemLocateNote } from ${JSON.stringify(join(root, "src/utils/cheapGems.js"))};
   export { NOTE_TYPE, NOTE_KINDS, NOTE_KIND_LABEL, NOTE_KIND_MEANING, NOTE_CHECKS, NOTE_LIFE, NOTE_RECHECK, shapeNote, noteProblems, noteLive, noteAgo, noteSubjects, notesFor, notesForGuide, notesBlock, NOTE_LINE, hasFigure, foundElsewhere, MAX_NOTES, noteSearches, NOTE_PROMPT, settleNote, noteRunNotes, namesPublished, ALREADY_SAID, alreadySaid, aboutWords, MODES_WITH_WORDS, MODES_THE_APP_HAS } from ${JSON.stringify(join(root, "src/utils/founderNotes.js"))};
-  export { toolUsesIn, toolResultsFor, queriesIn, NO_ANSWER, nothingToSearch } from ${JSON.stringify(join(root, "src/utils/toolTurn.js"))};
+  export { toolUsesIn, toolResultsFor, queriesIn, NO_ANSWER, nothingToSearch, SEARCH_FAILED, SEARCH_FAILED_TEXT } from ${JSON.stringify(join(root, "src/utils/toolTurn.js"))};
   export { reelLive, withLiveReels, reelCount } from ${JSON.stringify(join(root, "src/utils/reelGate.js"))};
   export { sentencesIn, readerBody, noticeAsk, noticeText, TRANSLATE_NOTICE, translatedNotice, DEAD_ENDS } from ${JSON.stringify(join(root, "src/utils/noticeVoice.js"))};
   export { guideClaims, guideClaimNote } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
@@ -1295,7 +1296,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     // sitemap and the guide builder, each of which would need a rule to keep it
     // out, and one of them would be forgotten.
     ok("notices have their own table", /create table if not exists gemlyx_notices/.test(app));
-    ok("which a reader may read", /create policy "read gemlyx_notices"[\s\S]{0,120}to anon using \(true\)/.test(app));
+    ok("which a reader may read", /create policy "read gemlyx_notices" on gemlyx_notices for select using \(true\);/.test(app));
     ok("and it is not a content type", !/CONTENT_TYPES[\s\S]{0,200}"notice"/.test(app));
     // Two lists, and the difference between them IS the feature.
     ok("the tab shows everything current and near", /const noticesHere = useMemo\(/.test(app));
@@ -7622,7 +7623,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   is("and the SQL appears exactly once, in that branch", (app10.match(/\{RESEARCH_SQL\}/g) || []).length, 1);
   // Re-runnable, same lesson gemlyx_sources taught this morning: Supabase runs
   // the editor as one transaction, so "policy already exists" rolls back the lot.
-  ok("the research SQL can be run twice", /drop policy if exists "auth all gemlyx_research"/.test(app10));
+  ok("the research SQL can be run twice", /drop policy if exists "auth all gemlyx_research"/.test(app10) && /drop policy if exists "founder writes gemlyx_research"/.test(app10));
 }
 
 // ── "COULD NOT FIND THE 'kind' COLUMN OF 'gemlyx_feeds'" ─────────
@@ -50769,11 +50770,13 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("with an index for the recent list", /created_at desc/.test(sql));
     ok("row level security on", /enable row level security/.test(sql));
     ok("public read", /for select using \(true\)/.test(sql));
-    ok("and insert", /for insert with check \(true\)/.test(sql));
-    // NO UPDATE AND NO DELETE POLICY, so a published trip cannot be edited or
-    // removed with the key that ships in the browser.
+    // Security review, 4 Oct 2026, finding 2: members add, in the app's shape,
+    // and the script no longer reopens the table to anyone.
+    ok("members insert, in the shape the app makes", /for insert to authenticated\s+with check \(id ~ '\^lib_/.test(sql) && !/with check \(true\)/.test(sql));
+    // NO UPDATE POLICY, so a published trip cannot be edited; only the founder
+    // may remove one.
     ok("nothing may be changed through the anon key", !/for update/.test(sql));
-    ok("nor removed", !/for delete/.test(sql));
+    ok("and only the founder removes", /for delete to authenticated using \(public\.is_founder\(\)\)/.test(sql) && (sql.match(/for delete/g) || []).length === 1);
   }
 }
 
@@ -79953,7 +79956,13 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const call = seen.find(x => x.url.endsWith("/rpc/gemlyx_refund_guide"));
   ok("a stopped build is handed back", out.status === 200 && out.json.refunded === true);
   ok("off the visitor and the network, spent as a pass, and never off the day's total", call && call.body.p_keys.join() === `v:abcdefgh-1,ip:${M.buildPassHashIp(M.buildPassSecret("service-key"), "1.2.3.4")}` && call.body.p_spent_key === "r:n0nce1234567" && !call.body.p_keys.includes("site"));
-  ok("a browser can stop only so many a day", call.body.p_refund_key === "c:abcdefgh-1" && call.body.p_refund_limit === 2);
+  // Security review, 4 Oct 2026, finding 1: the stop limit is the address's
+  // (or the account's), never the id the browser makes up.
+  ok("a visitor can stop only so many a day, counted on the address", call.body.p_refund_key === `c:ip:${M.buildPassHashIp(M.buildPassSecret("service-key"), "1.2.3.4")}` && call.body.p_refund_limit === 2);
+  seen.length = 0;
+  await M.buildPassDecide({ headers: site, body: { visitor: "fresh-id-99", cancel: M.makePass(sign, { day: "2026-09-28", visitor: "fresh-id-99", nonce: "n0nce7654321" }) }, env, fetchImpl: db("ok"), now });
+  const call2 = seen.find(x => x.url.endsWith("/rpc/gemlyx_refund_guide"));
+  ok("a fresh browser id does not bring a fresh stop allowance", call2 && call2.body.p_refund_key === call.body.p_refund_key);
   const forged = await M.buildPassDecide({ headers: site, body: { visitor: "abcdefgh-1", cancel: pass.slice(0, -2) + "zz" }, env, fetchImpl: db("ok"), now });
   ok("a made up pass hands nothing back", forged.json.refunded === false);
   const twice = await M.buildPassDecide({ headers: site, body: { visitor: "abcdefgh-1", cancel: pass }, env, fetchImpl: db("spent"), now });
@@ -80849,6 +80858,31 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("OpenAI's paid web search is taken off for anybody but the founder", M.shapeOpenAI({ tools: [{ type: "function", function: { name: "f" } }, { type: "web_search" }] }, { anon: true }).tools.length === 1);
   is("and the visitor's OpenAI ceiling", M.shapeOpenAI({ max_tokens: 99999 }, { anon: true }).max_completion_tokens, 8000);
 
+  // ── Security review, 4 Oct 2026, findings 3 and 4 ──
+  is("an unset limit is the default, 0 is off, and a typo is off too", [M.limitOf(undefined, 5), M.limitOf("", 5), M.limitOf("0", 5), M.limitOf("12", 5), M.limitOf("12x", 5), M.limitOf("-3", 5)], [5, 5, 0, 12, 0, 0]);
+  ok("GEMLYX_AI_PER_DAY=0 reads as 0, not 8000", M.readAiLimits({ GEMLYX_AI_PER_DAY: "0" }).perDay === 0 && M.readAiLimits({}).perDay === 8000);
+  ok("the Opus limits have their defaults", M.readAiLimits({}).opusPerVisitor === 6 && M.readAiLimits({}).anonOpusPerDay === 150);
+  const offEnv = { ...env, GEMLYX_AI_PER_DAY: "0" };
+  const [offVisitor, offMember] = await Promise.all([
+    M.gateAi({ endpoint: "anthropic", body: {}, env: offEnv, headers: visitor, fetchImpl: counting("ok") }),
+    M.gateAi({ endpoint: "anthropic", body: {}, env: offEnv, headers: site, fetchImpl: user({ id: "member", email_confirmed_at: "x" }) }),
+  ]);
+  ok("set to 0, the AI is off for visitors and members alike", offVisitor.status === 503 && offVisitor.error === M.AI_OFF && offMember.status === 503 && offMember.error === M.AI_OFF);
+  is("an IPv6 address is counted by its /64", [M.addressBlock("2001:db8:85a3::1"), M.addressBlock("2001:0db8:85a3:0000:aaaa:bbbb:cccc:dddd"), M.addressBlock("[2001:db8:85a3:0:1::2]")], ["2001:db8:85a3:0::/64", "2001:db8:85a3:0::/64", "2001:db8:85a3:0::/64"]);
+  is("IPv4, plain or wrapped in IPv6, is counted whole", [M.addressBlock("203.0.113.9"), M.addressBlock("::ffff:203.0.113.9")], ["203.0.113.9", "203.0.113.9"]);
+  ok("two addresses in one IPv6 /64 are one visitor", M.visitorKey({ "x-real-ip": "2001:db8:1:2::a" }, "s") === M.visitorKey({ "x-real-ip": "2001:db8:1:2:ffff::9" }, "s") && M.visitorKey({ "x-real-ip": "2001:db8:1:2::a" }, "s") !== M.visitorKey({ "x-real-ip": "2001:db8:1:3::a" }, "s"));
+  sent.length = 0;
+  const [vOpus, vOpusAll] = await Promise.all([
+    M.gateAi({ endpoint: "anthropic", body: { model: "claude-opus-4-8" }, env, headers: visitor, fetchImpl: counting("ok") }),
+    M.gateAi({ endpoint: "anthropic", body: { model: "claude-opus-4-8" }, env, headers: visitor, fetchImpl: counting("ai:anon:opus") }),
+  ]);
+  const opusCall = sent.find(b => b.p_keys.length === 5);
+  ok("a visitor's Opus call is counted on the Opus pools too", vOpus.ok && opusCall && opusCall.p_keys[3] === `${opusCall.p_keys[0]}:opus` && opusCall.p_keys[4] === "ai:anon:opus" && opusCall.p_limits[3] === 6 && opusCall.p_limits[4] === 150);
+  ok("and all visitors over the Opus pool hear the site is done for today", vOpusAll.status === 429 && /used its AI for today/.test(vOpusAll.error));
+  sent.length = 0;
+  await M.gateAi({ endpoint: "anthropic", body: { model: "claude-sonnet-5" }, env, headers: visitor, fetchImpl: counting("ok") });
+  ok("a Sonnet call is not counted against Opus", sent.length === 1 && sent[0].p_keys.length === 3);
+
   ok("the raw body is not passed through any more", !/JSON\.stringify\(req\.body\)/.test(readFileSync(join(root, "api/anthropic.js"), "utf8") + readFileSync(join(root, "api/openai.js"), "utf8")));
 
   ok("the account is added to AI calls on the way out", M.AI_PATHS.test("/api/anthropic") && M.AI_PATHS.test("/api/search?q=x") && !M.AI_PATHS.test("/api/weather?lat=1"));
@@ -81637,6 +81671,58 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("and when the forecast cannot be read the page says so, rather than showing a dry walk", /could not be read just now, so there is no walk for right now/.test(pageW));
   const shown = pageW.replace(/\/\/.*$/gm, "");
   ok("no dashes and none of his banned words in the new text", !/[—–]/.test(shown) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(shown));
+}
+
+// ── Batch 200: the six Medium findings from the 4 Oct security review ──
+// Oliver, 4 Oct 2026, at work: "anything you want to work on?", and the
+// security fixes first.
+{
+  // Finding 5: Google's map calls are counted per address and for the site.
+  const sentM = [];
+  const counter = (answer) => async (url, init) => { sentM.push({ url, body: JSON.parse(init.body) }); return typeof answer === "number" ? { ok: false, status: answer, json: async () => ({}) } : { ok: true, json: async () => answer }; };
+  const h = { origin: "https://www.gemlyxtravel.com", "x-real-ip": "198.51.100.7" };
+  const envM = { SUPABASE_SERVICE_ROLE_KEY: "svc-key-for-maps" };
+  const [mOk, mOver, mDown, mNoKey, mOff] = await Promise.all([
+    M.gateMaps({ headers: h, env: envM, fetchImpl: counter("ok") }),
+    M.gateMaps({ headers: h, env: envM, fetchImpl: counter("maps:site") }),
+    M.gateMaps({ headers: h, env: envM, fetchImpl: counter(500) }),
+    M.gateMaps({ headers: h, env: {}, fetchImpl: counter("ok") }),
+    M.gateMaps({ headers: h, env: { ...envM, GEMLYX_MAPS_PER_DAY: "0" }, fetchImpl: counter("ok") }),
+  ]);
+  const first = sentM[0]?.body;
+  ok("a map call is counted on the address and the site", mOk.ok && first && /^maps:v:[0-9a-f]{24}$/.test(first.p_keys[0]) && first.p_keys[1] === "maps:site" && first.p_limits.join() === "400,6000");
+  ok("and the counter never holds the address", !JSON.stringify(first).includes("198.51.100.7"));
+  ok("over the limit is a 429 and Google is not asked", mOver.status === 429 && mOver.error === M.MAPS_DONE);
+  ok("a counter out of reach, or no service key, refuses rather than spends", mDown.status === 503 && mNoKey.status === 503);
+  ok("0 switches the maps off", mOff.status === 503 && sentM.length === 3);
+  is("the limits are read from Vercel", [M.readMapsLimits({}).perVisitor, M.readMapsLimits({ GEMLYX_MAPS_PER_VISITOR: "50" }).perVisitor, M.readMapsLimits({ GEMLYX_MAPS_PER_DAY: "x" }).perDay], [400, 50, 0]);
+  for (const f of ["directions", "places"]) {
+    const src = readFileSync(join(root, "api", `${f}.js`), "utf8");
+    const gateAt = src.indexOf("await gateMaps({ headers: req.headers, env: process.env })");
+    const googleAt = f === "directions" ? src.indexOf("const routed = await askRoutes(") : src.indexOf('await fetch("https://places.googleapis.com');
+    ok(`/api/${f} counts every call before Google is asked`, gateAt > 0 && googleAt > gateAt && /if \(!counted\.ok\) return res\.status\(counted\.status\)/.test(src));
+  }
+
+  // Finding 2: no script the Studio offers reopens a table.
+  const appS = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("no Studio script hands every account the write", !/using \(true\) with check \(true\)/.test(appS));
+  for (const t of ["gemlyx_research", "gemlyx_sources", "gemlyx_feeds", "gemlyx_notices"]) {
+    ok(`${t}: the old open policy is dropped and writes are the founder's`, appS.includes(`drop policy if exists "auth all ${t}" on ${t};`) && appS.includes(`create policy "founder writes ${t}" on ${t} for all to authenticated using (public.is_founder()) with check (public.is_founder());`));
+  }
+  ok("his tools stay his to read, the public pages stay public", appS.includes('create policy "read gemlyx_research" on gemlyx_research for select using (public.is_founder());') && appS.includes('create policy "read gemlyx_feeds" on gemlyx_feeds for select using (public.is_founder());') && appS.includes('create policy "read gemlyx_sources" on gemlyx_sources for select using (true);'));
+  ok("the old scripts in the repo say not to run them", ["gemlyx_tables_18sep.sql", "gemlyx_trip_library_19sep.sql"].every(f => readFileSync(join(root, f), "utf8").startsWith("-- ── DO NOT RUN THIS FILE ANY MORE")));
+
+  // Finding 6: a failed search is told to the model as a failure.
+  const TURN6 = [{ type: "tool_use", id: "toolu_x", name: "web_search", input: { query: "a" } }, { type: "tool_use", id: "toolu_y", name: "web_search", input: { query: "b" } }];
+  const r6 = M.toolResultsFor(TURN6, [M.SEARCH_FAILED, ""]);
+  ok("a failed search is an error the model can read as one", r6[0].is_error === true && r6[0].content === M.SEARCH_FAILED_TEXT && !/no results/i.test(r6[0].content));
+  ok("and an empty search is still nothing found", r6[1].content === M.NO_ANSWER && !r6[1].is_error);
+  const loop = appS.slice(appS.indexOf("const answers = await Promise.all(queriesIn(out.content)"), appS.indexOf("content: toolResultsFor(out.content, answers)"));
+  ok("the chat sends a refused, broken or unreachable search as a failure", /if \(!searchRes\.ok\) return SEARCH_FAILED;/.test(loop) && /if \(searchData\?\.error\) return SEARCH_FAILED;/.test(loop) && /catch \{ return SEARCH_FAILED; \}/.test(loop));
+
+  // Every new line of this batch keeps to his writing rules.
+  const fresh = ["src/utils/mapsGate.js", "src/utils/toolTurn.js", "src/utils/aiGate.js", "api/build-pass.js"].map(f => readFileSync(join(root, f), "utf8")).join("\n");
+  ok("no dashes and none of his banned words in the new text", !/[—–]/.test(fresh.replace(/\/\/ ── .*$/gm, "")) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(fresh));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
