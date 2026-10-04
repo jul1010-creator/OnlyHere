@@ -82,10 +82,21 @@ export const plainTownName = (town) => {
   const m = t.match(/^(.+?)\s+(?:(?:m|r)\.\s*)?sav\.?$|^(.+?)\s+(?:miesto|rajono)?\s*savivaldybė$/i);
   if (!m) return t;
   const gen = (m[1] || m[2] || "").trim();
+  // The -io genitive can come from -ys or -is, so those are named rather than
+  // guessed (review, 4 Oct 2026: "Panevėžio" is Panevėžys, not Panevėžias).
+  const NAMED = { "panevėžio": "Panevėžys", "rokiškio": "Rokiškis", "kupiškio": "Kupiškis", "akmenės": "Akmenė" };
+  if (NAMED[gen.toLowerCase()]) return NAMED[gen.toLowerCase()];
   // The genitive endings Lithuanian town names take: Klaipėdos, Neringos and
-  // Palangos from -a, Vilniaus from -us, Kauno from -as.
+  // Palangos from -a, Marijampolės from -ė, Šiaulių from -iai, Biržų from -ai,
+  // Vilniaus from -us, Kauno from -as.
   if (/os$/i.test(gen)) return gen.replace(/os$/i, "a");
+  if (/ės$/i.test(gen)) return gen.replace(/ės$/i, "ė");
+  if (/ių$/i.test(gen)) return gen.replace(/ių$/i, "iai");
+  if (/ų$/i.test(gen)) return gen.replace(/ų$/i, "ai");
   if (/aus$/i.test(gen)) return gen.replace(/aus$/i, "us");
+  // An -io this table does not know is not guessed: the municipality's own
+  // words stand, which matches nothing rather than the wrong town.
+  if (/io$/i.test(gen)) return t;
   if (/o$/i.test(gen)) return gen.replace(/o$/i, "as");
   return gen;
 };

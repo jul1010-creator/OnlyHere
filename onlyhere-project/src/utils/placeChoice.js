@@ -269,12 +269,15 @@ export const listingMatchesSubject = (typed, town, listing, { theNameIsAStreet =
 // "Museum of the History of Lithuania Minor" and "History Museum of Lithuania
 // Minor" are one name written two ways, and Google writes the second. Every
 // word has to be on both sides and nothing added, once "the", "of" and "and"
-// are set aside, so "Castle Museum" is still not "Castle".
+// are set aside, so "Castle Museum" is still not "Castle". Two-word names are
+// left to the rules above.
 const LINK_WORDS = new Set(["the", "of", "and", "a", "an"]);
 const wordSet = (v) => [...new Set(fold(clean(v)).split(/[^\p{L}\p{N}]+/u).filter(w => w && !LINK_WORDS.has(w)))].sort();
 export const sameWordsReordered = (typed, listing) => {
   const a = wordSet(typed), b = wordSet(listing);
-  return a.length >= 2 && a.length === b.length && a.every((w, i) => w === b[i]);
+  // Three words or more. "Hvalsø Kirke" and "Kirke Hvalsø" have the same two
+  // words and can be the church and the village (review, 4 Oct 2026).
+  return a.length >= 3 && a.length === b.length && a.every((w, i) => w === b[i]);
 };
 
 // ── THE SAME PLACE, NAMED IN ENGLISH AND IN LITHUANIAN ──────────────

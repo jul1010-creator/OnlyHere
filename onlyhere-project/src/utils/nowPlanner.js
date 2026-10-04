@@ -513,7 +513,10 @@ export const tidyWalk = (order, candidates, ctx) => {
   const kept = new Map(second.stops.map(s => [s.id, s]));
   const keepsAll = first.stops.every(s => kept.has(s.id));
   const mealStays = keepsAll && first.stops.every(s => s.kind !== "Food" || Math.abs(kept.get(s.id).arrive - s.arrive) <= MEAL_SHIFT);
-  return mealStays && walkedKm(second, ctx.start) < walkedKm(first, ctx.start) - 0.005 ? second : first;
+  // And a partner's offer the first order reached in time is still reached.
+  // A tidier line is not worth a deal the walker would have had.
+  const dealsStay = mealStays && first.stops.every(s => !s.deal || !!kept.get(s.id)?.deal);
+  return dealsStay && walkedKm(second, ctx.start) < walkedKm(first, ctx.start) - 0.005 ? second : first;
 };
 
 // ── THE SAME PLACES THE OTHER WAY ROUND ─────────────────────────────
