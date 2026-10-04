@@ -711,7 +711,6 @@ export const UI_STRINGS = {
   // Next to a deal, 1 Oct 2026: the code to show at the counter, where to book
   // a table, and how busy the place usually is at this hour. {code} and {time}
   // are filled in by the caller.
-  "deal.code":     { en: "Show this code: {code}", da: "Vis denne kode: {code}", de: "Zeig diesen Code: {code}", lt: "Parodykite šį kodą: {code}" },
   "deal.book":     { en: "Book a table", da: "Book et bord", de: "Tisch reservieren", lt: "Rezervuoti staliuką" },
   "deal.call":     { en: "Call to book", da: "Ring og book", de: "Anrufen und reservieren", lt: "Skambinti ir rezervuoti" },
   "busy.quiet":    { en: "Usually quiet now", da: "Normalt roligt nu", de: "Gerade meist ruhig", lt: "Dabar paprastai ramu" },

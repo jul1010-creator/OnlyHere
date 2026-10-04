@@ -4,11 +4,8 @@
 // attention to making it convinient. That shall be the main feature.
 // Remember, these are people stepping off a cruise."
 //
-// Three things a place can carry next to its deal, each set in Studio:
+// Two things a place can carry next to its deal, each set in Studio:
 //
-//   dealCode   a short code the guest shows at the table, so the partner can
-//              count the customers Gemlyx sent. Worked out from the place
-//              itself, so it never changes and nothing has to store it.
 //   __booking  where to book a table: the restaurant's own page, or a phone
 //              number. Gemlyx takes no booking itself (terms clause 4.3).
 //   __busy     how busy the place usually is, hour by hour, from BestTime,
@@ -16,35 +13,12 @@
 //
 // Pure, so the suite can drive all of it.
 
-// ── THE CODE ────────────────────────────────────────────────────────
-// No 0/O, 1/I/L or 5/S, because it is read off a phone across a counter.
-const CODE_ALPHABET = "ABCDEFGHJKMNPQRTUVWXYZ2346789";
-
-const placeKey = (item) => [item?.name, item?.city || item?.town || item?.location || ""]
-  .map(v => String(v || "").trim().toLowerCase().normalize("NFC")).join("|");
-
-// FNV-1a, 32 bit. Not a secret and not meant to be one: the code proves the
-// guest saw the deal on Gemlyx, the way a voucher printed in a magazine does.
-const hash32 = (s) => {
-  let h = 0x811c9dc5;
-  for (const ch of s) {
-    h ^= ch.codePointAt(0);
-    h = Math.imul(h, 0x01000193) >>> 0;
-  }
-  return h >>> 0;
-};
-
-export const dealCode = (item) => {
-  const key = placeKey(item);
-  if (!key.replace(/\|/g, "")) return "";
-  let n = hash32(key);
-  let out = "";
-  for (let i = 0; i < 4; i++) {
-    out += CODE_ALPHABET[n % CODE_ALPHABET.length];
-    n = Math.floor(n / CODE_ALPHABET.length);
-  }
-  return `GX-${out}`;
-};
+// ── NO DEAL CODE ────────────────────────────────────────────────────
+// There was a dealCode here: a short "GX-XXXX" worked out from the place,
+// shown under every deal for the guest to say at the counter. Oliver, 5 Oct
+// 2026: "I think the 'code' is stupid.. nobody will agree to that at start..
+// too complicated." So a deal is the offer and nothing to show or check: the
+// guest asks for it, the way they would ask for a lunch special.
 
 // ── WHERE TO BOOK ───────────────────────────────────────────────────
 // A web address (https only, as typed or with the scheme added) or a phone
