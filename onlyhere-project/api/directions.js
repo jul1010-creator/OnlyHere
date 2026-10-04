@@ -51,6 +51,7 @@ const decodePolyline = (encoded) => {
 };
 
 import { requestIsFromSite, NOT_FROM_SITE } from "../src/utils/apiGuard.js";
+import { gateMaps } from "../src/utils/mapsGate.js";
 import { COUNTRY_PROFILES, DEFAULT_COUNTRY } from "../src/utils/countries.js";
 
 // ── THE ROUTES API FIRST, THE OLD DIRECTIONS API BEHIND IT ──────────
@@ -232,10 +233,17 @@ export default async function handler(req, res) {
   if (!origin || !destination) {
     return res.status(400).json({ error: "origin and destination required" });
   }
+  if (String(origin).length > 300 || String(destination).length > 300) {
+    return res.status(400).json({ error: "origin or destination too long" });
+  }
   const key = process.env.GOOGLE_MAPS_KEY;
   if (!key) {
     return res.status(500).json({ error: "GOOGLE_MAPS_KEY not set on the server" });
   }
+  // ── COUNTED BEFORE GOOGLE IS ASKED ────────────────────────────────
+  // Security review, 4 Oct 2026, finding 5: see src/utils/mapsGate.js.
+  const counted = await gateMaps({ headers: req.headers, env: process.env });
+  if (!counted.ok) return res.status(counted.status).json({ error: counted.error });
   // BUG FIX: this used to check mode === "car"/"walk", but the client actually
   // sends "driving"/"walking"/"bicycling"/"transit" (Google's own mode names) —
   // the mismatch meant walking AND driving requests both silently fell through

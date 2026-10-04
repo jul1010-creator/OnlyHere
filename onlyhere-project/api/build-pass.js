@@ -116,7 +116,14 @@ export const decide = async ({ headers, body, env, fetchImpl, now = new Date(), 
     if (ipHash) keys.push(`ip:${ipHash}`);
     const got = await refund({
       day, keys,
-      refundKey: `c:${visitor || ipHash || "anon"}`, refundLimit: limits.refunds,
+      // ── THE STOP LIMIT IS THE ACCOUNT'S, NOT THE BROWSER'S ──────────
+      // Security review, 4 Oct 2026, finding 1. This was keyed on the
+      // visitor id, which the browser makes up, so a member who took and
+      // stopped a pass with a fresh id each time was handed back every slot
+      // but the site's, and filled the day's guides for everyone without any
+      // AI being spent. Keyed on the account, or on the address when there is
+      // no account, it holds whatever id the browser sends.
+      refundKey: who.userId ? `c:u:${String(who.userId).toLowerCase()}` : `c:ip:${ipHash || "anon"}`, refundLimit: limits.refunds,
       spentKey: `r:${stopped.nonce}`, serviceKey, fetchImpl,
     });
     if (got.open) return { status: 200, json: { ok: true, day, refunded: false, open: got.open } };

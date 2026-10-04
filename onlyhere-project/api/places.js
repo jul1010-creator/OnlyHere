@@ -7,6 +7,7 @@
 // GOOGLE_MAPS_KEY already used by directions.js.
 
 import { requestIsFromSite, NOT_FROM_SITE } from "../src/utils/apiGuard.js";
+import { gateMaps } from "../src/utils/mapsGate.js";
 
 export default async function handler(req, res) {
   // ── SECURITY, 17 AUG 2026 ─────────────────────────────────────────
@@ -45,6 +46,13 @@ export default async function handler(req, res) {
   const placeTypes = String(type || "transit_station").split(",").map(t => t.trim()).filter(Boolean);
   const radius = Math.min(Math.max(parseInt(req.query.radius, 10) || 1500, 200), 20000);
   const want = Math.min(Math.max(parseInt(req.query.limit, 10) || 1, 1), 10);
+  if (!Number.isFinite(parseFloat(lat)) || !Number.isFinite(parseFloat(lon))) {
+    return res.status(400).json({ error: "lat and lon must be numbers" });
+  }
+  // ── COUNTED BEFORE GOOGLE IS ASKED ────────────────────────────────
+  // Security review, 4 Oct 2026, finding 5: see src/utils/mapsGate.js.
+  const counted = await gateMaps({ headers: req.headers, env: process.env });
+  if (!counted.ok) return res.status(counted.status).json({ error: counted.error });
 
   try {
     // Places API (New) Nearby Search — POST with a JSON body, unlike every other
