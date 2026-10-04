@@ -1,8 +1,9 @@
 // ── THE TWO TIER PAGE READ, IN ONE PLACE ────────────────────────────
 //
-// api/scan-source.js had this inline. api/update-events-check.js now needs the
-// identical thing, and a second copy of it would be the seventh duplicated
-// function found in this codebase in a week. So it lives here, once.
+// api/scan-source.js had this inline, and the other routes that read a page
+// (social-find, link-alive) need the identical thing, so it lives here, once.
+// The weekly event check that first shared it was removed on 4 Oct 2026: no
+// schedule ever called it.
 //
 // It sits in src/utils/ rather than api/ ON PURPOSE. Vercel turns every file in
 // api/ into a serverless function, api/ is already at thirteen files against a
