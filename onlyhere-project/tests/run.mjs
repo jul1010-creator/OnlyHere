@@ -81607,6 +81607,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("the map's waiting listener is removed when the walk changes, and a stopped turn goes back to north",
     /idle = maps\.event\.addListenerOnce\(map, "idle"/.test(comp) && /idle\?\.remove\(\)/.test(comp) && /moveCamera\(\{ heading: 0 \}\); \} catch/.test(comp));
   ok("a failed walking line is asked again rather than kept faint", /if \(line\) legCache\.set\(key, line\);/.test(comp));
+  ok("the map is asked for as a vector map, which is the one that tilts and turns", /renderingType: maps\.RenderingType\?\.VECTOR \|\| "VECTOR"/.test(comp));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
