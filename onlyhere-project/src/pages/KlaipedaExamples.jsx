@@ -18,7 +18,7 @@ import { entryWord } from "../utils/entryWords";
 import { offerHoursLabel } from "../utils/offer";
 import { windowOf, timingAt, cleanDays, cleanClock } from "../utils/offerClock";
 import {
-  EXAMPLE_WALKS, WEATHER_WALKS, EXAMPLE_PARTNERS, EXAMPLE_GUIDES, GUIDE_LANGS, GUIDE_LANG_NAMES, GUIDE_LABELS, PARTNER_WEEK,
+  EXAMPLE_WALKS, WEATHER_WALKS, KLAIPEDA_SKY, walkForNow, EXAMPLE_PARTNERS, EXAMPLE_GUIDES, GUIDE_LANGS, GUIDE_LANG_NAMES, GUIDE_LABELS, PARTNER_WEEK,
   runExample, isExamplePartner, pageFor,
 } from "../data/klaipedaExamples";
 import { KLAIPEDA_SCULPTURES_PATH } from "../data/klaipedaSculptures";
@@ -53,10 +53,27 @@ export const KlaipedaExamples = () => {
   const [way, setWay] = useState("a");
   useEffect(() => { setWay("a"); }, [walkId]);
   const shownWalk = way === "b" && run.alt ? run.alt : run.walk;
-  // The same morning in other weather. See WEATHER_WALKS.
-  const [skyId, setSkyId] = useState(WEATHER_WALKS[1].id);
-  const sky = WEATHER_WALKS.find(w => w.id === skyId) || WEATHER_WALKS[0];
-  const skyRun = useMemo(() => runExample(sky), [sky]);
+  // ── THE SAME MORNING, IN THE WEATHER KLAIPĖDA HAS RIGHT NOW ────────
+  // Oliver, 4 Oct 2026: "Make an example that changes depending on the
+  // current weather. And make it, so the default one is how it is currently.
+  // So we know that it does detect it." The forecast is read the way the walk
+  // planner reads it (utils/walkWeather.js), and the morning is walked in it:
+  // the order is the one written for the nearest kind of weather, and the
+  // rules then do what they do to any walk.
+  const [live, setLive] = useState({ state: "loading" });
+  useEffect(() => {
+    let gone = false;
+    fetch(`/api/weather?lat=${KLAIPEDA_SKY.lat}&lon=${KLAIPEDA_SKY.lon}&mode=walk`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(w => { if (!gone) setLive(w && w.known ? { state: "ok", w } : { state: "failed" }); })
+      .catch(() => { if (!gone) setLive({ state: "failed" }); });
+    return () => { gone = true; };
+  }, []);
+  const nowWalk = useMemo(() => (live.state === "ok" ? walkForNow(live.w) : null), [live]);
+  // The same morning in other weather. See WEATHER_WALKS. "Right now" first.
+  const [skyId, setSkyId] = useState("now");
+  const sky = skyId === "now" ? nowWalk : (WEATHER_WALKS.find(w => w.id === skyId) || WEATHER_WALKS[0]);
+  const skyRun = useMemo(() => (sky ? runExample(sky) : null), [sky]);
   // The page a listing opens, in the window. See EXAMPLE_PAGES.
   const [open, setOpen] = useState(null);
   const openPage = (id) => { const p = pageFor(id); if (p) setOpen({ id, ...p }); };
@@ -167,14 +184,19 @@ export const KlaipedaExamples = () => {
         <Lead>The forecast for the next three hours comes from the Norwegian Meteorological Institute. Gemlyx picks for it, and fixed rules then hold the walk to it.</Lead>
 
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }} role="tablist" aria-label="Weather">
-          {WEATHER_WALKS.map(w => (
-            <button key={w.id} role="tab" aria-selected={w.id === sky.id} onClick={() => setSkyId(w.id)} style={pill(w.id === sky.id)} data-testid={`example-sky-${w.id}`}>
+          {[{ id: "now", label: "Right now" }, ...WEATHER_WALKS].map(w => (
+            <button key={w.id} role="tab" aria-selected={w.id === skyId} onClick={() => setSkyId(w.id)} style={pill(w.id === skyId)} data-testid={`example-sky-${w.id}`}>
               {w.label}
             </button>
           ))}
         </div>
 
         <div data-testid="example-weather" style={{ ...card, border: `1px solid ${C.gold}55`, borderRadius: 16, padding: "16px 16px 18px", marginBottom: 40 }}>
+          {!sky ? (
+            <div data-testid="example-sky-now-state" style={{ fontSize: 13, color: C.muted, lineHeight: 1.6 }}>
+              {live.state === "loading" ? "Reading the forecast for Klaipėda…" : "The forecast for Klaipėda could not be read just now, so there is no walk for right now. The other weathers still show how it changes."}
+            </div>
+          ) : (<>
           <div style={{ fontSize: 20, fontWeight: 600, fontFamily: "'Fraunces', serif" }}>{sky.title}</div>
           <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>{sky.moment}</div>
           {weatherChanges(sky.weather).length > 0 && (
@@ -193,6 +215,7 @@ export const KlaipedaExamples = () => {
               ))}
             </div>
           )}
+          </>)}
         </div>
 
         {/* ── OFFERS ──────────────────────────────────────────── */}
