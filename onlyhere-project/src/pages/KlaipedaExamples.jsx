@@ -22,6 +22,7 @@ import {
   runExample, isExamplePartner, pageFor,
 } from "../data/klaipedaExamples";
 import { KLAIPEDA_SCULPTURES_PATH } from "../data/klaipedaSculptures";
+import { GoogleWalkMap } from "../components/GoogleWalkMap";
 
 const WARN = "#FFB347";
 const DAY_LONG = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -138,6 +139,8 @@ export const KlaipedaExamples = () => {
               ))}
             </div>
           )}
+          {/* Google's own map, turning once. Left out until its key is set. */}
+          <GoogleWalkMap walk={shownWalk} />
           <EditableWalk walk={shownWalk} madeAt={run.startClock.minutes} lang="en" country="LT" tag={(s) => isExamplePartner(s.id) ? "Example" : null} onOpen={(s) => openPage(s.id)} />
           {run.left.length > 0 && (
             <div data-testid="example-left" style={{ borderTop: `1px solid ${C.border}`, marginTop: 14, paddingTop: 12 }}>
