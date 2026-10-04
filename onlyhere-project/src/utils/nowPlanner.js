@@ -15,7 +15,7 @@
 // IMPORTS ONLY FILES THAT IMPORT NOTHING, with their .js extension, because
 // api/plan-now.js loads this on the server, where Node cannot follow the
 // extensionless imports the rest of src/ uses.
-import { kmApart, offTownWalk, acrossWater, WALK_RULES } from "./walkable.js";
+import { kmApart, offTownWalk, acrossWater, WALK_RULES, ferryOf, ferryWait } from "./walkable.js";
 import { RIDE_APPS } from "./rideHail.js";
 import { COUNTRY_PROFILES } from "./countries.js";
 import { dayStart } from "./calendarDay.js";
@@ -51,6 +51,38 @@ export const walkMinutes = (a, b) => Math.max(1, Math.round((kmApart(a, b) * 100
 // A Bolt across town: a few minutes to arrive, then about 25 km an hour.
 export const RIDE_WAIT = 5;
 export const rideMinutes = (a, b) => RIDE_WAIT + Math.max(3, Math.round((kmApart(a, b) * WALK_DETOUR / 25) * 60));
+
+// ── ACROSS THE STRAIT ON THE OLD FERRY ──────────────────────────────
+// Oliver, 4 Oct 2026, from the work list: a walk may take the ferry to
+// Smiltynė. A leg that crosses is on foot to the landing, the longest wait for
+// the next ferry, the crossing, and on foot from the other landing (FERRIES in
+// walkable.js says where each figure comes from). Two places on the far side
+// are a walk between them. A crossing that would also need a Bolt at one end
+// is not planned at all: that is a trip, not a walk.
+const NOT_A_LEG = 9999;
+export const crossesWater = (country, a, b) => !!ferryOf(country) && acrossWater(country, a) !== acrossWater(country, b);
+const waitOf = (ctx) => (Number.isFinite(Number(ctx?.ferryWait)) && ctx?.ferryWait !== null ? Number(ctx.ferryWait) : ferryWait(ctx?.country || "LT"));
+export const legBetween = (a, b, ctx = {}) => {
+  const country = ctx.country || "LT";
+  const slow = Number(ctx.walkFactor) || 1;
+  const plain = (x, y) => {
+    if (acrossWater(country, x) && acrossWater(country, y)) return { minutes: Math.round(walkMinutes(x, y) * slow), ride: false };
+    return offTownWalk({ country, from: x, to: y })
+      ? { minutes: rideMinutes(x, y), ride: true }
+      : { minutes: Math.round(walkMinutes(x, y) * slow), ride: false };
+  };
+  if (!crossesWater(country, a, b)) return plain(a, b);
+  const ferry = ferryOf(country);
+  const back = acrossWater(country, a);
+  const to = plain(a, back ? ferry.far : ferry.near);
+  const from = plain(back ? ferry.near : ferry.far, b);
+  if (to.ride || from.ride) return { minutes: NOT_A_LEG, ride: false };
+  const wait = waitOf(ctx);
+  return { minutes: to.minutes + wait + ferry.crossing + from.minutes, ride: false, ferry: { walkTo: to.minutes, wait, crossing: ferry.crossing, walkFrom: from.minutes } };
+};
+// The ferry as a distance, for the planner's sums that count kilometres: the
+// wait and the crossing, as the walk they take the time of.
+const ferryKm = (ctx) => ((waitOf(ctx) || 0) + (ferryOf(ctx?.country || "LT")?.crossing || 0)) * WALK_M_PER_MIN / 1000 / WALK_DETOUR;
 
 // The half hour a moment falls in, written the way the URL carries it.
 export const slotOf = (now = new Date()) => {
@@ -177,9 +209,10 @@ export const nowCandidates = (rows, { country = "LT", zone = "", now = new Date(
     if (String(p.country || "DK").toUpperCase() !== country) continue;
     const at = pointOf(p);
     if (!at) continue;
-    // Across the strait needs the ferry, which a walk made for a few hours does
-    // not plan around yet.
-    if (acrossWater(country, at)) continue;
+    // Across the strait needs the ferry. Kept where the country has one
+    // (legBetween times it), left out where it does not.
+    const across = acrossWater(country, at);
+    if (across && !ferryOf(country)) continue;
     if (kind === "Event") {
       const a = dayStart(p.date), b = dayStart(p.dateEnd || p.date);
       const iso = (d) => d && `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -192,6 +225,7 @@ export const nowCandidates = (rows, { country = "LT", zone = "", now = new Date(
       name: words(p.name, 80),
       kind: museum ? "Museum" : kind,
       lat: at.lat, lon: at.lon,
+      ...(across ? { across: true } : {}),
       tier: p.tier || "",
       indoor: kind === "Food" || kind === "Workshop" || (INDOOR.test(text) && !OUTDOOR.test(p.name)),
       // The name and the first sentence only. A square described further down
@@ -263,10 +297,7 @@ export const scheduleWalk = (order, candidates, ctx) => {
   const deadline = budget - margin;
   const stops = [];
   let here = start, t = 0, foods = 0;
-  const legOf = (a, b) => {
-    const far = offTownWalk({ country, from: a, to: b });
-    return far ? { minutes: rideMinutes(a, b), ride: true } : { minutes: Math.round(walkMinutes(a, b) * rules.walk), ride: false };
-  };
+  const legOf = (a, b) => legBetween(a, b, { ...ctx, country, walkFactor: rules.walk });
   for (const pick of Array.isArray(order) ? order : []) {
     const c = byId.get(pick?.id);
     if (!c || stops.some(s => s.id === c.id)) continue;
@@ -302,7 +333,7 @@ export const scheduleWalk = (order, candidates, ctx) => {
     if (leave + back.minutes > deadline) continue;
     stops.push({
       id: c.id, name: c.name, kind: c.kind, lat: c.lat, lon: c.lon,
-      leg: leg.minutes, ride: leg.ride, arrive, leave, stay,
+      leg: leg.minutes, ride: leg.ride, ...(leg.ferry ? { ferry: leg.ferry } : {}), arrive, leave, stay,
       deal: c.offer && dealNow ? { text: c.offer.text, to: c.offer.window?.to || "" } : null,
       tier: c.tier || "",
       why: words(stripDashes(pick.why), 160),
@@ -311,7 +342,7 @@ export const scheduleWalk = (order, candidates, ctx) => {
     here = c; t = leave;
   }
   const home = legOf(here, start);
-  return { stops, back: { leg: home.minutes, ride: home.ride, at: t + home.minutes }, deadline };
+  return { stops, back: { leg: home.minutes, ride: home.ride, ...(home.ferry ? { ferry: home.ferry } : {}), at: t + home.minutes }, deadline };
 };
 
 // ── THE WALK WITHOUT ANY AI ─────────────────────────────────────────
@@ -332,7 +363,7 @@ export const ruleOrder = (candidates, ctx) => {
       const score = (TIER_SCORE[c.tier] || 0) + (wet && c.indoor ? 2 : 0) + (wet && !c.indoor ? -1 : 0)
         + (c.kind === "Food" ? (lunch && !order.some(o => o.kind === "Food") ? 3 : -3) : 0)
         + (storm && c.exposed && !c.indoor ? -5 : 0)
-        - walkMinutes(here, c) / 8;
+        - (walkMinutes(here, c) + (crossesWater(ctx.country || "LT", here, c) ? waitOf(ctx) + ferryOf(ctx.country || "LT").crossing : 0)) / 8;
       if (score > bestScore) { bestScore = score; best = c; }
     }
     order.push({ id: best.id, kind: best.kind });
@@ -354,7 +385,9 @@ export const planPrompt = (candidates, ctx) => {
     : w.wet ? "wet, so favour places indoors" : "dry";
   const gale = Number(w.wind) >= STORM_WIND ? ", and a storm wind, so keep away from the harbour, the quays and anywhere out on open water" : "";
   const list = candidates.slice(0, 40).map(c => {
-    const far = offTownWalk({ country, from: start, to: c }) ? " | OUTSIDE THE WALKABLE CENTRE, needs a Bolt" : ` | ${walkMinutes(start, c)} min walk from the start`;
+    const cross = crossesWater(country, start, c) ? legBetween(start, c, ctx) : null;
+    const far = cross ? (cross.ferry ? ` | ACROSS THE WATER, by ${ferryOf(country).name}: about ${cross.minutes} min from the start with the wait, the same back, so keep these together` : " | ACROSS THE WATER, out of reach on this walk")
+      : offTownWalk({ country, from: start, to: c }) ? " | OUTSIDE THE WALKABLE CENTRE, needs a Bolt" : ` | ${walkMinutes(start, c)} min walk from the start`;
     return `${c.id} | ${c.name} | ${c.kind}${c.tier ? ` | ${c.tier}` : ""}${c.indoor ? " | indoors" : ""}${c.exposed && !c.indoor ? " | out on open water" : ""}${far}${c.about ? ` | ${c.about}` : ""}`;
   }).join("\n");
   return `You plan one walk for a visitor in ${COUNTRY_PROFILES[country]?.name || country} who has ${budget} minutes, starting now at ${HHMM(startClock.minutes)} local time from ${start.name}${margin ? `, and who must be back there ${margin} minutes before their time is up (they are off a cruise ship)` : ""}.
@@ -460,10 +493,13 @@ export const nextOpen = (lines, { day, minutes }) => {
 // when the rules keep every place the first one kept and no meal moves more
 // than MEAL_SHIFT minutes, so an opening hour or a band starting at 20:00
 // still wins over a tidier line on the map.
-const loopKm = (start, pts) => {
+// A crossing counts as the walk its wait and crossing take, so tidying the
+// order never sends a walker over the strait and back twice.
+const loopKm = (start, pts, ctx = null) => {
+  const step = (a, b) => kmApart(a, b) + (ctx && crossesWater(ctx.country || "LT", a, b) ? ferryKm(ctx) : 0);
   let km = 0, here = start;
-  for (const p of pts) { km += kmApart(here, p); here = p; }
-  return km + kmApart(here, start);
+  for (const p of pts) { km += step(here, p); here = p; }
+  return km + step(here, start);
 };
 
 export const untangle = (order, candidates, ctx) => {
@@ -472,7 +508,7 @@ export const untangle = (order, candidates, ctx) => {
   let list = (Array.isArray(order) ? order : []).filter(o => o && byId.has(o.id));
   // Two places or fewer make the same loop either way round.
   if (list.length < 3) return list;
-  const length = (l) => loopKm(start, l.map(o => byId.get(o.id)));
+  const length = (l) => loopKm(start, l.map(o => byId.get(o.id)), ctx);
   let best = length(list);
   for (let round = 0, better = true; better && round < 50; round++) {
     better = false;
@@ -502,7 +538,7 @@ export const untangle = (order, candidates, ctx) => {
 };
 
 export const MEAL_SHIFT = 45;
-const walkedKm = (w, start) => loopKm(start, w.stops);
+const walkedKm = (w, start, ctx = null) => loopKm(start, w.stops, ctx);
 
 export const tidyWalk = (order, candidates, ctx) => {
   const first = scheduleWalk(order, candidates, ctx);
@@ -516,7 +552,7 @@ export const tidyWalk = (order, candidates, ctx) => {
   // And a partner's offer the first order reached in time is still reached.
   // A tidier line is not worth a deal the walker would have had.
   const dealsStay = mealStays && first.stops.every(s => !s.deal || !!kept.get(s.id)?.deal);
-  return dealsStay && walkedKm(second, ctx.start) < walkedKm(first, ctx.start) - 0.005 ? second : first;
+  return dealsStay && walkedKm(second, ctx.start, ctx) < walkedKm(first, ctx.start, ctx) - 0.005 ? second : first;
 };
 
 // ── THE SAME PLACES THE OTHER WAY ROUND ─────────────────────────────

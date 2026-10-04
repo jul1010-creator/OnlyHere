@@ -58,12 +58,25 @@ export const fingerprint = (prose) => {
   return h.toString(36);
 };
 
-export const translatePrompt = (prose, lang, { name = "", where = "" } = {}) =>
+// ── THE PLACE'S OWN NAME, IN ITS OWN LANGUAGE ──────────────────────
+// Oliver, 4 Oct 2026, from the work list: Lithuanian place names. A Lithuanian
+// reading about the Castle Site in Klaipėda calls it Klaipėdos piliavietė, and
+// says "piliavietėje" when they are in it, not "Castle Site". So the
+// Lithuanian translation is told the place's own name and told to decline it.
+// Danish and German are written the way a guide in that language would: the
+// name on the sign, which is what a visitor will see when they get there.
+const NAME_RULES = {
+  lt: (local) => `- This place's own Lithuanian name is "${local}". Wherever the English names this place, use that name instead, declined as Lithuanian grammar needs (for example the locative when someone is inside it). Other proper names stay as written.`,
+  da: (local) => `- This place's own name, the one on the sign, is "${local}". Wherever the English names this place, write it the way a Danish guidebook would: the place's own name, with the English one in brackets the first time if it helps the reader. Other proper names stay as written.`,
+  de: (local) => `- This place's own name, the one on the sign, is "${local}". Wherever the English names this place, write it the way a German guidebook would: the place's own name, with the English one in brackets the first time if it helps the reader. Other proper names stay as written.`,
+};
+
+export const translatePrompt = (prose, lang, { name = "", where = "", localName = "" } = {}) =>
   `Translate the text fields of a travel guide entry about "${name}"${where ? ` in ${where}` : ""} from English into ${LANG_NAMES[lang] || lang}.
 
 RULES
 - Write natural, plain ${LANG_NAMES[lang] || lang} for a visitor, in the same tone and at the same length. Do not add or leave out anything.
-- Keep every proper name exactly as written: places, streets, businesses, people, dishes with a local name.
+${localName && NAME_RULES[lang] ? NAME_RULES[lang](localName) : "- Keep every proper name exactly as written: places, streets, businesses, people, dishes with a local name."}
 - Keep every number, price, time, date and currency exactly as written.
 - No dashes as punctuation: no em dash, no en dash, no hyphen with spaces around it. Use a comma or a full stop.
 - Answer with JSON only: the same keys, each with its translation.
@@ -99,7 +112,11 @@ export const needsTranslation = (payload) => {
   const prose = proseOf(payload);
   if (!Object.keys(prose).length) return false;
   const tr = payload?.__i18n;
-  return !tr || tr.fp !== fingerprint(prose) || TRANSLATED_LANGS.some(l => !tr[l]);
+  // A local name added or changed since is a reason to translate again: the
+  // Lithuanian was written without it. The old one is still shown meanwhile,
+  // because it is still a translation of this English.
+  return !tr || tr.fp !== fingerprint(prose) || TRANSLATED_LANGS.some(l => !tr[l])
+    || String(payload?.localName || "").trim() !== String(tr.ln || "");
 };
 
 // Make the three. `ask(prompt, maxTokens)` is the Studio's model call and
@@ -110,13 +127,14 @@ export const translateEntry = async (payload, ask, { where = "" } = {}) => {
   if (!Object.keys(prose).length) return null;
   const results = await Promise.all(TRANSLATED_LANGS.map(async lang => {
     try {
-      const r = await ask(translatePrompt(prose, lang, { name: payload?.name || "", where }), 6000);
+      const r = await ask(translatePrompt(prose, lang, { name: payload?.name || "", where, localName: String(payload?.localName || "").trim() }), 6000);
       return [lang, r?.error ? null : readTranslation(r?.text, prose)];
     } catch { return [lang, null]; }
   }));
   const got = Object.fromEntries(results.filter(([, v]) => v));
   if (!Object.keys(got).length) return null;
-  return { fp: fingerprint(prose), at: new Date().toISOString().slice(0, 10), ...got };
+  const ln = String(payload?.localName || "").trim();
+  return { fp: fingerprint(prose), at: new Date().toISOString().slice(0, 10), ...(ln ? { ln } : {}), ...got };
 };
 
 // ── WHAT THE READER SEES ────────────────────────────────────────────

@@ -49,6 +49,35 @@ const point = (p) => {
 export const ACROSS_WATER = {
   LT: (p) => p.lat > 55.55 && p.lat < 55.727 && p.lon < 21.116 - (p.lat - 55.705) * 0.6,
 };
+// ── AND THE FERRY THAT CROSSES IT ───────────────────────────────────
+// Oliver, 4 Oct 2026, from the work list: let a walk take the ferry to
+// Smiltynė. The old ferry carries people on foot from the North Horn by the
+// castle to Smiltynė. Both landings were read off Google Maps on 4 Oct 2026
+// ("Old Ferry Terminal, North Horn" and "Old Ferry Terminal, Smiltynė"); the
+// crossing is the ten minutes the sculpture page already uses (keltas.lt).
+// Klaipėda's tourist office (klaipedon.lt, read 4 Oct 2026): every 30 minutes
+// in the warmer season, every hour in the colder one. It does not say which
+// months, so the warm timetable is assumed only from May to September, and
+// the wait counted is the whole gap between two ferries: a walker who just
+// missed one still gets back in time.
+export const FERRIES = {
+  LT: {
+    name: "the old ferry to Smiltynė",
+    near: { lat: 55.70634, lon: 21.12303 },
+    far: { lat: 55.70574, lon: 21.11288 },
+    crossing: 10,
+    timetable: "keltas.lt",
+  },
+};
+export const ferryOf = (code) => FERRIES[String(code || "").toUpperCase()] || null;
+// The longest wait for the next ferry in a given month (1 to 12). Unknown is
+// the colder timetable, the longer of the two.
+export const ferryWait = (code, month) => {
+  if (!ferryOf(code)) return null;
+  const m = Number(month);
+  return m >= 5 && m <= 9 ? 30 : 60;
+};
+
 export const acrossWater = (code, p) => {
   const pt = point(p);
   const test = ACROSS_WATER[String(code || "").toUpperCase()];

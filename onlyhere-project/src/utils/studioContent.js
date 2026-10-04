@@ -1051,6 +1051,13 @@ export const shapeForLive = (type, t) => {
   // country reads as Danish everywhere. See utils/countries.js.
   const country = String(t?.country || "").trim().toUpperCase();
   if (COUNTRY_PROFILES[country] && country !== DEFAULT_COUNTRY) out = { ...out, country };
+  // ── AND ITS OWN NAME, WHERE IT HAS ONE ─────────────────────────
+  // 4 Oct 2026. The name on the sign abroad ("Klaipėdos piliavietė" for the
+  // Castle Site), taken from Google's listing by the draft. Added in the same
+  // edit as the field, for the reason written above. Read by the translator
+  // and shown under the title. Never on a Danish row.
+  const localName = String(t?.localName || "").trim().slice(0, 120);
+  if (localName && out.country) out = { ...out, localName };
   // Appended AFTER the prose, which is where layoutBody in DetailPage.jsx wants
   // them: it looks for the trailing run of images and deals them back in beside
   // the paragraphs, so a picture ends up floated next to writing instead of
