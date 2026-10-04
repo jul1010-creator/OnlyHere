@@ -48763,7 +48763,9 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // would not crash, it would silently lock the offer for a paying member
     // on one page and nowhere else.
     const app = stripComments(readFileSync(join(root, "src/App.jsx"), "utf8"));
-    const sites = app.match(/<DetailPage\b/g) || [];
+    // Batch 202: the Special deals example opens a made-up page, marked
+    // `sample`, which is paid on purpose and is not one of the live sites.
+    const sites = app.match(/<DetailPage\b(?!\s+windowed item=\{exampleDeal\})/g) || [];
     // The shared prefix grew a `windowed` on 9 Sep, so the pattern matches the
     // props rather than their order from the tag onwards.
     const withPaid = app.match(/<DetailPage\s+windowed=\{entryWindowed\}\s+lang=\{uiLang\}\s+paid=\{/g) || [];
@@ -62006,7 +62008,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
      // Batch 172: deals and reviews abroad need an account too.
      (appF.match(/<DetailPage windowed=\{entryWindowed\} lang=\{uiLang\} paid=\{\(OPEN_ABROAD && !!userSession\) \|\| hasPaidPlan\(userProfile\)\} signedIn=\{!!userSession\} onNeedAccount=/g) || []).length, 7);
   is("and none is left without them",
-     (appF.match(/<DetailPage /g) || []).length, 7);
+     (appF.match(/<DetailPage (?!windowed item=\{exampleDeal\})/g) || []).length, 7);
+  ok("the one other site is the made-up example, marked as one", (appF.match(/<DetailPage windowed item=\{exampleDeal\}[^\n]*\n[^\n]*sample=\{uiT\("deals\.exampleMadeUp", uiLang\)\}/g) || []).length === 1);
 
   const detail = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
   ok("the buttons render on the page", /<ArticleFeedback itemType=\{kind\} itemName=\{item\.name\}/.test(detail));
@@ -80595,9 +80598,9 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   is("the end date reads like a date", M.untilLabel("2026-12-31", today), "Until 31 December");
   is("with the year when it is not this one", M.untilLabel("2027-01-15", today), "Until 15 January 2027");
   const app = readFileSync(join(root, "src/App.jsx"), "utf8");
-  ok("the page reads the entries, not a list of its own", /const promotions = livePromotions\(\{/.test(app));
+  ok("the page reads the entries, not a list of its own", /const livePromos = livePromotions\(\{/.test(app) && /const promotions = exampleDeals \? livePromotions\(examplePromotionPools\(\)\) : livePromos;/.test(app));
   ok("out of the menu while nothing is on", /const hidePromotions = liveLoaded && !libraryFailed && !isStudio && promotions\.length === 0;/.test(app));
-  ok("open abroad to members, locked like the entry page in Denmark", /tab === "promotions" && <PromotionsPage promos=\{promotions\}[^\n]*\n\s*paid=\{\(OPEN_ABROAD && !!userSession\) \|\| hasPaidPlan\(userProfile\)\}\n\s*onOpen=\{\(p\) => \{ if \(OPEN_ABROAD && needsAccountFor\("deal"\)\) return; openStopDetail\(p\); \}\}/.test(app)); // Batch 172
+  ok("open abroad to members, locked like the entry page in Denmark", /tab === "promotions" && <PromotionsPage promos=\{promotions\}[^\n]*\n\s*examples=\{exampleDeals\}\n\s*paid=\{exampleDeals \|\| \(OPEN_ABROAD && !!userSession\) \|\| hasPaidPlan\(userProfile\)\}\n\s*onOpen=\{\(p\) => \{ if \(p\._exampleId\) \{ setExampleDeal\(p\); return; \} if \(OPEN_ABROAD && needsAccountFor\("deal"\)\) return; openStopDetail\(p\); \}\}/.test(app)); // Batch 172
   const page = readFileSync(join(root, "src/components/PromotionsPage.jsx"), "utf8");
   ok("no dash in the page's copy", !/[\u2013\u2014]/.test(page.replace(/\/\/.*$/gm, "")));
 }
@@ -81786,6 +81789,23 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
     cut(npl, "ACROSS THE STRAIT ON THE OLD FERRY", "export const slotOf"),
   ].join("\n").replace(/── /g, "");
   ok("no dashes and none of his banned words in the new text", shown.length > 2000 && !/[—–]/.test(shown) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(shown));
+}
+
+// ── Batch 202: Special deals on /lithuania, with examples to show ──
+// Oliver, 4 Oct 2026: "it's not updated to 'special deals'" and "Put in a few
+// examples I can show".
+{
+  const pools = M.KEX.examplePromotionPools();
+  const all = Object.values(pools).flat();
+  ok("every made-up partner becomes an example deal, opening its own example page", all.length === M.KEX.EXAMPLE_PARTNERS.length && all.every(r => r._exampleId && M.KEX.pageFor(r._exampleId) && r.__offer?.text && r.country === "LT"));
+  const appD = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("examples only on the Lithuanian page, and only while no Lithuanian deal is live", /const exampleDeals = PAGE_COUNTRY === "LT" && !livePromos\.some\(p => rowCountry\(p\) === "LT"\);/.test(appD));
+  ok("an example opens its made-up page, never the account gate", /if \(p\._exampleId\) \{ setExampleDeal\(p\); return; \}/.test(appD) && /sample=\{uiT\("deals\.exampleMadeUp", uiLang\)\}/.test(appD));
+  const pp = readFileSync(join(root, "src/components/PromotionsPage.jsx"), "utf8");
+  ok("the page says they are made up, and every card says Example", /examples && promos\.length > 0 &&/.test(pp) && /uiT\("deals\.examples", lang\)/.test(pp) && /p\._exampleId && \(/.test(pp));
+  const keys = ["deals.examples", "deals.example", "deals.exampleMadeUp"];
+  const words = keys.map(k => ["en", "da", "de", "lt"].map(l => M.UI_STRINGS[k]?.[l] || "").join(" ")).join(" ");
+  ok("in four languages, with no dashes and none of his banned words", keys.every(k => ["en", "da", "de", "lt"].every(l => M.UI_STRINGS[k]?.[l])) && !/[—–]/.test(words) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(words));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
