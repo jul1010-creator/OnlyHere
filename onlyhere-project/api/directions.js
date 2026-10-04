@@ -53,6 +53,158 @@ const decodePolyline = (encoded) => {
 import { requestIsFromSite, NOT_FROM_SITE } from "../src/utils/apiGuard.js";
 import { COUNTRY_PROFILES, DEFAULT_COUNTRY } from "../src/utils/countries.js";
 
+// ── THE ROUTES API FIRST, THE OLD DIRECTIONS API BEHIND IT ──────────
+// Oliver, 4 Oct 2026, of Google's page of Maps APIs: "why don't we use some of
+// these cool APIs?" Google has marked the Directions API this file was built on
+// as legacy since 1 March 2025; the Routes API is its replacement and where new
+// work goes. This asks the Routes API first and returns EXACTLY the shape the
+// rest of the app has read since August, so no caller changes.
+//
+// The old call stays behind it, unchanged. The Routes API has to be switched on
+// for the key in Google Cloud, and until it is, every request here would fail;
+// a refused or failed Routes call falls through to the Directions call and the
+// page sees what it saw yesterday. `via` in the answer says which one served.
+//
+// THE TEXT IS WRITTEN HERE, NOT TAKEN FROM GOOGLE. durationText and the step
+// durations are parsed downstream ("1 hour 22 mins"), and the Routes API's own
+// localised text is a different producer that could differ by a character.
+// Written from Google's seconds in the Directions API's own style, the strings
+// come out the same whichever API answered.
+const ROUTES_URL = "https://routes.googleapis.com/directions/v2:computeRoutes";
+const ROUTES_MODE = { driving: "DRIVE", walking: "WALK", bicycling: "BICYCLE", transit: "TRANSIT" };
+const MODE_BACK = { DRIVE: "driving", WALK: "walking", BICYCLE: "bicycling", TRANSIT: "transit", TWO_WHEELER: "driving" };
+// Basic fields only, and traffic-unaware driving, which keeps every call on the
+// Essentials tier. The Directions answer this replaces read leg.duration and
+// never the traffic figure, so nothing is lost.
+const ROUTES_FIELDS = [
+  "routes.legs.duration", "routes.legs.distanceMeters",
+  "routes.legs.steps.travelMode", "routes.legs.steps.staticDuration", "routes.legs.steps.distanceMeters",
+  "routes.legs.steps.navigationInstruction", "routes.legs.steps.transitDetails",
+  "routes.polyline.encodedPolyline", "geocodingResults",
+].join(",");
+
+const secondsOf = (d) => {
+  const m = String(d || "").match(/^(\d+(?:\.\d+)?)s$/);
+  return m ? Number(m[1]) : NaN;
+};
+const plural = (n, one) => `${n} ${one}${n === 1 ? "" : "s"}`;
+// "1 min", "24 mins", "1 hour 22 mins", "2 hours", "1 day 3 hours": the
+// Directions API's English.
+export const durationWords = (secs) => {
+  const total = Math.max(1, Math.round((Number(secs) || 0) / 60));
+  const days = Math.floor(total / 1440), hours = Math.floor((total % 1440) / 60), mins = total % 60;
+  if (days) return [plural(days, "day"), hours ? plural(hours, "hour") : ""].filter(Boolean).join(" ");
+  if (hours) return [plural(hours, "hour"), mins ? plural(mins, "min") : ""].filter(Boolean).join(" ");
+  return plural(mins, "min");
+};
+// "350 m", "1.2 km", "145 km".
+export const distanceWords = (meters) => {
+  const m = Math.max(0, Number(meters) || 0);
+  if (m < 1000) return `${Math.round(m)} m`;
+  return m < 100000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m / 1000)} km`;
+};
+const waypointOf = (t) => {
+  if (!isCoordPair(t)) return { address: t };
+  const [a, b] = t.split(",").map(Number);
+  return { location: { latLng: { latitude: a, longitude: b } } };
+};
+const typesOf = (g) => (Array.isArray(g?.type) ? g.type : g?.type ? [String(g.type)] : []);
+
+// The answer the Directions code below builds, from a Routes API reply. Kept
+// separate from the fetch so the suite can hand it a reply and read the result.
+export const fromRoutes = (data) => {
+  const geo = data?.geocodingResults || {};
+  const notFound = [geo.origin, geo.destination].some(g => g && g.geocoderStatus && Number(g.geocoderStatus.code || 0) !== 0);
+  const route = data?.routes?.[0];
+  const leg = route?.legs?.[0];
+  // The same words the Directions API used, because transport.js reads them:
+  // NOT_FOUND and ZERO_RESULTS both mean Google looked and found no route.
+  if (!leg) return { error: notFound ? "NOT_FOUND" : "ZERO_RESULTS", via: "routes" };
+  const rawSteps = Array.isArray(leg.steps) ? leg.steps : [];
+  const steps = rawSteps.map(s => {
+    const secs = secondsOf(s.staticDuration);
+    const td = s.transitDetails;
+    if (!td) {
+      return { mode: MODE_BACK[s.travelMode] || String(s.travelMode || "").toLowerCase(), duration: Number.isFinite(secs) ? durationWords(secs) : "", mins: Number.isFinite(secs) ? Math.round(secs / 60) : 0, distance: Number.isFinite(Number(s.distanceMeters)) ? distanceWords(s.distanceMeters) : "" };
+    }
+    const tl = td.transitLine || {};
+    return {
+      mode: "transit",
+      vehicle: String(tl.vehicle?.type || "").toUpperCase(),
+      line: tl.nameShort || tl.name || "",
+      agency: (tl.agencies || []).map(a => a.name).filter(Boolean).join(", "),
+      // The agency's link travels with its name, as below: a licence term.
+      agencies: (tl.agencies || [])
+        .map(a => ({ name: String(a?.name || "").trim(), url: String(a?.uri || a?.url || "").trim() }))
+        .filter(a => a.name)
+        .slice(0, 3),
+      from: td.stopDetails?.departureStop?.name || "",
+      to: td.stopDetails?.arrivalStop?.name || "",
+      departure: td.localizedValues?.departureTime?.time?.text || "",
+      arrival: td.localizedValues?.arrivalTime?.time?.text || "",
+      duration: Number.isFinite(secs) ? durationWords(secs) : "",
+      mins: Number.isFinite(secs) ? Math.round(secs / 60) : 0,
+      stops: td.stopCount,
+    };
+  });
+  // A car on a ferry is a step Google names FERRY or FERRY_TRAIN.
+  const drivingFerryStep = rawSteps.some(s =>
+    /^FERRY/.test(String(s.navigationInstruction?.maneuver || ""))
+    || /\bferry\b|\bfærge|\bfaerge/i.test(String(s.navigationInstruction?.instructions || "")));
+  const ferries = steps.filter(s => s.vehicle === "FERRY").map(s => ({
+    line: s.line, agency: s.agency, from: s.from, to: s.to,
+    departure: s.departure, arrival: s.arrival, duration: s.duration,
+  }));
+  const secs = secondsOf(leg.duration);
+  const meters = Number(leg.distanceMeters) || 0;
+  return {
+    steps,
+    ferries,
+    hasFerry: ferries.length > 0 || drivingFerryStep,
+    ferryUnnamed: ferries.length === 0 && drivingFerryStep,
+    durationText: durationWords(secs),
+    durationMinutes: Math.round((Number.isFinite(secs) ? secs : 0) / 60),
+    distanceText: distanceWords(meters),
+    distanceMeters: meters,
+    polyline: decodePolyline(route.polyline?.encodedPolyline),
+    // Present when a place was given as text, which is the case the Maps link
+    // needs them for. A coordinate needs no place id.
+    placeIds: { origin: String(geo.origin?.placeId || ""), destination: String(geo.destination?.placeId || "") },
+    placeTypes: { origin: typesOf(geo.origin), destination: typesOf(geo.destination) },
+    // The Routes API gives no formatted addresses. Nothing reads these.
+    endAddresses: { origin: "", destination: "" },
+    via: "routes",
+  };
+};
+
+// One Routes API call. Null means "it did not answer", and the Directions call
+// runs instead; an answer with no route is an answer, and is returned.
+const askRoutes = async ({ key, origin, destination, travelMode, departAt, avoid }) => {
+  const body = {
+    origin: waypointOf(origin),
+    destination: waypointOf(destination),
+    travelMode: ROUTES_MODE[travelMode] || "TRANSIT",
+    languageCode: "en",
+    units: "METRIC",
+  };
+  if (travelMode === "driving") body.routingPreference = "TRAFFIC_UNAWARE";
+  // A departure time only shapes a transit answer here: a timetable. Driving
+  // stays traffic-unaware, as the Directions answer always effectively was.
+  if (departAt && travelMode === "transit") body.departureTime = new Date(Number(departAt) * 1000).toISOString();
+  if (avoid === "ferries" && travelMode === "driving") body.routeModifiers = { avoidFerries: true };
+  try {
+    const r = await fetch(ROUTES_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Goog-Api-Key": key, "X-Goog-FieldMask": ROUTES_FIELDS },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) return null;
+    const data = await r.json().catch(() => null);
+    return data && typeof data === "object" ? fromRoutes(data) : null;
+  } catch { return null; }
+};
+
+
 export default async function handler(req, res) {
   // ── SECURITY, 17 AUG 2026 ─────────────────────────────────────────
   // This endpoint answered anybody until tonight. See src/utils/apiGuard.js for
@@ -100,6 +252,11 @@ export default async function handler(req, res) {
   const originParam = withCountry(origin);
   const destinationParam = withCountry(destination);
 
+  // The departure time is read once, for both calls.
+  const departAt = /^\d{9,11}$/.test(String(departure_time || "")) ? String(departure_time) : "";
+  const routed = await askRoutes({ key, origin: originParam, destination: destinationParam, travelMode, departAt, avoid });
+  if (routed) return res.status(200).json(routed);
+
   try {
     let url = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(originParam)}&destination=${encodeURIComponent(destinationParam)}&mode=${travelMode}&key=${key}`;
     // departure_time is optional — only transit/driving use it (transit for real
@@ -107,7 +264,6 @@ export default async function handler(req, res) {
     // Must be a future Unix timestamp in seconds; Google rejects a past one.
     // A whole number of seconds or nothing: the raw value was appended to the
     // Google URL as typed, so "…&waypoints=…" rode along (Fable, 30 Sep 2026).
-    const departAt = /^\d{9,11}$/.test(String(departure_time || "")) ? String(departure_time) : "";
     if (departAt && (travelMode === "transit" || travelMode === "driving")) {
       url += `&departure_time=${departAt}`;
     }
@@ -271,6 +427,7 @@ export default async function handler(req, res) {
         destination: Array.isArray(waypoints[waypoints.length - 1]?.types) ? waypoints[waypoints.length - 1].types : [],
       },
       endAddresses: { origin: String(leg.start_address || ""), destination: String(leg.end_address || "") },
+      via: "directions",
     });
   } catch (err) {
     return res.status(500).json({ error: String(err) });
