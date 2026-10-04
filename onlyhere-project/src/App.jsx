@@ -26474,6 +26474,21 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         </button>
                       ))}
                     </div>
+                    {/* ── THE KLAIPĖDA PAGES, ONE TAP AWAY ─────────────────
+                        Oliver, 4 Oct 2026: "link the examples then, or put
+                        them into the studio." The three pages that exist only
+                        for the Klaipėda pitch, beside the Lithuanian Studio. */}
+                    {studioCountry === "LT" && (
+                      <div data-testid="studio-klaipeda-pages" style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: C.muted, marginRight: 2 }}>Klaipėda pages</span>
+                        {[[KLAIPEDA_EXAMPLES_PATH, "Examples"], [KLAIPEDA_DEMO_PATH, "QR walk"], [KLAIPEDA_SCULPTURES_PATH, "Sculptures"]].map(([href, label]) => (
+                          <a key={href} href={href} target="_blank" rel="noopener noreferrer"
+                            style={{ border: `1px solid ${C.border}`, borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 700, color: C.light, textDecoration: "none", fontFamily: "'Inter', sans-serif" }}>
+                            {label} ↗
+                          </a>
+                        ))}
+                      </div>
+                    )}
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
                       {[["town", "🏘 Town"], ["island", "⛴ Island"], ["festival", "🎪 Events"], ["free", "🎟 Attractions"], ["food", "🍽 Food"], ["foodStreet", "🍜 Food Street"], ["night", "🍺 Nightlife"], ["nightStreet", "🍻 Bar street"], ["nightTown", "🌃 Nightlife (Town)"], ["shop", "🛍 Shop"], ["shopPlace", "🏬 Shopping street"], ["booking", "🔨 Workshop"], ["essential", "🧭 Essential"]].filter(([k]) => !PAGE_ABROAD || (k !== "island" && k !== "booking")).map(([k, label]) => (
                         <button key={k} onClick={() => { setStudioType(k); setStudioResult(null); setStudioError(null); }}
