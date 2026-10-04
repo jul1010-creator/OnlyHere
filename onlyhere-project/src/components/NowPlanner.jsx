@@ -13,12 +13,26 @@ import { countryProfile } from "../utils/countries";
 import { placeClock } from "../utils/offerClock";
 import { NOW_HOURS, NOW_STARTS, OLD_TOWN, STROLL, STORM_WIND, slotOf, walkMapsUrl, rideApp, MUST_SEE, STAY_STEP, replanWalk, canStayLonger } from "../utils/nowPlanner";
 import { entryWord } from "../utils/entryWords";
+import { ferryOf } from "../utils/walkable";
 
 const fill = (s, vars) => Object.entries(vars).reduce((out, [k, v]) => out.split(`{${k}}`).join(String(v)), s);
 const clock = (m, lang) => {
   const mm = ((Math.round(m) % 1440) + 1440) % 1440;
   const s = `${String(Math.floor(mm / 60)).padStart(2, "0")}:${String(mm % 60).padStart(2, "0")}`;
   return lang === "da" ? s.replace(":", ".") : s;
+};
+
+// A leg that crosses the strait, said in its parts, with the operator's
+// timetable one tap away: the wait is the longest it can be, and the page
+// should not pretend to know today's departures.
+const FerryLeg = ({ ferry, lang, country }) => {
+  const host = ferryOf(country)?.timetable || "";
+  return (
+    <span data-testid="now-ferry">
+      {fill(uiT("now.ferry", lang), { a: ferry.walkTo, w: ferry.wait, c: ferry.crossing, b: ferry.walkFrom })}
+      {host && <>{" · "}<a href={`https://www.${host}/`} target="_blank" rel="noopener noreferrer" style={{ color: C.gold, textDecoration: "none", fontWeight: 700 }}>{uiT("now.ferryTimes", lang)} ↗</a></>}
+    </span>
+  );
 };
 
 const readerLang = () => {
@@ -47,7 +61,8 @@ export const WalkView = ({ walk, madeAt, lang, country = "LT", tag = null, onOpe
           {walk.stops.map(s => (
             <div key={s.id}>
               <div style={{ fontSize: 11.5, color: C.muted, padding: "6px 0 6px 12px", borderLeft: `1px solid ${C.gold}55`, marginLeft: 4 }}>
-                {s.ride && app
+                {s.ferry ? <FerryLeg ferry={s.ferry} lang={lang} country={country} />
+                  : s.ride && app
                   ? <a href={app.url} target="_blank" rel="noopener noreferrer" style={{ color: C.gold, textDecoration: "none", fontWeight: 700 }}>{fill(uiT("now.ride", lang), { app: app.name, n: s.leg })} ↗</a>
                   : fill(uiT("now.walk", lang), { n: s.leg })}
               </div>
@@ -82,7 +97,8 @@ export const WalkView = ({ walk, madeAt, lang, country = "LT", tag = null, onOpe
             </div>
           ))}
           <div style={{ fontSize: 11.5, color: C.muted, padding: "6px 0 6px 12px", borderLeft: `1px solid ${C.gold}55`, marginLeft: 4 }}>
-            {walk.back.ride && app
+            {walk.back.ferry ? <FerryLeg ferry={walk.back.ferry} lang={lang} country={country} />
+              : walk.back.ride && app
               ? <a href={app.url} target="_blank" rel="noopener noreferrer" style={{ color: C.gold, textDecoration: "none", fontWeight: 700 }}>{fill(uiT("now.ride", lang), { app: app.name, n: walk.back.leg })} ↗</a>
               : fill(uiT("now.walk", lang), { n: walk.back.leg })}
           </div>

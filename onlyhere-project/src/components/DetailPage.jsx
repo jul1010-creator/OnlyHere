@@ -516,7 +516,22 @@ export const DetailPage = ({ item: itemIn, onClose, kind, liveInfo, liveInfoLoad
               what `location` holds on them. Oliver, 22 Sep 2026. */}
           {kind === "event" ? `${item.town}` : kind === "nightlife" ? item.location : kind === "free" ? item.city : kind === "food" ? item.location : kind === "shop" ? (item.location || item.town) : item.region}
         </div>
-        <div style={{ fontSize: 30, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.1, marginBottom: 8 }}>{item.name}</div>
+        {/* The name on the sign, abroad (4 Oct 2026). A Lithuanian reader
+            gets it as the title and the English name under it; everyone else
+            the other way round, so they know what to look for when they get
+            there. Only the words shown change: item.name stays the key for
+            saves, reviews and links. */}
+        {(() => {
+          const local = String(item.localName || "").trim();
+          const top = local && lang === "lt" ? local : item.name;
+          const under = local ? (lang === "lt" ? item.name : local) : "";
+          return (
+            <>
+              <div style={{ fontSize: 30, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.1, marginBottom: under ? 4 : 8 }}>{top}</div>
+              {under && <div data-testid="local-name" lang={lang === "lt" ? "en" : String(item.country || "").toLowerCase() || undefined} style={{ fontSize: 14, color: C.muted, marginBottom: 8 }}>{under}</div>}
+            </>
+          );
+        })()}
 
         {/* ── THE ADD-TO-TRIP ROW ─────────────────────────────────────
             The heart in the top corner already did this and had done for
