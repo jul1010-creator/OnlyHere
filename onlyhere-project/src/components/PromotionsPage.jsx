@@ -11,7 +11,7 @@ import { dealCode, busyAt } from "../utils/dealExtras";
 import { t as uiT } from "../utils/uiLanguage";
 import { countryProfile, activeCountry } from "../utils/countries";
 
-export const PromotionsPage = ({ promos = [], title = "Special deals", paid = false, onOpen, lang = "en" }) => {
+export const PromotionsPage = ({ promos = [], title = "Special deals", paid = false, onOpen, lang = "en", examples = false }) => {
   const today = new Date();
   return (
     <div data-testid="promotions-page" style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
@@ -19,6 +19,12 @@ export const PromotionsPage = ({ promos = [], title = "Special deals", paid = fa
         <div style={{ fontSize: 20, fontWeight: 700, fontFamily: "'Fraunces', serif", color: C.text }}>◈ {title}</div>
         <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>What Gemlyx gets you at the places it recommends.</div>
       </div>
+      {/* Made-up partners, until a real deal is live (App.jsx exampleDeals). */}
+      {examples && promos.length > 0 && (
+        <div data-testid="deals-examples" style={{ background: C.surface, border: `1px dashed ${C.gold}88`, borderRadius: 12, padding: "11px 14px", fontSize: 12.5, color: C.light, lineHeight: 1.55, marginBottom: 14 }}>
+          {uiT("deals.examples", lang)}
+        </div>
+      )}
       {promos.length === 0 ? (
         <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "16px", fontSize: 12.5, color: C.muted, lineHeight: 1.6 }}>
           No offers running right now.
@@ -32,6 +38,9 @@ export const PromotionsPage = ({ promos = [], title = "Special deals", paid = fa
                 style={{ textAlign: "left", background: C.surface, border: `1px solid ${C.gold}55`, borderRadius: 16, padding: 0, overflow: "hidden", cursor: "pointer", fontFamily: "'Inter', sans-serif", display: "flex", flexDirection: "column" }}>
                 <div style={{ height: 130, position: "relative" }}>
                   <PhotoPlate photo={p.photo} name={p.name} color={p.color || C.gold} />
+                  {p._exampleId && (
+                    <span data-testid="deal-example-tag" style={{ position: "absolute", top: 10, left: 10, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, color: C.text, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 100, padding: "3px 9px" }}>{uiT("deals.example", lang)}</span>
+                  )}
                 </div>
                 <div style={{ padding: "12px 14px 14px", display: "flex", flexDirection: "column", gap: 6, flex: 1 }}>
                   <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase" }}>
