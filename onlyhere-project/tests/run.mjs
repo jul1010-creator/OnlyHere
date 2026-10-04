@@ -299,7 +299,7 @@ writeFileSync(entry, `
   export { KLAIPEDA_STOPS, KLAIPEDA_STOPS_READ_ON } from ${JSON.stringify(join(root, "src/data/klaipedaStops.js"))};
   export { groupNav, childActive, groupActive, NAV_GROUPS } from ${JSON.stringify(join(root, "src/utils/navGroups.js"))};
   export { groupByMonth, monthLabel } from ${JSON.stringify(join(root, "src/utils/calendarMonths.js"))};
-  export { dealCode, cleanBooking, bookingProblem, busyFromBestTime, busyAt, cleanBusy, localClock } from ${JSON.stringify(join(root, "src/utils/dealExtras.js"))};
+  export { cleanBooking, bookingProblem, busyFromBestTime, busyAt, cleanBusy, localClock } from ${JSON.stringify(join(root, "src/utils/dealExtras.js"))};
   export { rideFor, RIDE_FROM_MINUTES } from ${JSON.stringify(join(root, "src/utils/rideHail.js"))};
   export { SCAN_KINDS, scanKindOf, scanPrompt } from ${JSON.stringify(join(root, "src/utils/scanKinds.js"))};
   export * as NP from ${JSON.stringify(join(root, "src/utils/nowPlanner.js"))};
@@ -80928,9 +80928,6 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
 
 // ── Batch 174: off the ship, deal codes, booking, busyness ──
 {
-  const a = { name: "Devi", city: "Klaipėda" };
-  ok("a deal code is short, readable and stable", /^GX-[A-HJ-NP-Z2-46-9]{4}$/.test(M.dealCode(a)) && M.dealCode(a) === M.dealCode({ ...a }) && !/[01ILOS5]/.test(M.dealCode(a).slice(3)));
-  ok("and differs from place to place", M.dealCode(a) !== M.dealCode({ name: "Friedrich Passage", city: "Klaipėda" }) && M.dealCode({}) === "");
   is("a phone number books by calling", M.cleanBooking("+370 600 12345"), { kind: "phone", href: "tel:+37060012345", value: "+370 600 12345" });
   is("a web address books on the restaurant's own page", M.cleanBooking("restaurant.lt/booking")?.href, "https://restaurant.lt/booking");
   ok("anything else is refused, with a reason", M.cleanBooking("call us") === null && /neither a web address nor a phone number/.test(M.bookingProblem("call us")) && M.bookingProblem("") === "");
@@ -80988,9 +80985,11 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("and Explore is never one of them", !/\bhome: /.test(appB.slice(appB.indexOf("const emptyHere = {"), appB.indexOf("const hideAbroad"))));
   ok("Studio fetches it through the renewing fetch", /studioFetch\(`\/api\/busyness`/.test(appB));
   ok("Studio refuses a booking that would not work", /const bookFault = bookingProblem\(studioBooking\);/.test(appB) && /if \(cleanBooking\(studioBooking\)\) shaped\.__booking = studioBooking\.trim\(\);\s*else delete shaped\.__booking;/.test(appB));
-  ok("and shows the partner their code", /Deal code for the partner: <strong[^>]*>\{dealCode\(studioDraft\)\}<\/strong>/.test(appB));
+  // Oliver, 5 Oct 2026: "I think the 'code' is stupid.. nobody will agree to
+  // that at start.. too complicated." The deal code is gone everywhere.
+  ok("no deal code in the Studio", !/Deal code for the partner/.test(appB) && !/dealCode/.test(appB));
   const dp = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
-  ok("a guest sees the code only with the deal itself", /\{!view\.locked && dealCode\(item\) && \(/.test(dp));
+  ok("nor on a place's page, the deals page or in the strings", !/dealCode/.test(dp) && !/dealCode/.test(readFileSync(join(root, "src/components/PromotionsPage.jsx"), "utf8")) && !/"deal\.code"/.test(readFileSync(join(root, "src/utils/uiLanguage.js"), "utf8")) && !/export const dealCode/.test(readFileSync(join(root, "src/utils/dealExtras.js"), "utf8")));
   ok("and booking and busyness need no account", /const book = cleanBooking\(item\.__booking\);/.test(dp) && !/signedIn && .*cleanBooking/.test(dp));
   // "why does it all say free?" (Oliver, 2 Oct 2026). "free" is the Studio's old
   // name for Attractions, from when the list was free entrances only.
