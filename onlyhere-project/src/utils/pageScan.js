@@ -940,7 +940,9 @@ export const isOwnSiteFor = (url, nameWords = [], { placesWebsite = "", type = "
   // What an event's registered URL loses is the BYPASS. It stops skipping the
   // name test and has to name the thing like any other candidate — which
   // roskilde-festival.dk does, and which a venue's domain does not.
-  const registered = hostOf(placesWebsite);
+  // A shared platform (Facebook, Instagram and the like) is never anyone's own
+  // site, even when Google lists it as one (security review, 4 Oct 2026).
+  const registered = isNeverOwnSite(placesWebsite) ? "" : hostOf(placesWebsite);
   const registeredHere = !!registered && (host === registered || host.endsWith(`.${registered}`));
   if (registeredHere && !subjectIsEvent(type)) return true;
   if (isTourismHost(url) || isListingHost(url) || isReferenceHost(url)) return false;

@@ -403,7 +403,10 @@ export const sourceIsAboutPlace = (snippet, { name, town, url = "", ownHost = ""
   const said = String(snippet || "");
   if (!said.trim()) return false;             // never saw the page, so it is not a source
   const host = normaliseDomain(url);
-  if (ownHost && host && host === normaliseDomain(ownHost)) return true;
+  // Not when the "own site" is a shared platform. A place whose Google listing
+  // gives facebook.com as its website would otherwise make every Facebook page
+  // a page about it (security review, 4 Oct 2026, finding 13).
+  if (ownHost && host && host === normaliseDomain(ownHost) && !isNeverOwnSite(url || `https://${host}`)) return true;
   // Every resolved spelling gets the same treatment as the typed one, core and
   // all, so "Jomfru Ane Gade" from Google Places carries the same weight as what
   // was typed and a leading-article variant of it still works.
