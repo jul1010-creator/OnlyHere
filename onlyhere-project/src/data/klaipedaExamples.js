@@ -23,6 +23,7 @@
 
 import { NOW_STARTS, SHIP_MARGIN, MUST_SEE, STROLL, STORM_WIND, nowCandidates, tidyWalk, windowsFor, withMustSee, nextOpen, reversedWalk, placesOf, strollCandidates, weatherRules } from "../utils/nowPlanner";
 import { fingerprint, proseOf } from "../utils/entryTranslate";
+import { ferryWait } from "../utils/walkable";
 
 export const KLAIPEDA_EXAMPLES_PATH = "/lithuania/examples";
 
@@ -459,7 +460,7 @@ export const runExample = (ex) => {
   const weather = ex.weather || { wet: !!ex.wet, snow: false, wind: 0 };
   const budget = ex.hours * 60;
   const margin = start.ship ? SHIP_MARGIN : 0;
-  const ctx = { country: "LT", start, startClock, budget, margin, weather, style };
+  const ctx = { country: "LT", start, startClock, budget, margin, weather, style, ferryWait: ferryWait("LT", Number(String(ex.at).slice(5, 7))) };
   // The order as the route makes it: the model's, then every Can't Miss Out
   // place it left out put in where it costs least, then untangled so no
   // street is walked twice.
@@ -744,7 +745,7 @@ export const EXAMPLE_PAGES = {
   }),
   "free:ghost": page({
     kind: "free",
-    row: { id: "x-ghost", name: "The Black Ghost", city: "Klaipėda", type: "Sculpture", emoji: "👻", __lat: 55.70660, __lon: 21.12682, mapHint: "Black Ghost sculpture, Klaipėda", __sources: ["https://klaipedatravel.lt/en/place/jv/"] },
+    row: { id: "x-ghost", name: "The Black Ghost", city: "Klaipėda", type: "Sculpture", emoji: "👻", __lat: 55.70660, __lon: 21.12682, mapHint: "Black Ghost sculpture, Klaipėda", __sources: ["https://lithuania.travel/en/where-to-visit/major-cities/klaipeda-major-cities/top-10-places-to-visit-in-klaipeda/the-black-ghost-sculpture"] },
     en: {
       desc: "A dark figure rising out of the water of the old castle harbour. The legend says he appeared to a castle guard in the 16th century with a warning about grain and firewood.",
       ticketsGlance: "Free",
@@ -797,7 +798,7 @@ export const EXAMPLE_PAGES = {
   }),
   "free:theatre": page({
     kind: "free",
-    row: { id: "x-theatre", name: "Theatre Square", city: "Klaipėda", type: "Square", emoji: "🎭", __lat: 55.70780, __lon: 21.13163, mapHint: "Teatro aikštė, Klaipėda", __sources: ["https://klaipedatravel.lt/en/place/ta/"] },
+    row: { id: "x-theatre", name: "Theatre Square", city: "Klaipėda", type: "Square", emoji: "🎭", __lat: 55.70780, __lon: 21.13163, mapHint: "Teatro aikštė, Klaipėda", __sources: ["https://lithuania.travel/en/where-to-visit/major-cities/klaipeda-major-cities/top-10-places-to-visit-in-klaipeda/theatre-square"] },
     en: {
       desc: "The square in front of the theatre, with Ännchen of Tharau in the middle, the girl from Simon Dach's 17th century love poem.",
       ticketsGlance: "Free",
