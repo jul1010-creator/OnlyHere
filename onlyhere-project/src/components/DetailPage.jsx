@@ -41,7 +41,7 @@ import { audioLine } from "../utils/wegotripMatch";
 // every word is English is the half-translation uiLanguage.js already calls
 // worse than none. `lang` arrives as a prop from App.jsx, which holds it.
 import { t as uiT, DEFAULT_UI_LANGUAGE } from "../utils/uiLanguage";
-import { dealCode, cleanBooking, busyAt } from "../utils/dealExtras";
+import { cleanBooking, busyAt } from "../utils/dealExtras";
 import { entryWord, bookLabel } from "../utils/entryWords";
 import { readableOn } from "../utils/readableColor";
 import { events, majorEvents, vikingEvents } from "../data/events";
@@ -1566,11 +1566,6 @@ export const DetailPage = ({ item: itemIn, onClose, kind, liveInfo, liveInfoLoad
                   ? <button onClick={() => onNeedAccount?.("deal")} style={{ background: "none", border: "none", padding: 0, color: C.gold, fontSize: 12, fontWeight: 700, cursor: "pointer", textDecoration: "underline", fontFamily: "'Inter', sans-serif" }}>{offerLockedNote()}</button>
                   : view.locked ? offerLockedNote() : view.text}
               </div>
-              {!view.locked && dealCode(item) && (
-                <div style={{ fontSize: 13, color: C.text, marginTop: 8 }}>
-                  {uiT("deal.code", lang).split("{code}")[0]}<strong style={{ color: C.gold, letterSpacing: 1.5, fontSize: 15 }}>{dealCode(item)}</strong>{uiT("deal.code", lang).split("{code}")[1] || ""}
-                </div>
-              )}
               <div style={{ fontSize: 10, color: C.muted, lineHeight: 1.5, marginTop: 7 }}>
                 {OFFER_NOTE}{view.until ? ` Until ${view.until}.` : ""}
               </div>

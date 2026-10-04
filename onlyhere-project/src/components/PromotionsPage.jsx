@@ -7,7 +7,7 @@ import { C } from "../utils/theme";
 import { PhotoPlate } from "./PhotoPlate";
 import { promoCard, untilLabel } from "../utils/promotions";
 import { OFFER_LOCKED_LABEL, offerLockedNote, OFFER_NOTE } from "../utils/offer";
-import { dealCode, busyAt } from "../utils/dealExtras";
+import { busyAt } from "../utils/dealExtras";
 import { t as uiT } from "../utils/uiLanguage";
 import { countryProfile, activeCountry } from "../utils/countries";
 
@@ -57,11 +57,6 @@ export const PromotionsPage = ({ promos = [], title = "Special deals", paid = fa
                     <div style={{ fontSize: card.locked ? 12 : 13, color: card.locked ? C.muted : C.text, lineHeight: 1.5 }}>
                       {card.locked ? offerLockedNote() : card.text}
                     </div>
-                    {!card.locked && dealCode(p) && (
-                      <div style={{ fontSize: 12, color: C.text, marginTop: 5 }}>
-                        {uiT("deal.code", lang).split("{code}")[0]}<strong style={{ color: C.gold, letterSpacing: 1.2 }}>{dealCode(p)}</strong>{uiT("deal.code", lang).split("{code}")[1] || ""}
-                      </div>
-                    )}
                   </div>
                   {(() => {
                     const busy = busyAt(p.__busy, today, countryProfile(p.country || activeCountry()).zone || "Europe/Copenhagen");
