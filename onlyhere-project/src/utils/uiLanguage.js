@@ -92,6 +92,11 @@ export const UI_STRINGS = {
   // "Special deals", Oliver 30 Sep 2026: one name for the gold button, the
   // page and the menu item.
   "nav.promotions":  { en: "Special deals",   da: "Særlige tilbud", de: "Sonderangebote", lt: "Specialūs pasiūlymai" },
+  // The Special deals examples on /lithuania, 4 Oct 2026, until a Klaipėda
+  // business has a real deal live.
+  "deals.examples":  { en: "These are examples. The businesses and their offers are made up, to show how a deal from a Klaipėda business looks here.", da: "Det er eksempler. Stederne og deres tilbud er opdigtede, for at vise hvordan et tilbud fra en virksomhed i Klaipėda ser ud her.", de: "Das sind Beispiele. Die Geschäfte und ihre Angebote sind erfunden, um zu zeigen, wie ein Angebot eines Geschäfts in Klaipėda hier aussieht.", lt: "Tai pavyzdžiai. Verslai ir jų pasiūlymai išgalvoti, kad matytumėte, kaip čia atrodo Klaipėdos verslo pasiūlymas." },
+  "deals.example":   { en: "Example", da: "Eksempel", de: "Beispiel", lt: "Pavyzdys" },
+  "deals.exampleMadeUp": { en: "Example page · made-up business", da: "Eksempelside · opdigtet virksomhed", de: "Beispielseite · erfundenes Geschäft", lt: "Puslapio pavyzdys · išgalvotas verslas" },
   // The menu groups, 30 Sep 2026. See utils/navGroups.js.
   "nav.group.advice":     { en: "Advice",      da: "Råd",           de: "Ratgeber", lt: "Naudinga žinoti" },
   "nav.group.activities": { en: "Activities",  da: "Aktiviteter",   de: "Aktivitäten", lt: "Veikla" },
