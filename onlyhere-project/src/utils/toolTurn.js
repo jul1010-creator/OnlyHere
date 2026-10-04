@@ -32,12 +32,23 @@ export const toolUsesIn = (content) =>
 // search that threw comes back as a sentence rather than as nothing.
 export const NO_ANSWER = "No results found.";
 
+// ── A SEARCH THAT FAILED IS NOT A SEARCH THAT FOUND NOTHING ─────────
+// Security review, 4 Oct 2026, finding 6. A search that threw, or came back
+// refused or broken, was answered "No results found.", and the model read that
+// as a fact about the world: the place has no website, the event is not on.
+// A failed search is now told to the model as a failure, marked as an error
+// the way Anthropic's API allows, so it says it could not check.
+export const SEARCH_FAILED = Object.freeze({ searchFailed: true });
+export const SEARCH_FAILED_TEXT = "The search failed and returned nothing. This says nothing about whether the thing exists. Tell the traveller you could not check it just now.";
+
 export const toolResultsFor = (uses, answers = []) =>
-  toolUsesIn(uses).map((u, i) => ({
-    type: "tool_result",
-    tool_use_id: u.id,
-    content: String(answers[i] == null || answers[i] === "" ? NO_ANSWER : answers[i]),
-  }));
+  toolUsesIn(uses).map((u, i) => (answers[i] === SEARCH_FAILED
+    ? { type: "tool_result", tool_use_id: u.id, content: SEARCH_FAILED_TEXT, is_error: true }
+    : {
+      type: "tool_result",
+      tool_use_id: u.id,
+      content: String(answers[i] == null || answers[i] === "" ? NO_ANSWER : answers[i]),
+    }));
 
 // What each call is asking for. Kept beside the two above because a tool with
 // no query is the other way this loop can end up sending nothing useful, and

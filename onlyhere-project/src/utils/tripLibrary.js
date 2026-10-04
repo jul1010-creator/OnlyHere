@@ -211,6 +211,16 @@ create policy "${LIBRARY_TABLE}_read" on ${LIBRARY_TABLE}
   for select using (true);
 
 drop policy if exists "${LIBRARY_TABLE}_insert" on ${LIBRARY_TABLE};
-create policy "${LIBRARY_TABLE}_insert" on ${LIBRARY_TABLE}
-  for insert with check (true);
+
+-- Security review, 4 Oct 2026, finding 2: the same rules as
+-- SECURITY_LOCKDOWN_30SEP.sql, so running this again does not reopen the
+-- table. Members add, in the shape the app makes; only the founder removes.
+-- Run the lockdown file first; it makes public.is_founder().
+drop policy if exists "members add to the library" on ${LIBRARY_TABLE};
+create policy "members add to the library" on ${LIBRARY_TABLE}
+  for insert to authenticated
+  with check (id ~ '^lib_[a-z0-9]{6,24}$' and length(title) <= 160 and pg_column_size(payload) < 400000);
+drop policy if exists "founder prunes library" on ${LIBRARY_TABLE};
+create policy "founder prunes library" on ${LIBRARY_TABLE}
+  for delete to authenticated using (public.is_founder());
 `;

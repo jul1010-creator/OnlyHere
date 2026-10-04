@@ -74,12 +74,29 @@ export const BODY_LIMIT = { anon: 400_000, member: 1_000_000, founder: 4_000_000
 // is some tens of calls, and a member gets one guide a day.
 // A visitor without an account: 120 calls a day, about three guides, and all
 // such visitors together 1500. All are set in Vercel without a code change.
+// ── 0 IS OFF, AND A TYPO IS NOT A DEFAULT ───────────────────────────
+// Security review, 4 Oct 2026, finding 3. Each limit read Number(x) || default,
+// so 0, the obvious emergency off switch, came back as the default, and so did
+// any typo: setting GEMLYX_AI_PER_DAY to 0 left the site at 8000 calls. Now an
+// unset limit is the default, 0 is off, and anything that is not a whole
+// number of 0 or more is off too, because a limit nobody can read must not
+// open the door.
+export const limitOf = (value, fallback) => {
+  if (value === undefined || value === null || String(value).trim() === "") return fallback;
+  const n = Number(String(value).trim());
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0;
+};
 export const readAiLimits = (env = {}) => ({
-  perUser: Math.max(1, Number(env.GEMLYX_AI_PER_USER) || 400),
-  perDay: Math.max(1, Number(env.GEMLYX_AI_PER_DAY) || 8000),
-  perVisitor: Math.max(1, Number(env.GEMLYX_AI_PER_VISITOR) || 120),
-  anonPerDay: Math.max(1, Number(env.GEMLYX_AI_ANON_PER_DAY) || 1500),
+  perUser: limitOf(env.GEMLYX_AI_PER_USER, 400),
+  perDay: limitOf(env.GEMLYX_AI_PER_DAY, 8000),
+  perVisitor: limitOf(env.GEMLYX_AI_PER_VISITOR, 120),
+  anonPerDay: limitOf(env.GEMLYX_AI_ANON_PER_DAY, 1500),
+  // The dearest model, for visitors only (finding 4): a guide uses it once or
+  // twice, so a visitor gets a few a day and all visitors together a ceiling.
+  opusPerVisitor: limitOf(env.GEMLYX_AI_OPUS_PER_VISITOR, 6),
+  anonOpusPerDay: limitOf(env.GEMLYX_AI_ANON_OPUS_PER_DAY, 150),
 });
+export const AI_OFF = "Gemlyx's AI is switched off just now.";
 
 // The visitor's address as Vercel reports it. x-real-ip is set by Vercel
 // itself; the first x-forwarded-for entry is the fallback.
@@ -87,8 +104,23 @@ const headerOf = (headers, name) => {
   const h = headers || {};
   return String((typeof h.get === "function" ? h.get(name) : h[name]) || "");
 };
+// ── ONE IPv6 MACHINE IS ONE VISITOR ─────────────────────────────────
+// Security review, 4 Oct 2026, finding 4. An IPv6 connection usually holds a
+// whole /64 of addresses, so counting the full address let one machine count
+// as endless visitors. An IPv6 address is counted by its first four groups,
+// the /64 a home or a phone is given; IPv4 is counted whole.
+export const addressBlock = (addr) => {
+  const a = String(addr || "").trim().replace(/^\[|\]$/g, "").split("%")[0];
+  if (!a.includes(":")) return a;
+  if (/^::ffff:\d+\.\d+\.\d+\.\d+$/i.test(a)) return a.slice(7);
+  const [head, tail = ""] = a.split("::");
+  const h = head ? head.split(":") : [];
+  const t = a.includes("::") ? (tail ? tail.split(":") : []) : [];
+  const groups = a.includes("::") ? [...h, ...Array(Math.max(0, 8 - h.length - t.length)).fill("0"), ...t] : h;
+  return groups.slice(0, 4).map(g => (g || "0").toLowerCase().replace(/^0+(?=.)/, "")).join(":") + "::/64";
+};
 export const visitorAddress = (headers) =>
-  (headerOf(headers, "x-real-ip") || headerOf(headers, "x-forwarded-for").split(",")[0] || "").trim() || "unknown";
+  addressBlock((headerOf(headers, "x-real-ip") || headerOf(headers, "x-forwarded-for").split(",")[0] || "").trim()) || "unknown";
 // Kept only as a salted hash, so the counter table never holds an address.
 export const visitorKey = (headers, salt = "") =>
   `ai:v:${createHash("sha256").update(`${salt}|${visitorAddress(headers)}`).digest("hex").slice(0, 24)}`;
@@ -110,12 +142,17 @@ const whoIs = async (token, { supabaseUrl, apiKey, fetchImpl }) => {
   } catch { return null; }
 };
 
-const takeCalls = ({ day, userId = "", visitor = "", limits, supabaseUrl, serviceKey, fetchImpl }) => takeDaily({
+const takeCalls = ({ day, userId = "", visitor = "", opus = false, limits, supabaseUrl, serviceKey, fetchImpl }) => takeDaily({
   day, supabaseUrl, serviceKey, fetchImpl,
   keys: visitor
-    ? [{ key: visitor, limit: limits.perVisitor }, { key: "ai:anon", limit: limits.anonPerDay }, { key: "ai:site", limit: limits.perDay }]
+    ? [
+      { key: visitor, limit: limits.perVisitor }, { key: "ai:anon", limit: limits.anonPerDay }, { key: "ai:site", limit: limits.perDay },
+      ...(opus ? [{ key: `${visitor}:opus`, limit: limits.opusPerVisitor }, { key: "ai:anon:opus", limit: limits.anonOpusPerDay }] : []),
+    ]
     : [{ key: `ai:u:${userId.toLowerCase()}`, limit: limits.perUser }, { key: "ai:site", limit: limits.perDay }],
 });
+// The model a visitor's Anthropic call will run on, after shapeAnthropic.
+const asksForOpus = (endpoint, body) => endpoint === "anthropic" && /opus/i.test(String(body?.model || "")) && AI_CEILINGS.anthropic.models.includes(body.model);
 
 // ── A DAILY COUNT, TAKEN IN ONE STEP ────────────────────────────────
 // gemlyx_take_guide checks every key against its limit and counts them all
@@ -153,6 +190,7 @@ export const gateAi = async ({ headers, body, endpoint, env = {}, fetchImpl = fe
     if (size > (founder ? BODY_LIMIT.founder : BODY_LIMIT.member)) return { ok: false, status: 413, error: "That request is too large." };
     if (founder) return { ok: true, founder: true, anon: false, userId: who.id };
     if (who.confirmed) {
+      if (limits.perUser === 0 || limits.perDay === 0) return { ok: false, status: 503, error: AI_OFF };
       if (!serviceKey) return { ok: false, status: 503, error: "This is not available just now." };
       const got = await takeCalls({ day, userId: who.id, limits, supabaseUrl, serviceKey, fetchImpl });
       if (got.closed) return { ok: false, status: 503, error: "This is not available just now. Try again in a moment." };
@@ -162,10 +200,12 @@ export const gateAi = async ({ headers, body, endpoint, env = {}, fetchImpl = fe
   }
   // No account, a lapsed session or an unconfirmed email: the visitor's terms.
   if (size > BODY_LIMIT.anon) return { ok: false, status: 413, error: "That request is too large." };
+  const opus = asksForOpus(endpoint, body);
+  if (limits.perVisitor === 0 || limits.anonPerDay === 0 || limits.perDay === 0) return { ok: false, status: 503, error: AI_OFF };
   if (!serviceKey) return { ok: false, status: 503, error: "This is not available just now." };
-  const got = await takeCalls({ day, visitor: visitorKey(headers, serviceKey.slice(-16)), limits, supabaseUrl, serviceKey, fetchImpl });
+  const got = await takeCalls({ day, visitor: visitorKey(headers, serviceKey.slice(-16)), opus, limits, supabaseUrl, serviceKey, fetchImpl });
   if (got.closed) return { ok: false, status: 503, error: "This is not available just now. Try again in a moment." };
-  if (!got.ok) return { ok: false, status: 429, error: got.over === "ai:site" || got.over === "ai:anon" ? "Gemlyx has used its AI for today. Try again tomorrow." : "You have used today's allowance. It resets at midnight, Danish time." };
+  if (!got.ok) return { ok: false, status: 429, error: ["ai:site", "ai:anon", "ai:anon:opus"].includes(got.over) ? "Gemlyx has used its AI for today. Try again tomorrow." : "You have used today's allowance. It resets at midnight, Danish time." };
   return { ok: true, founder: false, anon: true, userId: "", endpoint };
 };
 
