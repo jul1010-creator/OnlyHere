@@ -31,7 +31,7 @@
         },
         {
           "key": "Content-Security-Policy-Report-Only",
-          "value": "default-src 'self'; script-src 'self' https://www.instagram.com https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src 'self' data: https://fonts.gstatic.com; img-src * data: blob:; media-src * blob:; connect-src 'self' https://vpxfahjnerkkkoueovhl.supabase.co https://nominatim.openstreetmap.org https://*.openstreetmap.org https://tiles.openfreemap.org https://*.stadiamaps.com https://en.wikipedia.org https://commons.wikimedia.org; frame-src https://www.instagram.com https://www.google.com; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
+          "value": "default-src 'self'; script-src 'self' https://www.instagram.com https://cdnjs.cloudflare.com https://maps.googleapis.com https://maps.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src 'self' data: https://fonts.gstatic.com https://maps.gstatic.com; img-src * data: blob:; media-src * blob:; connect-src 'self' https://maps.googleapis.com https://*.googleapis.com https://maps.gstatic.com https://vpxfahjnerkkkoueovhl.supabase.co https://nominatim.openstreetmap.org https://*.openstreetmap.org https://tiles.openfreemap.org https://*.stadiamaps.com https://en.wikipedia.org https://commons.wikimedia.org; frame-src https://www.instagram.com https://www.google.com; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
         }
       ]
     }
