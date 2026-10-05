@@ -15,6 +15,7 @@ import { NOW_HOURS, NOW_STARTS, NOW_STYLES, STROLL, STORM_WIND, HERE, NOW_AREAS,
 import { entryWord } from "../utils/entryWords";
 import { ferryOf } from "../utils/walkable";
 import { WalkMode, askForCompass } from "./WalkMode";
+import { inPortNow, hoursBeforeSailing } from "../utils/cruiseDays";
 
 const fill = (s, vars) => Object.entries(vars).reduce((out, [k, v]) => out.split(`{${k}}`).join(String(v)), s);
 const clock = (m, lang) => {
@@ -243,6 +244,21 @@ export const NowPlanner = ({ country = "LT", lang: langProp = "", defaultFrom = 
     return () => { gone = true; };
   }, [country, fromQuery]);
 
+  // ── WHEN THE SHIP SAILS ────────────────────────────────────────
+  // Oliver, 5 Oct 2026, "Sure" to the cruise ships and the time to be back
+  // on board. From the ship, on a day a ship is in (data/klaipedaCruises.js),
+  // only the walk lengths that end before it sails are offered; with more
+  // than one ship in, the latest to sail decides, and every ship is named.
+  const ships = from === "terminal" && country === "LT" ? inPortNow(new Date()) : [];
+  const sailing = ships.length ? (() => {
+    const last = Math.max(...ships.map(c => c.to));
+    return { ships, fit: hoursBeforeSailing(NOW_HOURS, placeClock(new Date(), countryProfile(country).zone).minutes, last) };
+  })() : null;
+  const noTime = !!sailing && sailing.fit.length === 0;
+  useEffect(() => {
+    if (sailing && sailing.fit.length && !sailing.fit.includes(hours)) setHours(sailing.fit[sailing.fit.length - 1]);
+  }, [from, sailing?.fit.join(",")]);
+
   if (!firstFrom) return null;
   const zone = countryProfile(country).zone;
 
@@ -292,12 +308,20 @@ export const NowPlanner = ({ country = "LT", lang: langProp = "", defaultFrom = 
       {posNote && <div data-testid="now-pos-note" style={{ fontSize: 12, color: "#FFB347", margin: "-4px 0 12px" }}>{posNote}</div>}
 
       <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 8 }}>{uiT("now.howLong", lang)}</div>
+      {sailing && (
+        <div data-testid="now-sailing" style={{ fontSize: 12.5, color: C.gold, fontWeight: 700, marginBottom: 8 }}>
+          🚢 {sailing.ships.map(c => fill(uiT("now.sails", lang), { ship: c.ship, time: c.leaves })).join(" · ")}
+        </div>
+      )}
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
-        {NOW_HOURS.map(h => (
-          <button key={h} onClick={() => setHours(h)} aria-pressed={h === hours} style={pill(h === hours)} data-testid={`now-hours-${h}`}>
-            {fill(uiT("now.hours", lang), { n: h })}
-          </button>
-        ))}
+        {NOW_HOURS.map(h => {
+          const off = !!sailing && !sailing.fit.includes(h);
+          return (
+            <button key={h} onClick={() => !off && setHours(h)} disabled={off} aria-pressed={h === hours} style={{ ...pill(h === hours && !off), opacity: off ? 0.35 : 1, cursor: off ? "default" : "pointer" }} data-testid={`now-hours-${h}`}>
+              {fill(uiT("now.hours", lang), { n: h })}
+            </button>
+          );
+        })}
       </div>
 
       {kinds.length > 0 && (
@@ -311,7 +335,7 @@ export const NowPlanner = ({ country = "LT", lang: langProp = "", defaultFrom = 
         </div>
       )}
 
-      <button onClick={make} disabled={state.busy} data-testid="now-make"
+      <button onClick={make} disabled={state.busy || noTime} data-testid="now-make"
         style={{ width: "100%", background: C.gold, color: C.onGold, border: "none", borderRadius: 12, padding: "13px", fontSize: 14, fontWeight: 700, cursor: state.busy ? "default" : "pointer", fontFamily: "'Inter', sans-serif", opacity: state.busy ? 0.7 : 1 }}>
         {state.busy ? uiT("now.making", lang) : uiT("now.make", lang)}
       </button>

@@ -66,7 +66,9 @@ export const askForCompass = async () => {
   } catch { /* no compass, the arrow points with north up */ }
 };
 
-export const WalkMode = ({ walk, madeAt, lang = "en", country = "LT", onClose, cardFor = null }) => {
+// `loop` false for a trail that ends at its last stop: no way back, and the
+// last stop's button finishes the walk.
+export const WalkMode = ({ walk, madeAt, lang = "en", country = "LT", onClose, cardFor = null, loop = true }) => {
   const stops = Array.isArray(walk?.stops) ? walk.stops : [];
   // 0..stops.length-1 are the stops; stops.length is the way back.
   const [idx, setIdx] = useState(0);
@@ -162,7 +164,7 @@ export const WalkMode = ({ walk, madeAt, lang = "en", country = "LT", onClose, c
       {/* The walk's own map, following the walker. */}
       <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
         {googleMapsReady()
-          ? <GoogleWalkMap walk={walk} height="100%" round={false} madeAt={madeAt} cardFor={cardFor} focus={focus} me={pos} follow lang={lang} />
+          ? <GoogleWalkMap walk={walk} height="100%" round={false} madeAt={madeAt} cardFor={cardFor} focus={focus} me={pos} follow lang={lang} loop={loop} />
           : <div style={{ padding: 20, fontSize: 13, color: C.muted }}>{uiT("walk.noMap", lang)}</div>}
       </div>
 
@@ -173,11 +175,13 @@ export const WalkMode = ({ walk, madeAt, lang = "en", country = "LT", onClose, c
         ) : (
           <>
             <a href={streets} target="_blank" rel="noopener noreferrer" style={{ ...btn(false), flex: 1 }}>{uiT("walk.streets", lang)} ↗</a>
-            {!back && (
+            {!back && (!loop && idx + 1 >= stops.length ? (
+              <button onClick={onClose} style={{ ...btn(!!g?.here), flex: 1 }} data-testid="walk-finish">{uiT("walk.finished", lang)}</button>
+            ) : (
               <button onClick={() => setIdx(i => i + 1)} style={{ ...btn(!!g?.here), flex: 1 }} data-testid="walk-next">
                 {uiT(idx + 1 >= stops.length ? "walk.headBack" : "walk.nextStop", lang)}
               </button>
-            )}
+            ))}
           </>
         )}
       </div>

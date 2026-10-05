@@ -141,7 +141,7 @@ const PIN_SCALE = 0.85;
 // the card. `cardFor(stop)` may add { emoji, photo } for a stop. `focus` is
 // { id, n }: a new n glides to the stop with that id. `me` is the walker's
 // position { lat, lon }, drawn as a blue dot, and `follow` keeps it in view.
-export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = null, focus = null, me = null, follow = false, round = true, lang = "en" }) => {
+export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = null, focus = null, me = null, follow = false, round = true, lang = "en", loop = true }) => {
   const box = useRef(null);
   // ONE map for the life of the page. Google bills every map it creates, and
   // making a new one each time a visitor picks another walk would bill each
@@ -269,10 +269,11 @@ export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = nul
         // white edge with an arrow halfway, so the order reads off the map.
         // Back to the start: a dashed line, so the way home never looks like
         // part of the walk.
-        const legs = walkLegs(walk);
+        // A trail that ends where it ends (the sculptures) has no way back.
+        const legs = loop ? walkLegs(walk) : walkLegs(walk).slice(0, -1);
         const lines = await Promise.all(legs.map(([a, b]) => legLine(a, b)));
         if (gone) return;
-        const last = legs.length - 1;
+        const last = loop ? legs.length - 1 : -1;
         lines.forEach((line, i) => {
           const measured = !!line;
           const path = measured ? line.map(([la, lo]) => ({ lat: la, lng: lo })) : legs[i].map(at);
