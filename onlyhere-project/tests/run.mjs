@@ -181,11 +181,11 @@ writeFileSync(entry, `
   export { startLog, endLog, note, decide, recentLogs, summariseLog, formatLog, formatLogs, logChips, OUTCOMES } from ${JSON.stringify(join(root, "src/utils/runLog.js"))};
   export { fieldProvenance, correctionProvenance, entrySources, untracedFields, describeProvenance, readerCorrection, readerCorrections, isCheckerVoice, readerUncertainty, readerUncertainties, READER_UNCERTAINTY_LIMIT } from ${JSON.stringify(join(root, "src/utils/provenance.js"))};
   export { ALLOWED_ORIGINS, originOf, isAllowedOrigin, requestIsFromSite, NOT_FROM_SITE, STUDIO_ONLY_ENDPOINTS, resolveUser, isFounder } from ${JSON.stringify(join(root, "src/utils/apiGuard.js"))};
-  export { gateAi, shapeAnthropic, shapeOpenAI, shapePerplexity, searchCeiling, AI_CEILINGS, readAiLimits, visitorKey, visitorAddress, takeDaily, AI_OFF, addressBlock, limitOf } from ${JSON.stringify(join(root, "src/utils/aiGate.js"))};
+  export { keepAnthropicFields, MAX_IMAGES, gateAi, shapeAnthropic, shapeOpenAI, shapePerplexity, searchCeiling, AI_CEILINGS, readAiLimits, visitorKey, visitorAddress, takeDaily, AI_OFF, addressBlock, limitOf } from ${JSON.stringify(join(root, "src/utils/aiGate.js"))};
   export { gateMaps, readMapsLimits, MAPS_BUSY, MAPS_DONE } from ${JSON.stringify(join(root, "src/utils/mapsGate.js"))};
   export { cleanErrorMessage, safeUpstreamError } from ${JSON.stringify(join(root, "src/utils/upstreamError.js"))};
   export { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_KEY } from ${JSON.stringify(join(root, "src/utils/supabasePublic.js"))};
-  export { sitePath, AI_PATHS } from ${JSON.stringify(join(root, "src/utils/apiAuth.js"))};
+  export { sitePath, AI_PATHS, TOKEN_PATHS } from ${JSON.stringify(join(root, "src/utils/apiAuth.js"))};
   export { citationUrls, askOpenAI, askClaude, localisePrompt } from ${JSON.stringify(join(root, "src/utils/aiClient.js"))};
   export { THEMES, THEME_ORDER, DEFAULT_THEME, storedTheme, THEME_PARAM } from ${JSON.stringify(join(root, "src/utils/theme.js"))};
   export { layoutBody, trimCaption } from ${JSON.stringify(join(root, "src/utils/articleLayout.js"))};
@@ -81210,7 +81210,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const pageX = readFileSync(join(root, "src/pages/KlaipedaExamples.jsx"), "utf8");
   ok("the examples have their own address, apart from the QR one, and stay out of search", X.KLAIPEDA_EXAMPLES_PATH === "/lithuania/examples" && X.KLAIPEDA_EXAMPLES_PATH !== M.KLAIPEDA_DEMO_PATH && /<Route path=\{KLAIPEDA_EXAMPLES_PATH\} element=\{<KlaipedaExamples \/>\} \/>/.test(appX) && /noindex/.test(pageX));
   ok("the page says at the top that the businesses and offers are made up", /These are examples/.test(pageX) && /Every business, every offer and every number about them is made up/.test(pageX));
-  ok("and every made-up partner carries the Example mark, in the walk and in the list", /tag=\{\(s\) => isExamplePartner\(s\.id\) \? "Example" : null\}/.test(pageX) && /<Tag>Example<\/Tag>/.test(pageX) && X.EXAMPLE_PARTNERS.every(p => X.isExamplePartner(`${p.type}:${p.key}`)) && !X.isExamplePartner("free:castle"));
+  ok("and every made-up partner carries the Example mark, in the walk and in the list", /tag=\{\(s\) => isExamplePartner\(s\.id\) \? "Example" : null\}/.test(pageX) && /<Tag>Example<\/Tag>/.test(readFileSync(join(root, "src/pages/KlaipedaBusiness.jsx"), "utf8")) && X.EXAMPLE_PARTNERS.every(p => X.isExamplePartner(`${p.type}:${p.key}`)) && !X.isExamplePartner("free:castle"));
   ok("no percentage off anything", X.EXAMPLE_PARTNERS.every(p => !/%|percent|discount/i.test(p.offer.text)));
   ok("no partner is pointed at a real door: a street, never a house number", X.EXAMPLE_PARTNERS.every(p => /^[^\d]+ g\.$/.test(p.street)));
   const runs = Object.fromEntries(X.EXAMPLE_WALKS.map(e => [e.id, X.runExample(e)]));
@@ -81349,7 +81349,8 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("no example line that reads wrong the other way round", twoWays.length >= 3 && twoWays.every(e => e.order.every(o => !/\b(first|to finish|way back|for later|last look)\b/i.test(o.why || ""))));
   ok("every real place's page reads in four languages", Object.entries(X.EXAMPLE_PAGES).filter(([id]) => !X.isExamplePartner(id)).every(([, p]) => ["lt", "de", "da"].every(l => !!p.item.__i18n?.[l] && M.TR.localizedEntry(p.item, l).desc !== p.item.desc)));
   const pageX = readFileSync(join(root, "src/pages/KlaipedaExamples.jsx"), "utf8");
-  ok("an all day offer at a door that has closed is not shown as on", /const timing = doorShut \? "shut" : inWindow;/.test(pageX) && /shut: "Closed at this moment"/.test(pageX));
+  const pageB = readFileSync(join(root, "src/pages/KlaipedaBusiness.jsx"), "utf8");
+  ok("an all day offer at a door that has closed is not shown as on", /const timing = doorShut \? "shut" : inWindow;/.test(pageB) && /shut: "Closed at this moment"/.test(pageB));
 }
 
 // ── Batch 187: the museums' days, read again ──
@@ -81437,7 +81438,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("from the mainland, the ferry is a walk and ten minutes over", S.ferryFrom("annchen")?.crossing === 10 && S.ferryFrom("annchen").walk > 0 && S.ferryFrom("albatross") === null);
   const pg = readFileSync(join(root, "src/pages/KlaipedaSculptures.jsx"), "utf8");
   ok("the sketch says what is real and what is made up, and plays nothing it does not have", /A working sketch/.test(pg) && /which this page does not play/.test(pg) && /Made-up numbers/.test(pg) && !/<audio/.test(pg));
-  ok("it has its own address, stays out of search, and the examples page links to it", S.KLAIPEDA_SCULPTURES_PATH === "/lithuania/sculptures" && /noindex/.test(pg) && /<Route path=\{KLAIPEDA_SCULPTURES_PATH\} element=\{<KlaipedaSculptures \/>\} \/>/.test(readFileSync(join(root, "src/App.jsx"), "utf8")) && /href=\{KLAIPEDA_SCULPTURES_PATH\}/.test(readFileSync(join(root, "src/pages/KlaipedaExamples.jsx"), "utf8")));
+  ok("it has its own address, stays out of search, and the examples page links to it", S.KLAIPEDA_SCULPTURES_PATH === "/lithuania/sculptures" && /keepOutOfSearch\("Talking sculptures · Gemlyx"\)/.test(pg) && /noindex, nofollow/.test(readFileSync(join(root, "src/components/KlaipedaTop.jsx"), "utf8")) && /<Route path=\{KLAIPEDA_SCULPTURES_PATH\} element=\{<KlaipedaSculptures \/>\} \/>/.test(readFileSync(join(root, "src/App.jsx"), "utf8")) && /href=\{KLAIPEDA_SCULPTURES_PATH\}/.test(readFileSync(join(root, "src/pages/KlaipedaExamples.jsx"), "utf8")));
   const shown = JSON.stringify(S.SCULPTURES) + JSON.stringify(S.EXAMPLE_WEEK) + pg.replace(/\/\/.*$/gm, "");
   ok("no dashes and none of his banned words", !/[—–]/.test(shown) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(shown));
 }
@@ -81652,7 +81653,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("a new walk cancels any glide and clears the old pins and lines", /if \(raf\) cancelAnimationFrame\(raf\);\s*api\.current = null;\s*setAway\(false\);\s*drawn\.forEach/.test(comp));
   ok("a failed walking line is asked again rather than kept faint", /if \(line\) legCache\.set\(key, line\);/.test(comp));
   ok("the Lithuanian Studio links the three Klaipėda pages",
-    /\{studioCountry === "LT" && \(\s*<div data-testid="studio-klaipeda-pages"/.test(app) && /\[\[KLAIPEDA_EXAMPLES_PATH, "Examples"\], \[KLAIPEDA_DEMO_PATH, "QR walk"\], \[KLAIPEDA_SCULPTURES_PATH, "Sculptures"\]\]/.test(app));
+    /\{studioCountry === "LT" && \(\s*<div data-testid="studio-klaipeda-pages"/.test(app) && /\[\[KLAIPEDA_EXAMPLES_PATH, "For visitors"\], \[KLAIPEDA_BUSINESS_PATH, "For businesses"\], \[KLAIPEDA_DEMO_PATH, "QR walk"\], \[KLAIPEDA_SCULPTURES_PATH, "Sculptures"\], \[KLAIPEDA_CENTRE_PATH, "Sculptures, centre"\]\]/.test(app));
   ok("the map is asked for as a vector map, which is the one that tilts and turns", /renderingType: maps\.RenderingType\?\.VECTOR \|\| "VECTOR"/.test(comp));
 }
 
@@ -81855,7 +81856,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("Melnragė and Smiltynė count, Vilnius and Denmark do not", !!N.hereStart("LT", 55.7382, 21.0834) && !!N.hereStart("LT", 55.7178, 21.0989) && N.hereStart("LT", 54.6872, 25.2797) === null && N.hereStart("DK", 55.70913, 21.13149) === null);
   const api = readFileSync(join(root, "api/plan-now.js"), "utf8");
   ok("the route takes only a position on the grid, spelled as snapPos spells it", /snapPos\(q\.lat\) === String\(q\.lat\) && snapPos\(q\.lon\) === String\(q\.lon\)/.test(api) && /return json\(res, 400, \{ error: "Outside the area\.", outside: true \}\)/.test(api));
-  ok("and counts the model for walks from a position, falling back to the rules", /if \(!here\) return true;/.test(api) && /key: "walk:site", limit: 1000/.test(api) && /&& await modelAllowed\(\)\) \{/.test(api));
+  ok("and counts every model walk, from a position or a fixed start, falling back to the rules", !/if \(!here\) return true;/.test(api) && /key: "walk:site", limit: 1000/.test(api) && /&& await modelAllowed\(\)\) \{/.test(api));
   const np = readFileSync(join(root, "src/components/NowPlanner.jsx"), "utf8");
   ok("the position is asked for only when the button is tapped, and checked against the area", /const useHere = \(\) => \{/.test(np) && /onClick=\{useHere\}/.test(np) && /if \(!inNowArea\(country, at\)\) \{ setPosNote\(uiT\("now\.notHere", lang\)\); return; \}/.test(np) && !/localStorage[^\n]*pos/.test(np));
   ok("and the walk says it starts and ends where you are", /walk\.start\.id === HERE \? uiT\("now\.whereYouAre", lang\)/.test(np) && /walk\.start\.id === HERE \? "now\.backHere" : "now\.backCentre"/.test(np));
@@ -81944,7 +81945,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("after the last call of the season there is nothing to show", CR.cruiseDaysAhead(new Date("2026-11-01T10:00:00Z")).length === 0);
   const np = readFileSync(join(root, "src/components/NowPlanner.jsx"), "utf8");
   ok("from the ship, walk lengths past sailing are greyed out and the ship is named", /const ships = from === "terminal" && country === "LT" \? inPortNow\(new Date\(\)\) : \[\];/.test(np) && /const off = !!sailing && !sailing\.fit\.includes\(h\);/.test(np) && /data-testid="now-sailing"/.test(np) && /disabled=\{state\.busy \|\| noTime\}/.test(np));
-  ok("the ships are on the QR walk page and in the Lithuanian Studio", /<CruiseDays lang=\{lang\} \/>/.test(readFileSync(join(root, "src/pages/KlaipedaDemo.jsx"), "utf8")) && /\{studioCountry === "LT" && <CruiseDays lang="en" count=\{6\} compact \/>\}/.test(readFileSync(join(root, "src/App.jsx"), "utf8")));
+  ok("the ships are on the business page and in the Lithuanian Studio, not on the visitor's", /<CruiseDays lang="en" count=\{6\} compact \/>/.test(readFileSync(join(root, "src/pages/KlaipedaBusiness.jsx"), "utf8")) && !/CruiseDays/.test(readFileSync(join(root, "src/pages/KlaipedaDemo.jsx"), "utf8").replace(/\/\/.*$/gm, "").replace(/\{\/\*[\s\S]*?\*\/\}/g, "")) && /\{studioCountry === "LT" && <CruiseDays lang="en" count=\{6\} compact \/>\}/.test(readFileSync(join(root, "src/App.jsx"), "utf8")));
   // The sculpture trail.
   const trail = { stops: [{ id: "kiss", name: "A Kiss", lat: 55.70617, lon: 21.12306, arrive: 0 }, { id: "ghost", name: "The Black Ghost", lat: 55.7066, lon: 21.12682, arrive: 9, line: "A dark figure." }], used: 13 };
   const rw = M.trailWalk(trail);
@@ -81974,6 +81975,79 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("Re-centre in four languages, no dashes, none of his banned words", ["en", "da", "de", "lt"].every(l => M.UI_STRINGS["map.recenter"]?.[l]) && !/[—–]/.test(words) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(words));
   const shown = (gm + wm).replace(/\/\/ ── .*$/gm, "");
   ok("and none in the code's own text", !/[—–]/.test(shown) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(shown.replace(/"It's a lame flying[^\n]*/g, "")));
+}
+
+// ── Batch 213: the visitor's side and the business side ──
+// Oliver, 5 Oct 2026, going for a nap: "right now it's all a big mess combined
+// together ... even the owner of the restaurant is seeing the same as the
+// customers and reverse.. we need a seperation.. because obviously the tourist
+// is not gonna care about how many people are coming in thursday with the
+// ship.. so seperate it. Polish it a bit, so we can move on from there."
+{
+  const strip = (src) => src.replace(/\/\/.*$/gm, "").replace(/\{\/\*[\s\S]*?\*\/\}/g, "").replace(/^import [\s\S]*?;$/gm, "");
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const trips = strip(read("src/pages/KlaipedaDemo.jsx")), ex = strip(read("src/pages/KlaipedaExamples.jsx"));
+  const biz = strip(read("src/pages/KlaipedaBusiness.jsx")), sc = read("src/pages/KlaipedaSculptures.jsx"), top = read("src/components/KlaipedaTop.jsx"), app = read("src/App.jsx");
+  const visitorSc = strip(sc.slice(0, sc.indexOf("export const KlaipedaSculpturesCentre")));
+  const centreSc = strip(sc.slice(sc.indexOf("export const KlaipedaSculpturesCentre")));
+  ok("the business side has its own address and route", M.KEX.KLAIPEDA_BUSINESS_PATH === "/lithuania/business" && /<Route path=\{KLAIPEDA_BUSINESS_PATH\} element=\{<KlaipedaBusiness \/>\} \/>/.test(app) && /<Route path=\{KLAIPEDA_CENTRE_PATH\} element=\{<KlaipedaSculpturesCentre \/>\} \/>/.test(app));
+  ok("no visitor page shows the ships' guests, the partner numbers or how offers are set", [trips, ex, visitorSc].every(p => !/CruiseDays|cruiseDaysAhead|aboutGuests|PARTNER_WEEK|EXAMPLE_PARTNERS|What a partner would see|Offers, the way|EXAMPLE_WEEK|What the centre would see/.test(p)));
+  ok("the business page has the ships, how it works, the offers, what a partner sees and a way to join", /<CruiseDays lang="en" count=\{6\} compact \/>/.test(biz) && /How it works for you/.test(biz) && /Offers, the way you set them/.test(biz) && /data-testid="business-partner-stats"/.test(biz) && /mailto:hello@gemlyxtravel\.com/.test(biz));
+  ok("the centre's numbers are on the centre's own page", /What the centre would see/.test(centreSc) && /data-testid="sculpture-week"/.test(centreSc) && !/data-testid="sculpture-week"/.test(visitorSc));
+  ok("every page says which side it is on, and the QR page shows no switch", /<KlaipedaTop side="visitors" \/>/.test(ex) && /<KlaipedaTop side="visitors" \/>/.test(visitorSc) && /<KlaipedaTop side="business" \/>/.test(biz) && /<KlaipedaTop side="business" \/>/.test(centreSc) && /<KlaipedaTop place=\{null\} \/>/.test(trips) && /\{side && \(/.test(top));
+  ok("and the QR page no longer says Preview", !/>Preview</.test(trips));
+  ok("a passenger still sees when their own ship sails, in the walk", /data-testid="now-sailing"/.test(read("src/components/NowPlanner.jsx")));
+  const S = M.CRD, season = M.CR.seasonOf(2026);
+  ok("the season in one line comes from the port's calls", season.calls === 58 && season.ships === Object.keys(S.SHIPS).length && season.guests === S.CRUISE_CALLS.reduce((n, c) => n + S.SHIPS[c.ship].guests, 0) && M.CR.seasonOf(2027).calls === 0);
+  ok("every page stays out of search", /noindex, nofollow/.test(top) && [trips, ex, biz, sc].every(p => /keepOutOfSearch\(/.test(p)));
+  const shown = [trips, ex, biz, visitorSc, centreSc, strip(top)].join("\n");
+  ok("no dashes and none of his banned words on either side", !/[—–]/.test(shown) && !/"[^"\n]* - [^"\n]*"|>[^<{\n]* - [^<{\n]*</.test(shown) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(shown));
+}
+
+// ── Batch 214: the security review of 5 Oct 2026, the money side ──
+// Oliver sent the review: "Oh, btw..". Checked against main first: the walk
+// planner had a counter by then for walks from a position (Batch 205), but
+// not for the two fixed starts, so finding 1 still stood there.
+{
+  const api = readFileSync(join(root, "api/plan-now.js"), "utf8");
+  ok("finding 1: every model walk is counted, and a refusal is cached for five minutes, not thirty", !/if \(!here\) return true;/.test(api) && /refused = !got\.ok;/.test(api) && /refused \? "public, s-maxage=300, stale-while-revalidate=60" : "public, s-maxage=1800/.test(api));
+  const k = M.keepAnthropicFields({
+    model: "claude-sonnet-5", max_tokens: 100, service_tier: "priority", container: "x", mcp_servers: [{}],
+    system: [{ type: "text", text: "s", cache_control: { type: "ephemeral" } }],
+    messages: [
+      { role: "user", content: [{ type: "text", text: "a", cache_control: { type: "ephemeral" } }, { type: "document", source: { type: "url", url: "https://x/y.pdf" } },
+        { type: "image", source: { type: "url", url: "https://x/1.jpg" } }, { type: "image", source: { type: "url", url: "https://x/2.jpg" } }, { type: "image", source: { type: "url", url: "https://x/3.jpg" } }, { type: "image", source: { type: "base64", data: "AAAA" } }] },
+      { role: "assistant", content: [{ type: "thinking", thinking: "t", signature: "s" }, { type: "redacted_thinking", data: "r" }, { type: "tool_use", id: "1", name: "f", input: {} }] },
+      { role: "user", content: [{ type: "tool_result", tool_use_id: "1", content: [{ type: "text", text: "ok" }, { type: "document", source: {} }] }] },
+      { role: "system", content: "sneaky" },
+    ],
+  });
+  ok("finding 2: no service tier, container or MCP servers get through", !("service_tier" in k) && !("container" in k) && !("mcp_servers" in k) && k.model === "claude-sonnet-5");
+  ok("no PDFs, at most two images and only by address, no cache writes", JSON.stringify(k).indexOf("document") === -1 && !/cache_control/.test(JSON.stringify(k)) && k.messages[0].content.filter(b => b.type === "image").length === M.MAX_IMAGES && M.MAX_IMAGES === 2 && !/base64/.test(JSON.stringify(k)));
+  ok("but the chat's thinking blocks and tool rounds come through, so the chat keeps working", k.messages[1].content.map(b => b.type).join() === "thinking,redacted_thinking,tool_use" && k.messages[2].content[0].content.length === 1 && k.messages.length === 3);
+  ok("and the founder's request is left as he sent it", M.shapeAnthropic({ model: "claude-opus-5", service_tier: "priority" }, { founder: true }).service_tier === "priority" && !("service_tier" in M.shapeAnthropic({ service_tier: "priority" })));
+  ok("a member's body limit is 500 KB, and a member has an Opus ceiling of 120 a day", /member: 500_000/.test(readFileSync(join(root, "src/utils/aiGate.js"), "utf8")) && M.readAiLimits({}).opusPerUser === 120 && M.readAiLimits({ GEMLYX_AI_OPUS_PER_USER: "0" }).opusPerUser === 0);
+  const gate = readFileSync(join(root, "src/utils/aiGate.js"), "utf8");
+  ok("the member's Opus calls are counted on their own key", /\{ key: `ai:u:\$\{userId\.toLowerCase\(\)\}:opus`, limit: limits\.opusPerUser \}/.test(gate) && /opus: asksForOpus\(endpoint, body\), limits/.test(gate));
+  ok("finding 8: a slow counter is a closed one after three seconds", /signal: AbortSignal\.timeout\(3000\),/.test(gate));
+}
+
+// ── Batch 214, finding 4: Google's dearer place search is Studio's only ──
+{
+  const pl = readFileSync(join(root, "api/places.js"), "utf8");
+  ok("finding 4: /api/places wants the founder before it counts or calls Google", /if \(!isFounder\(who\.userId, process\.env\.GEMLYX_FOUNDER_IDS\)\)/.test(pl) && pl.indexOf("isFounder(who.userId") < pl.indexOf("await gateMaps(") && pl.indexOf("isFounder(who.userId") < pl.indexOf("places.googleapis.com"));
+  ok("and the Studio token goes with it, while other paths are left alone", M.TOKEN_PATHS.test("/api/places?lat=1&lon=2") && M.TOKEN_PATHS.test("/api/anthropic") && !M.TOKEN_PATHS.test("/api/places-hours?name=x") && !M.TOKEN_PATHS.test("/api/directions") && /!TOKEN_PATHS\.test\(path\)/.test(readFileSync(join(root, "src/utils/apiAuth.js"), "utf8")));
+}
+
+// ── Batch 214, findings 12 and 15 ──
+{
+  const L = (v) => M.readLimits({ GEMLYX_GUIDES_PER_DAY: v }).perDay;
+  const ga = readFileSync(join(root, "src/utils/guideAllowance.js"), "utf8");
+  ok("finding 12: a typo in GEMLYX_GUIDES_PER_DAY is off, not 40", /String\(env\.GEMLYX_GUIDES_PER_DAY \?\? ""\)\.trim\(\) === "" \? ALLOWANCE_DEFAULTS\.perDay : wholeOr\(env\.GEMLYX_GUIDES_PER_DAY, 0\)/.test(ga) && L("4o") === 0 && L("") === 40 && L("12") === 12);
+  const ts = (h1, h6, wind) => ({ properties: { timeseries: [0, 1, 2].map(i => ({ time: `2026-10-05T1${i}:00:00Z`, data: { instant: { details: wind === undefined ? {} : { wind_speed: wind, air_temperature: 9 } }, ...(h1 ? { next_1_hours: h1 } : {}), ...(h6 ? { next_6_hours: h6 } : {}) } })) } });
+  ok("finding 15: with no hourly figures, the six hour ones say it is raining", M.walkWeatherFrom(ts(null, { summary: { symbol_code: "rain" }, details: { precipitation_amount: 3 } }, 4)).wet === true);
+  ok("and with no figures at all, nothing is known, never dry and calm", M.walkWeatherFrom(ts(null, null, undefined)) === null);
+  ok("and an ordinary forecast reads as before", M.walkWeatherFrom(ts({ summary: { symbol_code: "cloudy" }, details: { precipitation_amount: 0 } }, null, 6)).wet === false && M.walkWeatherFrom(ts({ summary: { symbol_code: "cloudy" }, details: { precipitation_amount: 0 } }, null, 6)).wind === 6);
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
