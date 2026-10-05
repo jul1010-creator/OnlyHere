@@ -8,8 +8,10 @@ import { useEffect, useMemo, useState } from "react";
 import { C } from "../utils/theme";
 import { GemlyxLogo } from "../components/GemlyxLogo";
 import {
-  SCULPTURES, STORY_LANGS, EXAMPLE_WEEK, FERRY, progressLine, nextFrom, trailFrom, ferryFrom, walkLink,
+  SCULPTURES, STORY_LANGS, EXAMPLE_WEEK, FERRY, progressLine, nextFrom, trailFrom, ferryFrom, walkLink, trailWalk,
 } from "../data/klaipedaSculptures";
+import { GoogleWalkMap } from "../components/GoogleWalkMap";
+import { WalkMode, askForCompass } from "../components/WalkMode";
 import { KLAIPEDA_EXAMPLES_PATH } from "../data/klaipedaExamples";
 
 const Tag = ({ children, strong = false, dashed = false }) => (
@@ -36,6 +38,9 @@ export const KlaipedaSculptures = () => {
   const next = useMemo(() => nextFrom(scanned, found), [scanned, found]);
   const trail = useMemo(() => trailFrom(scanned, minutes, found), [scanned, minutes, found]);
   const ferry = ferryFrom(scanned);
+  // The trail as a route on the map, walked with the phone's GPS (5 Oct 2026).
+  const route = useMemo(() => trailWalk(trail), [trail]);
+  const [walking, setWalking] = useState(false);
   const across = SCULPTURES.filter(s => s.side !== here.side);
 
   useEffect(() => {
@@ -157,6 +162,16 @@ export const KlaipedaSculptures = () => {
               ))}
               <div style={{ fontSize: 12, color: C.muted, marginTop: 6 }}>{trail.stops.length} sculptures in about {trail.used} minutes, a few minutes at each.</div>
             </div>
+            {route && (
+              <>
+                <GoogleWalkMap walk={route} loop={false} height={280} cardFor={() => ({ emoji: "🗿" })} />
+                <button onClick={() => { askForCompass(); setWalking(true); }} data-testid="trail-start-walk"
+                  style={{ display: "block", width: "100%", marginTop: 10, background: C.gold, color: C.onGold, border: "none", borderRadius: 12, padding: "12px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                  ▶ Walk this trail
+                </button>
+                {walking && <WalkMode walk={route} madeAt={null} lang="en" loop={false} cardFor={() => ({ emoji: "🗿" })} onClose={() => setWalking(false)} />}
+              </>
+            )}
           </div>
         </div>
         <div style={{ fontSize: 11.5, lineHeight: 1.6, color: C.muted, margin: "0 0 40px" }}>

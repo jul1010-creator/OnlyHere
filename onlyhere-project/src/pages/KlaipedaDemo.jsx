@@ -14,6 +14,7 @@ import { useEffect, useMemo, useState } from "react";
 import { C } from "../utils/theme";
 import { GemlyxLogo } from "../components/GemlyxLogo";
 import { NowPlanner } from "../components/NowPlanner";
+import { CruiseDays } from "../components/CruiseDays";
 import { LOCAL_TIPS, todayInKlaipeda } from "../data/klaipedaDemo";
 import { currentUiLanguage, t as uiT } from "../utils/uiLanguage";
 import { ensureLiveContentLoaded } from "../utils/liveContent";
@@ -86,6 +87,9 @@ export const KlaipedaDemo = () => {
         {/* The walk made for this moment. The QR at the terminal carries
             ?from=terminal, the one at the centre ?from=centre. */}
         <NowPlanner country="LT" lang={lang} defaultFrom={from} />
+
+        {/* The ships due in, with about how many guests they carry (5 Oct 2026). */}
+        <CruiseDays lang={lang} />
 
         {(live.onToday.length > 0 || live.deals.length > 0) && (
           <div style={{ display: "grid", gap: 10, marginBottom: 28 }}>
