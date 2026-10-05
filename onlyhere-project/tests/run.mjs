@@ -82066,7 +82066,24 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
 // ── Batch 215, seen live: the card sat over the dot ──
 {
   const gm = readFileSync(join(root, "src/components/GoogleWalkMap.jsx"), "utf8");
-  ok("walking, a stop's card comes up at the top and goes after a few seconds", /\.\.\.\(follow \? \{ top: 10 \} : \{ bottom: 26 \}\)/.test(gm) && /setCard\(c => \(c && c\.n === n \? null : c\)\); \}, CARD_WALKING_MS\)/.test(gm) && M.CARD_WALKING_MS === 6000 && /bottom: st && !follow \? 150 : 26/.test(gm));
+  ok("walking, a stop's card comes up at the top and goes after a few seconds", /position: "absolute", left: 10, right: 10, top: 10, background: C\.surface, border: `1px solid \$\{C\.gold\}`, borderRadius: 100/.test(gm) && /setCard\(c => \(c && c\.n === n \? null : c\)\); \}, CARD_WALKING_MS\)/.test(gm) && M.CARD_WALKING_MS === 6000 && /bottom: \(st && !follow \? 150 : 26\) \+ lift/.test(gm));
+}
+
+// ── Batch 216: places, not stops; a slimmer walk screen; full screen ──
+// Oliver, 6 Oct 2026: "Stop? You mean bus stop? I doubt anyone will use
+// busses..", "do you think the display of the attraction takes up too much
+// of the screen? Making the GPS annoying" and "maybe make a 'full screen' tab".
+{
+  const wm = readFileSync(join(root, "src/components/WalkMode.jsx"), "utf8");
+  const gm = readFileSync(join(root, "src/components/GoogleWalkMap.jsx"), "utf8");
+  ok("the walk says place, not stop, in four languages", M.UI_STRINGS["walk.stopOf"].en === "Place {i} of {n}" && M.UI_STRINGS["walk.nextStop"].en === "On to the next place" && !/\b(stop|Halt|sustojim)/i.test(["da", "de", "lt"].map(l => M.UI_STRINGS["walk.stopOf"][l] + M.UI_STRINGS["walk.nextStop"][l]).join(" ")));
+  ok("the top of the walk is one slim bar", /data-testid="walk-bar"/.test(wm) && /width: 44, height: 44/.test(wm) && !/marginTop: 8 \}\}>\s*<div aria-hidden="true" data-testid="walk-arrow"/.test(wm));
+  ok("walking, a place arrives as a slim strip, and Whole walk stays off the walking map", /\{follow \? \(\s*<div key=\{`card\$\{card\.n\}`\} data-testid="map-card"/.test(gm) && /borderRadius: 100, padding: "6px 14px 6px 6px"/.test(gm) && /\{!follow && \(\s*<button onClick=\{\(\) => api\.current\?\.overview\(\)\} data-testid="map-whole-walk"/.test(gm));
+  ok("full screen hides both bars and leaves one strip with the arrow, the distance and the way out", /\{!full && <div data-testid="walk-bar"/.test(wm) && /\{!full && <div style=\{\{ padding: "8px 12px/.test(wm) && /data-testid="walk-full-strip"/.test(wm) && /data-testid="walk-exit-full"/.test(wm) && /lift=\{full \? 62 : 0\}/.test(wm));
+  ok("and asks the phone for its own full screen, coming out when the phone does", /shell\.current\?\.requestFullscreen\?\.\(\)/.test(wm) && /document\.addEventListener\("fullscreenchange", left\)/.test(wm));
+  const keys = ["walk.fullScreen", "walk.exitFull", "walk.stopOf", "walk.nextStop"];
+  const words = keys.map(k => ["en", "da", "de", "lt"].map(l => M.UI_STRINGS[k]?.[l] || "").join(" ")).join(" ");
+  ok("in four languages, no dashes, none of his banned words", keys.every(k => ["en", "da", "de", "lt"].every(l => M.UI_STRINGS[k]?.[l])) && !/[—–]/.test(words) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(words));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
