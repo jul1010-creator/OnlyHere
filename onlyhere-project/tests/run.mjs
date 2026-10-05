@@ -415,7 +415,7 @@ writeFileSync(entry, `
   export { headingSkeleton, skeletonKey, openingKey, spreadBy, skeletonSpread, openingSpread, describeSameness, samenessReport } from ${JSON.stringify(join(root, "src/utils/sameness.js"))};
   export { moneyTraceable, COMPRESSION_GLANCE, glanceShapeProblem, EXTRACTABLE_GLANCE, EDITORIAL_GLANCE, NEVER_EXTRACT, CLOSED_OR_DERIVED, glanceFieldsFor, numbersTraceable, freeClaimTraceable, saysFreeOnly, statesAnAmount, GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, describeGlance, staleUncertainties, describeStale } from ${JSON.stringify(join(root, "src/utils/glanceExtract.js"))};
   export { walkWeatherFrom } from ${JSON.stringify(join(root, "src/utils/walkWeather.js"))};
-  export { walkLegs, flightPoints, flightMs, flightPhase, cameraAt, bearingOf, flightZoom, FLY_LEG_MS, FLY_HOLD_MS } from ${JSON.stringify(join(root, "src/components/GoogleWalkMap.jsx"))};
+  export { walkLegs, flightPoints, flightMs, flightPhase, cameraAt, bearingOf, flightZoom, FLY_LEG_MS, FLY_HOLD_MS, SPARKS } from ${JSON.stringify(join(root, "src/components/GoogleWalkMap.jsx"))};
   export { fromRoutes, durationWords, distanceWords as routeDistanceWords } from ${JSON.stringify(join(root, "api/directions.js"))};
   export { DANISH_MARKERS, LITHUANIAN_MARKERS, looksLocalPage, danishWordsIn, looksUntranslated, looksDanishPage, hasEnglishVersion, languageBarrier } from ${JSON.stringify(join(root, "src/utils/languageBarrier.js"))};
   export { readerLanguage, languageName, answerInLanguage, languageBlock, nativeBlock } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
@@ -81918,6 +81918,20 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("the examples page gives each card its picture", /cardFor=\{\(st\) => \{ const pg = pageFor\(st\.id\); return pg \? \{ emoji: pg\.item\.emoji, photo: pg\.item\.photo \} : null; \}\}/.test(pageG));
   const shown = comp.replace(/\/\/ ── .*$/gm, "");
   ok("no dashes and none of his banned words", !/[—–]/.test(shown) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(shown.replace(/"It's a lame flying[^\n]*/g, "")));
+}
+
+// ── Batch 209: bling, Disney style ──
+// Oliver, 5 Oct 2026: "I like the flying. But can it fade in a little better?
+// Maybe with bling bling? Like disney type?"
+{
+  const comp = readFileSync(join(root, "src/components/GoogleWalkMap.jsx"), "utf8");
+  ok("every arrival bursts in gold stars, a flash and a ring of light from the pin", /\{!card\.out && <Burst key=\{`burst\$\{card\.stop\}`\} \/>\}/.test(comp) && /animation: "gxFlash 520ms/.test(comp) && /animation: "gxRing 800ms/.test(comp) && M.SPARKS.length === 22);
+  ok("the stars fly out in every direction, the same way every time", M.SPARKS.some(p => p.dx > 0 && p.dy > 0) && M.SPARKS.some(p => p.dx < 0 && p.dy < 0) && JSON.stringify(M.SPARKS) === JSON.stringify(M.SPARKS));
+  ok("the card blurs into focus, a light sweeps across it, it glows and a star twinkles", /gxCardIn 560ms cubic-bezier\(\.2,\.9,\.3,1\) both, gxGlow 1800ms 560ms ease-in-out infinite/.test(comp) && /animation: "gxShimmer 950ms 300ms ease-out both"/.test(comp) && /animation: "gxTwinkle 1400ms ease-in-out infinite"/.test(comp) && /@keyframes gxCardIn \{ 0% \{ opacity: 0; filter: blur\(10px\)/.test(comp));
+  ok("and fades out before the next leg", /card\.out \? "gxCardOut 300ms ease-in both"/.test(comp) && /setCard\(c => \(c && !c\.out \? \{ \.\.\.c, out: true \} : c\)\);/.test(comp));
+  ok("the flight opens out of a dark curtain with a burst, and lands with the biggest", /animation: "gxCurtain 900ms ease-out both"/.test(comp) && /<Burst top="50%" size=\{1\.6\} \/>/.test(comp) && /<Burst key="burst-end" top="45%" size=\{2\} \/>/.test(comp));
+  const shown = comp.replace(/\/\/ ── .*$/gm, "");
+  ok("no dashes and none of his banned words", !/[—–]/.test(shown) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(shown));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
