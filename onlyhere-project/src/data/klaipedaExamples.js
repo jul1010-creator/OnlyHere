@@ -21,7 +21,7 @@
 // hour, a price for a thing they already do, a service a visitor needs. No
 // percentage off everything.
 
-import { NOW_STARTS, SHIP_MARGIN, MUST_SEE, STROLL, STORM_WIND, nowCandidates, tidyWalk, windowsFor, withMustSee, nextOpen, reversedWalk, placesOf, strollCandidates, weatherRules } from "../utils/nowPlanner";
+import { NOW_STARTS, SHIP_MARGIN, MUST_SEE, STROLL, STORM_WIND, nowCandidates, tidyWalk, windowsFor, withMustSee, nextOpen, reversedWalk, placesOf, styleCandidates, weatherRules } from "../utils/nowPlanner";
 import { fingerprint, proseOf } from "../utils/entryTranslate";
 import { ferryWait } from "../utils/walkable";
 
@@ -456,7 +456,7 @@ export const runExample = (ex) => {
   const now = new Date(`${ex.at}:00+03:00`);
   const all = nowCandidates(exampleRows(), { country: "LT", zone: "Europe/Vilnius", now });
   const style = ex.style || "";
-  const candidates = style ? strollCandidates(all, "LT") : all;
+  const candidates = styleCandidates(all, style, "LT");
   const weather = ex.weather || { wet: !!ex.wet, snow: false, wind: 0 };
   const budget = ex.hours * 60;
   const margin = start.ship ? SHIP_MARGIN : 0;
