@@ -417,6 +417,9 @@ writeFileSync(entry, `
   export { walkWeatherFrom } from ${JSON.stringify(join(root, "src/utils/walkWeather.js"))};
   export { walkLegs, bearingOf, kmBetween as mapKm, glideAt, GLIDE_MS, FOCUS, SPARKS } from ${JSON.stringify(join(root, "src/components/GoogleWalkMap.jsx"))};
   export { guideTo, compassOf, distanceWords as walkDistanceWords, ARRIVE_M, COMPASS } from ${JSON.stringify(join(root, "src/components/WalkMode.jsx"))};
+  export * as CR from ${JSON.stringify(join(root, "src/utils/cruiseDays.js"))};
+  export * as CRD from ${JSON.stringify(join(root, "src/data/klaipedaCruises.js"))};
+  export { trailWalk } from ${JSON.stringify(join(root, "src/data/klaipedaSculptures.js"))};
   export { fromRoutes, durationWords, distanceWords as routeDistanceWords } from ${JSON.stringify(join(root, "api/directions.js"))};
   export { DANISH_MARKERS, LITHUANIAN_MARKERS, looksLocalPage, danishWordsIn, looksUntranslated, looksDanishPage, hasEnglishVersion, languageBarrier } from ${JSON.stringify(join(root, "src/utils/languageBarrier.js"))};
   export { readerLanguage, languageName, answerInLanguage, languageBlock, nativeBlock } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
@@ -81919,6 +81922,38 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("in four languages, no dashes, none of his banned words", keys.every(k => ["en", "da", "de", "lt"].every(l => M.UI_STRINGS[k]?.[l])) && !/[—–]/.test(words) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(words));
   const shown = (comp + wm).replace(/\/\/ ── .*$/gm, "");
   ok("and none in the code's own text", !/[—–]/.test(shown) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(shown.replace(/"It's a lame flying[^\n]*/g, "")));
+}
+
+// ── Batch 211: the ships coming in, and the sculpture trail on GPS ──
+// Oliver, 5 Oct 2026: "Can the AI track 'expected visitors' in klaipda?",
+// "Sure" to the cruise ships first, and "Is it possible to install a GPS
+// route through sculptures?"
+{
+  const CR = M.CR, CRD = M.CRD;
+  ok("the port's 2026 season, 58 calls, every ship with its guests and a source", CRD.CRUISE_CALLS.length === 58 && CRD.CRUISE_CALLS.every(c => CRD.SHIPS[c.ship]?.guests > 0 && /^https:\/\//.test(CRD.SHIPS[c.ship].source)) && /portofklaipeda\.lt/.test(CRD.CRUISE_SOURCE));
+  ok("every call reads as a day, an arrival and a departure", CRD.CRUISE_CALLS.every(c => /^2026-\d{2}-\d{2} \d{2}:\d{2}$/.test(c.arrive) && /^2026-\d{2}-\d{2} \d{2}:\d{2}$/.test(c.leave) && c.leave > c.arrive));
+  // 6 Oct 2026, 12:00 in Klaipėda is 09:00 UTC.
+  const noon = new Date("2026-10-06T09:00:00Z");
+  const inPort = CR.inPortNow(noon);
+  ok("on 6 October at noon the Norwegian Sun is in, sailing at 18:00", inPort.length === 1 && inPort[0].ship === "Norwegian Sun" && inPort[0].leaves === "18:00" && inPort[0].guests === 1936);
+  ok("and before it arrives or after it sails, nobody is", CR.inPortNow(new Date("2026-10-06T06:00:00Z")).length === 0 && CR.inPortNow(new Date("2026-10-06T15:30:00Z")).length === 0);
+  is("walks that end before it sails", CR.hoursBeforeSailing([2, 3, 4, 6], 12 * 60, 18 * 60), [2, 3, 4, 6]);
+  is("and at three in the afternoon, only the short ones", CR.hoursBeforeSailing([2, 3, 4, 6], 15 * 60, 18 * 60), [2, 3]);
+  const ahead = CR.cruiseDaysAhead(new Date("2026-10-05T10:00:00Z"), 4);
+  ok("the days ahead, soonest first, with about how many guests", ahead.length === 2 && ahead[0].day === "2026-10-06" && ahead[1].day === "2026-10-14" && ahead[1].guests === 1000 && CR.aboutGuests(1936) === "1,900");
+  ok("after the last call of the season there is nothing to show", CR.cruiseDaysAhead(new Date("2026-11-01T10:00:00Z")).length === 0);
+  const np = readFileSync(join(root, "src/components/NowPlanner.jsx"), "utf8");
+  ok("from the ship, walk lengths past sailing are greyed out and the ship is named", /const ships = from === "terminal" && country === "LT" \? inPortNow\(new Date\(\)\) : \[\];/.test(np) && /const off = !!sailing && !sailing\.fit\.includes\(h\);/.test(np) && /data-testid="now-sailing"/.test(np) && /disabled=\{state\.busy \|\| noTime\}/.test(np));
+  ok("the ships are on the QR walk page and in the Lithuanian Studio", /<CruiseDays lang=\{lang\} \/>/.test(readFileSync(join(root, "src/pages/KlaipedaDemo.jsx"), "utf8")) && /\{studioCountry === "LT" && <CruiseDays lang="en" count=\{6\} compact \/>\}/.test(readFileSync(join(root, "src/App.jsx"), "utf8")));
+  // The sculpture trail.
+  const trail = { stops: [{ id: "kiss", name: "A Kiss", lat: 55.70617, lon: 21.12306, arrive: 0 }, { id: "ghost", name: "The Black Ghost", lat: 55.7066, lon: 21.12682, arrive: 9, line: "A dark figure." }], used: 13 };
+  const rw = M.trailWalk(trail);
+  ok("a sculpture trail becomes a walk: the scanned one is the start, the rest are stops", rw.start.name === "A Kiss" && rw.stops.length === 1 && rw.stops[0].why === "A dark figure." && rw.stops[0].stay === 4 && M.trailWalk({ stops: [trail.stops[0]] }) === null);
+  const sp = readFileSync(join(root, "src/pages/KlaipedaSculptures.jsx"), "utf8"), wm = readFileSync(join(root, "src/components/WalkMode.jsx"), "utf8"), gm = readFileSync(join(root, "src/components/GoogleWalkMap.jsx"), "utf8");
+  ok("on the map, and walked with GPS, ending at the last sculpture with no way back", /<GoogleWalkMap walk=\{route\} loop=\{false\}/.test(sp) && /<WalkMode walk=\{route\}[^>]*loop=\{false\}/.test(sp) && /const legs = loop \? walkLegs\(walk\) : walkLegs\(walk\)\.slice\(0, -1\);/.test(gm) && /!loop && idx \+ 1 >= stops\.length \?/.test(wm));
+  const keys = ["now.sails", "ships.title", "ships.guests", "ships.today", "ships.source"];
+  const words = keys.map(k => ["en", "da", "de", "lt"].map(l => M.UI_STRINGS[k]?.[l] || "").join(" ")).join(" ");
+  ok("in four languages, no dashes, none of his banned words", keys.every(k => ["en", "da", "de", "lt"].every(l => M.UI_STRINGS[k]?.[l])) && !/[—–]/.test(words) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(words));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
