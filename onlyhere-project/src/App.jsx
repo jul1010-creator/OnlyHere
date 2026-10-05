@@ -86,6 +86,7 @@ import { KlaipedaSculptures } from "./pages/KlaipedaSculptures";
 import { COUNTRY_PROFILES, DEFAULT_COUNTRY, countryProfile, setWorkingCountry, countryParam, rowCountry, activeCountry, homePath, plainTownName } from "./utils/countries";
 import { KLAIPEDA_DEMO_PATH } from "./data/klaipedaDemo";
 import { KLAIPEDA_EXAMPLES_PATH, examplePromotionPools } from "./data/klaipedaExamples";
+import { CruiseDays } from "./components/CruiseDays";
 import { KLAIPEDA_SCULPTURES_PATH } from "./data/klaipedaSculptures";
 import { translateEntry, needsTranslation, fingerprint, proseOf } from "./utils/entryTranslate";
 import { TripLibraryPage } from "./components/TripLibraryPage";
@@ -26534,6 +26535,8 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         ))}
                       </div>
                     )}
+                    {/* Cruise days for partner talks (5 Oct 2026, utils/cruiseDays.js). */}
+                    {studioCountry === "LT" && <CruiseDays lang="en" count={6} compact />}
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
                       {[["town", "🏘 Town"], ["island", "⛴ Island"], ["festival", "🎪 Events"], ["free", "🎟 Attractions"], ["food", "🍽 Food"], ["foodStreet", "🍜 Food Street"], ["night", "🍺 Nightlife"], ["nightStreet", "🍻 Bar street"], ["nightTown", "🌃 Nightlife (Town)"], ["shop", "🛍 Shop"], ["shopPlace", "🏬 Shopping street"], ["booking", "🔨 Workshop"], ["essential", "🧭 Essential"]].filter(([k]) => !PAGE_ABROAD || (k !== "island" && k !== "booking")).map(([k, label]) => (
                         <button key={k} onClick={() => { setStudioType(k); setStudioResult(null); setStudioError(null); }}
