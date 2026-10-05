@@ -94,7 +94,9 @@ const ROUTES_FIELDS = [
 export const TURN_LANGS = ["en", "da", "de", "lt"];
 export const turnsFrom = (raw = []) => raw.map(s => {
   const n = s?.navigationInstruction || {};
-  const text = String(n.instructions || "").replace(/\s+/g, " ").trim();
+  // Google puts a second line ("Destination will be on the left") after a
+  // line break; it is read as a second sentence.
+  const text = String(n.instructions || "").replace(/\s*\n\s*/g, ". ").replace(/\s+/g, " ").replace(/\.\s*\./g, ".").trim();
   return text ? { text: text.slice(0, 200), maneuver: String(n.maneuver || "").toUpperCase().slice(0, 40), meters: Math.round(Number(s.distanceMeters) || 0) } : null;
 }).filter(Boolean).slice(0, 60);
 // The older Directions answer writes its steps in HTML and its turns in
