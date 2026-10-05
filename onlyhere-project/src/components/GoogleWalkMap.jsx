@@ -1,4 +1,8 @@
-// ── A WALK ON GOOGLE'S MAP, TURNING ONCE ───────────────────────────
+// ── A WALK ON GOOGLE'S MAP, FLOWN ONCE ─────────────────────────────
+//
+// The turn below became the fly-along on 5 Oct 2026 (see THE FLY-ALONG); what
+// it kept from the turn is the clock timing, the stop on a touch and the
+// stillness for reduced motion.
 //
 // Oliver, 4 Oct 2026, sending a camera loop Google's AI had given him:
 //
@@ -22,9 +26,17 @@ import { useEffect, useRef, useState } from "react";
 import { C } from "../utils/theme";
 import { GOOGLE_MAP_ID, googleMapsReady, loadGoogleMaps } from "../utils/googleMapsLoader";
 
-// One full turn, and the tilt it is seen at.
-export const SPIN_MS = 36000;
-export const SPIN_TILT = 45;
+// ── THE FLY-ALONG ───────────────────────────────────────────────────
+// Oliver, 5 Oct 2026, asking whether the map before a walk could be 3D, then,
+// with Google's photorealistic 3D not covering Klaipėda, choosing this: the
+// camera tilts down over the town's buildings, flies from the start to each
+// stop in walking order, facing the way the walk goes, and then lies flat with
+// the whole walk in view. It replaces the one slow turn of 4 Oct. A touch ends
+// it at once, flat with the walk in view, and it never moves for a phone set
+// to reduce motion. "Fly the walk" plays it again.
+export const FLY_TILT = 55;
+export const FLY_LEG_MS = 2200;
+export const FLY_HOLD_MS = 500;
 
 // The legs of a walk, start to start: [from, to] pairs of { lat, lon }.
 export const walkLegs = (walk) => {
@@ -37,9 +49,51 @@ export const walkLegs = (walk) => {
   return legs;
 };
 
-// Where the camera points after `ms` of turning, or null once it has gone
-// round once.
-export const headingAt = (ms) => (ms >= SPIN_MS ? null : (Math.max(0, ms) / SPIN_MS) * 360);
+// The points the camera flies through: the start, then each stop in order.
+const okPoint = (p) => p && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lon));
+export const flightPoints = (walk) => {
+  const stops = Array.isArray(walk?.stops) ? walk.stops.filter(okPoint) : [];
+  return okPoint(walk?.start) && stops.length ? [walk.start, ...stops].map(p => ({ lat: Number(p.lat), lon: Number(p.lon) })) : [];
+};
+export const flightMs = (pts) => (pts.length < 2 ? 0 : (pts.length - 1) * (FLY_LEG_MS + FLY_HOLD_MS));
+
+// Compass bearing from a to b, 0 to 360, north 0.
+export const bearingOf = (a, b) => {
+  const r = Math.PI / 180;
+  const y = Math.sin((b.lon - a.lon) * r) * Math.cos(b.lat * r);
+  const x = Math.cos(a.lat * r) * Math.sin(b.lat * r) - Math.sin(a.lat * r) * Math.cos(b.lat * r) * Math.cos((b.lon - a.lon) * r);
+  return ((Math.atan2(y, x) / r) + 360) % 360;
+};
+const kmBetween = (a, b) => {
+  const r = Math.PI / 180, dLat = (b.lat - a.lat) * r, dLon = (b.lon - a.lon) * r;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLon / 2) ** 2;
+  return 12742 * Math.asin(Math.sqrt(h));
+};
+// Close enough to see the buildings as buildings, far enough out that the
+// longest leg does not race past.
+export const flightZoom = (pts) => {
+  let far = 0;
+  for (let i = 0; i < pts.length - 1; i++) far = Math.max(far, kmBetween(pts[i], pts[i + 1]));
+  return far < 0.6 ? 17 : far < 1.5 ? 16.5 : far < 3 ? 16 : 15;
+};
+const ease = (t) => (t < 0.5 ? 2 * t * t : 1 - ((-2 * t + 2) ** 2) / 2);
+// Turning the short way round, so 350 to 10 is twenty degrees, not 340.
+const turn = (from, to, t) => (((from + ((((to - from) % 360) + 540) % 360 - 180) * t) % 360) + 360) % 360;
+
+// Where the camera is `ms` into the flight, or null once it has landed. Each
+// leg glides from one point to the next and holds there a moment; the
+// heading swings to face the new leg in its first third.
+export const cameraAt = (pts, ms) => {
+  if (pts.length < 2 || ms >= flightMs(pts)) return null;
+  const per = FLY_LEG_MS + FLY_HOLD_MS;
+  const at = Math.max(0, ms);
+  const i = Math.min(pts.length - 2, Math.floor(at / per));
+  const t = Math.min(1, (at - i * per) / FLY_LEG_MS);
+  const a = pts[i], b = pts[i + 1], e = ease(t);
+  const now = bearingOf(a, b);
+  const before = i === 0 ? now : bearingOf(pts[i - 1], a);
+  return { lat: a.lat + (b.lat - a.lat) * e, lng: a.lon + (b.lon - a.lon) * e, heading: turn(before, now, Math.min(1, t / 0.35)) };
+};
 
 // A walking line is the same whichever walk asks for it, so it is asked once.
 const legCache = new Map();
@@ -84,11 +138,14 @@ export const GoogleWalkMap = ({ walk, height = 340 }) => {
   // making a new one each time a visitor picks another walk would bill each
   // pick. A new walk clears the pins and lines and draws its own on this map.
   const mapRef = useRef(null);
-  // It turns once per page, on the first walk shown, and not again when the
-  // visitor picks another: by then they are reading, not watching.
+  // It flies once per page, on the first walk shown, and not again by itself
+  // when the visitor picks another: by then they are reading, not watching.
+  // "Fly the walk" plays it whenever they ask.
   const turned = useRef(false);
   const moved = useRef(false);
+  const flyRef = useRef(null);
   const [failed, setFailed] = useState(false);
+  const [canFly, setCanFly] = useState(false);
 
   // A touch anywhere on the map, before or during the turn, ends it for good.
   useEffect(() => {
@@ -139,25 +196,35 @@ export const GoogleWalkMap = ({ walk, height = 340 }) => {
         // had come back from api/directions. By then the map had usually
         // already gone idle, the event never came again, and it neither tilted
         // nor turned. The listener goes on before anything slow is asked.
+        const pts = flightPoints(walk);
+        const zoom = flightZoom(pts);
+        // Flat, north up, the whole walk in view: where every flight ends.
+        const settle = () => { map.moveCamera({ heading: 0, tilt: 0 }); map.fitBounds(bounds, PAD); };
+        const flyNow = () => {
+          if (gone || pts.length < 2 || reducedMotion()) return;
+          if (raf) cancelAnimationFrame(raf);
+          moved.current = false;
+          const first = cameraAt(pts, 0);
+          map.moveCamera({ center: { lat: first.lat, lng: first.lng }, zoom, tilt: FLY_TILT, heading: first.heading });
+          const t0 = performance.now();
+          const fly = (now) => {
+            if (gone) return;
+            // Touched: the flight ends at once, with the walk in view.
+            if (moved.current) { raf = 0; settle(); return; }
+            const cam = cameraAt(pts, now - t0);
+            if (!cam) { raf = 0; settle(); return; }
+            map.moveCamera({ center: { lat: cam.lat, lng: cam.lng }, zoom, tilt: FLY_TILT, heading: cam.heading });
+            raf = requestAnimationFrame(fly);
+          };
+          raf = requestAnimationFrame(fly);
+        };
+        flyRef.current = flyNow;
+        setCanFly(pts.length >= 2 && !reducedMotion());
         idle = maps.event.addListenerOnce(map, "idle", () => {
           if (gone) return;
-          // Flat unless it is turning: a tilted map pushes the start off the
-          // bottom and hides how the walk runs.
           if (turned.current || moved.current || reducedMotion()) return;
           turned.current = true;
-          map.moveCamera({ tilt: SPIN_TILT, heading: 0 });
-          const t0 = performance.now();
-          const turn = (now) => {
-            if (gone) return;
-            // Touched: flat and north up, where the visitor's finger left it.
-            if (moved.current) { raf = 0; map.moveCamera({ heading: 0, tilt: 0 }); return; }
-            const heading = headingAt(now - t0);
-            // Round once: flat again, with the whole walk in view.
-            if (heading === null) { raf = 0; map.moveCamera({ heading: 0, tilt: 0 }); map.fitBounds(bounds, PAD); return; }
-            map.moveCamera({ heading });
-            raf = requestAnimationFrame(turn);
-          };
-          raf = requestAnimationFrame(turn);
+          flyNow();
         });
         map.moveCamera({ heading: 0, tilt: 0 });
         map.fitBounds(bounds, PAD);
@@ -210,13 +277,21 @@ export const GoogleWalkMap = ({ walk, height = 340 }) => {
 
   if (!googleMapsReady() || failed || !walkLegs(walk).length) return null;
   return (
-    <div
-      ref={box}
-      data-testid="google-walk-map"
-      role="region"
-      aria-label="Map of this walk"
-      style={{ height, borderRadius: 14, overflow: "hidden", border: `1px solid ${C.border}`, margin: "12px 0 4px", background: C.surface }}
-    />
+    <div style={{ position: "relative", margin: "12px 0 4px" }}>
+      <div
+        ref={box}
+        data-testid="google-walk-map"
+        role="region"
+        aria-label="Map of this walk"
+        style={{ height, borderRadius: 14, overflow: "hidden", border: `1px solid ${C.border}`, background: C.surface }}
+      />
+      {canFly && (
+        <button onClick={() => flyRef.current?.()} data-testid="fly-walk"
+          style={{ position: "absolute", left: 10, bottom: 30, background: C.gold, color: C.onGold, border: "none", borderRadius: 100, padding: "7px 13px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", boxShadow: "0 2px 8px rgba(0,0,0,0.35)" }}>
+          ▶ Fly the walk
+        </button>
+      )}
+    </div>
   );
 };
 
