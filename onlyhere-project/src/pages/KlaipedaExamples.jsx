@@ -8,7 +8,7 @@
 // live rules rather than written as text, is in data/klaipedaExamples.js.
 // Same shell as KlaipedaDemo: one column, the theme's colours, Fraunces for
 // names. Linked from nowhere and kept out of search, like that page.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { C } from "../utils/theme";
 import { GemlyxLogo } from "../components/GemlyxLogo";
 import { EditableWalk } from "../components/NowPlanner";
@@ -77,6 +77,12 @@ export const KlaipedaExamples = () => {
   // The page a listing opens, in the window. See EXAMPLE_PAGES.
   const [open, setOpen] = useState(null);
   const openPage = (id) => { const p = pageFor(id); if (p) setOpen({ id, ...p }); };
+  // Show on map (5 Oct 2026): the stop the map glides to, and the walk as
+  // the reader has changed it, so the map and the list agree.
+  const [mapFocus, setMapFocus] = useState(null);
+  const [mapWalk, setMapWalk] = useState(null);
+  const mapBox = useRef(null);
+  const cardOf = (st) => { const pg = pageFor(st.id); return pg ? { emoji: pg.item.emoji, photo: pg.item.photo } : null; };
 
   useEffect(() => {
     const prevTitle = document.title;
@@ -157,9 +163,12 @@ export const KlaipedaExamples = () => {
             </div>
           )}
           {/* Google's own map, turning once. Left out until its key is set. */}
-          <GoogleWalkMap walk={shownWalk} madeAt={run.startClock.minutes}
-            cardFor={(st) => { const pg = pageFor(st.id); return pg ? { emoji: pg.item.emoji, photo: pg.item.photo } : null; }} />
-          <EditableWalk walk={shownWalk} madeAt={run.startClock.minutes} lang="en" country="LT" tag={(s) => isExamplePartner(s.id) ? "Example" : null} onOpen={(s) => openPage(s.id)} />
+          <div ref={mapBox}>
+            <GoogleWalkMap walk={mapWalk || shownWalk} madeAt={run.startClock.minutes} cardFor={cardOf} focus={mapFocus} />
+          </div>
+          <EditableWalk walk={shownWalk} madeAt={run.startClock.minutes} lang="en" country="LT" tag={(s) => isExamplePartner(s.id) ? "Example" : null} onOpen={(s) => openPage(s.id)}
+            cardFor={cardOf} onWalk={setMapWalk}
+            onShow={(s) => { setMapFocus({ id: s.id, n: Date.now() }); try { mapBox.current?.scrollIntoView({ behavior: "smooth", block: "center" }); } catch { /* old browser */ } }} />
           {run.left.length > 0 && (
             <div data-testid="example-left" style={{ borderTop: `1px solid ${C.border}`, marginTop: 14, paddingTop: 12 }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 6 }}>Left out of this walk</div>
