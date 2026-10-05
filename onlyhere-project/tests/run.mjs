@@ -415,7 +415,8 @@ writeFileSync(entry, `
   export { headingSkeleton, skeletonKey, openingKey, spreadBy, skeletonSpread, openingSpread, describeSameness, samenessReport } from ${JSON.stringify(join(root, "src/utils/sameness.js"))};
   export { moneyTraceable, COMPRESSION_GLANCE, glanceShapeProblem, EXTRACTABLE_GLANCE, EDITORIAL_GLANCE, NEVER_EXTRACT, CLOSED_OR_DERIVED, glanceFieldsFor, numbersTraceable, freeClaimTraceable, saysFreeOnly, statesAnAmount, GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, describeGlance, staleUncertainties, describeStale } from ${JSON.stringify(join(root, "src/utils/glanceExtract.js"))};
   export { walkWeatherFrom } from ${JSON.stringify(join(root, "src/utils/walkWeather.js"))};
-  export { walkLegs, flightPoints, flightMs, flightPhase, cameraAt, bearingOf, flightZoom, FLY_LEG_MS, FLY_HOLD_MS, SPARKS } from ${JSON.stringify(join(root, "src/components/GoogleWalkMap.jsx"))};
+  export { walkLegs, bearingOf, kmBetween as mapKm, glideAt, GLIDE_MS, FOCUS, SPARKS } from ${JSON.stringify(join(root, "src/components/GoogleWalkMap.jsx"))};
+  export { guideTo, compassOf, distanceWords as walkDistanceWords, ARRIVE_M, COMPASS } from ${JSON.stringify(join(root, "src/components/WalkMode.jsx"))};
   export { fromRoutes, durationWords, distanceWords as routeDistanceWords } from ${JSON.stringify(join(root, "api/directions.js"))};
   export { DANISH_MARKERS, LITHUANIAN_MARKERS, looksLocalPage, danishWordsIn, looksUntranslated, looksDanishPage, hasEnglishVersion, languageBarrier } from ${JSON.stringify(join(root, "src/utils/languageBarrier.js"))};
   export { readerLanguage, languageName, answerInLanguage, languageBlock, nativeBlock } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
@@ -81594,13 +81595,8 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const legs = M.walkLegs(walk);
   ok("the legs run start to start through every stop", legs.length === 3 && legs[0][0] === walk.start && legs[2][1] === walk.start);
   ok("and a walk with nothing to draw draws nothing", M.walkLegs({ start: walk.start, stops: [] }).length === 0 && M.walkLegs(null).length === 0);
-  // Batch 207: the turn became the fly-along, still timed by the clock.
-  ok("one flight, timed by the clock and not the frame", !!M.cameraAt(M.flightPoints(walk), 0) && M.cameraAt(M.flightPoints(walk), M.flightMs(M.flightPoints(walk))) === null);
-  ok("it stops when touched, and never starts after a touch", /\["pointerdown", "wheel", "touchstart", "keydown"\]/.test(comp) && /if \(turned\.current \|\| moved\.current \|\| reducedMotion\(\)\) return;/.test(comp) && /if \(moved\.current\) \{ raf = 0; show\("", null, -1\); settle\(\); return; \}/.test(comp));
-  // Found on the live page, 4 Oct 2026: the "idle" listener went on after the
-  // walking lines came back, by when the map had gone idle, so it never turned.
-  ok("the turn waits for the map, not for the walking lines",
-    comp.indexOf('maps.event.addListenerOnce(map, "idle"') > 0 && comp.indexOf('maps.event.addListenerOnce(map, "idle"') < comp.indexOf("await Promise.all(legs.map("));
+  // Batch 210: no flight by itself any more; a touch stops a glide.
+  ok("a touch on the map stops a glide where it is", /\["pointerdown", "wheel", "touchstart", "keydown"\]/.test(comp) && /if \(moved\.current\) \{ raf = 0; return; \}/.test(comp));
   ok("one map for the page, so picking another walk is not another billed map load",
     /if \(!mapRef\.current\) \{\s*mapRef\.current = new Map\(/.test(comp) && (comp.match(/new Map\(box\.current/g) || []).length === 1);
   ok("and does not move for anyone who asked for less motion", /prefers-reduced-motion: reduce/.test(comp));
@@ -81608,7 +81604,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("a leg Google could not measure is drawn faint, never confident", /strokeOpacity: measured \? 0\.9 : 0\.35/.test(comp) && /strokeOpacity: measured \? 0\.85 : 0\.35/.test(comp));
   ok("a separate browser key, never the server one", /import\.meta\.env\.VITE_GOOGLE_MAPS_BROWSER_KEY/.test(loader) && !/GOOGLE_MAPS_KEY\b/.test(loader.replace(/\/\/.*$/gm, "").replace(/VITE_GOOGLE_MAPS_BROWSER_KEY/g, "")) && !/process\.env/.test(loader));
   ok("without the key and a Map ID nothing loads", /if \(!googleMapsReady\(\)\) return Promise\.reject/.test(loader) && /if \(!googleMapsReady\(\) \|\| failed \|\| !walkLegs\(walk\)\.length\) return null;/.test(comp));
-  ok("the examples page shows it for the walk on screen", /<GoogleWalkMap walk=\{shownWalk\} madeAt=\{run\.startClock\.minutes\}/.test(pageG));
+  ok("the examples page shows it for the walk on screen", /<GoogleWalkMap walk=\{mapWalk \|\| shownWalk\} madeAt=\{run\.startClock\.minutes\}/.test(pageG));
   const vj = JSON.parse(readFileSync(join(root, "vercel.json"), "utf8"));
   const csp = vj.headers[0].headers.find(h => h.key === "Content-Security-Policy-Report-Only").value;
   ok("the browser policy allows Google's map scripts", /script-src[^;]*https:\/\/maps\.googleapis\.com/.test(csp) && /connect-src[^;]*https:\/\/maps\.googleapis\.com/.test(csp));
@@ -81648,8 +81644,9 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
     ["Panevėžio m. sav.", "Rokiškio r. sav.", "Šiaulių m. sav.", "Marijampolės sav.", "Biržų r. sav."].map(M.plainTownName),
     ["Panevėžys", "Rokiškis", "Šiauliai", "Marijampolė", "Biržai"]);
   ok("a quarter after a comma is not a town", /const looksLikeATown = !!afterComma && \(!!townPointFor\(afterComma\) \|\| /.test(app));
-  ok("the map's waiting listener is removed when the walk changes, and a stopped turn goes back to north",
-    /idle = maps\.event\.addListenerOnce\(map, "idle"/.test(comp) && /idle\?\.remove\(\)/.test(comp) && /moveCamera\(\{ heading: 0, tilt: 0 \}\); \} catch/.test(comp));
+  // Batch 210: no waiting listener any more; a new walk cancels a glide and
+  // the map's pins and lines are taken off.
+  ok("a new walk cancels any glide and clears the old pins and lines", /if \(raf\) cancelAnimationFrame\(raf\);\s*api\.current = null;\s*drawn\.forEach/.test(comp));
   ok("a failed walking line is asked again rather than kept faint", /if \(line\) legCache\.set\(key, line\);/.test(comp));
   ok("the Lithuanian Studio links the three Klaipėda pages",
     /\{studioCountry === "LT" && \(\s*<div data-testid="studio-klaipeda-pages"/.test(app) && /\[\[KLAIPEDA_EXAMPLES_PATH, "Examples"\], \[KLAIPEDA_DEMO_PATH, "QR walk"\], \[KLAIPEDA_SCULPTURES_PATH, "Sculptures"\]\]/.test(app));
@@ -81873,65 +81870,55 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const comp = readFileSync(join(root, "src/components/GoogleWalkMap.jsx"), "utf8");
   ok("every leg out says which way it runs, with an arrow on a white edge", /path: maps\.SymbolPath\.FORWARD_CLOSED_ARROW[^}]*\}, offset: "50%"/.test(comp) && /strokeColor: "#FFFFFF", strokeOpacity: 0\.9, strokeWeight: 8, zIndex: 2/.test(comp));
   ok("the way back is dashed, never drawn like the walk", /if \(i === last\) \{\s*drawn\.push\(new maps\.Polyline\(\{\s*map, path, strokeOpacity: 0, zIndex: 1,\s*icons: \[\{ icon: \{ path: "M 0,-1 0,1"/.test(comp) && /repeat: "14px"/.test(comp));
-  ok("the map lies flat with the whole walk in view, and after its flight", /map\.moveCamera\(\{ heading: 0, tilt: 0 \}\);\s*map\.fitBounds\(bounds, PAD\);/.test(comp) && /const settle = \(\) => \{ try \{ map\.setMapTypeId\("roadmap"\); \} catch \{ \/\* keep going \*\/ \} map\.moveCamera\(\{ heading: 0, tilt: 0 \}\); map\.fitBounds\(bounds, PAD\); \};/.test(comp) && /if \(!cam\) \{\s*raf = 0; settle\(\);/.test(comp));
-  ok("and only tilts while it flies", (comp.match(/tilt: FLY_TILT/g) || []).length === 2 && comp.indexOf("if (turned.current || moved.current || reducedMotion()) return;") < comp.indexOf("flyNow();\n"));
+  ok("the map opens flat, north up, on the plain map, over the whole walk", /map\.moveCamera\(\{ heading: 0, tilt: 0 \}\);\s*try \{ map\.setMapTypeId\("roadmap"\); \} catch \{ \/\* keep going \*\/ \}\s*map\.fitBounds\(bounds, PAD\);/.test(comp));
+  ok("and only tilts when a place is shown", (comp.match(/tilt: FOCUS|FOCUS = \{ zoom: 17\.5, tilt: 50 \}/g) || []).length >= 1 && !/addListenerOnce\(map, "idle"/.test(comp));
   ok("smaller pins, the start on top, Google's own places not clickable", (comp.match(/scale: PIN_SCALE/g) || []).length === 2 && /zIndex: 100 \}\)\);/.test(comp) && /clickableIcons: false/.test(comp));
   const shown = comp.replace(/\/\/ ── .*$/gm, "");
   ok("no dashes and none of his banned words", !/[—–]/.test(shown) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(shown));
 }
 
-// ── Batch 207: the fly-along ──
-// Oliver, 5 Oct 2026, with Google's photorealistic 3D not covering Klaipėda:
-// fly the walk on the map Gemlyx already has, tilted over the buildings.
-{
-  const comp = readFileSync(join(root, "src/components/GoogleWalkMap.jsx"), "utf8");
-  const walk = { start: { lat: 55.70526, lon: 21.12217 }, stops: [{ lat: 55.70660, lon: 21.12682 }, { lat: 55.70592, lon: 21.12891 }, { lat: 55.70780, lon: 21.13163 }] };
-  const pts = M.flightPoints(walk);
-  ok("the camera flies through the start and every stop, in order", pts.length === 4 && pts[0].lat === 55.70526 && pts[3].lon === 21.13163);
-  is("and takes a leg and a pause per stop", M.flightMs(pts), 3 * (M.FLY_LEG_MS + M.FLY_HOLD_MS));
-  const c0 = M.cameraAt(pts, 0), cEnd = M.cameraAt(pts, M.FLY_LEG_MS), cHold = M.cameraAt(pts, M.FLY_LEG_MS + M.FLY_HOLD_MS - 1);
-  ok("it starts at the start, reaches the first stop, and holds there", Math.abs(c0.lat - pts[0].lat) < 1e-9 && Math.abs(cEnd.lat - pts[1].lat) < 1e-9 && Math.abs(cHold.lng - pts[1].lon) < 1e-9);
-  ok("facing the way the walk goes", Math.abs(c0.heading - M.bearingOf(pts[0], pts[1])) < 1e-9 && Math.abs(M.bearingOf({ lat: 55, lon: 21 }, { lat: 56, lon: 21 })) < 1e-9 && Math.abs(M.bearingOf({ lat: 55, lon: 21 }, { lat: 55, lon: 22 }) - 90) < 1);
-  ok("and lands when the last stop is reached", M.cameraAt(pts, M.flightMs(pts)) === null && M.cameraAt([pts[0]], 0) === null);
-  ok("close in over the old town, further out when a leg is long", M.flightZoom(pts) === 17 && M.flightZoom([{ lat: 55.7053, lon: 21.1222 }, { lat: 55.7382, lon: 21.0834 }]) === 15);
-  ok("a touch ends it with the walk in view, and Fly the walk plays it again", /if \(moved\.current\) \{ raf = 0; show\("", null, -1\); settle\(\); return; \}/.test(comp) && /onClick=\{\(\) => flyRef\.current\?\.\(\)\}/.test(comp) && /moved\.current = false;/.test(comp));
-  ok("never for a phone set to reduce motion", /if \(gone \|\| pts\.length < 2 \|\| reducedMotion\(\)\) return;/.test(comp) && /setCanFly\(pts\.length >= 2 && !reducedMotion\(\)\)/.test(comp));
-  const shown = comp.replace(/\/\/ ── .*$/gm, "");
-  ok("no dashes and none of his banned words", !/[—–]/.test(shown) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(shown));
-}
 
-// ── Batch 208: something to see at every stop ──
-// Oliver, 5 Oct 2026: "It's a lame flying.. because it is pointless. If we do
-// flying, it has to be because of something cool to see.. or some 'bling
-// bling' popping up with the place."
+
+
+// ── Batch 210: Show on map, and walking it inside Gemlyx ──
+// Oliver, 5 Oct 2026: "Have a 'show on map'. So keep the overview at start,
+// but no flying. When someone clicks a place on the list, then the map flies
+// to it." And, of walking inside Gemlyx: "Yes, build it. But make it so it
+// works like google maps. Distance, which way to go, how long, etc."
 {
   const comp = readFileSync(join(root, "src/components/GoogleWalkMap.jsx"), "utf8");
-  const walk = { start: { lat: 55.70526, lon: 21.12217 }, stops: [{ lat: 55.70660, lon: 21.12682 }, { lat: 55.70592, lon: 21.12891 }] };
-  const pts = M.flightPoints(walk);
-  ok("on the way to a stop nothing shows, at the stop its card does", M.flightPhase(pts, 0).holding === false && M.flightPhase(pts, M.FLY_LEG_MS).holding === true && M.flightPhase(pts, M.FLY_LEG_MS).stop === 0 && M.flightPhase(pts, M.FLY_LEG_MS + M.FLY_HOLD_MS + M.FLY_LEG_MS).stop === 1 && M.flightPhase(pts, M.flightMs(pts)) === null);
-  ok("the stops are where it stays, not the legs", M.FLY_HOLD_MS > M.FLY_LEG_MS);
-  ok("the card has the place, the time, why, and the star or the offer", /data-testid="fly-card"/.test(comp) && /HHMM\(madeAt \+ Number\(st\.arrive\)\)/.test(comp) && /\{st\.why && /.test(comp) && /⭐ Can't Miss Out/.test(comp) && /\{st\.deal && /.test(comp));
-  ok("and the pin jumps while its card is up", /el\.style\.transform = j === i \? "scale\(1\.45\) translateY\(-4px\)" : ""/.test(comp));
-  ok("it flies over Google's satellite pictures and lands on the plain map", /try \{ map\.setMapTypeId\("satellite"\); \}/.test(comp) && /const settle = \(\) => \{ try \{ map\.setMapTypeId\("roadmap"\); \}/.test(comp));
-  ok("it ends over the whole walk, saying when you are back", /data-testid="fly-card-end"/.test(comp) && /raf = 0; settle\(\); show\("end", \{ end: true \}, -1\);/.test(comp));
+  const np = readFileSync(join(root, "src/components/NowPlanner.jsx"), "utf8");
+  const wm = readFileSync(join(root, "src/components/WalkMode.jsx"), "utf8");
   const pageG = readFileSync(join(root, "src/pages/KlaipedaExamples.jsx"), "utf8");
-  ok("the examples page gives each card its picture", /cardFor=\{\(st\) => \{ const pg = pageFor\(st\.id\); return pg \? \{ emoji: pg\.item\.emoji, photo: pg\.item\.photo \} : null; \}\}/.test(pageG));
-  const shown = comp.replace(/\/\/ ── .*$/gm, "");
-  ok("no dashes and none of his banned words", !/[—–]/.test(shown) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(shown.replace(/"It's a lame flying[^\n]*/g, "")));
-}
-
-// ── Batch 209: bling, Disney style ──
-// Oliver, 5 Oct 2026: "I like the flying. But can it fade in a little better?
-// Maybe with bling bling? Like disney type?"
-{
-  const comp = readFileSync(join(root, "src/components/GoogleWalkMap.jsx"), "utf8");
-  ok("every arrival bursts in gold stars, a flash and a ring of light from the pin", /\{!card\.out && <Burst key=\{`burst\$\{card\.stop\}`\} \/>\}/.test(comp) && /animation: "gxFlash 520ms/.test(comp) && /animation: "gxRing 800ms/.test(comp) && M.SPARKS.length === 22);
-  ok("the stars fly out in every direction, the same way every time", M.SPARKS.some(p => p.dx > 0 && p.dy > 0) && M.SPARKS.some(p => p.dx < 0 && p.dy < 0) && JSON.stringify(M.SPARKS) === JSON.stringify(M.SPARKS));
-  ok("the card blurs into focus, a light sweeps across it, it glows and a star twinkles", /gxCardIn 560ms cubic-bezier\(\.2,\.9,\.3,1\) both, gxGlow 1800ms 560ms ease-in-out infinite/.test(comp) && /animation: "gxShimmer 950ms 300ms ease-out both"/.test(comp) && /animation: "gxTwinkle 1400ms ease-in-out infinite"/.test(comp) && /@keyframes gxCardIn \{ 0% \{ opacity: 0; filter: blur\(10px\)/.test(comp));
-  ok("and fades out before the next leg", /card\.out \? "gxCardOut 300ms ease-in both"/.test(comp) && /setCard\(c => \(c && !c\.out \? \{ \.\.\.c, out: true \} : c\)\);/.test(comp));
-  ok("the flight opens out of a dark curtain with a burst, and lands with the biggest", /animation: "gxCurtain 900ms ease-out both"/.test(comp) && /<Burst top="50%" size=\{1\.6\} \/>/.test(comp) && /<Burst key="burst-end" top="45%" size=\{2\} \/>/.test(comp));
-  const shown = comp.replace(/\/\/ ── .*$/gm, "");
-  ok("no dashes and none of his banned words", !/[—–]/.test(shown) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(shown));
+  // The map.
+  const from = { lat: 55.70526, lon: 21.12217, zoom: 15, tilt: 0, heading: 350 };
+  const to = { lat: 55.71221, lon: 21.13416, zoom: 17.5, tilt: 50, heading: 10 };
+  const mid = M.glideAt(from, to, 0.5), end = M.glideAt(from, to, 1), start = M.glideAt(from, to, 0);
+  ok("a glide starts where the camera is and ends on the place", Math.abs(start.lat - from.lat) < 1e-9 && Math.abs(end.lat - to.lat) < 1e-9 && Math.abs(end.zoom - to.zoom) < 1e-9 && end.tilt === 50);
+  ok("it turns the short way round, through north", Math.abs(mid.heading) < 1e-6 || Math.abs(mid.heading - 360) < 1e-6);
+  ok("and on a long hop it lifts off in the middle to cross town", mid.zoom < (from.zoom + to.zoom) / 2 - 0.5 && M.glideAt({ ...from, lat: 55.70530 }, { ...to, lat: 55.70540, lon: 21.12230 }, 0.5).zoom > 16);
+  ok("the map no longer moves by itself", !/addListenerOnce\(map, "idle"/.test(comp) && !/fly-walk/.test(comp));
+  ok("Show on map glides there over the satellite pictures, and the place arrives with its sparkle and card", /const focusStop = \(i, n\) => \{/.test(comp) && /try \{ map\.setMapTypeId\("satellite"\); \}/.test(comp) && /const arrive = \(\) => \{ popPin\(i\); setCard\(\{ stop: i, n \}\); \};/.test(comp) && /<Burst key=\{`burst\$\{card\.n\}`\} \/>/.test(comp));
+  ok("and Whole walk goes back to the plain map over the walk", /data-testid="map-whole-walk"/.test(comp) && /const overview = \(\) => \{/.test(comp));
+  ok("every stop in the list has Show on map, and the examples page glides to it", /\{onShow && \(/.test(np) && /data-testid="now-show-on-map"/.test(np) && /onShow=\{\(s\) => \{ setMapFocus\(\{ id: s\.id, n: Date\.now\(\) \}\);/.test(pageG));
+  ok("and the map shows the walk as the reader has changed it", /useEffect\(\(\) => \{ if \(onWalk\) onWalk\(shown\); \}, \[shown\]\);/.test(np) && /onWalk=\{setMapWalk\}/.test(pageG));
+  // Walking it.
+  const here = { lat: 55.70526, lon: 21.12217 }, castle = { lat: 55.70592, lon: 21.12891 };
+  const gd = M.guideTo(here, castle);
+  ok("distance, time and direction to the next stop, timed the planner's way", gd.metres > 500 && gd.metres < 700 && gd.minutes === Math.round(gd.metres / 80) && M.compassOf(gd.bearing) === "e" && !gd.here);
+  ok("within a few metres you are there", M.guideTo(here, { lat: 55.70536, lon: 21.12217 }).here === true && M.ARRIVE_M === 35);
+  is("the eight ways to head", [0, 44, 90, 135, 180, 225, 270, 316, 359].map(M.compassOf), ["n", "ne", "e", "se", "s", "sw", "w", "nw", "n"]);
+  is("distances read the way a sign reads them", [M.walkDistanceWords(4), M.walkDistanceWords(447), M.walkDistanceWords(1260)], ["10 m", "450 m", "1.3 km"]);
+  ok("the walk opens full screen with its own map following you", /<GoogleWalkMap walk=\{walk\} height="100%" round=\{false\}[^>]*me=\{pos\} follow/.test(wm) && /navigator\.geolocation\.watchPosition\(/.test(wm) && /position: "fixed", inset: 0/.test(wm));
+  ok("the arrow turns with the phone where it has a compass, and asks iOS from the tap", /webkitCompassHeading/.test(wm) && /deviceorientationabsolute/.test(wm) && /onClick=\{\(\) => \{ askForCompass\(\); setWalking\(true\); \}\}/.test(np));
+  ok("arriving brings the stop up again with its sparkle, once", /if \(g\?\.here && !back && arrived\.current !== idx && target\)/.test(wm));
+  ok("street by street turns go to Google Maps, never re-made here", /travelmode=walking/.test(wm) && /3\.2\.3\(d\)/.test(wm) && !/walkLine|legLine/.test(wm));
+  ok("the position never leaves the phone", !/fetch\(/.test(wm));
+  const keys = ["now.showOnMap", "now.startWalk", "map.wholeWalk", "walk.title", "walk.stopOf", "walk.wayBack", "walk.start", "walk.end", "walk.here", "walk.minutes", "walk.head", ...M.COMPASS.map(d => `walk.dir.${d}`), "walk.finding", "walk.noGps", "walk.planned", "walk.noMap", "walk.streets", "walk.nextStop", "walk.headBack", "walk.finished"];
+  const words = keys.map(k => ["en", "da", "de", "lt"].map(l => M.UI_STRINGS[k]?.[l] || "").join(" ")).join(" ");
+  ok("in four languages, no dashes, none of his banned words", keys.every(k => ["en", "da", "de", "lt"].every(l => M.UI_STRINGS[k]?.[l])) && !/[—–]/.test(words) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(words));
+  const shown = (comp + wm).replace(/\/\/ ── .*$/gm, "");
+  ok("and none in the code's own text", !/[—–]/.test(shown) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(shown.replace(/"It's a lame flying[^\n]*/g, "")));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
