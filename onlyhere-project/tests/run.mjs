@@ -415,12 +415,12 @@ writeFileSync(entry, `
   export { headingSkeleton, skeletonKey, openingKey, spreadBy, skeletonSpread, openingSpread, describeSameness, samenessReport } from ${JSON.stringify(join(root, "src/utils/sameness.js"))};
   export { moneyTraceable, COMPRESSION_GLANCE, glanceShapeProblem, EXTRACTABLE_GLANCE, EDITORIAL_GLANCE, NEVER_EXTRACT, CLOSED_OR_DERIVED, glanceFieldsFor, numbersTraceable, freeClaimTraceable, saysFreeOnly, statesAnAmount, GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, describeGlance, staleUncertainties, describeStale } from ${JSON.stringify(join(root, "src/utils/glanceExtract.js"))};
   export { walkWeatherFrom } from ${JSON.stringify(join(root, "src/utils/walkWeather.js"))};
-  export { JOIN_ON_M, JOIN_MAX_M, CARD_WALKING_MS, walkLegs, bearingOf, kmBetween as mapKm, glideAt, GLIDE_MS, FOCUS, SPARKS } from ${JSON.stringify(join(root, "src/components/GoogleWalkMap.jsx"))};
+  export { turnSign, JOIN_ON_M, JOIN_MAX_M, CARD_WALKING_MS, walkLegs, bearingOf, kmBetween as mapKm, glideAt, GLIDE_MS, FOCUS, SPARKS } from ${JSON.stringify(join(root, "src/components/GoogleWalkMap.jsx"))};
   export { guideTo, compassOf, distanceWords as walkDistanceWords, ARRIVE_M, COMPASS } from ${JSON.stringify(join(root, "src/components/WalkMode.jsx"))};
   export * as CR from ${JSON.stringify(join(root, "src/utils/cruiseDays.js"))};
   export * as CRD from ${JSON.stringify(join(root, "src/data/klaipedaCruises.js"))};
   export { trailWalk } from ${JSON.stringify(join(root, "src/data/klaipedaSculptures.js"))};
-  export { fromRoutes, durationWords, distanceWords as routeDistanceWords } from ${JSON.stringify(join(root, "api/directions.js"))};
+  export { turnsFrom, turnsFromDirections, TURN_LANGS, fromRoutes, durationWords, distanceWords as routeDistanceWords } from ${JSON.stringify(join(root, "api/directions.js"))};
   export { DANISH_MARKERS, LITHUANIAN_MARKERS, looksLocalPage, danishWordsIn, looksUntranslated, looksDanishPage, hasEnglishVersion, languageBarrier } from ${JSON.stringify(join(root, "src/utils/languageBarrier.js"))};
   export { readerLanguage, languageName, answerInLanguage, languageBlock, nativeBlock } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
   export { keepLanguageOf } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
@@ -82088,6 +82088,30 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
 
 // ── Batch 216b: no zoom buttons under the strip while walking (pinch zooms) ──
 ok("walking, the map has no zoom buttons, and pinching still zooms", /zoomControl: !follow, gestureHandling: follow \? "greedy"/.test(readFileSync(join(root, "src/components/GoogleWalkMap.jsx"), "utf8")));
+
+// ── Batch 217: the turns, as a list ──
+// Oliver, 6 Oct 2026, choosing "Turn list only" of three ways to give
+// directions through town, after asking whether the terms meant being sued.
+{
+  const D = { turnsFrom: M.turnsFrom, turnsFromDirections: M.turnsFromDirections, TURN_LANGS: M.TURN_LANGS };
+  const routes = [
+    { travelMode: "WALK", distanceMeters: 120, navigationInstruction: { maneuver: "DEPART", instructions: "Head north on Danės g." } },
+    { travelMode: "WALK", distanceMeters: 80, navigationInstruction: { maneuver: "TURN_RIGHT", instructions: "Turn right onto Tiltų g." } },
+    { travelMode: "WALK", distanceMeters: 0, navigationInstruction: {} },
+  ];
+  is("Google's walking steps become a list of turns, with their distances", D.turnsFrom(routes), [{ text: "Head north on Danės g.", maneuver: "DEPART", meters: 120 }, { text: "Turn right onto Tiltų g.", maneuver: "TURN_RIGHT", meters: 80 }]);
+  is("and the older answer's HTML steps read the same way", D.turnsFromDirections([{ html_instructions: "Turn <b>left</b> onto <b>Tiltų g.</b><div style=\"font-size:0.9em\">Destination will be on the right</div>", maneuver: "turn-left", distance: { value: 64 } }]), [{ text: "Turn left onto Tiltų g.. Destination will be on the right".replace("..", "."), maneuver: "TURN_LEFT", meters: 64 }]);
+  is("each turn has its sign", ["TURN_LEFT", "TURN_SLIGHT_RIGHT", "TURN_SHARP_LEFT", "UTURN_RIGHT", "ROUNDABOUT_LEFT", "DEPART", ""].map(M.turnSign), ["←", "↗", "↙", "↶", "⟳", "↑", "↑"]);
+  ok("only the four walk languages are asked for, and only for a walk", D.TURN_LANGS.join() === "en,da,de,lt" && /const lang = mode === "walking" && TURN_LANGS\.includes/.test(readFileSync(join(root, "api/directions.js"), "utf8")));
+  const wm = readFileSync(join(root, "src/components/WalkMode.jsx"), "utf8"), gm = readFileSync(join(root, "src/components/GoogleWalkMap.jsx"), "utf8");
+  ok("the list opens from the map and from the full screen strip, and turns over with the leg", /data-testid="walk-turns-open"/.test(wm) && /data-testid="walk-full-turns"/.test(wm) && /if \(!turnsOpen \|\| turns\.idx === idx\) return undefined;/.test(wm) && /legTurns\(leg\[0\], leg\[1\], lang\)/.test(wm));
+  ok("it is asked for only when opened, once per leg and language", /if \(turnCache\.has\(key\)\) return turnCache\.get\(key\);/.test(gm) && /mode=walking&country=LT&lang=/.test(gm));
+  ok("nothing moves the list with the walker's position", !/\bpos\b|g\.here|heading/.test(wm.slice(wm.indexOf("{turnsOpen && ("), wm.indexOf("walk.turnsBy"))));
+  ok("and Google is named under it", /uiT\("walk\.turnsBy", lang\)/.test(wm));
+  const keys = ["walk.turns", "walk.wayTo", "walk.turnsLoading", "walk.turnsNone", "walk.turnsBy"];
+  const words = keys.map(k => ["en", "da", "de", "lt"].map(l => M.UI_STRINGS[k]?.[l] || "").join(" ")).join(" ");
+  ok("in four languages, no dashes, none of his banned words", keys.every(k => ["en", "da", "de", "lt"].every(l => M.UI_STRINGS[k]?.[l])) && !/[—–]/.test(words) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(words));
+}
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
 if (failed) { fails.forEach(f => console.log("  FAIL " + f + "\n")); process.exit(1); }
