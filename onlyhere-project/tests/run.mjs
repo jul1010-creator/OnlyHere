@@ -415,7 +415,7 @@ writeFileSync(entry, `
   export { headingSkeleton, skeletonKey, openingKey, spreadBy, skeletonSpread, openingSpread, describeSameness, samenessReport } from ${JSON.stringify(join(root, "src/utils/sameness.js"))};
   export { moneyTraceable, COMPRESSION_GLANCE, glanceShapeProblem, EXTRACTABLE_GLANCE, EDITORIAL_GLANCE, NEVER_EXTRACT, CLOSED_OR_DERIVED, glanceFieldsFor, numbersTraceable, freeClaimTraceable, saysFreeOnly, statesAnAmount, GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, describeGlance, staleUncertainties, describeStale } from ${JSON.stringify(join(root, "src/utils/glanceExtract.js"))};
   export { walkWeatherFrom } from ${JSON.stringify(join(root, "src/utils/walkWeather.js"))};
-  export { walkLegs, bearingOf, kmBetween as mapKm, glideAt, GLIDE_MS, FOCUS, SPARKS } from ${JSON.stringify(join(root, "src/components/GoogleWalkMap.jsx"))};
+  export { JOIN_ON_M, JOIN_MAX_M, walkLegs, bearingOf, kmBetween as mapKm, glideAt, GLIDE_MS, FOCUS, SPARKS } from ${JSON.stringify(join(root, "src/components/GoogleWalkMap.jsx"))};
   export { guideTo, compassOf, distanceWords as walkDistanceWords, ARRIVE_M, COMPASS } from ${JSON.stringify(join(root, "src/components/WalkMode.jsx"))};
   export * as CR from ${JSON.stringify(join(root, "src/utils/cruiseDays.js"))};
   export * as CRD from ${JSON.stringify(join(root, "src/data/klaipedaCruises.js"))};
@@ -81966,7 +81966,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("walking, the map turns the way you face, tilts, and looks ahead of the dot", /export const NAV = \{ zoom: 18, tilt: 55, ahead: 45 \};/.test(gm) && /center: h === null \? pos : ahead\(pos, h, NAV\.ahead\), zoom: NAV\.zoom, tilt: NAV\.tilt, heading: h === null/.test(gm));
   ok("the dot glides from fix to fix instead of jumping", /\/\/ Glide from the last fix to this one\./.test(gm) && /meMarker\.position = at2;/.test(gm) && /meRaf = t < 1 \? requestAnimationFrame\(step\) : 0;/.test(gm));
   ok("a beam shows which way the phone points, and a pale circle how sure the fix is", /<span data-beam/.test(gm) && /meBeam\.style\.display = meHeading === null \? "none" : "block";/.test(gm) && /meRing = new maps\.Circle\(\{ map, center: pos, radius: Number\(p\.accuracy\)/.test(gm));
-  ok("the leg being walked stands out, legs walked go grey, legs ahead are pale", /const styleLegs = \(active\) => \{/.test(gm) && /#9AA0A6/.test(gm) && /strokeWeight: now \? 7 : 4/.test(gm) && /useEffect\(\(\) => \{ activeLegRef\.current = activeLeg; api\.current\?\.styleLegs\(activeLeg\); \}, \[activeLeg\]\);/.test(gm));
+  ok("the leg being walked stands out, legs walked go grey, legs ahead are pale", /const styleLegs = \(active\) => \{/.test(gm) && /#9AA0A6/.test(gm) && /strokeWeight: now \? 7 : 4/.test(gm) && /useEffect\(\(\) => \{ activeLegRef\.current = activeLeg; api\.current\?\.styleLegs\(activeLeg\);/.test(gm));
   ok("touch the map to look around, and Re-centre puts it back", /if \(follow\) setAway\(true\);/.test(gm) && /const recenter = \(\) => \{ moved\.current = false; setAway\(false\);/.test(gm) && /data-testid="map-recenter"/.test(gm));
   ok("while walking, arriving at a stop pops it up without flying off", /if \(follow\) \{ popPin\(i\); setCard\(\{ stop: i, n \}\); return; \}/.test(gm) && /api\.current\.showMe\(me, follow, heading\)/.test(gm));
   ok("walk mode hands the map the compass, or the GPS course, and the leg", /heading=\{heading \?\? course\} activeLeg=\{idx\}/.test(wm) && /const h = p\.coords\.heading;/.test(wm));
@@ -82048,6 +82048,19 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("finding 15: with no hourly figures, the six hour ones say it is raining", M.walkWeatherFrom(ts(null, { summary: { symbol_code: "rain" }, details: { precipitation_amount: 3 } }, 4)).wet === true);
   ok("and with no figures at all, nothing is known, never dry and calm", M.walkWeatherFrom(ts(null, null, undefined)) === null);
   ok("and an ordinary forecast reads as before", M.walkWeatherFrom(ts({ summary: { symbol_code: "cloudy" }, details: { precipitation_amount: 0 } }, null, 6)).wet === false && M.walkWeatherFrom(ts({ summary: { symbol_code: "cloudy" }, details: { precipitation_amount: 0 } }, null, 6)).wind === 6);
+}
+
+// ── Batch 215: a line from where you stand to the way ──
+// Oliver, 5 Oct 2026: "Is it not possible to improve the map? Like make line
+// between the destination and current position"
+{
+  const gm = readFileSync(join(root, "src/components/GoogleWalkMap.jsx"), "utf8");
+  ok("walking, a blue dotted line joins the dot to the leg, or to the stop when far off", /joinUp = \(pos\) => \{/.test(gm) && /const to = near\.d <= JOIN_MAX_M \? near\.p : leg\.to;/.test(gm) && /fillColor: "#4285F4"/.test(gm) && M.JOIN_ON_M === 15 && M.JOIN_MAX_M === 250);
+  ok("what is behind you on the leg goes grey, and a new leg puts the old one back whole", /const behind = \[\.\.\.leg\.path\.slice\(0, near\.k \+ 1\), near\.p\]/.test(gm) && /joinedLeg\.line\.setPath\(joinedLeg\.path\)/.test(gm) && /api\.current\?\.joinUp\(\); \}, \[activeLeg\]\);/.test(gm));
+  ok("it joins on the first fix and at the end of each glide, never while just looking at the walk", /placeCamera\(pos\);\s*joinUp\(pos\);/.test(gm) && /if \(t >= 1\) joinUp\(at2\);/.test(gm) && /const leg = follow && active !== null/.test(gm));
+  ok("nothing is asked of Google as you walk", !/fetch\(|legLine\(|DirectionsService/.test(gm.slice(gm.indexOf("FROM WHERE YOU STAND TO THE WAY"), gm.indexOf("api.current = { focusStop"))));
+  const shown = gm.replace(/\/\/ ── .*$/gm, "");
+  ok("no dashes and none of his banned words", !/[—–]/.test(shown) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(shown.replace(/"It's a lame flying[^\n]*/g, "")));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
