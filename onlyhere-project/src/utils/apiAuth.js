@@ -14,6 +14,9 @@
 import { getSession } from "./auth";
 
 export const AI_PATHS = /^\/api\/(anthropic|openai|perplexity|search)(\?|$)/;
+// The paths the token is added to: the AI routes, and /api/places, which is
+// Studio's only since the security review of 5 Oct 2026 (finding 4).
+export const TOKEN_PATHS = /^\/api\/(anthropic|openai|perplexity|search|places)(\?|$)/;
 
 let studioRefresher = null;
 export const setStudioRefresher = (fn) => { studioRefresher = typeof fn === "function" ? fn : null; };
@@ -54,7 +57,7 @@ export const installApiAuth = () => {
   const plain = window.fetch.bind(window);
   window.fetch = async (input, init = {}) => {
     const path = sitePath(input, window.location.origin);
-    if (!path || !AI_PATHS.test(path) || hasAuth(init.headers) || (typeof input !== "string" && hasAuth(input?.headers))) {
+    if (!path || !TOKEN_PATHS.test(path) || hasAuth(init.headers) || (typeof input !== "string" && hasAuth(input?.headers))) {
       return plain(input, init);
     }
     const send = (token) => plain(input, {

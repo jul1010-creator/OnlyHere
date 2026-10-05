@@ -60,8 +60,11 @@ export const readLimits = (env = {}) => ({
   perVisitor: Math.max(1, wholeOr(env.GEMLYX_GUIDES_PER_VISITOR, ALLOWANCE_DEFAULTS.perVisitor)),
   perAccount: Math.max(1, wholeOr(env.GEMLYX_GUIDES_PER_ACCOUNT, ALLOWANCE_DEFAULTS.perAccount)),
   perIp: Math.max(1, wholeOr(env.GEMLYX_GUIDES_PER_IP, ALLOWANCE_DEFAULTS.perIp)),
-  // 0 is allowed here and only here: it is the off switch.
-  perDay: wholeOr(env.GEMLYX_GUIDES_PER_DAY, ALLOWANCE_DEFAULTS.perDay),
+  // 0 is allowed here and only here: it is the off switch. Unset is the
+  // default; set to anything that is not a whole number, it is off, not the
+  // default (security review, 5 Oct 2026, finding 12), the way the AI limits
+  // read since 4 Oct.
+  perDay: String(env.GEMLYX_GUIDES_PER_DAY ?? "").trim() === "" ? ALLOWANCE_DEFAULTS.perDay : wholeOr(env.GEMLYX_GUIDES_PER_DAY, 0),
   retries: wholeOr(env.GEMLYX_GUIDE_RETRIES, ALLOWANCE_DEFAULTS.retries),
   refunds: wholeOr(env.GEMLYX_GUIDE_REFUNDS, ALLOWANCE_DEFAULTS.refunds),
 });

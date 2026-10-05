@@ -68,7 +68,10 @@ export const AI_CEILINGS = {
 
 // Bytes of JSON a request may carry. A guide build's longest prompt (the
 // writer with the published inventory) is well under the member figure.
-export const BODY_LIMIT = { anon: 400_000, member: 1_000_000, founder: 4_000_000 };
+// 5 Oct 2026, security review finding 2: the member figure was 1 MB, which
+// let one call carry a very long and costly prompt. 500 KB still holds the
+// writer's longest prompt with room over.
+export const BODY_LIMIT = { anon: 400_000, member: 500_000, founder: 4_000_000 };
 
 // Calls per member per day, and for all members together. A whole guide build
 // is some tens of calls, and a member gets one guide a day.
@@ -95,6 +98,9 @@ export const readAiLimits = (env = {}) => ({
   // twice, so a visitor gets a few a day and all visitors together a ceiling.
   opusPerVisitor: limitOf(env.GEMLYX_AI_OPUS_PER_VISITOR, 6),
   anonOpusPerDay: limitOf(env.GEMLYX_AI_ANON_OPUS_PER_DAY, 150),
+  // A member had no Opus ceiling at all (security review, 5 Oct 2026, finding
+  // 2). 120 a day is above what a long guide's writer uses, retries included.
+  opusPerUser: limitOf(env.GEMLYX_AI_OPUS_PER_USER, 120),
 });
 export const AI_OFF = "Gemlyx's AI is switched off just now.";
 
@@ -149,7 +155,10 @@ const takeCalls = ({ day, userId = "", visitor = "", opus = false, limits, supab
       { key: visitor, limit: limits.perVisitor }, { key: "ai:anon", limit: limits.anonPerDay }, { key: "ai:site", limit: limits.perDay },
       ...(opus ? [{ key: `${visitor}:opus`, limit: limits.opusPerVisitor }, { key: "ai:anon:opus", limit: limits.anonOpusPerDay }] : []),
     ]
-    : [{ key: `ai:u:${userId.toLowerCase()}`, limit: limits.perUser }, { key: "ai:site", limit: limits.perDay }],
+    : [
+      { key: `ai:u:${userId.toLowerCase()}`, limit: limits.perUser }, { key: "ai:site", limit: limits.perDay },
+      ...(opus ? [{ key: `ai:u:${userId.toLowerCase()}:opus`, limit: limits.opusPerUser }] : []),
+    ],
 });
 // The model a visitor's Anthropic call will run on, after shapeAnthropic.
 const asksForOpus = (endpoint, body) => endpoint === "anthropic" && /opus/i.test(String(body?.model || "")) && AI_CEILINGS.anthropic.models.includes(body.model);
@@ -166,6 +175,9 @@ export const takeDaily = async ({ day, keys, supabaseUrl, serviceKey, fetchImpl 
       method: "POST",
       headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({ p_day: day, p_keys: keys.map(k => k.key), p_limits: keys.map(k => k.limit) }),
+      // A slow counter is a closed one, not a wait (security review, 5 Oct
+      // 2026, finding 8). Every caller already treats { closed } as a no.
+      signal: AbortSignal.timeout(3000),
     });
     if (!r.ok) return { closed: true };
     const answer = String((await r.json()) ?? "");
@@ -192,7 +204,7 @@ export const gateAi = async ({ headers, body, endpoint, env = {}, fetchImpl = fe
     if (who.confirmed) {
       if (limits.perUser === 0 || limits.perDay === 0) return { ok: false, status: 503, error: AI_OFF };
       if (!serviceKey) return { ok: false, status: 503, error: "This is not available just now." };
-      const got = await takeCalls({ day, userId: who.id, limits, supabaseUrl, serviceKey, fetchImpl });
+      const got = await takeCalls({ day, userId: who.id, opus: asksForOpus(endpoint, body), limits, supabaseUrl, serviceKey, fetchImpl });
       if (got.closed) return { ok: false, status: 503, error: "This is not available just now. Try again in a moment." };
       if (!got.ok) return { ok: false, status: 429, error: got.over === "ai:site" ? "Gemlyx has used its AI for today. Try again tomorrow." : "You have used today's allowance. It resets at midnight, Danish time." };
       return { ok: true, founder: false, anon: false, userId: who.id, endpoint };
@@ -213,9 +225,41 @@ export const gateAi = async ({ headers, body, endpoint, env = {}, fetchImpl = fe
 // Anthropic: an allowed model, a capped length, and only the app's own
 // (client-side) tools. A server tool, such as web search, has a `type` and is
 // billed per use, so it is taken off a member's request.
+// ── ONLY WHAT THE APP ITSELF SENDS ──────────────────────────────────
+// Security review, 5 Oct 2026, finding 2: everybody but the founder had the
+// request body copied on whole, so a caller could add a priority service
+// tier, cache writes, or PDF and image links that are billed per page, past
+// the size check. Now a member's or visitor's request keeps the fields the
+// app sends and the block types the chat sends back on each tool round
+// (thinking and redacted_thinking among them, or the chat breaks), at most
+// two images by address, and no cache_control anywhere.
+export const ANTHROPIC_FIELDS = ["model", "max_tokens", "messages", "system", "tools", "tool_choice", "temperature", "top_p", "top_k", "stop_sequences", "stream", "thinking"];
+const BLOCK_TYPES = new Set(["text", "image", "tool_use", "tool_result", "thinking", "redacted_thinking"]);
+export const MAX_IMAGES = 2;
+const noCache = (b) => { if (!b || typeof b !== "object") return b; const { cache_control, ...rest } = b; return rest; };
+const cleanBlocks = (blocks, seen) => (Array.isArray(blocks) ? blocks : []).filter(b => b && BLOCK_TYPES.has(b.type)).filter(b => {
+  if (b.type !== "image") return true;
+  if (b.source?.type !== "url" || !/^https?:\/\//i.test(String(b.source?.url || ""))) return false;
+  seen.images += 1;
+  return seen.images <= MAX_IMAGES;
+}).map(b => {
+  const out = noCache(b);
+  if (out.type === "tool_result" && Array.isArray(out.content)) out.content = cleanBlocks(out.content, seen).filter(x => x.type === "text" || x.type === "image");
+  return out;
+});
+export const keepAnthropicFields = (body = {}) => {
+  const out = {};
+  for (const k of ANTHROPIC_FIELDS) if (body[k] !== undefined) out[k] = body[k];
+  const seen = { images: 0 };
+  if (Array.isArray(out.messages)) out.messages = out.messages.filter(m => m && (m.role === "user" || m.role === "assistant")).map(m => ({ role: m.role, content: typeof m.content === "string" ? m.content : cleanBlocks(m.content, seen) }));
+  if (Array.isArray(out.system)) out.system = out.system.filter(b => b && b.type === "text").map(noCache);
+  if (Array.isArray(out.tools)) out.tools = out.tools.map(noCache);
+  return out;
+};
+
 export const shapeAnthropic = (body = {}, { founder = false, anon = false } = {}) => {
   const c = AI_CEILINGS.anthropic;
-  const out = { ...body };
+  const out = founder ? { ...body } : keepAnthropicFields(body);
   if (!founder) {
     out.model = c.models.includes(out.model) ? out.model : c.defaultModel;
     if (Array.isArray(out.tools)) out.tools = out.tools.filter(t => t && !t.type).slice(0, 12);

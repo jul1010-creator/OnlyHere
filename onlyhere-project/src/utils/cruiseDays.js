@@ -58,3 +58,15 @@ export const aboutGuests = (n) => (n >= 100 ? (Math.round(n / 100) * 100).toLoca
 // so a length fits when it ends by the time the ship leaves.
 export const hoursBeforeSailing = (hoursList, nowMinutes, leavesMinutes) =>
   hoursList.filter(h => nowMinutes + h * 60 <= leavesMinutes);
+
+// A season in one line, for the business page: how many calls, how many
+// ships, and about how many guests on board across the year.
+export const seasonOf = (year, calls = CRUISE_CALLS) => {
+  const mine = calls.filter(c => String(c.arrive).startsWith(`${year}-`));
+  return {
+    year,
+    calls: mine.length,
+    ships: new Set(mine.map(c => c.ship)).size,
+    guests: mine.reduce((n, c) => n + (SHIPS[c.ship]?.guests || 0), 0),
+  };
+};
