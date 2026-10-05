@@ -6,7 +6,7 @@
 // longer be enabled for new setups — this uses the current one) and the same
 // GOOGLE_MAPS_KEY already used by directions.js.
 
-import { requestIsFromSite, NOT_FROM_SITE } from "../src/utils/apiGuard.js";
+import { requestIsFromSite, NOT_FROM_SITE, resolveUser, isFounder } from "../src/utils/apiGuard.js";
 import { gateMaps } from "../src/utils/mapsGate.js";
 
 export default async function handler(req, res) {
@@ -15,6 +15,22 @@ export default async function handler(req, res) {
   // what that meant in practice and why a login gate would break the product.
   if (!requestIsFromSite(req.headers)) {
     return res.status(403).json({ error: NOT_FROM_SITE });
+  }
+  // ── STUDIO ONLY ───────────────────────────────────────────────────
+  // Security review, 5 Oct 2026, finding 4: this is Google's dearer search
+  // (about six directions calls each) and it answered anybody from the site,
+  // with the caller choosing the types and a 20 km radius. Only Studio's
+  // drafts call it (utils/geo.js, from generateArea), so it is the founder's,
+  // like /api/places-hours. The token travels with it from utils/apiAuth.js.
+  {
+    const who = await resolveUser(req.headers, {
+      supabaseUrl: process.env.SUPABASE_URL || "https://vpxfahjnerkkkoueovhl.supabase.co",
+      serviceKey: process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY || "",
+    });
+    if (!who.ok) return res.status(who.status).json({ error: who.error });
+    if (!isFounder(who.userId, process.env.GEMLYX_FOUNDER_IDS)) {
+      return res.status(403).json({ error: "This account cannot run Studio research." });
+    }
   }
   const { lat, lon, type } = req.query;
   if (!lat || !lon) {

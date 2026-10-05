@@ -155,13 +155,16 @@ export default async function handler(req, res) {
     return json(res, 200, { slot: q.slot, country, from: start.id, hours, styles: stylesThatFit(all, ctx) }, "public, s-maxage=1800, stale-while-revalidate=120");
   }
 
-  let walk = null, made = "rules";
-  // A walk from a position is one more walk per street corner, so the model
-  // is counted for it: 30 a day from one address and 1000 for the site. Past
-  // either, or with the counter out of reach, the rules make the walk alone.
-  // The two fixed starts stay as they were, shared by everybody.
+  let walk = null, made = "rules", refused = false;
+  // Every walk the model makes is counted: 30 a day from one address and
+  // 1000 for the site. Past either, or with the counter out of reach, the
+  // rules make the walk alone. Until 5 Oct 2026 the two fixed starts were not
+  // counted, on the grounds that the CDN shares one walk per half hour; the
+  // security review that day showed a request with an Authorization header is
+  // never cached, so a script could make every call a fresh paid one
+  // (finding 1). A walk only reaches this line on a cache miss, so the count
+  // is per fresh walk, not per reader.
   const modelAllowed = async () => {
-    if (!here) return true;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
     if (!serviceKey) return false;
     const got = await takeDaily({
@@ -169,6 +172,7 @@ export default async function handler(req, res) {
       keys: [{ key: visitorKey(req.headers, serviceKey.slice(-16)).replace(/^ai:v:/, "walk:v:"), limit: 30 }, { key: "walk:site", limit: 1000 }],
       supabaseUrl: process.env.SUPABASE_URL || SUPABASE_FALLBACK_URL, serviceKey,
     });
+    refused = !got.ok;
     return !!got.ok;
   };
   if (candidates.length && startClock.minutes >= AI_FROM && startClock.minutes < AI_TO && await modelAllowed()) {
@@ -187,5 +191,7 @@ export default async function handler(req, res) {
     weather, margin, ...walk,
     alt: alt ? { stops: alt.stops, back: alt.back, deadline: alt.deadline } : null,
     places: placesOf(walk, candidates), clock: startClock, budget,
-  }, "public, s-maxage=1800, stale-while-revalidate=120");
+  // A walk the rules made only because the counter said no is kept for five
+  // minutes, not the half hour, so one refusal is not what everybody gets.
+  }, refused ? "public, s-maxage=300, stale-while-revalidate=60" : "public, s-maxage=1800, stale-while-revalidate=120");
 }
