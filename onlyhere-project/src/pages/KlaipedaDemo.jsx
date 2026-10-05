@@ -12,9 +12,8 @@
 // is on in town today. The hand-written walks are gone.
 import { useEffect, useMemo, useState } from "react";
 import { C } from "../utils/theme";
-import { GemlyxLogo } from "../components/GemlyxLogo";
+import { KlaipedaTop, keepOutOfSearch } from "../components/KlaipedaTop";
 import { NowPlanner } from "../components/NowPlanner";
-import { CruiseDays } from "../components/CruiseDays";
 import { LOCAL_TIPS, todayInKlaipeda } from "../data/klaipedaDemo";
 import { currentUiLanguage, t as uiT } from "../utils/uiLanguage";
 import { ensureLiveContentLoaded } from "../utils/liveContent";
@@ -51,32 +50,15 @@ export const KlaipedaDemo = () => {
     return () => { gone = true; };
   }, [today]);
 
-  // Linked from nowhere, and kept out of search too, until he decides it is
-  // more than a preview.
-  useEffect(() => {
-    const prevTitle = document.title;
-    document.title = "Klaipėda · Gemlyx";
-    // index.html already carries a robots tag for the whole site, so this
-    // rewrites that one rather than adding a second that contradicts it.
-    const existing = document.querySelector('meta[name="robots"]');
-    const meta = existing || document.createElement("meta");
-    const prevContent = existing ? existing.content : null;
-    meta.name = "robots";
-    meta.content = "noindex, nofollow, noai, noimageai";
-    if (!existing) document.head.appendChild(meta);
-    return () => {
-      document.title = prevTitle;
-      if (existing) existing.content = prevContent; else meta.remove();
-    };
-  }, []);
+  // Linked from nowhere but the QR codes, and kept out of search (noindex)
+  // until he decides it is more than a preview.
+  useEffect(() => keepOutOfSearch("Klaipėda · Gemlyx"), []);
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif" }}>
       <div style={{ maxWidth: 680, margin: "0 auto", padding: "26px 16px 64px" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 30 }}>
-          <GemlyxLogo size={18} color={C.text} />
-          <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 1.4, textTransform: "uppercase", color: C.muted }}>Preview</span>
-        </div>
+        {/* A visitor's page only: no switch to the business side here. */}
+        <KlaipedaTop place={null} />
 
         <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 1.6, textTransform: "uppercase", marginBottom: 8 }}>Lithuania</div>
         <h1 style={{ fontSize: 38, fontWeight: 500, fontFamily: "'Fraunces', serif", lineHeight: 1.1, margin: "0 0 12px" }}>Klaipėda</h1>
@@ -88,9 +70,9 @@ export const KlaipedaDemo = () => {
             ?from=terminal, the one at the centre ?from=centre. */}
         <NowPlanner country="LT" lang={lang} defaultFrom={from} />
 
-        {/* The ships due in, with about how many guests they carry (5 Oct 2026). */}
-        <CruiseDays lang={lang} />
-
+        {/* The ships and their guests are for businesses, not for the people
+            on them (Oliver, 5 Oct 2026), so they are on /lithuania/business.
+            A passenger still sees when their own ship sails, in the walk. */}
         {(live.onToday.length > 0 || live.deals.length > 0) && (
           <div style={{ display: "grid", gap: 10, marginBottom: 28 }}>
             {live.onToday.length > 0 && (

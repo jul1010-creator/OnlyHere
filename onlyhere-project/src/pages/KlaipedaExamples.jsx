@@ -10,23 +10,19 @@
 // names. Linked from nowhere and kept out of search, like that page.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { C } from "../utils/theme";
-import { GemlyxLogo } from "../components/GemlyxLogo";
+import { KlaipedaTop, keepOutOfSearch } from "../components/KlaipedaTop";
 import { EditableWalk } from "../components/NowPlanner";
 import { DetailPage } from "../components/DetailPage";
-import { MUST_SEE, weatherChanges, openBetween } from "../utils/nowPlanner";
+import { MUST_SEE, weatherChanges } from "../utils/nowPlanner";
 import { entryWord } from "../utils/entryWords";
-import { offerHoursLabel } from "../utils/offer";
-import { windowOf, timingAt, cleanDays, cleanClock } from "../utils/offerClock";
 import {
-  EXAMPLE_WALKS, WEATHER_WALKS, KLAIPEDA_SKY, walkForNow, EXAMPLE_PARTNERS, EXAMPLE_GUIDES, GUIDE_LANGS, GUIDE_LANG_NAMES, GUIDE_LABELS, PARTNER_WEEK,
+  EXAMPLE_WALKS, WEATHER_WALKS, KLAIPEDA_SKY, walkForNow, EXAMPLE_GUIDES, GUIDE_LANGS, GUIDE_LANG_NAMES, GUIDE_LABELS,
   runExample, isExamplePartner, pageFor,
 } from "../data/klaipedaExamples";
 import { KLAIPEDA_SCULPTURES_PATH } from "../data/klaipedaSculptures";
 import { GoogleWalkMap } from "../components/GoogleWalkMap";
 
 const WARN = "#FFB347";
-const DAY_LONG = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-const hhmm = (m) => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 
 const Tag = ({ children, strong = false }) => (
   <span style={{
@@ -41,8 +37,6 @@ const H2 = ({ children }) => (
 const Lead = ({ children }) => (
   <p style={{ fontSize: 13.5, lineHeight: 1.65, color: C.light, margin: "0 0 16px" }}>{children}</p>
 );
-
-const TIMING_TEXT = { now: "On at this moment", always: "On at this moment", later: "Later that day", off: "Not that day", shut: "Closed at this moment" };
 
 export const KlaipedaExamples = () => {
   const [walkId, setWalkId] = useState(EXAMPLE_WALKS[0].id);
@@ -84,20 +78,8 @@ export const KlaipedaExamples = () => {
   const mapBox = useRef(null);
   const cardOf = (st) => { const pg = pageFor(st.id); return pg ? { emoji: pg.item.emoji, photo: pg.item.photo } : null; };
 
-  useEffect(() => {
-    const prevTitle = document.title;
-    document.title = "Klaipėda examples · Gemlyx";
-    const existing = document.querySelector('meta[name="robots"]');
-    const meta = existing || document.createElement("meta");
-    const prevContent = existing ? existing.content : null;
-    meta.name = "robots";
-    meta.content = "noindex, nofollow, noai, noimageai";
-    if (!existing) document.head.appendChild(meta);
-    return () => {
-      document.title = prevTitle;
-      if (existing) existing.content = prevContent; else meta.remove();
-    };
-  }, []);
+  // Kept out of search (noindex), like every Klaipėda page.
+  useEffect(() => keepOutOfSearch("Klaipėda for visitors · Gemlyx"), []);
 
   const pill = (active) => ({
     background: active ? C.gold : "transparent", color: active ? C.onGold : C.light,
@@ -106,42 +88,37 @@ export const KlaipedaExamples = () => {
   });
   const card = { background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px 15px" };
   const L = GUIDE_LABELS[lang];
-  const busiest = Math.max(...PARTNER_WEEK.map(d => d.guests), 1);
-  const momentLabel = `${DAY_LONG[run.startClock.day]} ${hhmm(run.startClock.minutes)}`;
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif" }}>
       <div style={{ maxWidth: 680, margin: "0 auto", padding: "26px 16px 64px" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 30 }}>
-          <GemlyxLogo size={18} color={C.text} />
-          <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 1.4, textTransform: "uppercase", color: C.muted }}>Examples</span>
-        </div>
+        <KlaipedaTop side="visitors" />
 
-        <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 1.6, textTransform: "uppercase", marginBottom: 8 }}>Klaipėda</div>
-        <h1 style={{ fontSize: 36, fontWeight: 500, fontFamily: "'Fraunces', serif", lineHeight: 1.1, margin: "0 0 12px" }}>What a visitor would see</h1>
+        <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 1.6, textTransform: "uppercase", marginBottom: 8 }}>For visitors</div>
+        <h1 style={{ fontSize: 36, fontWeight: 500, fontFamily: "'Fraunces', serif", lineHeight: 1.1, margin: "0 0 12px" }}>Klaipėda, in the time you have</h1>
         <p style={{ fontSize: 15, lineHeight: 1.65, color: C.light, margin: "0 0 18px", fontFamily: "'Fraunces', serif" }}>
-          Walks made for the time a visitor has, guides in their own language, and local businesses showing up where they fit.
+          A walk made for the hours you have, a guide in your own language, and the places worth stopping at on the way.
         </p>
 
         <div data-testid="examples-banner" style={{ border: `1px solid ${C.gold}88`, background: `${C.gold}12`, borderRadius: 14, padding: "12px 15px", marginBottom: 34 }}>
           <div style={{ fontSize: 13, fontWeight: 800, color: C.gold, marginBottom: 4 }}>These are examples</div>
           <div style={{ fontSize: 13, lineHeight: 1.6, color: C.light }}>
-            The museums, squares and sculptures are real, with hours as they are this autumn. Every business, every offer and every number about them is made up, to show how it would work.
+            The museums, squares and sculptures are real, with hours as they are this autumn. Every business, every offer and every number about them is made up, to show how it would work. What a business sees is on the other side, For businesses.
           </div>
         </div>
 
         <a href={KLAIPEDA_SCULPTURES_PATH} data-testid="examples-sculptures-link"
           style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "13px 15px", margin: "-18px 0 34px", textDecoration: "none" }}>
           <span>
-            <span style={{ display: "block", fontSize: 14.5, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text }}>The talking sculptures, joined up</span>
-            <span style={{ display: "block", fontSize: 12, color: C.muted, marginTop: 2 }}>A working sketch for the centre's 13 sculptures</span>
+            <span style={{ display: "block", fontSize: 14.5, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text }}>The talking sculptures</span>
+            <span style={{ display: "block", fontSize: 12, color: C.muted, marginTop: 2 }}>Scan one, find the next, walk a trail of them</span>
           </span>
           <span style={{ color: C.gold, fontWeight: 700 }}>›</span>
         </a>
 
         {/* ── WALKS ───────────────────────────────────────────── */}
         <H2>A walk for the time they have</H2>
-        <Lead>A visitor scans the QR code at the terminal or the tourist centre and taps how long they have. Gemlyx makes one walk from what is open then, shows the offers that are on then, and gets them back in time. Places rated Can't Miss Out go in whenever they are open, and the stops are put in the order that walks least, so the walk does not double back. Each phone gets one of two ways round, so a full ship splits in half instead of moving as one crowd.</Lead>
+        <Lead>Scan the QR code at the terminal or the tourist centre and tap how long you have. Gemlyx makes one walk from what is open then, with the offers that are on then, and gets you back in time. Places rated Can't Miss Out go in whenever they are open, and the stops are put in the order that walks least, so you never double back.</Lead>
 
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }} role="tablist" aria-label="Example walks">
           {EXAMPLE_WALKS.map(w => (
@@ -156,7 +133,7 @@ export const KlaipedaExamples = () => {
           <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>{ex.moment}</div>
           {run.alt && (
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 12 }} role="tablist" aria-label="Way round">
-              {[["a", "Route A"], ["b", "Route B"]].map(([k, label]) => (
+              {[["a", "This way round"], ["b", "The other way round"]].map(([k, label]) => (
                 <button key={k} role="tab" aria-selected={way === k} onClick={() => setWay(k)} data-testid={`example-way-${k}`}
                   style={{ ...pill(way === k), padding: "5px 12px", fontSize: 11.5 }}>{label}</button>
               ))}
@@ -228,42 +205,6 @@ export const KlaipedaExamples = () => {
           </>)}
         </div>
 
-        {/* ── OFFERS ──────────────────────────────────────────── */}
-        <H2>Offers, the way a business sets them</H2>
-        <Lead>A business writes what the visitor gets and picks the days and hours. Places are picked for a walk on merit. An offer is shown only when the place has earned its stop and the offer is on for the whole visit, and it is always marked as a partner's.</Lead>
-
-        <div style={{ fontSize: 12, color: C.muted, marginBottom: 10 }}>Shown as they stand on {momentLabel}, the moment of the walk above.</div>
-        <div style={{ display: "grid", gap: 10, marginBottom: 40 }}>
-          {EXAMPLE_PARTNERS.map(p => {
-            // An offer is only on while the door is open: an all-day offer at a
-            // workshop that has closed for the day is not on. Found in review,
-            // 2 Oct 2026.
-            const inWindow = timingAt(windowOf({ days: cleanDays(p.offer.days), from: cleanClock(p.offer.from), to: cleanClock(p.offer.to) }), run.startClock);
-            const doorShut = (inWindow === "now" || inWindow === "always") && openBetween(p.hours, run.startClock.day, run.startClock.minutes, run.startClock.minutes + 1) === false;
-            const timing = doorShut ? "shut" : inWindow;
-            const set = offerHoursLabel({ ...p.offer, until: "2027-12-31" }, { lang: "en" }) || "Whenever they are open";
-            const on = timing === "now" || timing === "always";
-            return (
-              <div key={p.key} data-testid="example-offer" role="button" tabIndex={0} onClick={() => openPage(`${p.type}:${p.key}`)} onKeyDown={(e) => { if (e.key === "Enter") openPage(`${p.type}:${p.key}`); }} style={{ ...card, cursor: "pointer" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                  <span style={{ fontSize: 15.5, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.gold }}>{p.name}</span>
-                  <Tag>Example</Tag>
-                </div>
-                <div style={{ fontSize: 10.5, color: C.muted, textTransform: "uppercase", letterSpacing: 1.1, marginTop: 4 }}>{p.what} · {p.street}</div>
-                <div style={{ fontSize: 13.5, fontWeight: 700, color: C.text, lineHeight: 1.5, marginTop: 9 }}>{p.offer.text}</div>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 8 }}>
-                  <Tag strong>{set}</Tag>
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: on ? C.light : C.muted }}>
-                    <span style={{ width: 7, height: 7, borderRadius: 7, background: on ? C.gold : C.border }} />
-                    {TIMING_TEXT[timing]}
-                  </span>
-                </div>
-                <div style={{ fontSize: 12.5, lineHeight: 1.55, color: C.muted, marginTop: 9, fontStyle: "italic" }}>{p.idea}</div>
-              </div>
-            );
-          })}
-        </div>
-
         {/* ── GUIDES ──────────────────────────────────────────── */}
         <H2>Guides in the visitor's language</H2>
         <Lead>Each place is written once and read in English, Lithuanian, German or Danish. Names, prices and times are never translated, and a translation that changes a number is thrown out.</Lead>
@@ -305,50 +246,13 @@ export const KlaipedaExamples = () => {
           ))}
         </div>
 
-        {/* ── WHAT A PARTNER WOULD SEE ─────────────────────────── */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 8 }}>
-          <H2>What a partner would see</H2>
-          <Tag strong>Next step</Tag>
-        </div>
-        <Lead>The question every café and restaurant in the Old Town asks: when are the ships in? A partner would see the week ahead, and how often their place made it into a walk.</Lead>
-
-        <div data-testid="example-partner-week" style={{ ...card, marginBottom: 12 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 12 }}>Ships in port this week</div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: 6, alignItems: "end", height: 96 }}>
-            {PARTNER_WEEK.map(d => (
-              <div key={d.day} style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", height: "100%", gap: 5 }}>
-                {d.ships > 0 && <span style={{ fontSize: 10.5, fontWeight: 700, color: C.gold }}>{(d.guests / 1000).toFixed(1)}k</span>}
-                <div style={{ width: "100%", maxWidth: 34, borderRadius: 6, background: d.ships ? C.gold : C.border, height: d.ships ? Math.max(10, Math.round((d.guests / busiest) * 56)) : 4 }} />
-              </div>
-            ))}
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: 6, marginTop: 6 }}>
-            {PARTNER_WEEK.map(d => <div key={d.day} style={{ fontSize: 11, color: C.muted, textAlign: "center" }}>{d.day}</div>)}
-          </div>
-          <div style={{ borderTop: `1px solid ${C.border}`, marginTop: 14, paddingTop: 12, display: "grid", gap: 6 }}>
-            {PARTNER_WEEK.filter(d => d.ships).map(d => (
-              <div key={d.day} style={{ fontSize: 12.5, color: C.light }}>
-                <span style={{ fontWeight: 700, color: C.text }}>{d.day}</span> · {d.ships} {d.ships === 1 ? "ship" : "ships"}, about {d.guests.toLocaleString("en-GB")} guests ashore, {d.hours}
-              </div>
-            ))}
-          </div>
-        </div>
-        <div style={{ ...card, display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10, marginBottom: 40 }}>
-          {[["46", "walks it was in"], ["19", "opened the map"], ["Tue 12:00", "busiest half hour"]].map(([n, what]) => (
-            <div key={what}>
-              <div style={{ fontSize: 20, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.gold }}>{n}</div>
-              <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.4 }}>{what}</div>
-            </div>
-          ))}
-        </div>
-
         {open && (
           <DetailPage windowed item={open.item} kind={open.kind} onClose={() => setOpen(null)} lang={lang} paid
             sample={isExamplePartner(open.id) ? L.madeUp : L.page} />
         )}
 
         <div style={{ fontSize: 11.5, lineHeight: 1.7, color: C.muted, borderTop: `1px solid ${C.border}`, paddingTop: 16 }}>
-          Museum hours and prices were checked on 29 September 2026 against each museum's own website. Coordinates are from OpenStreetMap. The businesses, offers, ship days and numbers on this page are examples.
+          Museum hours and prices were checked on 29 September 2026 against each museum's own website. Coordinates are from OpenStreetMap. The businesses and offers on this page are examples.
         </div>
       </div>
     </div>

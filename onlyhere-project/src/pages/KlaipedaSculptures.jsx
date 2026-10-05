@@ -6,13 +6,13 @@
 // page, linked from it, kept out of search.
 import { useEffect, useMemo, useState } from "react";
 import { C } from "../utils/theme";
-import { GemlyxLogo } from "../components/GemlyxLogo";
+import { KlaipedaTop, keepOutOfSearch } from "../components/KlaipedaTop";
 import {
-  SCULPTURES, STORY_LANGS, EXAMPLE_WEEK, FERRY, progressLine, nextFrom, trailFrom, ferryFrom, walkLink, trailWalk,
+  SCULPTURES, STORY_LANGS, EXAMPLE_WEEK, FERRY, KLAIPEDA_SCULPTURES_PATH, progressLine, nextFrom, trailFrom, ferryFrom, walkLink, trailWalk,
 } from "../data/klaipedaSculptures";
 import { GoogleWalkMap } from "../components/GoogleWalkMap";
 import { WalkMode, askForCompass } from "../components/WalkMode";
-import { KLAIPEDA_EXAMPLES_PATH } from "../data/klaipedaExamples";
+import { KLAIPEDA_BUSINESS_PATH } from "../data/klaipedaExamples";
 
 const Tag = ({ children, strong = false, dashed = false }) => (
   <span style={{
@@ -43,20 +43,7 @@ export const KlaipedaSculptures = () => {
   const [walking, setWalking] = useState(false);
   const across = SCULPTURES.filter(s => s.side !== here.side);
 
-  useEffect(() => {
-    const prevTitle = document.title;
-    document.title = "Talking sculptures · Gemlyx";
-    const existing = document.querySelector('meta[name="robots"]');
-    const meta = existing || document.createElement("meta");
-    const prevContent = existing ? existing.content : null;
-    meta.name = "robots";
-    meta.content = "noindex, nofollow, noai, noimageai";
-    if (!existing) document.head.appendChild(meta);
-    return () => {
-      document.title = prevTitle;
-      if (existing) existing.content = prevContent; else meta.remove();
-    };
-  }, []);
+  useEffect(() => keepOutOfSearch("Talking sculptures · Gemlyx"), []);
 
   const scan = (id) => { setScanned(id); setFound(f => (f.includes(id) ? f : [...f, id])); };
 
@@ -66,33 +53,28 @@ export const KlaipedaSculptures = () => {
     fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif",
   });
   const card = { background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px 15px" };
-  const top = Math.max(...Object.values(EXAMPLE_WEEK.scans));
-  const ranked = SCULPTURES.map(s => ({ s, n: EXAMPLE_WEEK.scans[s.id] || 0 })).sort((a, b) => b.n - a.n);
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif" }}>
       <div style={{ maxWidth: 680, margin: "0 auto", padding: "26px 16px 64px" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 30 }}>
-          <GemlyxLogo size={18} color={C.text} />
-          <a href={KLAIPEDA_EXAMPLES_PATH} style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 1.4, textTransform: "uppercase", color: C.muted, textDecoration: "none" }}>‹ Examples</a>
-        </div>
+        <KlaipedaTop side="visitors" />
 
-        <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 1.6, textTransform: "uppercase", marginBottom: 8 }}>Klaipėda</div>
-        <h1 style={{ fontSize: 34, fontWeight: 500, fontFamily: "'Fraunces', serif", lineHeight: 1.1, margin: "0 0 12px" }}>The talking sculptures, joined up</h1>
+        <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 1.6, textTransform: "uppercase", marginBottom: 8 }}>For visitors</div>
+        <h1 style={{ fontSize: 34, fontWeight: 500, fontFamily: "'Fraunces', serif", lineHeight: 1.1, margin: "0 0 12px" }}>The talking sculptures</h1>
         <p style={{ fontSize: 15, lineHeight: 1.65, color: C.light, margin: "0 0 18px", fontFamily: "'Fraunces', serif" }}>
-          Thirteen sculptures already tell their stories when a visitor scans the sign. This sketch adds what comes after the story: the next one, how many are left, and a trail that fits the time the visitor has.
+          Thirteen sculptures around Klaipėda tell their stories when you scan the sign. After the story: the next one, how many are left, and a trail that fits the time you have.
         </p>
 
         <div data-testid="sculptures-banner" style={{ border: `1px solid ${C.gold}88`, background: `${C.gold}12`, borderRadius: 14, padding: "12px 15px", marginBottom: 34 }}>
           <div style={{ fontSize: 13, fontWeight: 800, color: C.gold, marginBottom: 4 }}>A working sketch</div>
           <div style={{ fontSize: 13, lineHeight: 1.6, color: C.light }}>
-            The sculptures and where they stand are real. Their stories are the tourism centre's own recordings, which this page does not play. The numbers on the centre's page are made up.
+            The sculptures and where they stand are real. Their stories are the tourism centre's own recordings, which this page does not play.
           </div>
         </div>
 
         {/* ── WHAT A VISITOR SEES ─────────────────────────────── */}
-        <H2>What a visitor sees after scanning</H2>
-        <Lead>Pick the sign you are standing at. The page counts each one you scan, the way a phone would.</Lead>
+        <H2>After you scan</H2>
+        <Lead>Pick the sign you are standing at. The page counts each one you scan, the way your phone would.</Lead>
 
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }} role="tablist" aria-label="Sculptures">
           {SCULPTURES.map(s => (
@@ -175,8 +157,45 @@ export const KlaipedaSculptures = () => {
           </div>
         </div>
         <div style={{ fontSize: 11.5, lineHeight: 1.6, color: C.muted, margin: "0 0 40px" }}>
-          No AI is needed at the sign: the next sculpture and the trail come from where the sculptures stand. AI earns its place in putting the centre's stories into more languages.
+          The next sculpture and the trail come from where the sculptures stand, so they work the moment you scan.
         </div>
+
+        <div style={{ fontSize: 11.5, lineHeight: 1.7, color: C.muted, borderTop: `1px solid ${C.border}`, paddingTop: 16 }}>
+          Sculpture positions from OpenStreetMap, read on 3 October 2026. The list of talking sculptures and their languages from the tourism centre and Lithuania Travel. Walking times are estimates.
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
+// ── WHAT THE TOURISM CENTRE WOULD SEE ───────────────────────────────
+// Its own page since 5 Oct 2026, so a visitor scanning a sign never lands on
+// the centre's numbers, and the centre's pitch is not a visitor's page.
+export const KlaipedaSculpturesCentre = () => {
+  useEffect(() => keepOutOfSearch("Talking sculptures for the centre · Gemlyx"), []);
+  const card = { background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px 15px" };
+  const top = Math.max(...Object.values(EXAMPLE_WEEK.scans));
+  const ranked = SCULPTURES.map(s => ({ s, n: EXAMPLE_WEEK.scans[s.id] || 0 })).sort((a, b) => b.n - a.n);
+
+  return (
+    <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif" }}>
+      <div style={{ maxWidth: 680, margin: "0 auto", padding: "26px 16px 64px" }}>
+        <KlaipedaTop side="business" />
+
+        <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 1.6, textTransform: "uppercase", marginBottom: 8 }}>For the tourism centre</div>
+        <h1 style={{ fontSize: 34, fontWeight: 500, fontFamily: "'Fraunces', serif", lineHeight: 1.1, margin: "0 0 12px" }}>The talking sculptures, joined up</h1>
+        <p style={{ fontSize: 15, lineHeight: 1.65, color: C.light, margin: "0 0 18px", fontFamily: "'Fraunces', serif" }}>
+          The signs already tell the stories. This adds what comes after the story, and shows the centre which sculptures are found, when, and in what language.
+        </p>
+        <a href={KLAIPEDA_SCULPTURES_PATH} data-testid="centre-visitor-link"
+          style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, ...card, textDecoration: "none", marginBottom: 34 }}>
+          <span>
+            <span style={{ display: "block", fontSize: 14.5, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text }}>What a visitor sees</span>
+            <span style={{ display: "block", fontSize: 12, color: C.muted, marginTop: 2 }}>The page after a scan, with the next sculpture and a trail</span>
+          </span>
+          <span style={{ color: C.gold, fontWeight: 700 }}>›</span>
+        </a>
 
         {/* ── WHAT THE CENTRE SEES ────────────────────────────── */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 8 }}>
@@ -244,7 +263,7 @@ export const KlaipedaSculptures = () => {
         </div>
 
         <div style={{ fontSize: 11.5, lineHeight: 1.7, color: C.muted, borderTop: `1px solid ${C.border}`, paddingTop: 16 }}>
-          Sculpture positions from OpenStreetMap, read on 3 October 2026. The list of talking sculptures and their languages from the tourism centre and Lithuania Travel. Walking times are estimates.
+          The numbers on this page are made up, to show how it would work. Sculpture positions from OpenStreetMap, read on 3 October 2026. The list of talking sculptures and their languages from the tourism centre and Lithuania Travel. <a href={KLAIPEDA_BUSINESS_PATH} style={{ color: C.gold }}>For businesses ›</a>
         </div>
       </div>
     </div>
