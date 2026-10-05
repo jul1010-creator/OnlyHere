@@ -14,6 +14,7 @@ import { placeClock } from "../utils/offerClock";
 import { NOW_HOURS, NOW_STARTS, NOW_STYLES, STROLL, STORM_WIND, HERE, NOW_AREAS, snapPos, inNowArea, slotOf, walkMapsUrl, rideApp, MUST_SEE, STAY_STEP, replanWalk, canStayLonger } from "../utils/nowPlanner";
 import { entryWord } from "../utils/entryWords";
 import { ferryOf } from "../utils/walkable";
+import { WalkMode, askForCompass } from "./WalkMode";
 
 const fill = (s, vars) => Object.entries(vars).reduce((out, [k, v]) => out.split(`{${k}}`).join(String(v)), s);
 const clock = (m, lang) => {
@@ -44,8 +45,10 @@ const readerLang = () => {
 // The walk itself, drawn from what the route answers with. Also used by the
 // examples page (pages/KlaipedaExamples.jsx), which runs the same rules on
 // made-up partners, and passes `tag` to mark them as made up.
-export const WalkView = ({ walk, madeAt, lang, country = "LT", tag = null, onOpen = null, edit = null }) => {
+export const WalkView = ({ walk, madeAt, lang, country = "LT", tag = null, onOpen = null, edit = null, onShow = null, cardFor = null }) => {
   const app = rideApp(country);
+  // Walking it inside Gemlyx (WalkMode.jsx), from the Start walking button.
+  const [walking, setWalking] = useState(false);
   const small = { background: "transparent", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, width: 26, height: 26, fontSize: 14, fontWeight: 700, lineHeight: 1, cursor: "pointer", fontFamily: "'Inter', sans-serif", display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 };
   return (
     <div data-testid="now-walk" style={{ marginTop: 16 }}>
@@ -92,6 +95,13 @@ export const WalkView = ({ walk, madeAt, lang, country = "LT", tag = null, onOpe
                     </div>
                   )}
                   {s.why && <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.5, marginTop: 6 }}>{s.why}</div>}
+                  {/* Oliver, 5 Oct 2026: "Have a 'show on map'... When someone
+                      clicks a place on the list, then the map flies to it." */}
+                  {onShow && (
+                    <button onClick={() => onShow(s)} data-testid="now-show-on-map" style={{ marginTop: 7, background: "transparent", border: `1px solid ${C.gold}88`, color: C.gold, borderRadius: 100, padding: "4px 11px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                      📍 {uiT("now.showOnMap", lang)}
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -107,10 +117,15 @@ export const WalkView = ({ walk, madeAt, lang, country = "LT", tag = null, onOpe
               ? fill(uiT("now.backShip", lang), { time: clock(madeAt + walk.back.at, lang), n: Math.max(walk.margin, walk.deadline + walk.margin - walk.back.at) })
               : fill(uiT(walk.start.id === HERE ? "now.backHere" : "now.backCentre", lang), { time: clock(madeAt + walk.back.at, lang) })}
           </div>
+          <button onClick={() => { askForCompass(); setWalking(true); }} data-testid="now-start-walk"
+            style={{ display: "block", width: "100%", marginTop: 12, background: C.gold, color: C.onGold, border: "none", borderRadius: 12, padding: "12px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+            ▶ {uiT("now.startWalk", lang)}
+          </button>
           <a href={walkMapsUrl(walk.start, walk.stops)} target="_blank" rel="noopener noreferrer"
-            style={{ display: "block", textAlign: "center", marginTop: 12, border: `1px solid ${C.border}`, borderRadius: 12, padding: "11px", fontSize: 13, fontWeight: 700, color: C.light, textDecoration: "none" }}>
+            style={{ display: "block", textAlign: "center", marginTop: 8, border: `1px solid ${C.border}`, borderRadius: 12, padding: "11px", fontSize: 13, fontWeight: 700, color: C.light, textDecoration: "none" }}>
             {uiT("now.route", lang)} ↗
           </a>
+          {walking && <WalkMode walk={walk} madeAt={madeAt} lang={lang} country={country} cardFor={cardFor} onClose={() => setWalking(false)} />}
         </>
       )}
       {/* Outside the walk, so taking out every stop still leaves the way to
@@ -136,14 +151,16 @@ export const WalkView = ({ walk, madeAt, lang, country = "LT", tag = null, onOpe
 // by the same rules from the places the server sent with it (walk.places), so
 // every time and every open door stays checked. Longer is offered only while
 // it pushes nothing else out.
-export const EditableWalk = ({ walk, madeAt, lang, country = "LT", tag = null, onOpen = null }) => {
+export const EditableWalk = ({ walk, madeAt, lang, country = "LT", tag = null, onOpen = null, onShow = null, cardFor = null, onWalk = null }) => {
   const [edits, setEdits] = useState({ stays: {}, removed: [] });
   useEffect(() => { setEdits({ stays: {}, removed: [] }); }, [walk]);
   const ctx = useMemo(() => ({ country, start: walk.start, startClock: walk.clock, budget: walk.budget, margin: walk.margin || 0, weather: walk.weather || null, style: walk.style || "" }), [walk, country]);
   const usable = !!(walk?.clock && walk?.budget && Array.isArray(walk?.places) && walk.places.length);
   const changed = Object.keys(edits.stays).length > 0 || edits.removed.length > 0;
   const shown = useMemo(() => (usable && changed ? { ...walk, ...replanWalk(walk, edits, ctx) } : walk), [walk, edits, ctx, usable, changed]);
-  if (!usable) return <WalkView walk={walk} madeAt={madeAt} lang={lang} country={country} tag={tag} onOpen={onOpen} />;
+  // The map beside the list shows the walk as the reader has changed it.
+  useEffect(() => { if (onWalk) onWalk(shown); }, [shown]);
+  if (!usable) return <WalkView walk={walk} madeAt={madeAt} lang={lang} country={country} tag={tag} onOpen={onOpen} onShow={onShow} cardFor={cardFor} />;
   const stayOf = (id) => shown.stops.find(x => x.id === id)?.stay;
   const edit = {
     longer: (id) => { if (canStayLonger(walk, edits, id, ctx)) setEdits(e => ({ ...e, stays: { ...e.stays, [id]: stayOf(id) + STAY_STEP } })); },
@@ -153,7 +170,7 @@ export const EditableWalk = ({ walk, madeAt, lang, country = "LT", tag = null, o
     putBack: (id) => setEdits(e => ({ ...e, removed: e.removed.filter(x => x !== id) })),
     removed: edits.removed.map(id => ({ id, name: walk.stops.find(x => x.id === id)?.name || id })),
   };
-  return <WalkView walk={shown} madeAt={madeAt} lang={lang} country={country} tag={tag} onOpen={onOpen} edit={edit} />;
+  return <WalkView walk={shown} madeAt={madeAt} lang={lang} country={country} tag={tag} onOpen={onOpen} edit={edit} onShow={onShow} cardFor={cardFor} />;
 };
 
 // Which way round this phone walks, kept so a reload does not flip it. See
