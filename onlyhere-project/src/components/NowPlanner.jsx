@@ -11,7 +11,7 @@ import { C } from "../utils/theme";
 import { t as uiT, resolveUiLanguage, UI_LANGUAGE_KEY } from "../utils/uiLanguage";
 import { countryProfile } from "../utils/countries";
 import { placeClock } from "../utils/offerClock";
-import { NOW_HOURS, NOW_STARTS, NOW_STYLES, STROLL, STORM_WIND, slotOf, walkMapsUrl, rideApp, MUST_SEE, STAY_STEP, replanWalk, canStayLonger } from "../utils/nowPlanner";
+import { NOW_HOURS, NOW_STARTS, NOW_STYLES, STROLL, STORM_WIND, HERE, NOW_AREAS, snapPos, inNowArea, slotOf, walkMapsUrl, rideApp, MUST_SEE, STAY_STEP, replanWalk, canStayLonger } from "../utils/nowPlanner";
 import { entryWord } from "../utils/entryWords";
 import { ferryOf } from "../utils/walkable";
 
@@ -56,7 +56,7 @@ export const WalkView = ({ walk, madeAt, lang, country = "LT", tag = null, onOpe
       ) : (
         <>
           <div style={{ fontSize: 12, color: C.muted, marginBottom: 8 }}>
-            {clock(madeAt, lang)} · {uiT("now.start", lang)}: {walk.start.name}
+            {clock(madeAt, lang)} · {uiT("now.start", lang)}: {walk.start.id === HERE ? uiT("now.whereYouAre", lang) : walk.start.name}
           </div>
           {walk.stops.map(s => (
             <div key={s.id}>
@@ -105,7 +105,7 @@ export const WalkView = ({ walk, madeAt, lang, country = "LT", tag = null, onOpe
           <div data-testid="now-back" style={{ fontSize: 13, fontWeight: 700, color: C.text, padding: "8px 0 4px" }}>
             {walk.start.ship
               ? fill(uiT("now.backShip", lang), { time: clock(madeAt + walk.back.at, lang), n: Math.max(walk.margin, walk.deadline + walk.margin - walk.back.at) })
-              : fill(uiT("now.backCentre", lang), { time: clock(madeAt + walk.back.at, lang) })}
+              : fill(uiT(walk.start.id === HERE ? "now.backHere" : "now.backCentre", lang), { time: clock(madeAt + walk.back.at, lang) })}
           </div>
           <a href={walkMapsUrl(walk.start, walk.stops)} target="_blank" rel="noopener noreferrer"
             style={{ display: "block", textAlign: "center", marginTop: 12, border: `1px solid ${C.border}`, borderRadius: 12, padding: "11px", fontSize: 13, fontWeight: 700, color: C.light, textDecoration: "none" }}>
@@ -173,6 +173,24 @@ export const NowPlanner = ({ country = "LT", lang: langProp = "", defaultFrom = 
   const firstFrom = starts[defaultFrom] ? defaultFrom : Object.keys(starts)[0];
   const [from, setFrom] = useState(firstFrom);
   const [hours, setHours] = useState(3);
+  // From where I am (Oliver, 5 Oct 2026). The position is asked for only when
+  // that button is tapped, kept on the 200 metre grid the route caches on,
+  // and never stored.
+  const [pos, setPos] = useState(null);
+  const [posNote, setPosNote] = useState("");
+  const canLocate = typeof navigator !== "undefined" && !!navigator.geolocation && !!NOW_AREAS[country];
+  const useHere = () => {
+    setPosNote("");
+    try {
+      navigator.geolocation.getCurrentPosition((p) => {
+        const at = { lat: snapPos(p.coords.latitude), lon: snapPos(p.coords.longitude) };
+        if (!inNowArea(country, at)) { setPosNote(uiT("now.notHere", lang)); return; }
+        setPos(at); setFrom(HERE);
+      }, () => setPosNote(uiT("now.noLocation", lang)), { enableHighAccuracy: false, timeout: 10000, maximumAge: 120000 });
+    } catch { setPosNote(uiT("now.noLocation", lang)); }
+  };
+  // The start part of the address, the same spelling the route insists on.
+  const fromQuery = from === HERE && pos ? `from=${HERE}&h=${hours}&lang=${lang}&lat=${pos.lat}&lon=${pos.lon}` : `from=${from}&h=${hours}&lang=${lang}`;
   // A walk of one kind (Oliver, 5 Oct 2026: "anything possible in Klaipeda.
   // But Only if the timing fits"). `kinds` is what the route says fits this
   // start, this length and this half hour; nothing is offered until it says.
@@ -186,14 +204,14 @@ export const NowPlanner = ({ country = "LT", lang: langProp = "", defaultFrom = 
 
   // A new choice clears the old walk, so a 2 hour walk is never shown under
   // a 4 hour button.
-  useEffect(() => { asked.current = ""; setState({ busy: false, walk: null, error: "", madeAt: 0 }); }, [from, hours, style]);
+  useEffect(() => { asked.current = ""; setState({ busy: false, walk: null, error: "", madeAt: 0 }); }, [from, hours, style, pos]);
 
   // Which kinds fit, asked again when the start or the length changes. A kind
   // that no longer fits is let go of rather than left pressed.
   useEffect(() => {
-    if (!starts[from]) return undefined;
+    if (!starts[from] && !(from === HERE && pos)) return undefined;
     let gone = false;
-    const ask = (slot) => fetch(`/api/plan-now?c=${country}&from=${from}&h=${hours}&lang=${lang}&slot=${encodeURIComponent(slot)}&styles=1`);
+    const ask = (slot) => fetch(`/api/plan-now?c=${country}&${fromQuery}&slot=${encodeURIComponent(slot)}&styles=1`);
     (async () => {
       try {
         let r = await ask(slotOf(new Date()));
@@ -206,16 +224,16 @@ export const NowPlanner = ({ country = "LT", lang: langProp = "", defaultFrom = 
       } catch { if (!gone) setKinds([]); }
     })();
     return () => { gone = true; };
-  }, [country, from, hours, lang]);
+  }, [country, fromQuery]);
 
   if (!firstFrom) return null;
   const zone = countryProfile(country).zone;
 
   const make = async () => {
-    const mine = `${from}|${hours}|${style}`;
+    const mine = `${fromQuery}|${style}`;
     asked.current = mine;
     setState({ busy: true, walk: null, error: "", madeAt: 0 });
-    const ask = (slot) => fetch(`/api/plan-now?c=${country}&from=${from}&h=${hours}&lang=${lang}&slot=${encodeURIComponent(slot)}${style ? `&style=${style}` : ""}`);
+    const ask = (slot) => fetch(`/api/plan-now?c=${country}&${fromQuery}&slot=${encodeURIComponent(slot)}${style ? `&style=${style}` : ""}`);
     try {
       let r = await ask(slotOf(new Date()));
       if (r.status === 409) { const j = await r.json().catch(() => ({})); if (j.slot) r = await ask(j.slot); }
@@ -248,7 +266,13 @@ export const NowPlanner = ({ country = "LT", lang: langProp = "", defaultFrom = 
             {uiT(k === "terminal" ? "now.fromShip" : "now.fromCentre", lang)}
           </button>
         ))}
+        {canLocate && (
+          <button onClick={useHere} aria-pressed={from === HERE} style={pill(from === HERE)} data-testid="now-from-here">
+            {uiT("now.fromHere", lang)}
+          </button>
+        )}
       </div>
+      {posNote && <div data-testid="now-pos-note" style={{ fontSize: 12, color: "#FFB347", margin: "-4px 0 12px" }}>{posNote}</div>}
 
       <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 8 }}>{uiT("now.howLong", lang)}</div>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
