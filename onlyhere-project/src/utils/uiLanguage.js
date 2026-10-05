@@ -796,6 +796,11 @@ export const UI_STRINGS = {
   "walk.headBack":   { en: "Head back", da: "Gå tilbage", de: "Zurück gehen", lt: "Grįžti atgal" },
   "walk.fullScreen": { en: "Full screen", da: "Fuld skærm", de: "Vollbild", lt: "Visas ekranas" },
   "walk.exitFull":   { en: "Exit full screen", da: "Luk fuld skærm", de: "Vollbild beenden", lt: "Išeiti iš viso ekrano" },
+  "walk.turns":      { en: "Turns", da: "Sving", de: "Abbiegungen", lt: "Posūkiai" },
+  "walk.wayTo":      { en: "The way to {place}", da: "Vejen til {place}", de: "Der Weg zu {place}", lt: "Kelias iki: {place}" },
+  "walk.turnsLoading": { en: "Reading the way…", da: "Henter vejen…", de: "Der Weg wird geladen…", lt: "Įkeliamas kelias…" },
+  "walk.turnsNone":  { en: "The turns for this stretch could not be read. The map still shows the way.", da: "Svingene for denne strækning kunne ikke hentes. Kortet viser stadig vejen.", de: "Die Abbiegungen für diese Strecke konnten nicht geladen werden. Die Karte zeigt den Weg trotzdem.", lt: "Šios atkarpos posūkių nepavyko įkelti. Žemėlapis vis tiek rodo kelią." },
+  "walk.turnsBy":    { en: "Directions by Google", da: "Rutevejledning fra Google", de: "Wegbeschreibung von Google", lt: "Nuorodos: Google" },
   "walk.finished":   { en: "Walk done", da: "Turen er slut", de: "Tour beendet", lt: "Maršrutas baigtas" },
   // Walks of one kind, 5 Oct 2026, offered only when one fits (nowPlanner styleFits).
   "now.style.food":      { en: "Food and drink", da: "Mad og drikke", de: "Essen und Trinken", lt: "Maistas ir gėrimai" },
