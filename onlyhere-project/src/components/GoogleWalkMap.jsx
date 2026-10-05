@@ -34,9 +34,19 @@ import { GOOGLE_MAP_ID, googleMapsReady, loadGoogleMaps } from "../utils/googleM
 // the whole walk in view. It replaces the one slow turn of 4 Oct. A touch ends
 // it at once, flat with the walk in view, and it never moves for a phone set
 // to reduce motion. "Fly the walk" plays it again.
+//
+// ── AND SOMETHING TO SEE AT EVERY STOP ──────────────────────────────
+// Oliver, 5 Oct 2026, of that first flight: "It's a lame flying.. because it
+// is pointless. If we do flying, it has to be because of something cool to
+// see.. or some 'bling bling' popping up with the place." So the flight is a
+// preview of the walk now: at each stop the pin jumps and a card pops up with
+// the place, the time you get there, why it is in the walk, and a star or a
+// partner's offer where there is one. It ends pulled back over the whole walk
+// with when you are back. The legs are quick; the stops are where it stays.
 export const FLY_TILT = 55;
-export const FLY_LEG_MS = 2200;
-export const FLY_HOLD_MS = 500;
+export const FLY_LEG_MS = 1300;
+export const FLY_HOLD_MS = 2400;
+export const FLY_END_MS = 3200;
 
 // The legs of a walk, start to start: [from, to] pairs of { lat, lon }.
 export const walkLegs = (walk) => {
@@ -79,6 +89,16 @@ export const flightZoom = (pts) => {
 const ease = (t) => (t < 0.5 ? 2 * t * t : 1 - ((-2 * t + 2) ** 2) / 2);
 // Turning the short way round, so 350 to 10 is twenty degrees, not 340.
 const turn = (from, to, t) => (((from + ((((to - from) % 360) + 540) % 360 - 180) * t) % 360) + 360) % 360;
+
+// Which stop the flight is at `ms` in, and whether it has arrived there and
+// is holding (when its card shows), or null once it has landed.
+export const flightPhase = (pts, ms) => {
+  if (pts.length < 2 || ms >= flightMs(pts)) return null;
+  const per = FLY_LEG_MS + FLY_HOLD_MS;
+  const at = Math.max(0, ms);
+  const stop = Math.min(pts.length - 2, Math.floor(at / per));
+  return { stop, holding: at - stop * per >= FLY_LEG_MS };
+};
 
 // Where the camera is `ms` into the flight, or null once it has landed. Each
 // leg glides from one point to the next and holds there a moment; the
@@ -132,7 +152,11 @@ const reducedMotion = () => {
 const PAD = { top: 52, right: 28, bottom: 28, left: 28 };
 const PIN_SCALE = 0.85;
 
-export const GoogleWalkMap = ({ walk, height = 340 }) => {
+const HHMM = (m) => `${String(Math.floor((((m % 1440) + 1440) % 1440) / 60)).padStart(2, "0")}:${String((((m % 60) + 60) % 60)).padStart(2, "0")}`;
+
+// `madeAt` is the walk's start, in minutes after midnight, for the times on
+// the cards. `cardFor(stop)` may add { emoji, photo } for a stop.
+export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = null }) => {
   const box = useRef(null);
   // ONE map for the life of the page. Google bills every map it creates, and
   // making a new one each time a visitor picks another walk would bill each
@@ -146,6 +170,8 @@ export const GoogleWalkMap = ({ walk, height = 340 }) => {
   const flyRef = useRef(null);
   const [failed, setFailed] = useState(false);
   const [canFly, setCanFly] = useState(false);
+  // What pops up during the flight: { stop: index } or { end: true }.
+  const [card, setCard] = useState(null);
 
   // A touch anywhere on the map, before or during the turn, ends it for good.
   useEffect(() => {
@@ -160,6 +186,8 @@ export const GoogleWalkMap = ({ walk, height = 340 }) => {
     if (!googleMapsReady() || !walkLegs(walk).length) return undefined;
     let gone = false, raf = 0, idle = null;
     const drawn = [];
+    const pinEls = [];
+    setCard(null);
     const stop = () => {
       if (!raf) return;
       cancelAnimationFrame(raf); raf = 0;
@@ -199,20 +227,41 @@ export const GoogleWalkMap = ({ walk, height = 340 }) => {
         const pts = flightPoints(walk);
         const zoom = flightZoom(pts);
         // Flat, north up, the whole walk in view: where every flight ends.
-        const settle = () => { map.moveCamera({ heading: 0, tilt: 0 }); map.fitBounds(bounds, PAD); };
+        // ── OVER THE REAL TOWN ────────────────────────────────────────
+        // Oliver, 5 Oct 2026, sending a satellite view of Klaipėda from a
+        // third-party site: "how do we use this?" That site shows Google's own
+        // satellite pictures, and this map can show them too, on the same key
+        // and under Google's terms. So the flight is over the real roofs, the
+        // castle ruins and the harbour, and the map goes back to the plain one
+        // when it lands, because the plain one is the one you read a route on.
+        const settle = () => { try { map.setMapTypeId("roadmap"); } catch { /* keep going */ } map.moveCamera({ heading: 0, tilt: 0 }); map.fitBounds(bounds, PAD); };
+        let endTimer = 0;
+        const popPin = (i) => pinEls.forEach((el, j) => { try { el.style.transform = j === i ? "scale(1.45) translateY(-4px)" : ""; } catch { /* pin gone */ } });
         const flyNow = () => {
           if (gone || pts.length < 2 || reducedMotion()) return;
           if (raf) cancelAnimationFrame(raf);
+          clearTimeout(endTimer);
           moved.current = false;
+          let shown = "";
+          try { map.setMapTypeId("satellite"); } catch { /* the plain map flies too */ }
+          const show = (key, value, pin) => { if (shown === key) return; shown = key; setCard(value); popPin(pin); };
           const first = cameraAt(pts, 0);
           map.moveCamera({ center: { lat: first.lat, lng: first.lng }, zoom, tilt: FLY_TILT, heading: first.heading });
           const t0 = performance.now();
           const fly = (now) => {
             if (gone) return;
             // Touched: the flight ends at once, with the walk in view.
-            if (moved.current) { raf = 0; settle(); return; }
+            if (moved.current) { raf = 0; show("", null, -1); settle(); return; }
             const cam = cameraAt(pts, now - t0);
-            if (!cam) { raf = 0; settle(); return; }
+            // Landed: pulled back over the whole walk, with when you are back.
+            if (!cam) {
+              raf = 0; settle(); show("end", { end: true }, -1);
+              endTimer = setTimeout(() => { if (!gone) setCard(null); }, FLY_END_MS);
+              return;
+            }
+            const phase = flightPhase(pts, now - t0);
+            if (phase?.holding) show(`s${phase.stop}`, { stop: phase.stop }, phase.stop);
+            else show("", null, -1);
             map.moveCamera({ center: { lat: cam.lat, lng: cam.lng }, zoom, tilt: FLY_TILT, heading: cam.heading });
             raf = requestAnimationFrame(fly);
           };
@@ -234,6 +283,8 @@ export const GoogleWalkMap = ({ walk, height = 340 }) => {
         drawn.push(new AdvancedMarkerElement({ map, position: at(walk.start), content: startPin.element, title: walk.start.name || "Start", zIndex: 100 }));
         walk.stops.forEach((s, i) => {
           const pin = new PinElement({ glyph: String(i + 1), background: C.gold, borderColor: C.onGold, glyphColor: C.onGold, scale: PIN_SCALE });
+          try { pin.element.style.transition = "transform 280ms cubic-bezier(.2,1.6,.4,1)"; pin.element.style.transformOrigin = "50% 100%"; } catch { /* no element */ }
+          pinEls.push(pin.element);
           drawn.push(new AdvancedMarkerElement({ map, position: at(s), content: pin.element, title: s.name || "", zIndex: 50 - i }));
         });
 
@@ -285,7 +336,46 @@ export const GoogleWalkMap = ({ walk, height = 340 }) => {
         aria-label="Map of this walk"
         style={{ height, borderRadius: 14, overflow: "hidden", border: `1px solid ${C.border}`, background: C.surface }}
       />
-      {canFly && (
+      <style>{`@keyframes gxCardPop { 0% { opacity: 0; transform: translateY(16px) scale(.9); } 70% { opacity: 1; transform: translateY(-3px) scale(1.02); } 100% { opacity: 1; transform: none; } }`}</style>
+      {card && (() => {
+        const stops = Array.isArray(walk?.stops) ? walk.stops : [];
+        const box = { position: "absolute", left: 10, right: 10, bottom: 26, background: C.surface, border: `1px solid ${C.gold}`, borderRadius: 14, padding: "11px 13px", boxShadow: "0 8px 24px rgba(0,0,0,0.45)", animation: "gxCardPop 420ms cubic-bezier(.2,.9,.3,1) both", pointerEvents: "none", fontFamily: "'Inter', sans-serif" };
+        if (card.end) {
+          const back = madeAt != null && walk?.back?.at != null ? HHMM(madeAt + walk.back.at) : "";
+          return (
+            <div key="end" data-testid="fly-card-end" style={box}>
+              <div style={{ fontSize: 15, fontWeight: 700, fontFamily: "'Fraunces', serif", color: C.text }}>{stops.length} stops{back ? `, back by ${back}` : ""}</div>
+              <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>⚓ {walk?.start?.name || "Start"} and back</div>
+            </div>
+          );
+        }
+        const st = stops[card.stop];
+        if (!st) return null;
+        const extra = (cardFor && cardFor(st)) || {};
+        const time = madeAt != null && Number.isFinite(Number(st.arrive)) ? HHMM(madeAt + Number(st.arrive)) : "";
+        return (
+          <div key={`s${card.stop}`} data-testid="fly-card" style={{ ...box, display: "flex", gap: 11, alignItems: "flex-start" }}>
+            <div style={{ position: "relative", flex: "0 0 auto" }}>
+              {extra.photo
+                ? <img src={extra.photo} alt="" style={{ width: 54, height: 54, borderRadius: 10, objectFit: "cover", display: "block" }} />
+                : <div style={{ width: 54, height: 54, borderRadius: 10, background: `${C.gold}22`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28 }}>{extra.emoji || "📍"}</div>}
+              <div style={{ position: "absolute", top: -7, left: -7, width: 22, height: 22, borderRadius: 100, background: C.gold, color: C.onGold, fontSize: 12, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" }}>{card.stop + 1}</div>
+            </div>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ fontSize: 15.5, fontWeight: 700, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.2 }}>{st.name}</div>
+              <div style={{ fontSize: 11.5, color: C.gold, fontWeight: 700, marginTop: 3 }}>{[time, st.stay ? `${st.stay} min here` : ""].filter(Boolean).join(" · ")}</div>
+              {st.why && <div style={{ fontSize: 12, color: C.light, lineHeight: 1.45, marginTop: 4 }}>{st.why}</div>}
+              {(st.tier === "Can't Miss Out" || st.deal) && (
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+                  {st.tier === "Can't Miss Out" && <span style={{ fontSize: 10.5, fontWeight: 700, background: C.gold, color: C.onGold, borderRadius: 100, padding: "2px 8px" }}>⭐ Can't Miss Out</span>}
+                  {st.deal && <span style={{ fontSize: 10.5, fontWeight: 700, border: `1px solid ${C.gold}`, color: C.gold, borderRadius: 100, padding: "2px 8px" }}>● {st.deal.text}</span>}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+      {canFly && !card && (
         <button onClick={() => flyRef.current?.()} data-testid="fly-walk"
           style={{ position: "absolute", left: 10, bottom: 30, background: C.gold, color: C.onGold, border: "none", borderRadius: 100, padding: "7px 13px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", boxShadow: "0 2px 8px rgba(0,0,0,0.35)" }}>
           ▶ Fly the walk
