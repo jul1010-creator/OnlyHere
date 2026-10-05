@@ -81649,7 +81649,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("a quarter after a comma is not a town", /const looksLikeATown = !!afterComma && \(!!townPointFor\(afterComma\) \|\| /.test(app));
   // Batch 210: no waiting listener any more; a new walk cancels a glide and
   // the map's pins and lines are taken off.
-  ok("a new walk cancels any glide and clears the old pins and lines", /if \(raf\) cancelAnimationFrame\(raf\);\s*api\.current = null;\s*drawn\.forEach/.test(comp));
+  ok("a new walk cancels any glide and clears the old pins and lines", /if \(raf\) cancelAnimationFrame\(raf\);\s*api\.current = null;\s*setAway\(false\);\s*drawn\.forEach/.test(comp));
   ok("a failed walking line is asked again rather than kept faint", /if \(line\) legCache\.set\(key, line\);/.test(comp));
   ok("the Lithuanian Studio links the three Klaipėda pages",
     /\{studioCountry === "LT" && \(\s*<div data-testid="studio-klaipeda-pages"/.test(app) && /\[\[KLAIPEDA_EXAMPLES_PATH, "Examples"\], \[KLAIPEDA_DEMO_PATH, "QR walk"\], \[KLAIPEDA_SCULPTURES_PATH, "Sculptures"\]\]/.test(app));
@@ -81872,7 +81872,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
 {
   const comp = readFileSync(join(root, "src/components/GoogleWalkMap.jsx"), "utf8");
   ok("every leg out says which way it runs, with an arrow on a white edge", /path: maps\.SymbolPath\.FORWARD_CLOSED_ARROW[^}]*\}, offset: "50%"/.test(comp) && /strokeColor: "#FFFFFF", strokeOpacity: 0\.9, strokeWeight: 8, zIndex: 2/.test(comp));
-  ok("the way back is dashed, never drawn like the walk", /if \(i === last\) \{\s*drawn\.push\(new maps\.Polyline\(\{\s*map, path, strokeOpacity: 0, zIndex: 1,\s*icons: \[\{ icon: \{ path: "M 0,-1 0,1"/.test(comp) && /repeat: "14px"/.test(comp));
+  ok("the way back is dashed, never drawn like the walk", /if \(i === last\) \{\s*const dash = new maps\.Polyline\(\{\s*map, path, strokeOpacity: 0, zIndex: 1,\s*icons: \[\{ icon: \{ path: "M 0,-1 0,1"/.test(comp) && /repeat: "14px"/.test(comp));
   ok("the map opens flat, north up, on the plain map, over the whole walk", /map\.moveCamera\(\{ heading: 0, tilt: 0 \}\);\s*try \{ map\.setMapTypeId\("roadmap"\); \} catch \{ \/\* keep going \*\/ \}\s*map\.fitBounds\(bounds, PAD\);/.test(comp));
   ok("and only tilts when a place is shown", (comp.match(/tilt: FOCUS|FOCUS = \{ zoom: 17\.5, tilt: 50 \}/g) || []).length >= 1 && !/addListenerOnce\(map, "idle"/.test(comp));
   ok("smaller pins, the start on top, Google's own places not clickable", (comp.match(/scale: PIN_SCALE/g) || []).length === 2 && /zIndex: 100 \}\)\);/.test(comp) && /clickableIcons: false/.test(comp));
@@ -81954,6 +81954,26 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const keys = ["now.sails", "ships.title", "ships.guests", "ships.today", "ships.source"];
   const words = keys.map(k => ["en", "da", "de", "lt"].map(l => M.UI_STRINGS[k]?.[l] || "").join(" ")).join(" ");
   ok("in four languages, no dashes, none of his banned words", keys.every(k => ["en", "da", "de", "lt"].every(l => M.UI_STRINGS[k]?.[l])) && !/[—–]/.test(words) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(words));
+}
+
+// ── Batch 212: walking it like a sat nav ──
+// Oliver, 5 Oct 2026, of the blue dot on the walk: "It's not possible to make
+// it more gps-like?"
+{
+  const gm = readFileSync(join(root, "src/components/GoogleWalkMap.jsx"), "utf8");
+  const wm = readFileSync(join(root, "src/components/WalkMode.jsx"), "utf8");
+  ok("walking, the map turns the way you face, tilts, and looks ahead of the dot", /export const NAV = \{ zoom: 18, tilt: 55, ahead: 45 \};/.test(gm) && /center: h === null \? pos : ahead\(pos, h, NAV\.ahead\), zoom: NAV\.zoom, tilt: NAV\.tilt, heading: h === null/.test(gm));
+  ok("the dot glides from fix to fix instead of jumping", /\/\/ Glide from the last fix to this one\./.test(gm) && /meMarker\.position = at2;/.test(gm) && /meRaf = t < 1 \? requestAnimationFrame\(step\) : 0;/.test(gm));
+  ok("a beam shows which way the phone points, and a pale circle how sure the fix is", /<span data-beam/.test(gm) && /meBeam\.style\.display = meHeading === null \? "none" : "block";/.test(gm) && /meRing = new maps\.Circle\(\{ map, center: pos, radius: Number\(p\.accuracy\)/.test(gm));
+  ok("the leg being walked stands out, legs walked go grey, legs ahead are pale", /const styleLegs = \(active\) => \{/.test(gm) && /#9AA0A6/.test(gm) && /strokeWeight: now \? 7 : 4/.test(gm) && /useEffect\(\(\) => \{ activeLegRef\.current = activeLeg; api\.current\?\.styleLegs\(activeLeg\); \}, \[activeLeg\]\);/.test(gm));
+  ok("touch the map to look around, and Re-centre puts it back", /if \(follow\) setAway\(true\);/.test(gm) && /const recenter = \(\) => \{ moved\.current = false; setAway\(false\);/.test(gm) && /data-testid="map-recenter"/.test(gm));
+  ok("while walking, arriving at a stop pops it up without flying off", /if \(follow\) \{ popPin\(i\); setCard\(\{ stop: i, n \}\); return; \}/.test(gm) && /api\.current\.showMe\(me, follow, heading\)/.test(gm));
+  ok("walk mode hands the map the compass, or the GPS course, and the leg", /heading=\{heading \?\? course\} activeLeg=\{idx\}/.test(wm) && /const h = p\.coords\.heading;/.test(wm));
+  ok("the position still never leaves the phone", !/fetch\(/.test(wm) && !/fetch\(/.test(gm.slice(gm.indexOf("THE WALKER, THE WAY A SAT NAV"), gm.indexOf("const recenter"))));
+  const words = ["en", "da", "de", "lt"].map(l => M.UI_STRINGS["map.recenter"]?.[l] || "").join(" ");
+  ok("Re-centre in four languages, no dashes, none of his banned words", ["en", "da", "de", "lt"].every(l => M.UI_STRINGS["map.recenter"]?.[l]) && !/[—–]/.test(words) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(words));
+  const shown = (gm + wm).replace(/\/\/ ── .*$/gm, "");
+  ok("and none in the code's own text", !/[—–]/.test(shown) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(shown.replace(/"It's a lame flying[^\n]*/g, "")));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
