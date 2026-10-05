@@ -21,10 +21,13 @@ import { COUNTRY_PROFILES } from "../src/utils/countries.js";
 import { placeClock } from "../src/utils/offerClock.js";
 import { walkWeatherFrom } from "../src/utils/walkWeather.js";
 import { ferryWait } from "../src/utils/walkable.js";
+import { takeDaily, visitorKey, SUPABASE_FALLBACK_URL } from "../src/utils/aiGate.js";
+import { copenhagenDay } from "../src/utils/guideAllowance.js";
 import {
   NOW_STARTS, NOW_HOURS, NOW_LANGS, SHIP_MARGIN, slotAccepted, slotOf, slotDate,
   nowCandidates, ruleOrder, planPrompt, readOrder, goodWalk,
   withMustSee, tidyWalk, reversedWalk, placesOf, NOW_STYLES, styleCandidates, stylesThatFit,
+  HERE, hereStart, snapPos,
 } from "../src/utils/nowPlanner.js";
 
 const json = (res, status, body, cache = "no-store") => {
@@ -99,7 +102,14 @@ export default async function handler(req, res) {
   const keys = Object.keys(q).sort().join(",");
   const country = String(q.c || "");
   const starts = Object.prototype.hasOwnProperty.call(NOW_STARTS, country) ? NOW_STARTS[country] : null;
-  const start = starts && Object.prototype.hasOwnProperty.call(starts, String(q.from || "")) ? starts[String(q.from)] : null;
+  // From where the visitor stands (5 Oct 2026): a position on the 200 metre
+  // grid, spelled exactly as snapPos spells it, inside the walk's area.
+  const here = q.from === HERE;
+  const posOk = here && /^-?\d{1,3}\.\d{3}$/.test(String(q.lat || "")) && /^-?\d{1,3}\.\d{3}$/.test(String(q.lon || ""))
+    && snapPos(q.lat) === String(q.lat) && snapPos(q.lon) === String(q.lon);
+  const start = here
+    ? (posOk && starts ? hereStart(country, q.lat, q.lon) : null)
+    : starts && Object.prototype.hasOwnProperty.call(starts, String(q.from || "")) ? starts[String(q.from)] : null;
   const hours = /^[0-9]$/.test(String(q.h || "")) ? Number(q.h) : NaN;
   const lang = NOW_LANGS.includes(String(q.lang)) ? String(q.lang) : "";
   const now = new Date();
@@ -109,7 +119,9 @@ export default async function handler(req, res) {
   // rules alone and cached the same way.
   const style = NOW_STYLES.includes(String(q.style || "")) ? String(q.style) : "";
   const listing = q.styles === "1";
-  if (keys !== (listing ? "c,from,h,lang,slot,styles" : style ? "c,from,h,lang,slot,style" : "c,from,h,lang,slot")) return json(res, 400, { error: "Unexpected query." });
+  const base = here ? "c,from,h,lang,lat,lon,slot" : "c,from,h,lang,slot";
+  if (keys !== (listing ? `${base},styles` : style ? `${base},style` : base)) return json(res, 400, { error: "Unexpected query." });
+  if (here && posOk && !start) return json(res, 400, { error: "Outside the area.", outside: true });
   if (!start || !NOW_HOURS.includes(hours) || !lang) return json(res, 400, { error: "Unknown start, length or language." });
   // ── AND ONE SPELLING OF THE ADDRESS ITSELF ────────────────────────
   // Security review, 3 Oct 2026, finding 6: the check above sorts the keys
@@ -118,7 +130,7 @@ export default async function handler(req, res) {
   // a fresh paid call each time. So the raw query must be the exact string
   // NowPlanner builds, in its order and its encoding.
   const raw = String(req.url || "").split("?").slice(1).join("?");
-  const canonical = `c=${country}&from=${start.id}&h=${hours}&lang=${lang}&slot=${encodeURIComponent(String(q.slot || ""))}${listing ? "&styles=1" : style ? `&style=${style}` : ""}`;
+  const canonical = `c=${country}&from=${start.id}&h=${hours}&lang=${lang}${here ? `&lat=${q.lat}&lon=${q.lon}` : ""}&slot=${encodeURIComponent(String(q.slot || ""))}${listing ? "&styles=1" : style ? `&style=${style}` : ""}`;
   if (raw !== canonical) return json(res, 400, { error: "Unexpected query." });
   if (!slotAccepted(String(q.slot || ""), now)) return json(res, 409, { error: "Stale half hour.", slot: slotOf(now) });
 
@@ -144,7 +156,22 @@ export default async function handler(req, res) {
   }
 
   let walk = null, made = "rules";
-  if (candidates.length && startClock.minutes >= AI_FROM && startClock.minutes < AI_TO) {
+  // A walk from a position is one more walk per street corner, so the model
+  // is counted for it: 30 a day from one address and 1000 for the site. Past
+  // either, or with the counter out of reach, the rules make the walk alone.
+  // The two fixed starts stay as they were, shared by everybody.
+  const modelAllowed = async () => {
+    if (!here) return true;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+    if (!serviceKey) return false;
+    const got = await takeDaily({
+      day: copenhagenDay(new Date()),
+      keys: [{ key: visitorKey(req.headers, serviceKey.slice(-16)).replace(/^ai:v:/, "walk:v:"), limit: 30 }, { key: "walk:site", limit: 1000 }],
+      supabaseUrl: process.env.SUPABASE_URL || SUPABASE_FALLBACK_URL, serviceKey,
+    });
+    return !!got.ok;
+  };
+  if (candidates.length && startClock.minutes >= AI_FROM && startClock.minutes < AI_TO && await modelAllowed()) {
     const order = readOrder(await askModel(planPrompt(candidates, ctx)));
     const tried = order ? tidyWalk(withMustSee(order, candidates, ctx), candidates, ctx) : null;
     if (goodWalk(tried, budget)) { walk = tried; made = "ai"; }
@@ -156,7 +183,7 @@ export default async function handler(req, res) {
 
   return json(res, 200, {
     slot: q.slot, country, from: start.id, hours, lang, made, style,
-    start: { name: start.name, lat: start.lat, lon: start.lon, ship: !!start.ship },
+    start: { id: start.id, name: start.name, lat: start.lat, lon: start.lon, ship: !!start.ship },
     weather, margin, ...walk,
     alt: alt ? { stops: alt.stops, back: alt.back, deadline: alt.deadline } : null,
     places: placesOf(walk, candidates), clock: startClock, budget,
