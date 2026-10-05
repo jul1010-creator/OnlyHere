@@ -75,6 +75,9 @@ export const WalkMode = ({ walk, madeAt, lang = "en", country = "LT", onClose, c
   const [pos, setPos] = useState(null);
   const [gpsOff, setGpsOff] = useState(false);
   const [heading, setHeading] = useState(null);
+  // The way the walker is moving, from the GPS itself, where the phone gives
+  // it: steadier than the compass while walking, absent when standing still.
+  const [course, setCourse] = useState(null);
   const [focus, setFocus] = useState(null);
   const n = useRef(0);
   const back = idx >= stops.length;
@@ -85,7 +88,12 @@ export const WalkMode = ({ walk, madeAt, lang = "en", country = "LT", onClose, c
   useEffect(() => {
     if (typeof navigator === "undefined" || !navigator.geolocation) { setGpsOff(true); return undefined; }
     const id = navigator.geolocation.watchPosition(
-      (p) => { setGpsOff(false); setPos({ lat: p.coords.latitude, lon: p.coords.longitude, accuracy: p.coords.accuracy }); },
+      (p) => {
+        setGpsOff(false);
+        setPos({ lat: p.coords.latitude, lon: p.coords.longitude, accuracy: p.coords.accuracy });
+        const h = p.coords.heading;
+        if (typeof h === "number" && Number.isFinite(h) && (p.coords.speed ?? 1) > 0.5) setCourse(h);
+      },
       () => setGpsOff(true),
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 },
     );
@@ -161,10 +169,11 @@ export const WalkMode = ({ walk, madeAt, lang = "en", country = "LT", onClose, c
         </div>
       </div>
 
-      {/* The walk's own map, following the walker. */}
+      {/* The walk's own map, following the walker like a sat nav: turned the
+          way the walker faces, the leg being walked lit up. */}
       <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
         {googleMapsReady()
-          ? <GoogleWalkMap walk={walk} height="100%" round={false} madeAt={madeAt} cardFor={cardFor} focus={focus} me={pos} follow lang={lang} loop={loop} />
+          ? <GoogleWalkMap walk={walk} height="100%" round={false} madeAt={madeAt} cardFor={cardFor} focus={focus} me={pos} follow heading={heading ?? course} activeLeg={idx} lang={lang} loop={loop} />
           : <div style={{ padding: 20, fontSize: 13, color: C.muted }}>{uiT("walk.noMap", lang)}</div>}
       </div>
 

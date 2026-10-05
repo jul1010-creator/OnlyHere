@@ -63,6 +63,8 @@ export const kmBetween = (a, b) => {
 // lifts off to cross town, so the town is seen on the way.
 export const GLIDE_MS = 1700;
 export const FOCUS = { zoom: 17.5, tilt: 50 };
+// Walking: close in, tilted, and the camera this many metres ahead of the dot.
+export const NAV = { zoom: 18, tilt: 55, ahead: 45 };
 const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - ((-2 * t + 2) ** 3) / 2);
 const turnBy = (from, to, t) => (((from + ((((to - from) % 360) + 540) % 360 - 180) * t) % 360) + 360) % 360;
 export const glideAt = (from, to, t) => {
@@ -141,7 +143,7 @@ const PIN_SCALE = 0.85;
 // the card. `cardFor(stop)` may add { emoji, photo } for a stop. `focus` is
 // { id, n }: a new n glides to the stop with that id. `me` is the walker's
 // position { lat, lon }, drawn as a blue dot, and `follow` keeps it in view.
-export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = null, focus = null, me = null, follow = false, round = true, lang = "en", loop = true }) => {
+export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = null, focus = null, me = null, follow = false, round = true, lang = "en", loop = true, heading = null, activeLeg = null }) => {
   const box = useRef(null);
   // ONE map for the life of the page. Google bills every map it creates, and
   // making a new one each time a visitor picks another walk would bill each
@@ -152,12 +154,14 @@ export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = nul
   const [failed, setFailed] = useState(false);
   // The stop on show: { stop: index, n } while focused, null over the walk.
   const [card, setCard] = useState(null);
+  // Walking: the walker has panned away from the dot, so Re-centre shows.
+  const [away, setAway] = useState(false);
 
   // A touch on the map stops a glide where it is.
   useEffect(() => {
     const el = box.current;
     if (!el) return undefined;
-    const touched = () => { moved.current = true; };
+    const touched = () => { moved.current = true; if (follow) setAway(true); };
     ["pointerdown", "wheel", "touchstart", "keydown"].forEach(e => el.addEventListener(e, touched, { passive: true }));
     return () => ["pointerdown", "wheel", "touchstart", "keydown"].forEach(e => el.removeEventListener(e, touched));
   }, [failed]);
@@ -206,6 +210,9 @@ export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = nul
         const focusStop = (i, n) => {
           const s = walk.stops[i];
           if (!s) return;
+          // Walking, the camera stays with the walker: the stop only lights
+          // up, with its sparkle and card, where it stands.
+          if (follow) { popPin(i); setCard({ stop: i, n }); return; }
           if (raf) { cancelAnimationFrame(raf); raf = 0; }
           moved.current = false;
           popPin(-1); setCard(null);
@@ -231,25 +238,84 @@ export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = nul
           };
           raf = requestAnimationFrame(step);
         };
-        // The walker's blue dot, moved as the phone moves; the camera keeps
-        // it in view while `follow` is on and the walker has not panned away.
-        let meMarker = null;
-        const showMe = (p, keepInView) => {
+        // ── THE WALKER, THE WAY A SAT NAV SHOWS THEM ───────────────────
+        // Oliver, 5 Oct 2026, of the first blue dot: "It's not possible to
+        // make it more gps-like?" So, while walking: the map turns to the
+        // way the walker faces and tilts, the camera sits a little ahead of
+        // the dot so the street in front is what fills the screen, the dot
+        // glides from fix to fix instead of jumping, a beam shows which way
+        // the phone points, and a pale circle shows how sure the fix is.
+        // Touch the map to look around; Re-centre puts it back.
+        let meMarker = null, meBeam = null, meRing = null, meRaf = 0, mePos = null, meHeading = null;
+        const ahead = (p, h, m) => {
+          const r = Math.PI / 180, d = m / 6371000, la = p.lat * r, lo = p.lng * r, b = h * r;
+          const la2 = Math.asin(Math.sin(la) * Math.cos(d) + Math.cos(la) * Math.sin(d) * Math.cos(b));
+          const lo2 = lo + Math.atan2(Math.sin(b) * Math.sin(d) * Math.cos(la), Math.cos(d) - Math.sin(la) * Math.sin(la2));
+          return { lat: la2 / r, lng: lo2 / r };
+        };
+        const placeCamera = (pos) => {
+          if (!follow || moved.current) return;
+          const h = meHeading;
+          map.moveCamera({ center: h === null ? pos : ahead(pos, h, NAV.ahead), zoom: NAV.zoom, tilt: NAV.tilt, heading: h === null ? (map.getHeading?.() || 0) : h });
+        };
+        const showMe = (p, keepInView, faceTo = null) => {
           if (!p || !Number.isFinite(Number(p.lat)) || !Number.isFinite(Number(p.lon))) return;
           const pos = { lat: Number(p.lat), lng: Number(p.lon) };
+          meHeading = Number.isFinite(Number(faceTo)) && faceTo !== null ? Number(faceTo) : null;
           if (!meMarker) {
             const dot = document.createElement("div");
             dot.setAttribute("data-testid", "me-dot");
-            dot.style.cssText = "position:relative;width:18px;height:18px";
-            dot.innerHTML = '<span style="position:absolute;inset:0;border-radius:50%;background:#4285F4;animation:gxMePulse 1.8s ease-out infinite"></span><span style="position:absolute;inset:0;border-radius:50%;background:#4285F4;border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)"></span>';
+            dot.style.cssText = "position:relative;width:22px;height:22px";
+            dot.innerHTML = '<span data-beam style="position:absolute;left:50%;top:50%;width:70px;height:70px;margin:-62px 0 0 -35px;transform-origin:50% 88%;background:radial-gradient(ellipse at 50% 100%, rgba(66,133,244,.45), rgba(66,133,244,0) 70%);clip-path:polygon(50% 88%, 12% 0, 88% 0);display:none"></span><span style="position:absolute;inset:0;border-radius:50%;background:#4285F4;animation:gxMePulse 1.8s ease-out infinite"></span><span style="position:absolute;inset:0;border-radius:50%;background:#4285F4;border:3px solid #fff;box-shadow:0 1px 6px rgba(0,0,0,.45)"></span>';
+            meBeam = dot.querySelector("[data-beam]");
             meMarker = new AdvancedMarkerElement({ map, position: pos, content: dot, zIndex: 200, title: "You" });
             drawn.push(meMarker);
+            if (Number(p.accuracy) > 0) {
+              meRing = new maps.Circle({ map, center: pos, radius: Number(p.accuracy), strokeColor: "#4285F4", strokeOpacity: 0.35, strokeWeight: 1, fillColor: "#4285F4", fillOpacity: 0.12, clickable: false, zIndex: 0 });
+              drawn.push(meRing);
+            }
+            mePos = pos;
+            placeCamera(pos);
           } else {
-            meMarker.position = pos;
+            // Glide from the last fix to this one.
+            const from = mePos || pos, t0 = performance.now(), ms = reducedMotion() ? 0 : 900;
+            if (meRaf) cancelAnimationFrame(meRaf);
+            const step = (now) => {
+              if (gone) return;
+              const t = ms ? Math.min(1, (now - t0) / ms) : 1;
+              const at2 = { lat: from.lat + (pos.lat - from.lat) * t, lng: from.lng + (pos.lng - from.lng) * t };
+              meMarker.position = at2; mePos = at2;
+              if (meRing) meRing.setCenter(at2);
+              if (keepInView) placeCamera(at2);
+              meRaf = t < 1 ? requestAnimationFrame(step) : 0;
+            };
+            meRaf = requestAnimationFrame(step);
+            if (meRing && Number(p.accuracy) > 0) meRing.setRadius(Number(p.accuracy));
           }
-          if (keepInView && !moved.current) map.panTo(pos);
+          // The beam points the way the phone faces. With the map turned to
+          // that same way it points straight up the screen.
+          if (meBeam) {
+            meBeam.style.display = meHeading === null ? "none" : "block";
+            const mapH = map.getHeading?.() || 0;
+            meBeam.style.transform = `rotate(${meHeading === null ? 0 : meHeading - (follow && !moved.current ? meHeading : mapH)}deg)`;
+          }
         };
-        api.current = { focusStop, overview, showMe, recenter: () => { moved.current = false; } };
+        const recenter = () => { moved.current = false; setAway(false); if (mePos) placeCamera(mePos); };
+        // The leg being walked stands out; legs walked are grey; legs ahead
+        // are pale. Over the whole walk, before walking, every leg is gold.
+        const legLines = [];
+        const styleLegs = (active) => {
+          legLines.forEach((l, i) => {
+            const walking = active !== null && active !== undefined;
+            const now = walking && i === active, done = walking && i < active;
+            const color = done ? "#9AA0A6" : C.gold;
+            try {
+              l.line.setOptions({ strokeColor: color, strokeOpacity: l.dashed && !now ? 0 : (done ? 0.6 : now ? 1 : walking ? 0.45 : (l.measured ? 0.9 : 0.35)), strokeWeight: now ? 7 : 4, zIndex: now ? 5 : 3 });
+              if (l.casing) l.casing.setOptions({ strokeOpacity: done ? 0.4 : 0.9, strokeWeight: now ? 11 : 8 });
+            } catch { /* line gone */ }
+          });
+        };
+        api.current = { focusStop, overview, showMe, recenter, styleLegs };
 
         map.moveCamera({ heading: 0, tilt: 0 });
         try { map.setMapTypeId("roadmap"); } catch { /* keep going */ }
@@ -278,19 +344,29 @@ export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = nul
           const measured = !!line;
           const path = measured ? line.map(([la, lo]) => ({ lat: la, lng: lo })) : legs[i].map(at);
           if (i === last) {
-            drawn.push(new maps.Polyline({
+            const dash = new maps.Polyline({
               map, path, strokeOpacity: 0, zIndex: 1,
               icons: [{ icon: { path: "M 0,-1 0,1", strokeColor: C.gold, strokeOpacity: measured ? 0.85 : 0.35, strokeWeight: 3, scale: 3 }, offset: "0", repeat: "14px" }],
-            }));
+            });
+            drawn.push(dash);
+            // Walking home, the way back is the leg being walked: drawn as
+            // a line then, under the dashes.
+            const solid = new maps.Polyline({ map, path, strokeColor: C.gold, strokeOpacity: 0, strokeWeight: 4, zIndex: 1 });
+            drawn.push(solid);
+            legLines[i] = { line: solid, casing: null, measured, dashed: true };
             return;
           }
-          if (measured) drawn.push(new maps.Polyline({ map, path, strokeColor: "#FFFFFF", strokeOpacity: 0.9, strokeWeight: 8, zIndex: 2 }));
-          drawn.push(new maps.Polyline({
+          const casing = measured ? new maps.Polyline({ map, path, strokeColor: "#FFFFFF", strokeOpacity: 0.9, strokeWeight: 8, zIndex: 2 }) : null;
+          if (casing) drawn.push(casing);
+          const gold = new maps.Polyline({
             map, path, zIndex: 3,
             strokeColor: C.gold, strokeOpacity: measured ? 0.9 : 0.35, strokeWeight: measured ? 4 : 2,
             icons: [{ icon: { path: maps.SymbolPath.FORWARD_CLOSED_ARROW, scale: 3.2, fillColor: C.gold, fillOpacity: 1, strokeColor: "#FFFFFF", strokeWeight: 1.5 }, offset: "50%" }],
-          }));
+          });
+          drawn.push(gold);
+          legLines[i] = { line: gold, casing, measured, dashed: false };
         });
+        if (activeLegRef.current !== null) styleLegs(activeLegRef.current);
       } catch {
         if (!gone) setFailed(true);
       }
@@ -300,6 +376,7 @@ export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = nul
       gone = true;
       if (raf) cancelAnimationFrame(raf);
       api.current = null;
+      setAway(false);
       drawn.forEach(d => { try { if (typeof d.setMap === "function") d.setMap(null); else d.map = null; } catch { /* already gone */ } });
     };
   }, [walk]);
@@ -322,11 +399,15 @@ export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = nul
     if (!me) return;
     let tries = 0;
     const go = () => {
-      if (api.current) api.current.showMe(me, follow);
+      if (api.current) api.current.showMe(me, follow, heading);
       else if (tries++ < 40) setTimeout(go, 100);
     };
     go();
-  }, [me?.lat, me?.lon, follow]);
+  }, [me?.lat, me?.lon, me?.accuracy, follow, heading === null ? null : Math.round(heading / 5)]);
+
+  // The leg being walked, for the walk mode.
+  const activeLegRef = useRef(activeLeg);
+  useEffect(() => { activeLegRef.current = activeLeg; api.current?.styleLegs(activeLeg); }, [activeLeg]);
 
   if (!googleMapsReady() || failed || !walkLegs(walk).length) return null;
   const stops = Array.isArray(walk?.stops) ? walk.stops : [];
@@ -376,6 +457,11 @@ export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = nul
             {uiT("map.wholeWalk", lang)}
           </button>
         </>
+      )}
+      {follow && away && (
+        <button onClick={() => api.current?.recenter()} data-testid="map-recenter" style={{ ...pill, position: "absolute", right: 10, bottom: st ? 150 : 26 }}>
+          ◎ {uiT("map.recenter", lang)}
+        </button>
       )}
     </div>
   );
