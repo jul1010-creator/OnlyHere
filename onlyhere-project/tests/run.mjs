@@ -82113,5 +82113,8 @@ ok("walking, the map has no zoom buttons, and pinching still zooms", /zoomContro
   ok("in four languages, no dashes, none of his banned words", keys.every(k => ["en", "da", "de", "lt"].every(l => M.UI_STRINGS[k]?.[l])) && !/[—–]/.test(words) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(words));
 }
 
+// ── Batch 217b: a turn's second line reads as a second sentence ──
+is("Google's line break becomes a full stop", M.turnsFrom([{ travelMode: "WALK", distanceMeters: 10, navigationInstruction: { maneuver: "TURN_SLIGHT_LEFT", instructions: "Slight left\nDestination will be on the left" } }])[0].text, "Slight left. Destination will be on the left");
+
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
 if (failed) { fails.forEach(f => console.log("  FAIL " + f + "\n")); process.exit(1); }
