@@ -123,3 +123,20 @@ export const EXAMPLE_WEEK = {
   finished: 23,
   busiest: "Thursday 11:00, two ships in",
 };
+
+// ── THE TRAIL, AS A WALK ON THE MAP ─────────────────────────────────
+// Oliver, 5 Oct 2026: "Is it possible to install a GPS route through
+// sculptures?" The trail from the sculpture just scanned, in the shape the
+// walk map and the walk mode read (components/GoogleWalkMap.jsx, WalkMode.jsx):
+// the scanned one is the start, the rest are the stops in walking order. It
+// ends at the last sculpture rather than going back, so it is not a loop.
+export const trailWalk = (trail) => {
+  const stops = Array.isArray(trail?.stops) ? trail.stops : [];
+  if (stops.length < 2) return null;
+  const [first, ...rest] = stops;
+  return {
+    start: { id: `sculpture:${first.id}`, name: first.name, lat: first.lat, lon: first.lon, ship: false },
+    stops: rest.map(s => ({ id: `sculpture:${s.id}`, name: s.name, lat: s.lat, lon: s.lon, arrive: s.arrive, stay: LISTEN_MINUTES, why: s.line || s.where || "" })),
+    back: { at: trail.used },
+  };
+};
