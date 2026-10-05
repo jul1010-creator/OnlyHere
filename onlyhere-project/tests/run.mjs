@@ -81143,7 +81143,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const w = N.scheduleWalk([{ id: "food:3" }], cands, { country: "LT", start: terminal, startClock: { day: 2, minutes: 15 * 60 + 15 }, budget: 240, margin: 30 });
   ok("a deal is not shown as on for a visit that can begin as it ends", w.stops[0] && w.stops[0].deal === null);
   const api = readFileSync(join(root, "api/plan-now.js"), "utf8");
-  ok("the walk route answers one spelling of each request only", /if \(keys !== \(listing \? "c,from,h,lang,slot,styles" : style \? "c,from,h,lang,slot,style" : "c,from,h,lang,slot"\)\) return json\(res, 400/.test(api) && /const style = NOW_STYLES\.includes\(String\(q\.style \|\| ""\)\) \? String\(q\.style\) : "";/.test(api) && /const listing = q\.styles === "1";/.test(api) && /Object\.prototype\.hasOwnProperty\.call\(starts, String\(q\.from \|\| ""\)\)/.test(api) && /\/\^\[0-9\]\$\/\.test\(String\(q\.h \|\| ""\)\)/.test(api));
+  ok("the walk route answers one spelling of each request only", /const base = here \? "c,from,h,lang,lat,lon,slot" : "c,from,h,lang,slot";/.test(api) && /if \(keys !== \(listing \? `\$\{base\},styles` : style \? `\$\{base\},style` : base\)\) return json\(res, 400/.test(api) && /const style = NOW_STYLES\.includes\(String\(q\.style \|\| ""\)\) \? String\(q\.style\) : "";/.test(api) && /const listing = q\.styles === "1";/.test(api) && /Object\.prototype\.hasOwnProperty\.call\(starts, String\(q\.from \|\| ""\)\)/.test(api) && /\/\^\[0-9\]\$\/\.test\(String\(q\.h \|\| ""\)\)/.test(api));
   const np = readFileSync(join(root, "src/components/NowPlanner.jsx"), "utf8");
   ok("an answer for an older choice is dropped", /if \(asked\.current !== mine\) return;/.test(np));
   const store = readFileSync(join(root, "src/utils/studioDraftStore.js"), "utf8");
@@ -81395,8 +81395,10 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("and the billing words the guide builder looks for survive", /credit balance is too low/.test(M.safeUpstreamError({ error: { message: "Your credit balance is too low to access the API." } }, 400).error.message));
   ok("the Claude and OpenAI routes hand back only the cleaned error", (rd("api/anthropic.js").match(/safeUpstreamError\(/g) || []).length === 2 && /safeUpstreamError\(data, r\.status, "OpenAI"\)/.test(rd("api/openai.js")) && !/String\(err\)/.test(rd("api/anthropic.js")));
   const pn = rd("api/plan-now.js");
-  ok("plan-now answers one spelling of its address only, raw", /if \(raw !== canonical\) return json\(res, 400/.test(pn) && /const raw = String\(req\.url \|\| ""\)/.test(pn) && /\/api\/plan-now\?c=\$\{country\}&from=\$\{from\}&h=\$\{hours\}&lang=\$\{lang\}&slot=\$\{encodeURIComponent\(slot\)\}/.test(rd("src/components/NowPlanner.jsx")));
-  ok("and reads published rows with the public key, never the service key", /const key = PUBLIC_SUPABASE_KEY;/.test(pn) && !/SUPABASE_SERVICE_ROLE_KEY/.test(pn));
+  ok("plan-now answers one spelling of its address only, raw", /if \(raw !== canonical\) return json\(res, 400/.test(pn) && /const raw = String\(req\.url \|\| ""\)/.test(pn) && /\/api\/plan-now\?c=\$\{country\}&\$\{fromQuery\}&slot=\$\{encodeURIComponent\(slot\)\}/.test(rd("src/components/NowPlanner.jsx")) && /`from=\$\{HERE\}&h=\$\{hours\}&lang=\$\{lang\}&lat=\$\{pos\.lat\}&lon=\$\{pos\.lon\}` : `from=\$\{from\}&h=\$\{hours\}&lang=\$\{lang\}`/.test(rd("src/components/NowPlanner.jsx")) && /&lang=\$\{lang\}\$\{here \? `&lat=\$\{q\.lat\}&lon=\$\{q\.lon\}` : ""\}&slot=/.test(pn));
+  // Batch 205: the service key is used for one thing, counting the model calls
+  // for walks from a position, and never to read rows.
+  ok("and reads published rows with the public key, never the service key", /const key = PUBLIC_SUPABASE_KEY;/.test(pn) && (pn.match(/SUPABASE_SERVICE_ROLE_KEY/g) || []).length === 1 && pn.indexOf("SUPABASE_SERVICE_ROLE_KEY") > pn.indexOf("const modelAllowed = async"));
   ok("the public key on the server is the one in the page", rd("src/config.js").includes(M.PUBLIC_SUPABASE_KEY) && /"role":"anon"/.test(Buffer.from(M.PUBLIC_SUPABASE_KEY.split(".")[1], "base64").toString()));
   ok("a forecast that could not be read is unknown, not dry", /const UNKNOWN_WEATHER = \{ known: false/.test(pn) && /forecast could not be read/.test(M.NP.planPrompt([], { country: "LT", start: M.NP.NOW_STARTS.LT.centre, startClock: { day: 2, minutes: 600 }, budget: 120, weather: { known: false } })));
   ok("a founder's ticket answer stays out of the shared cache", /res\.setHeader\("Cache-Control", "private, max-age=900"\);/.test(rd("api/tickets.js")) && !/s-maxage=900, stale-while-revalidate=3600/.test(rd("api/tickets.js")));
@@ -81840,6 +81842,27 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const keys = ["food", "museums", "outdoors", "workshops", "events", "nightlife"].map(k => `now.style.${k}`);
   const words = keys.map(k => ["en", "da", "de", "lt"].map(l => M.UI_STRINGS[k]?.[l] || "").join(" ")).join(" ");
   ok("every kind is named in four languages, with no dashes or banned words", keys.every(k => ["en", "da", "de", "lt"].every(l => M.UI_STRINGS[k]?.[l])) && !/[—–]/.test(words) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(words));
+}
+
+// ── Batch 205: a walk from where the visitor stands ──
+// Oliver, 5 Oct 2026: "also, make from my position as well."
+{
+  const N = M.NP;
+  is("a position is snapped to a 200 metre grid, spelled one way", [N.snapPos(55.70913), N.snapPos(21.13149), N.snapPos("55.708")], ["55.710", "21.132", "55.708"]);
+  const h = N.hereStart("LT", 55.70913, 21.13149);
+  ok("inside Klaipėda it is a start, where you are, not a ship", h && h.id === N.HERE && h.lat === 55.71 && h.lon === 21.132 && h.ship === false);
+  ok("Melnragė and Smiltynė count, Vilnius and Denmark do not", !!N.hereStart("LT", 55.7382, 21.0834) && !!N.hereStart("LT", 55.7178, 21.0989) && N.hereStart("LT", 54.6872, 25.2797) === null && N.hereStart("DK", 55.70913, 21.13149) === null);
+  const api = readFileSync(join(root, "api/plan-now.js"), "utf8");
+  ok("the route takes only a position on the grid, spelled as snapPos spells it", /snapPos\(q\.lat\) === String\(q\.lat\) && snapPos\(q\.lon\) === String\(q\.lon\)/.test(api) && /return json\(res, 400, \{ error: "Outside the area\.", outside: true \}\)/.test(api));
+  ok("and counts the model for walks from a position, falling back to the rules", /if \(!here\) return true;/.test(api) && /key: "walk:site", limit: 1000/.test(api) && /&& await modelAllowed\(\)\) \{/.test(api));
+  const np = readFileSync(join(root, "src/components/NowPlanner.jsx"), "utf8");
+  ok("the position is asked for only when the button is tapped, and checked against the area", /const useHere = \(\) => \{/.test(np) && /onClick=\{useHere\}/.test(np) && /if \(!inNowArea\(country, at\)\) \{ setPosNote\(uiT\("now\.notHere", lang\)\); return; \}/.test(np) && !/localStorage[^\n]*pos/.test(np));
+  ok("and the walk says it starts and ends where you are", /walk\.start\.id === HERE \? uiT\("now\.whereYouAre", lang\)/.test(np) && /walk\.start\.id === HERE \? "now\.backHere" : "now\.backCentre"/.test(np));
+  const privacy = readFileSync(join(root, "public/privacy.html"), "utf8");
+  ok("the privacy notice says the rounded position goes to the server", /rounded to a grid of about 200 metres, is sent to our server/.test(privacy));
+  const keys = ["now.fromHere", "now.whereYouAre", "now.backHere", "now.notHere", "now.noLocation"];
+  const words = keys.map(k => ["en", "da", "de", "lt"].map(l => M.UI_STRINGS[k]?.[l] || "").join(" ")).join(" ");
+  ok("in four languages, with no dashes or banned words", keys.every(k => ["en", "da", "de", "lt"].every(l => M.UI_STRINGS[k]?.[l])) && !/[—–]/.test(words) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(words));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
