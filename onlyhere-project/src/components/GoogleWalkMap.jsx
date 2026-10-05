@@ -194,7 +194,7 @@ export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = nul
             // Asked for in code, not left to the Map ID's own setting: a
             // raster map ignores tilt and heading (4 Oct 2026).
             renderingType: maps.RenderingType?.VECTOR || "VECTOR",
-            disableDefaultUI: true, zoomControl: true, gestureHandling: follow ? "greedy" : "cooperative", clickableIcons: false,
+            disableDefaultUI: true, zoomControl: !follow, gestureHandling: follow ? "greedy" : "cooperative", clickableIcons: false,
           });
         }
         const map = mapRef.current;
