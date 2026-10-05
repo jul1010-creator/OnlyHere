@@ -770,6 +770,7 @@ export const UI_STRINGS = {
   "now.showOnMap":   { en: "Show on map", da: "Vis på kortet", de: "Auf der Karte", lt: "Rodyti žemėlapyje" },
   "now.startWalk":   { en: "Start walking", da: "Start turen", de: "Los gehen", lt: "Pradėti ėjimą" },
   "map.wholeWalk":   { en: "Whole walk", da: "Hele turen", de: "Ganze Tour", lt: "Visas maršrutas" },
+  "map.recenter":    { en: "Re-centre", da: "Centrér", de: "Zentrieren", lt: "Centruoti" },
   "walk.title":      { en: "Your walk", da: "Din tur", de: "Deine Tour", lt: "Jūsų maršrutas" },
   "walk.stopOf":     { en: "Stop {i} of {n}", da: "Stop {i} af {n}", de: "Halt {i} von {n}", lt: "Sustojimas {i} iš {n}" },
   "walk.wayBack":    { en: "The way back", da: "Vejen tilbage", de: "Der Rückweg", lt: "Kelias atgal" },
