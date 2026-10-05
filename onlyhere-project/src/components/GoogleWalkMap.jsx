@@ -62,7 +62,23 @@ const reducedMotion = () => {
   try { return !!window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches; } catch { return false; }
 };
 
-export const GoogleWalkMap = ({ walk, height = 300 }) => {
+// ── A MAP YOU CAN READ AS A ROUTE ───────────────────────────────────
+// Oliver, 5 Oct 2026, of the four hour walk from the ship: "confusing and
+// messy map.. you don't look at this and think 'looks like a good route'..
+// nobody can tell what this route is". What made it so: every leg the same
+// gold line with nothing to say which way it ran, the way back drawn over the
+// way out, the map left tilted after the turn so the start fell off the
+// bottom, and pins large enough to cover each other on Theatre Square. Now
+// each leg carries an arrow halfway along it, on a white edge so it reads on
+// water and on streets, the way back is a dashed line, the map lies flat
+// again after its one turn with the whole walk in view, and the pins are
+// smaller. Google's own labels (museums, bars) are hidden by the map style
+// set on the Map ID in Google Cloud, not here: a vector map with a Map ID
+// takes no style from code.
+const PAD = { top: 52, right: 28, bottom: 28, left: 28 };
+const PIN_SCALE = 0.85;
+
+export const GoogleWalkMap = ({ walk, height = 340 }) => {
   const box = useRef(null);
   // ONE map for the life of the page. Google bills every map it creates, and
   // making a new one each time a visitor picks another walk would bill each
@@ -92,7 +108,7 @@ export const GoogleWalkMap = ({ walk, height = 300 }) => {
       cancelAnimationFrame(raf); raf = 0;
       // Stopped part way round, it is set back to north rather than left at
       // whatever angle it had reached.
-      try { mapRef.current?.moveCamera({ heading: 0 }); } catch { /* map gone */ }
+      try { mapRef.current?.moveCamera({ heading: 0, tilt: 0 }); } catch { /* map gone */ }
     };
 
     (async () => {
@@ -113,7 +129,7 @@ export const GoogleWalkMap = ({ walk, height = 300 }) => {
             // heading, so the walk neither tilted nor turned. The option wins
             // over the cloud setting.
             renderingType: maps.RenderingType?.VECTOR || "VECTOR",
-            disableDefaultUI: true, zoomControl: true, gestureHandling: "cooperative",
+            disableDefaultUI: true, zoomControl: true, gestureHandling: "cooperative", clickableIcons: false,
           });
         }
         const map = mapRef.current;
@@ -125,40 +141,58 @@ export const GoogleWalkMap = ({ walk, height = 300 }) => {
         // nor turned. The listener goes on before anything slow is asked.
         idle = maps.event.addListenerOnce(map, "idle", () => {
           if (gone) return;
-          map.moveCamera({ tilt: SPIN_TILT, heading: 0 });
+          // Flat unless it is turning: a tilted map pushes the start off the
+          // bottom and hides how the walk runs.
           if (turned.current || moved.current || reducedMotion()) return;
           turned.current = true;
+          map.moveCamera({ tilt: SPIN_TILT, heading: 0 });
           const t0 = performance.now();
           const turn = (now) => {
             if (gone) return;
-            if (moved.current) { raf = 0; return; }
+            // Touched: flat and north up, where the visitor's finger left it.
+            if (moved.current) { raf = 0; map.moveCamera({ heading: 0, tilt: 0 }); return; }
             const heading = headingAt(now - t0);
-            if (heading === null) { map.moveCamera({ heading: 0 }); raf = 0; return; }
+            // Round once: flat again, with the whole walk in view.
+            if (heading === null) { raf = 0; map.moveCamera({ heading: 0, tilt: 0 }); map.fitBounds(bounds, PAD); return; }
             map.moveCamera({ heading });
             raf = requestAnimationFrame(turn);
           };
           raf = requestAnimationFrame(turn);
         });
-        map.fitBounds(bounds, 36);
+        map.moveCamera({ heading: 0, tilt: 0 });
+        map.fitBounds(bounds, PAD);
 
         // The start, then every stop numbered in the order it is walked.
-        const startPin = new PinElement({ glyph: "⚓", background: C.surface, borderColor: C.gold, glyphColor: C.gold });
-        drawn.push(new AdvancedMarkerElement({ map, position: at(walk.start), content: startPin.element, title: walk.start.name || "Start" }));
+        const startPin = new PinElement({ glyph: "⚓", background: C.surface, borderColor: C.gold, glyphColor: C.gold, scale: PIN_SCALE });
+        drawn.push(new AdvancedMarkerElement({ map, position: at(walk.start), content: startPin.element, title: walk.start.name || "Start", zIndex: 100 }));
         walk.stops.forEach((s, i) => {
-          const pin = new PinElement({ glyph: String(i + 1), background: C.gold, borderColor: C.onGold, glyphColor: C.onGold });
-          drawn.push(new AdvancedMarkerElement({ map, position: at(s), content: pin.element, title: s.name || "" }));
+          const pin = new PinElement({ glyph: String(i + 1), background: C.gold, borderColor: C.onGold, glyphColor: C.onGold, scale: PIN_SCALE });
+          drawn.push(new AdvancedMarkerElement({ map, position: at(s), content: pin.element, title: s.name || "", zIndex: 50 - i }));
         });
 
         // The legs as Google measured them.
         const legs = walkLegs(walk);
         const lines = await Promise.all(legs.map(([a, b]) => legLine(a, b)));
         if (gone) return;
+        // Out and on: a gold line on a white edge with an arrow halfway, so the
+        // order reads off the map. Back to the start: a dashed line, so the way
+        // home never looks like part of the walk.
+        const last = legs.length - 1;
         lines.forEach((line, i) => {
           const measured = !!line;
+          const path = measured ? line.map(([la, lo]) => ({ lat: la, lng: lo })) : legs[i].map(at);
+          if (i === last) {
+            drawn.push(new maps.Polyline({
+              map, path, strokeOpacity: 0, zIndex: 1,
+              icons: [{ icon: { path: "M 0,-1 0,1", strokeColor: C.gold, strokeOpacity: measured ? 0.85 : 0.35, strokeWeight: 3, scale: 3 }, offset: "0", repeat: "14px" }],
+            }));
+            return;
+          }
+          if (measured) drawn.push(new maps.Polyline({ map, path, strokeColor: "#FFFFFF", strokeOpacity: 0.9, strokeWeight: 8, zIndex: 2 }));
           drawn.push(new maps.Polyline({
-            map,
-            path: measured ? line.map(([la, lo]) => ({ lat: la, lng: lo })) : legs[i].map(at),
+            map, path, zIndex: 3,
             strokeColor: C.gold, strokeOpacity: measured ? 0.9 : 0.35, strokeWeight: measured ? 4 : 2,
+            icons: [{ icon: { path: maps.SymbolPath.FORWARD_CLOSED_ARROW, scale: 3.2, fillColor: C.gold, fillOpacity: 1, strokeColor: "#FFFFFF", strokeWeight: 1.5 }, offset: "50%" }],
           }));
         });
       } catch {
