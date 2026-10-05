@@ -11,7 +11,7 @@ import { C } from "../utils/theme";
 import { t as uiT, resolveUiLanguage, UI_LANGUAGE_KEY } from "../utils/uiLanguage";
 import { countryProfile } from "../utils/countries";
 import { placeClock } from "../utils/offerClock";
-import { NOW_HOURS, NOW_STARTS, OLD_TOWN, STROLL, STORM_WIND, slotOf, walkMapsUrl, rideApp, MUST_SEE, STAY_STEP, replanWalk, canStayLonger } from "../utils/nowPlanner";
+import { NOW_HOURS, NOW_STARTS, NOW_STYLES, STROLL, STORM_WIND, slotOf, walkMapsUrl, rideApp, MUST_SEE, STAY_STEP, replanWalk, canStayLonger } from "../utils/nowPlanner";
 import { entryWord } from "../utils/entryWords";
 import { ferryOf } from "../utils/walkable";
 
@@ -173,8 +173,11 @@ export const NowPlanner = ({ country = "LT", lang: langProp = "", defaultFrom = 
   const firstFrom = starts[defaultFrom] ? defaultFrom : Object.keys(starts)[0];
   const [from, setFrom] = useState(firstFrom);
   const [hours, setHours] = useState(3);
-  // The Old Town walk, where the country has an Old Town drawn.
-  const [stroll, setStroll] = useState(false);
+  // A walk of one kind (Oliver, 5 Oct 2026: "anything possible in Klaipeda.
+  // But Only if the timing fits"). `kinds` is what the route says fits this
+  // start, this length and this half hour; nothing is offered until it says.
+  const [style, setStyle] = useState("");
+  const [kinds, setKinds] = useState([]);
   const [state, setState] = useState({ busy: false, walk: null, error: "", madeAt: 0 });
   // Which choice the newest request was for. An answer for an older choice,
   // arriving after the reader tapped another button, is dropped.
@@ -183,16 +186,36 @@ export const NowPlanner = ({ country = "LT", lang: langProp = "", defaultFrom = 
 
   // A new choice clears the old walk, so a 2 hour walk is never shown under
   // a 4 hour button.
-  useEffect(() => { asked.current = ""; setState({ busy: false, walk: null, error: "", madeAt: 0 }); }, [from, hours, stroll]);
+  useEffect(() => { asked.current = ""; setState({ busy: false, walk: null, error: "", madeAt: 0 }); }, [from, hours, style]);
+
+  // Which kinds fit, asked again when the start or the length changes. A kind
+  // that no longer fits is let go of rather than left pressed.
+  useEffect(() => {
+    if (!starts[from]) return undefined;
+    let gone = false;
+    const ask = (slot) => fetch(`/api/plan-now?c=${country}&from=${from}&h=${hours}&lang=${lang}&slot=${encodeURIComponent(slot)}&styles=1`);
+    (async () => {
+      try {
+        let r = await ask(slotOf(new Date()));
+        if (r.status === 409) { const j = await r.json().catch(() => ({})); if (j.slot) r = await ask(j.slot); }
+        const got = r.ok ? await r.json() : null;
+        const fit = Array.isArray(got?.styles) ? got.styles.filter(k => NOW_STYLES.includes(k)) : [];
+        if (gone) return;
+        setKinds(fit);
+        setStyle(cur => (cur && !fit.includes(cur) ? "" : cur));
+      } catch { if (!gone) setKinds([]); }
+    })();
+    return () => { gone = true; };
+  }, [country, from, hours, lang]);
 
   if (!firstFrom) return null;
   const zone = countryProfile(country).zone;
 
   const make = async () => {
-    const mine = `${from}|${hours}|${stroll}`;
+    const mine = `${from}|${hours}|${style}`;
     asked.current = mine;
     setState({ busy: true, walk: null, error: "", madeAt: 0 });
-    const ask = (slot) => fetch(`/api/plan-now?c=${country}&from=${from}&h=${hours}&lang=${lang}&slot=${encodeURIComponent(slot)}${stroll ? `&style=${STROLL}` : ""}`);
+    const ask = (slot) => fetch(`/api/plan-now?c=${country}&from=${from}&h=${hours}&lang=${lang}&slot=${encodeURIComponent(slot)}${style ? `&style=${style}` : ""}`);
     try {
       let r = await ask(slotOf(new Date()));
       if (r.status === 409) { const j = await r.json().catch(() => ({})); if (j.slot) r = await ask(j.slot); }
@@ -236,11 +259,14 @@ export const NowPlanner = ({ country = "LT", lang: langProp = "", defaultFrom = 
         ))}
       </div>
 
-      {OLD_TOWN[country] && (
-        <div style={{ marginBottom: 14 }}>
-          <button onClick={() => setStroll(v => !v)} aria-pressed={stroll} style={pill(stroll)} data-testid="now-old-town">
-            {uiT("now.oldTown", lang)}
-          </button>
+      {kinds.length > 0 && (
+        <div data-testid="now-kinds" style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+          {kinds.map(k => (
+            <button key={k} onClick={() => setStyle(cur => (cur === k ? "" : k))} aria-pressed={style === k} style={pill(style === k)}
+              data-testid={k === STROLL ? "now-old-town" : `now-style-${k}`}>
+              {uiT(k === STROLL ? "now.oldTown" : `now.style.${k}`, lang)}
+            </button>
+          ))}
         </div>
       )}
 
