@@ -69,6 +69,8 @@ export const NAV = { zoom: 18, tilt: 55, ahead: 45 };
 // you are joined to its nearest point; further than that, to the stop itself.
 export const JOIN_ON_M = 15;
 export const JOIN_MAX_M = 250;
+// How long a stop's card stays up while walking.
+export const CARD_WALKING_MS = 6000;
 const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - ((-2 * t + 2) ** 3) / 2);
 const turnBy = (from, to, t) => (((from + ((((to - from) % 360) + 540) % 360 - 180) * t) % 360) + 360) % 360;
 export const glideAt = (from, to, t) => {
@@ -216,7 +218,9 @@ export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = nul
           if (!s) return;
           // Walking, the camera stays with the walker: the stop only lights
           // up, with its sparkle and card, where it stands.
-          if (follow) { popPin(i); setCard({ stop: i, n }); return; }
+          // Walking, the card comes up at the top for a few seconds, so it
+          // never sits over the dot or the way ahead (5 Oct 2026).
+          if (follow) { popPin(i); setCard({ stop: i, n }); setTimeout(() => { if (!gone) setCard(c => (c && c.n === n ? null : c)); }, CARD_WALKING_MS); return; }
           if (raf) { cancelAnimationFrame(raf); raf = 0; }
           moved.current = false;
           popPin(-1); setCard(null);
@@ -491,7 +495,7 @@ export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = nul
         <>
           {!reducedMotion() && <Burst key={`burst${card.n}`} />}
           <div key={`card${card.n}`} data-testid="map-card" style={{
-            position: "absolute", left: 10, right: 10, bottom: 26, background: C.surface, border: `1px solid ${C.gold}`, borderRadius: 14, padding: "11px 13px", overflow: "hidden", pointerEvents: "none", fontFamily: "'Inter', sans-serif",
+            position: "absolute", left: 10, right: 10, ...(follow ? { top: 10 } : { bottom: 26 }), background: C.surface, border: `1px solid ${C.gold}`, borderRadius: 14, padding: "11px 13px", overflow: "hidden", pointerEvents: "none", fontFamily: "'Inter', sans-serif",
             display: "flex", gap: 11, alignItems: "flex-start",
             animation: reducedMotion() ? "none" : "gxCardIn 560ms cubic-bezier(.2,.9,.3,1) both, gxGlow 1800ms 560ms ease-in-out infinite",
           }}>
@@ -521,7 +525,7 @@ export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = nul
         </>
       )}
       {follow && away && (
-        <button onClick={() => api.current?.recenter()} data-testid="map-recenter" style={{ ...pill, position: "absolute", right: 10, bottom: st ? 150 : 26 }}>
+        <button onClick={() => api.current?.recenter()} data-testid="map-recenter" style={{ ...pill, position: "absolute", right: 10, bottom: st && !follow ? 150 : 26 }}>
           ◎ {uiT("map.recenter", lang)}
         </button>
       )}
