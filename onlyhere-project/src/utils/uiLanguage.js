@@ -754,6 +754,13 @@ export const UI_STRINGS = {
   "now.start":      { en: "Start", da: "Start", de: "Start", lt: "Pradžia" },
   "now.walk":       { en: "{n} min walk", da: "{n} min. gang", de: "{n} Min. zu Fuß", lt: "{n} min pėsčiomis" },
   "now.ride":       { en: "Too far to walk. Take a {app}, about {n} min", da: "For langt at gå. Tag en {app}, cirka {n} min.", de: "Zu weit zum Laufen. Nimm ein {app}, etwa {n} Min.", lt: "Per toli eiti pėsčiomis. Važiuokite {app}, apie {n} min." },
+  // Walks of one kind, 5 Oct 2026, offered only when one fits (nowPlanner styleFits).
+  "now.style.food":      { en: "Food and drink", da: "Mad og drikke", de: "Essen und Trinken", lt: "Maistas ir gėrimai" },
+  "now.style.museums":   { en: "Museums", da: "Museer", de: "Museen", lt: "Muziejai" },
+  "now.style.outdoors":  { en: "Outdoors", da: "Udendørs", de: "Draußen", lt: "Lauke" },
+  "now.style.workshops": { en: "Workshops", da: "Workshops", de: "Workshops", lt: "Dirbtuvės" },
+  "now.style.events":    { en: "Events today", da: "Begivenheder i dag", de: "Veranstaltungen heute", lt: "Šiandienos renginiai" },
+  "now.style.nightlife": { en: "Night out", da: "Byen om aftenen", de: "Ausgehen", lt: "Vakaras mieste" },
   // The old ferry to Smiltynė on a walk, 4 Oct 2026 (nowPlanner legBetween).
   "now.ferry":      { en: "{a} min walk to the old ferry, up to {w} min wait, {c} min across, then {b} min walk", da: "{a} min. gang til den gamle færge, op til {w} min. ventetid, {c} min. over vandet, så {b} min. gang", de: "{a} Min. zu Fuß zur alten Fähre, bis zu {w} Min. Wartezeit, {c} Min. Überfahrt, dann {b} Min. zu Fuß", lt: "{a} min pėsčiomis iki senosios perkėlos, iki {w} min laukimo, {c} min keltu, tada {b} min pėsčiomis" },
   "now.ferryTimes": { en: "Today's departures", da: "Dagens afgange", de: "Heutige Abfahrten", lt: "Šiandienos reisai" },

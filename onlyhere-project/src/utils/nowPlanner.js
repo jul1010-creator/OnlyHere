@@ -150,8 +150,8 @@ export const openBetween = (lines, day, fromMin, toMinute) => {
 };
 
 // ── WHAT IS IN THE RUNNING ──────────────────────────────────────────
-const KIND = { free: "Attraction", food: "Food", booking: "Workshop", festival: "Event" };
-const STAY = { Attraction: 40, Museum: 55, Food: 60, Workshop: 60, Event: 45 };
+const KIND = { free: "Attraction", food: "Food", booking: "Workshop", festival: "Event", nightlife: "Nightlife" };
+const STAY = { Attraction: 40, Museum: 55, Food: 60, Workshop: 60, Event: 45, Nightlife: 50 };
 const TIER_SCORE = { "Can't Miss Out": 3, "Highly Recommended": 2, "Worth Considering": 1 };
 const INDOOR = /museum|muziejus|gallery|galerija|church|bažnyčia|cathedral|aquarium|clock|laikrodžių|exhibition|indoor|café|cafe|restaurant|bakery|\bbar\b/i;
 // A name that says outdoors wins over a word that says indoors: Theatre
@@ -179,7 +179,30 @@ export const inOldTown = (country, p) => {
 export const STROLL = "oldtown";
 export const STROLL_STAY = 20;
 export const strollCandidates = (candidates, country) =>
-  candidates.filter(c => inOldTown(country, c) && c.kind !== "Museum");
+  candidates.filter(c => inOldTown(country, c) && c.kind !== "Museum" && c.kind !== "Nightlife");
+
+// ── WALKS OF ONE KIND ───────────────────────────────────────────────
+// Oliver, 5 Oct 2026, of a six hour walk made at 03:20 that had only Melnragė
+// Park and Danė Square in it: "Perhaps different categories?", then "anything
+// possible in Klaipeda. But Only if the timing fits", and only that category
+// in the walk. So a walk can be of one kind, and a kind is offered only when
+// the rules can make a walk of it from that start, for that time, in that
+// half hour (styleFits). The Old Town walk is one of them.
+export const NOW_STYLES = [STROLL, "food", "museums", "outdoors", "workshops", "events", "nightlife"];
+export const styleCandidates = (candidates, style, country) => {
+  const list = Array.isArray(candidates) ? candidates : [];
+  switch (style) {
+    case STROLL: return strollCandidates(list, country);
+    case "food": return list.filter(c => c.kind === "Food");
+    case "museums": return list.filter(c => c.kind === "Museum");
+    case "outdoors": return list.filter(c => c.kind === "Attraction" && !c.indoor);
+    case "workshops": return list.filter(c => c.kind === "Workshop");
+    case "events": return list.filter(c => c.kind === "Event");
+    case "nightlife": return list.filter(c => c.kind === "Nightlife");
+    // The everyday walk leaves the bars to their own: a pub is not a sight.
+    default: return list.filter(c => c.kind !== "Nightlife");
+  }
+};
 
 const pointOf = (p) => {
   const lat = Number(p?.__lat ?? p?.lat), lon = Number(p?.__lon ?? p?.lon);
@@ -301,7 +324,8 @@ export const scheduleWalk = (order, candidates, ctx) => {
   for (const pick of Array.isArray(order) ? order : []) {
     const c = byId.get(pick?.id);
     if (!c || stops.some(s => s.id === c.id)) continue;
-    if (c.kind === "Food" && foods >= Math.max(1, Math.floor(budget / 180))) continue;
+    // A food walk is several stops of food; any other walk has one meal in it.
+    if (c.kind === "Food" && foods >= (style === "food" ? Math.max(2, Math.floor(budget / 75)) : Math.max(1, Math.floor(budget / 180)))) continue;
     if (rules.dropExposed && c.exposed && !c.indoor) continue;
     const leg = legOf(here, c);
     const arrive = t + leg.minutes;
@@ -325,8 +349,8 @@ export const scheduleWalk = (order, candidates, ctx) => {
       const a = openBetween(c.hours, startClock.day, startClock.minutes + arrive, startClock.minutes + leave);
       const b = openBetween(c.hours, startClock.day, startClock.minutes + arrive + SPREAD, startClock.minutes + leave + SPREAD);
       if (a === false || b === false) continue;
-      if ((a === null || b === null) && (c.kind === "Food" || c.kind === "Museum" || c.kind === "Workshop")) continue;
-    } else if (c.kind === "Food" || c.kind === "Museum" || c.kind === "Workshop") {
+      if ((a === null || b === null) && (c.kind === "Food" || c.kind === "Museum" || c.kind === "Workshop" || c.kind === "Nightlife")) continue;
+    } else if (c.kind === "Food" || c.kind === "Museum" || c.kind === "Workshop" || c.kind === "Nightlife") {
       continue;
     }
     const back = legOf(c, start);
@@ -374,6 +398,16 @@ export const ruleOrder = (candidates, ctx) => {
 };
 
 // ── WHAT THE MODEL IS GIVEN ─────────────────────────────────────────
+// What a walk of one kind is for, said to the model in one sentence.
+const STYLE_ASK = {
+  [STROLL]: "The visitor wants an easy walk around the Old Town: streets, squares, the river and somewhere to sit, no museums, short stops.",
+  food: "The visitor wants a walk for food and drink: cafés, bakeries and a meal, with short walks between them.",
+  museums: "The visitor wants a walk of museums.",
+  outdoors: "The visitor wants to be outdoors: squares, parks, the river, the sea and the sculptures.",
+  workshops: "The visitor wants to make or try something: the workshops.",
+  events: "The visitor wants what is on today: the events.",
+  nightlife: "The visitor wants a night out: bars and live music.",
+};
 const LANG_NAMES = { en: "English", da: "Danish", de: "German", lt: "Lithuanian" };
 const HHMM = (m) => `${String(Math.floor(((m % 1440) + 1440) % 1440 / 60)).padStart(2, "0")}:${String(((m % 60) + 60) % 60).padStart(2, "0")}`;
 
@@ -391,7 +425,7 @@ export const planPrompt = (candidates, ctx) => {
     return `${c.id} | ${c.name} | ${c.kind}${c.tier ? ` | ${c.tier}` : ""}${c.indoor ? " | indoors" : ""}${c.exposed && !c.indoor ? " | out on open water" : ""}${far}${c.about ? ` | ${c.about}` : ""}`;
   }).join("\n");
   return `You plan one walk for a visitor in ${COUNTRY_PROFILES[country]?.name || country} who has ${budget} minutes, starting now at ${HHMM(startClock.minutes)} local time from ${start.name}${margin ? `, and who must be back there ${margin} minutes before their time is up (they are off a cruise ship)` : ""}.
-Weather now: ${sky}${gale}${temp !== null ? `, ${Math.round(temp)} °C` : ""}.${style === STROLL ? "\nThe visitor wants an easy walk around the Old Town: streets, squares, the river and somewhere to sit, no museums, short stops." : ""}
+Weather now: ${sky}${gale}${temp !== null ? `, ${Math.round(temp)} °C` : ""}.${STYLE_ASK[style] ? `\n${STYLE_ASK[style]}` : ""}
 
 PLACES YOU MAY USE, and no others. Use the id exactly as written:
 ${list}
@@ -430,6 +464,18 @@ export const stripDashes = (v) => String(v || "")
 
 // A walk worth serving: at least two places, or one when time is short.
 export const goodWalk = (walk, budget) => walk && walk.stops.length >= (budget <= 120 ? 1 : 2);
+
+// Whether a walk of this kind can be made right now: the rules alone, no
+// model, make it from the places of that kind, and it must be a walk worth
+// serving. A kind with nothing open, or nothing that fits the time and the
+// way back, is not offered.
+export const styleFits = (candidates, style, ctx) => {
+  const list = styleCandidates(candidates, style, ctx.country);
+  if (!list.length) return false;
+  const c = { ...ctx, style };
+  return !!goodWalk(scheduleWalk(ruleOrder(list, c), list, c), c.budget);
+};
+export const stylesThatFit = (candidates, ctx) => NOW_STYLES.filter(st => styleFits(candidates, st, ctx));
 
 // The Maps link for the whole walk, on foot, start to start.
 export const walkMapsUrl = (start, stops) => {
