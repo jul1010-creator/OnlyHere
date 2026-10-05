@@ -26,6 +26,9 @@
 import { walkMinutes } from "../utils/nowPlanner";
 
 export const KLAIPEDA_SCULPTURES_PATH = "/lithuania/sculptures";
+// What the tourism centre would see, apart from what a visitor sees (Oliver,
+// 5 Oct 2026: "we need a seperation").
+export const KLAIPEDA_CENTRE_PATH = "/lithuania/sculptures/centre";
 
 // side: "city" for the mainland, "smiltyne" for across the strait (still
 // Klaipėda city: Smiltynė belongs to the city municipality, not Neringa).

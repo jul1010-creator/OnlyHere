@@ -26,6 +26,12 @@ import { fingerprint, proseOf } from "../utils/entryTranslate";
 import { ferryWait } from "../utils/walkable";
 
 export const KLAIPEDA_EXAMPLES_PATH = "/lithuania/examples";
+// The side for cafés, restaurants and shops, apart from the visitor's.
+// Oliver, 5 Oct 2026: "even the owner of the restaurant is seeing the same as
+// the customers and reverse.. we need a seperation.. because obviously the
+// tourist is not gonna care about how many people are coming in thursday with
+// the ship.. so seperate it."
+export const KLAIPEDA_BUSINESS_PATH = "/lithuania/business";
 
 // Google's weekday lines, the shape the planner reads from a published row.
 const WEEK_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
