@@ -31,6 +31,28 @@ export const NOW_STARTS = {
   },
 };
 
+// ── OR FROM WHERE THE VISITOR STANDS ────────────────────────────────
+// Oliver, 5 Oct 2026: "also, make from my position as well." The phone's
+// position, snapped to a grid of about 200 metres, so everybody on the same
+// corner in the same half hour shares one walk from the cache, and the
+// address never carries a position more exact than a block. Only inside the
+// area a walk is made for: Klaipėda and what is around it (Smiltynė,
+// Melnragė, Giruliai), 12 km from Theatre Square.
+export const HERE = "here";
+export const POS_GRID = 0.002;
+export const snapPos = (v) => (Math.round(Number(v) / POS_GRID) * POS_GRID).toFixed(3);
+export const NOW_AREAS = { LT: { lat: 55.7078, lon: 21.1316, km: 12 } };
+export const inNowArea = (country, p) => {
+  const a = NOW_AREAS[String(country || "").toUpperCase()];
+  const lat = Number(p?.lat), lon = Number(p?.lon);
+  return !!a && Number.isFinite(lat) && Number.isFinite(lon) && kmApart(a, { lat, lon }) <= a.km;
+};
+// The start a position makes, or null when it is not one a walk is made from.
+export const hereStart = (country, lat, lon) => {
+  const p = { lat: Number(snapPos(lat)), lon: Number(snapPos(lon)) };
+  return inNowArea(country, p) ? { id: HERE, name: "Where you are", lat: p.lat, lon: p.lon, ship: false } : null;
+};
+
 export const NOW_HOURS = [2, 3, 4, 6];
 export const NOW_LANGS = ["en", "da", "de", "lt"];
 

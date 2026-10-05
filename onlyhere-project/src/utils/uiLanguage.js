@@ -754,6 +754,12 @@ export const UI_STRINGS = {
   "now.start":      { en: "Start", da: "Start", de: "Start", lt: "Pradžia" },
   "now.walk":       { en: "{n} min walk", da: "{n} min. gang", de: "{n} Min. zu Fuß", lt: "{n} min pėsčiomis" },
   "now.ride":       { en: "Too far to walk. Take a {app}, about {n} min", da: "For langt at gå. Tag en {app}, cirka {n} min.", de: "Zu weit zum Laufen. Nimm ein {app}, etwa {n} Min.", lt: "Per toli eiti pėsčiomis. Važiuokite {app}, apie {n} min." },
+  // From where the visitor stands, 5 Oct 2026 (nowPlanner hereStart).
+  "now.fromHere":     { en: "From where I am", da: "Fra hvor jeg er", de: "Von meinem Standort", lt: "Nuo mano vietos" },
+  "now.whereYouAre":  { en: "Where you are", da: "Hvor du er", de: "Dein Standort", lt: "Jūsų vieta" },
+  "now.backHere":     { en: "Back where you started by {time}", da: "Tilbage hvor du startede kl. {time}", de: "Um {time} zurück am Ausgangspunkt", lt: "Grįžtate į pradžios vietą iki {time}" },
+  "now.notHere":      { en: "You are not in Klaipėda, so the walk starts from the ship or the tourist centre.", da: "Du er ikke i Klaipėda, så turen starter fra skibet eller turistkontoret.", de: "Du bist nicht in Klaipėda, also beginnt die Tour am Schiff oder an der Touristeninformation.", lt: "Jūs ne Klaipėdoje, todėl maršrutas prasideda nuo laivo arba turizmo centro." },
+  "now.noLocation":   { en: "Your location is off, so the walk cannot start from where you are.", da: "Din placering er slået fra, så turen kan ikke starte, hvor du er.", de: "Dein Standort ist aus, also kann die Tour nicht bei dir beginnen.", lt: "Vietos nustatymas išjungtas, todėl maršrutas negali prasidėti nuo jūsų vietos." },
   // Walks of one kind, 5 Oct 2026, offered only when one fits (nowPlanner styleFits).
   "now.style.food":      { en: "Food and drink", da: "Mad og drikke", de: "Essen und Trinken", lt: "Maistas ir gėrimai" },
   "now.style.museums":   { en: "Museums", da: "Museer", de: "Museen", lt: "Muziejai" },
