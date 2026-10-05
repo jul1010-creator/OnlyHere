@@ -415,7 +415,7 @@ writeFileSync(entry, `
   export { headingSkeleton, skeletonKey, openingKey, spreadBy, skeletonSpread, openingSpread, describeSameness, samenessReport } from ${JSON.stringify(join(root, "src/utils/sameness.js"))};
   export { moneyTraceable, COMPRESSION_GLANCE, glanceShapeProblem, EXTRACTABLE_GLANCE, EDITORIAL_GLANCE, NEVER_EXTRACT, CLOSED_OR_DERIVED, glanceFieldsFor, numbersTraceable, freeClaimTraceable, saysFreeOnly, statesAnAmount, GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, describeGlance, staleUncertainties, describeStale } from ${JSON.stringify(join(root, "src/utils/glanceExtract.js"))};
   export { walkWeatherFrom } from ${JSON.stringify(join(root, "src/utils/walkWeather.js"))};
-  export { JOIN_ON_M, JOIN_MAX_M, walkLegs, bearingOf, kmBetween as mapKm, glideAt, GLIDE_MS, FOCUS, SPARKS } from ${JSON.stringify(join(root, "src/components/GoogleWalkMap.jsx"))};
+  export { JOIN_ON_M, JOIN_MAX_M, CARD_WALKING_MS, walkLegs, bearingOf, kmBetween as mapKm, glideAt, GLIDE_MS, FOCUS, SPARKS } from ${JSON.stringify(join(root, "src/components/GoogleWalkMap.jsx"))};
   export { guideTo, compassOf, distanceWords as walkDistanceWords, ARRIVE_M, COMPASS } from ${JSON.stringify(join(root, "src/components/WalkMode.jsx"))};
   export * as CR from ${JSON.stringify(join(root, "src/utils/cruiseDays.js"))};
   export * as CRD from ${JSON.stringify(join(root, "src/data/klaipedaCruises.js"))};
@@ -81968,7 +81968,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("a beam shows which way the phone points, and a pale circle how sure the fix is", /<span data-beam/.test(gm) && /meBeam\.style\.display = meHeading === null \? "none" : "block";/.test(gm) && /meRing = new maps\.Circle\(\{ map, center: pos, radius: Number\(p\.accuracy\)/.test(gm));
   ok("the leg being walked stands out, legs walked go grey, legs ahead are pale", /const styleLegs = \(active\) => \{/.test(gm) && /#9AA0A6/.test(gm) && /strokeWeight: now \? 7 : 4/.test(gm) && /useEffect\(\(\) => \{ activeLegRef\.current = activeLeg; api\.current\?\.styleLegs\(activeLeg\);/.test(gm));
   ok("touch the map to look around, and Re-centre puts it back", /if \(follow\) setAway\(true\);/.test(gm) && /const recenter = \(\) => \{ moved\.current = false; setAway\(false\);/.test(gm) && /data-testid="map-recenter"/.test(gm));
-  ok("while walking, arriving at a stop pops it up without flying off", /if \(follow\) \{ popPin\(i\); setCard\(\{ stop: i, n \}\); return; \}/.test(gm) && /api\.current\.showMe\(me, follow, heading\)/.test(gm));
+  ok("while walking, arriving at a stop pops it up without flying off", /if \(follow\) \{ popPin\(i\); setCard\(\{ stop: i, n \}\); setTimeout\(/.test(gm) && /CARD_WALKING_MS\); return; \}/.test(gm) && /api\.current\.showMe\(me, follow, heading\)/.test(gm));
   ok("walk mode hands the map the compass, or the GPS course, and the leg", /heading=\{heading \?\? course\} activeLeg=\{idx\}/.test(wm) && /const h = p\.coords\.heading;/.test(wm));
   ok("the position still never leaves the phone", !/fetch\(/.test(wm) && !/fetch\(/.test(gm.slice(gm.indexOf("THE WALKER, THE WAY A SAT NAV"), gm.indexOf("const recenter"))));
   const words = ["en", "da", "de", "lt"].map(l => M.UI_STRINGS["map.recenter"]?.[l] || "").join(" ");
@@ -82061,6 +82061,12 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("nothing is asked of Google as you walk", !/fetch\(|legLine\(|DirectionsService/.test(gm.slice(gm.indexOf("FROM WHERE YOU STAND TO THE WAY"), gm.indexOf("api.current = { focusStop"))));
   const shown = gm.replace(/\/\/ ── .*$/gm, "");
   ok("no dashes and none of his banned words", !/[—–]/.test(shown) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(shown.replace(/"It's a lame flying[^\n]*/g, "")));
+}
+
+// ── Batch 215, seen live: the card sat over the dot ──
+{
+  const gm = readFileSync(join(root, "src/components/GoogleWalkMap.jsx"), "utf8");
+  ok("walking, a stop's card comes up at the top and goes after a few seconds", /\.\.\.\(follow \? \{ top: 10 \} : \{ bottom: 26 \}\)/.test(gm) && /setCard\(c => \(c && c\.n === n \? null : c\)\); \}, CARD_WALKING_MS\)/.test(gm) && M.CARD_WALKING_MS === 6000 && /bottom: st && !follow \? 150 : 26/.test(gm));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
