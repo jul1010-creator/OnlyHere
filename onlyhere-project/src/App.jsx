@@ -82,12 +82,13 @@ import { SupportPage } from "./components/SupportPage";
 import { AffiliatesPage } from "./components/AffiliatesPage";
 import { KlaipedaDemo } from "./pages/KlaipedaDemo";
 import { KlaipedaExamples } from "./pages/KlaipedaExamples";
-import { KlaipedaSculptures } from "./pages/KlaipedaSculptures";
+import { KlaipedaSculptures, KlaipedaSculpturesCentre } from "./pages/KlaipedaSculptures";
+import { KlaipedaBusiness } from "./pages/KlaipedaBusiness";
 import { COUNTRY_PROFILES, DEFAULT_COUNTRY, countryProfile, setWorkingCountry, countryParam, rowCountry, activeCountry, homePath, plainTownName } from "./utils/countries";
 import { KLAIPEDA_DEMO_PATH } from "./data/klaipedaDemo";
-import { KLAIPEDA_EXAMPLES_PATH, examplePromotionPools } from "./data/klaipedaExamples";
+import { KLAIPEDA_EXAMPLES_PATH, KLAIPEDA_BUSINESS_PATH, examplePromotionPools } from "./data/klaipedaExamples";
 import { CruiseDays } from "./components/CruiseDays";
-import { KLAIPEDA_SCULPTURES_PATH } from "./data/klaipedaSculptures";
+import { KLAIPEDA_SCULPTURES_PATH, KLAIPEDA_CENTRE_PATH } from "./data/klaipedaSculptures";
 import { translateEntry, needsTranslation, fingerprint, proseOf } from "./utils/entryTranslate";
 import { TripLibraryPage } from "./components/TripLibraryPage";
 import { askForGuidePass, markGuideBuilt, todayRecord, usedTodayReason, copenhagenDay, cancelGuidePass } from "./utils/guideAllowance";
@@ -26527,7 +26528,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     {studioCountry === "LT" && (
                       <div data-testid="studio-klaipeda-pages" style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
                         <span style={{ fontSize: 11, fontWeight: 700, color: C.muted, marginRight: 2 }}>Klaipėda pages</span>
-                        {[[KLAIPEDA_EXAMPLES_PATH, "Examples"], [KLAIPEDA_DEMO_PATH, "QR walk"], [KLAIPEDA_SCULPTURES_PATH, "Sculptures"]].map(([href, label]) => (
+                        {[[KLAIPEDA_EXAMPLES_PATH, "For visitors"], [KLAIPEDA_BUSINESS_PATH, "For businesses"], [KLAIPEDA_DEMO_PATH, "QR walk"], [KLAIPEDA_SCULPTURES_PATH, "Sculptures"], [KLAIPEDA_CENTRE_PATH, "Sculptures, centre"]].map(([href, label]) => (
                           <a key={href} href={href} target="_blank" rel="noopener noreferrer"
                             style={{ border: `1px solid ${C.border}`, borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 700, color: C.light, textDecoration: "none", fontFamily: "'Inter', sans-serif" }}>
                             {label} ↗
@@ -35651,6 +35652,11 @@ export default function Gemlyx() {
       {/* The talking sculptures, joined up: a working sketch, Oliver, 3 Oct
           2026. Linked only from the examples page. See data/klaipedaSculptures.js. */}
       <Route path={KLAIPEDA_SCULPTURES_PATH} element={<KlaipedaSculptures />} />
+      {/* The business side, apart from the visitor's (Oliver, 5 Oct 2026: "we
+          need a seperation"): the ships and their guests, how offers work,
+          and what the tourism centre would see of the sculptures. */}
+      <Route path={KLAIPEDA_BUSINESS_PATH} element={<KlaipedaBusiness />} />
+      <Route path={KLAIPEDA_CENTRE_PATH} element={<KlaipedaSculpturesCentre />} />
       {/* ── TRIPS OTHER PEOPLE KEPT ────────────────────────────
           One component for both, because the list and a trip from it are the
           same page at two depths, and the trip renders through GuidePage the
