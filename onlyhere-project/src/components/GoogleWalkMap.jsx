@@ -149,7 +149,7 @@ const PIN_SCALE = 0.85;
 // the card. `cardFor(stop)` may add { emoji, photo } for a stop. `focus` is
 // { id, n }: a new n glides to the stop with that id. `me` is the walker's
 // position { lat, lon }, drawn as a blue dot, and `follow` keeps it in view.
-export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = null, focus = null, me = null, follow = false, round = true, lang = "en", loop = true, heading = null, activeLeg = null }) => {
+export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = null, focus = null, me = null, follow = false, round = true, lang = "en", loop = true, heading = null, activeLeg = null, lift = 0 }) => {
   const box = useRef(null);
   // ONE map for the life of the page. Google bills every map it creates, and
   // making a new one each time a visitor picks another walk would bill each
@@ -494,8 +494,25 @@ export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = nul
       {st && (
         <>
           {!reducedMotion() && <Burst key={`burst${card.n}`} />}
+          {/* Walking, the stop arrives as a slim strip that leaves the map be;
+              the full card is for looking at the walk before setting out. */}
+          {follow ? (
+            <div key={`card${card.n}`} data-testid="map-card" style={{
+              position: "absolute", left: 10, right: 10, top: 10, background: C.surface, border: `1px solid ${C.gold}`, borderRadius: 100, padding: "6px 14px 6px 6px", overflow: "hidden", pointerEvents: "none", fontFamily: "'Inter', sans-serif",
+              display: "flex", gap: 9, alignItems: "center",
+              animation: reducedMotion() ? "none" : "gxCardIn 560ms cubic-bezier(.2,.9,.3,1) both, gxGlow 1800ms 560ms ease-in-out infinite",
+            }}>
+              {extra.photo
+                ? <img src={extra.photo} alt="" style={{ width: 30, height: 30, borderRadius: 30, objectFit: "cover", display: "block", flex: "0 0 auto" }} />
+                : <span style={{ width: 30, height: 30, borderRadius: 30, background: `${C.gold}22`, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 16, flex: "0 0 auto" }}>{extra.emoji || "📍"}</span>}
+              <span style={{ minWidth: 0, flex: 1, fontSize: 13.5, fontWeight: 700, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {st.name}{st.stay ? <span style={{ color: C.gold, fontWeight: 700, fontSize: 12 }}> · {uiT("now.stay", lang).replace("{n}", st.stay)}</span> : null}
+              </span>
+              <span aria-hidden="true" style={{ color: C.gold, fontSize: 13, textShadow: `0 0 8px ${C.gold}`, animation: "gxTwinkle 1400ms ease-in-out infinite" }}>✦</span>
+            </div>
+          ) : (
           <div key={`card${card.n}`} data-testid="map-card" style={{
-            position: "absolute", left: 10, right: 10, ...(follow ? { top: 10 } : { bottom: 26 }), background: C.surface, border: `1px solid ${C.gold}`, borderRadius: 14, padding: "11px 13px", overflow: "hidden", pointerEvents: "none", fontFamily: "'Inter', sans-serif",
+            position: "absolute", left: 10, right: 10, bottom: 26, background: C.surface, border: `1px solid ${C.gold}`, borderRadius: 14, padding: "11px 13px", overflow: "hidden", pointerEvents: "none", fontFamily: "'Inter', sans-serif",
             display: "flex", gap: 11, alignItems: "flex-start",
             animation: reducedMotion() ? "none" : "gxCardIn 560ms cubic-bezier(.2,.9,.3,1) both, gxGlow 1800ms 560ms ease-in-out infinite",
           }}>
@@ -519,13 +536,16 @@ export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = nul
               )}
             </div>
           </div>
-          <button onClick={() => api.current?.overview()} data-testid="map-whole-walk" style={{ ...pill, position: "absolute", top: 10, right: 10 }}>
-            {uiT("map.wholeWalk", lang)}
-          </button>
+          )}
+          {!follow && (
+            <button onClick={() => api.current?.overview()} data-testid="map-whole-walk" style={{ ...pill, position: "absolute", top: 10, right: 10 }}>
+              {uiT("map.wholeWalk", lang)}
+            </button>
+          )}
         </>
       )}
       {follow && away && (
-        <button onClick={() => api.current?.recenter()} data-testid="map-recenter" style={{ ...pill, position: "absolute", right: 10, bottom: st && !follow ? 150 : 26 }}>
+        <button onClick={() => api.current?.recenter()} data-testid="map-recenter" style={{ ...pill, position: "absolute", right: 10, bottom: (st && !follow ? 150 : 26) + lift }}>
           ◎ {uiT("map.recenter", lang)}
         </button>
       )}
