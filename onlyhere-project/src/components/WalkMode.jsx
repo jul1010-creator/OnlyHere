@@ -25,7 +25,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { C } from "../utils/theme";
 import { t as uiT } from "../utils/uiLanguage";
 import { WALK_DETOUR, WALK_M_PER_MIN } from "../utils/nowPlanner";
-import { GoogleWalkMap, bearingOf, kmBetween } from "./GoogleWalkMap";
+import { GoogleWalkMap, bearingOf, kmBetween, walkLegs, legTurns, turnSign } from "./GoogleWalkMap";
 import { googleMapsReady } from "../utils/googleMapsLoader";
 
 // Close enough to say you are there: GPS on a phone in a street is good to
@@ -85,6 +85,14 @@ export const WalkMode = ({ walk, madeAt, lang = "en", country = "LT", onClose, c
   // the browser's own bars gone. What is left is one slim strip at the foot:
   // the arrow, where to and how far, and the way back out.
   const [full, setFull] = useState(false);
+  // ── THE TURNS, AS A LIST ──────────────────────────────────────────
+  // Oliver, 6 Oct 2026, of three ways to give directions: "Turn list only".
+  // Google's written steps for the leg being walked, opened from the map. The
+  // list is read like a written route: nothing ticks it off or moves it on
+  // with the walker's position (see the note at the top of this file). It
+  // turns over to the next leg when the walker taps on to the next place.
+  const [turnsOpen, setTurnsOpen] = useState(false);
+  const [turns, setTurns] = useState({ idx: -1, state: "idle", list: [] });
   const shell = useRef(null);
   const goFull = async (on) => {
     setFull(on);
@@ -138,6 +146,21 @@ export const WalkMode = ({ walk, madeAt, lang = "en", country = "LT", onClose, c
     return () => { try { lock?.release(); } catch { /* gone */ } };
   }, []);
 
+  // The leg's turns, asked for when the list is open and the leg is new.
+  const legs = useMemo(() => {
+    const all = walkLegs(walk);
+    return loop ? all : all.slice(0, -1);
+  }, [walk, loop]);
+  useEffect(() => {
+    if (!turnsOpen || turns.idx === idx) return undefined;
+    const leg = legs[idx];
+    if (!leg) { setTurns({ idx, state: "none", list: [] }); return undefined; }
+    let gone = false;
+    setTurns({ idx, state: "loading", list: [] });
+    legTurns(leg[0], leg[1], lang).then(list => { if (!gone) setTurns({ idx, state: list ? "ok" : "none", list: list || [] }); });
+    return () => { gone = true; };
+  }, [turnsOpen, idx]);
+
   // The map shows the stop you are walking to.
   useEffect(() => { if (!back && target) setFocus({ id: target.id, n: ++n.current }); }, [idx]);
 
@@ -151,6 +174,7 @@ export const WalkMode = ({ walk, madeAt, lang = "en", country = "LT", onClose, c
   const streets = target ? `https://www.google.com/maps/dir/?api=1&travelmode=walking${pos ? `&origin=${pos.lat},${pos.lon}` : ""}&destination=${Number(target.lat)},${Number(target.lon)}` : "";
   const done = back && g?.here;
 
+  const mapPill = { background: C.surface, color: C.text, border: `1px solid ${C.gold}`, borderRadius: 100, padding: "6px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", boxShadow: "0 2px 8px rgba(0,0,0,0.35)" };
   const btn = (primary) => ({
     background: primary ? C.gold : "transparent", color: primary ? C.onGold : C.text, border: `1px solid ${primary ? C.gold : C.border}`,
     borderRadius: 12, padding: "9px 12px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", textDecoration: "none", textAlign: "center",
@@ -194,10 +218,16 @@ export const WalkMode = ({ walk, madeAt, lang = "en", country = "LT", onClose, c
           ? <GoogleWalkMap walk={walk} height="100%" round={false} madeAt={madeAt} cardFor={cardFor} focus={focus} me={pos} follow heading={heading ?? course} activeLeg={idx} lang={lang} loop={loop} lift={full ? 62 : 0} />
           : <div style={{ padding: 20, fontSize: 13, color: C.muted }}>{uiT("walk.noMap", lang)}</div>}
         {!full ? (
-          <button onClick={() => goFull(true)} data-testid="walk-full" aria-label={uiT("walk.fullScreen", lang)}
-            style={{ position: "absolute", left: 10, bottom: 26, background: C.surface, color: C.text, border: `1px solid ${C.gold}`, borderRadius: 100, padding: "6px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", boxShadow: "0 2px 8px rgba(0,0,0,0.35)" }}>
-            ⛶ {uiT("walk.fullScreen", lang)}
-          </button>
+          !turnsOpen && (
+            <div style={{ position: "absolute", left: 10, bottom: 26, display: "flex", gap: 6 }}>
+              <button onClick={() => goFull(true)} data-testid="walk-full" aria-label={uiT("walk.fullScreen", lang)} style={mapPill}>
+                ⛶ {uiT("walk.fullScreen", lang)}
+              </button>
+              <button onClick={() => setTurnsOpen(true)} data-testid="walk-turns-open" style={mapPill}>
+                ↱ {uiT("walk.turns", lang)}
+              </button>
+            </div>
+          )
         ) : (
           <div data-testid="walk-full-strip" style={{ position: "absolute", left: 10, right: 10, bottom: "calc(12px + env(safe-area-inset-bottom, 0px))", background: C.surface, border: `1px solid ${C.gold}`, borderRadius: 100, padding: "5px 5px 5px 6px", display: "flex", alignItems: "center", gap: 9, boxShadow: "0 3px 12px rgba(0,0,0,0.4)" }}>
             <span aria-hidden="true" style={{ flex: "0 0 auto", width: 34, height: 34, borderRadius: "50%", background: `${C.gold}22`, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
@@ -214,8 +244,35 @@ export const WalkMode = ({ walk, madeAt, lang = "en", country = "LT", onClose, c
                 {uiT(idx + 1 >= stops.length ? "walk.headBack" : "walk.nextStop", lang)}
               </button>
             )}
+            {!turnsOpen && (
+              <button onClick={() => setTurnsOpen(true)} data-testid="walk-full-turns" aria-label={uiT("walk.turns", lang)}
+                style={{ flex: "0 0 auto", width: 34, height: 34, borderRadius: "50%", border: `1px solid ${C.gold}`, background: "transparent", color: C.gold, fontSize: 16, cursor: "pointer" }}>↱</button>
+            )}
             <button onClick={() => goFull(false)} data-testid="walk-exit-full" aria-label={uiT("walk.exitFull", lang)}
               style={{ flex: "0 0 auto", width: 34, height: 34, borderRadius: "50%", border: `1px solid ${C.border}`, background: "transparent", color: C.text, fontSize: 15, cursor: "pointer" }}>✕</button>
+          </div>
+        )}
+        {turnsOpen && (
+          <div data-testid="walk-turns" style={{ position: "absolute", left: 0, right: 0, bottom: full ? "calc(62px + env(safe-area-inset-bottom, 0px))" : 0, maxHeight: "45%", display: "flex", flexDirection: "column", background: C.surface, borderTop: `2px solid ${C.gold}`, borderRadius: "16px 16px 0 0", boxShadow: "0 -6px 20px rgba(0,0,0,0.35)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px 8px 16px", borderBottom: `1px solid ${C.border}` }}>
+              <div style={{ flex: 1, minWidth: 0, fontSize: 14.5, fontWeight: 700, fontFamily: "'Fraunces', serif", color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {fill(uiT("walk.wayTo", lang), { place: back ? (walk.start?.name || uiT("walk.start", lang)) : (target?.name || "") })}
+              </div>
+              <button onClick={() => setTurnsOpen(false)} data-testid="walk-turns-close" aria-label="✕"
+                style={{ flex: "0 0 auto", width: 30, height: 30, borderRadius: "50%", border: `1px solid ${C.border}`, background: "transparent", color: C.text, fontSize: 14, cursor: "pointer" }}>✕</button>
+            </div>
+            <div style={{ overflowY: "auto", padding: "4px 0 8px" }}>
+              {turns.state === "loading" && <div style={{ padding: "12px 16px", fontSize: 13, color: C.muted }}>{uiT("walk.turnsLoading", lang)}</div>}
+              {turns.state === "none" && <div style={{ padding: "12px 16px", fontSize: 13, color: C.muted, lineHeight: 1.5 }}>{uiT("walk.turnsNone", lang)}</div>}
+              {turns.state === "ok" && turns.list.map((tn, i) => (
+                <div key={i} data-testid="walk-turn" style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 16px", borderBottom: i < turns.list.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                  <span aria-hidden="true" style={{ flex: "0 0 auto", width: 30, height: 30, borderRadius: 8, background: `${C.gold}1F`, color: C.gold, fontSize: 17, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>{turnSign(tn.maneuver)}</span>
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, color: C.text, lineHeight: 1.4 }}>{tn.text}</span>
+                  {tn.meters > 0 && <span style={{ flex: "0 0 auto", fontSize: 12, fontWeight: 700, color: C.muted }}>{distanceWords(tn.meters)}</span>}
+                </div>
+              ))}
+              {turns.state === "ok" && <div style={{ padding: "8px 16px 0", fontSize: 10.5, color: C.muted }}>{uiT("walk.turnsBy", lang)}</div>}
+            </div>
           </div>
         )}
       </div>

@@ -104,6 +104,40 @@ const legLine = async (a, b) => {
 };
 export const walkLine = legLine;
 
+// ── THE TURNS OF ONE LEG ────────────────────────────────────────────
+// Oliver, 6 Oct 2026: "Turn list only". Google's own written steps for a
+// leg, in the walk's language, for the walk screen's list. Asked only when
+// the list is opened, once per leg and language for the visit; the line the
+// same answer brings is kept for the map too.
+const turnCache = new Map();
+export const legTurns = async (a, b, lang = "en") => {
+  const at = `${a.lat},${a.lon}>${b.lat},${b.lon}`;
+  const key = `${at}:${lang}`;
+  if (turnCache.has(key)) return turnCache.get(key);
+  try {
+    const r = await fetch(`/api/directions?origin=${a.lat},${a.lon}&destination=${b.lat},${b.lon}&mode=walking&country=LT&lang=${encodeURIComponent(lang)}`);
+    const d = await r.json();
+    if (!r.ok || !Array.isArray(d?.turns) || !d.turns.length) return null;
+    turnCache.set(key, d.turns);
+    if (Array.isArray(d.polyline) && d.polyline.length > 1 && !legCache.has(at)) legCache.set(at, d.polyline);
+    return d.turns;
+  } catch { return null; }
+};
+// The sign beside each turn, from Google's name for it.
+export const turnSign = (maneuver = "") => {
+  const m = String(maneuver).toUpperCase();
+  if (/UTURN/.test(m)) return "↶";
+  if (/ROUNDABOUT/.test(m)) return "⟳";
+  if (/FERRY/.test(m)) return "⛴";
+  if (/SHARP_LEFT/.test(m)) return "↙";
+  if (/SHARP_RIGHT/.test(m)) return "↘";
+  if (/SLIGHT_LEFT|KEEP_LEFT|FORK_LEFT|RAMP_LEFT/.test(m)) return "↖";
+  if (/SLIGHT_RIGHT|KEEP_RIGHT|FORK_RIGHT|RAMP_RIGHT/.test(m)) return "↗";
+  if (/LEFT/.test(m)) return "←";
+  if (/RIGHT/.test(m)) return "→";
+  return "↑";
+};
+
 const reducedMotion = () => {
   try { return !!window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches; } catch { return false; }
 };
