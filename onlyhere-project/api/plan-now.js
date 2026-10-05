@@ -24,7 +24,7 @@ import { ferryWait } from "../src/utils/walkable.js";
 import {
   NOW_STARTS, NOW_HOURS, NOW_LANGS, SHIP_MARGIN, slotAccepted, slotOf, slotDate,
   nowCandidates, ruleOrder, planPrompt, readOrder, goodWalk,
-  withMustSee, tidyWalk, reversedWalk, placesOf, STROLL, strollCandidates,
+  withMustSee, tidyWalk, reversedWalk, placesOf, NOW_STYLES, styleCandidates, stylesThatFit,
 } from "../src/utils/nowPlanner.js";
 
 const json = (res, status, body, cache = "no-store") => {
@@ -62,7 +62,7 @@ const SUPABASE_URL = process.env.SUPABASE_URL || PUBLIC_SUPABASE_URL;
 const rowsFor = async (country) => {
   const key = PUBLIC_SUPABASE_KEY;
   const r = await fetch(
-    `${SUPABASE_URL}/rest/v1/gemlyx_content?select=id,type,payload&published=eq.true&type=in.(free,food,booking,festival)&payload->>country=eq.${encodeURIComponent(country)}`,
+    `${SUPABASE_URL}/rest/v1/gemlyx_content?select=id,type,payload&published=eq.true&type=in.(free,food,booking,festival,nightlife)&payload->>country=eq.${encodeURIComponent(country)}`,
     { headers: { apikey: key, Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(4000) },
   );
   if (!r.ok) throw new Error(`content ${r.status}`);
@@ -103,10 +103,13 @@ export default async function handler(req, res) {
   const hours = /^[0-9]$/.test(String(q.h || "")) ? Number(q.h) : NaN;
   const lang = NOW_LANGS.includes(String(q.lang)) ? String(q.lang) : "";
   const now = new Date();
-  // The Old Town walk adds one key with one value, so it is one more spelling
-  // per walk and no more.
-  const style = q.style === STROLL ? STROLL : "";
-  if (keys !== (style ? "c,from,h,lang,slot,style" : "c,from,h,lang,slot")) return json(res, 400, { error: "Unexpected query." });
+  // A walk of one kind adds one key with one of a few values, so it is one
+  // more spelling per walk and no more. "styles=1" asks instead which kinds
+  // fit this start, this length and this half hour (5 Oct 2026), made by the
+  // rules alone and cached the same way.
+  const style = NOW_STYLES.includes(String(q.style || "")) ? String(q.style) : "";
+  const listing = q.styles === "1";
+  if (keys !== (listing ? "c,from,h,lang,slot,styles" : style ? "c,from,h,lang,slot,style" : "c,from,h,lang,slot")) return json(res, 400, { error: "Unexpected query." });
   if (!start || !NOW_HOURS.includes(hours) || !lang) return json(res, 400, { error: "Unknown start, length or language." });
   // ── AND ONE SPELLING OF THE ADDRESS ITSELF ────────────────────────
   // Security review, 3 Oct 2026, finding 6: the check above sorts the keys
@@ -115,7 +118,7 @@ export default async function handler(req, res) {
   // a fresh paid call each time. So the raw query must be the exact string
   // NowPlanner builds, in its order and its encoding.
   const raw = String(req.url || "").split("?").slice(1).join("?");
-  const canonical = `c=${country}&from=${start.id}&h=${hours}&lang=${lang}&slot=${encodeURIComponent(String(q.slot || ""))}${style ? `&style=${style}` : ""}`;
+  const canonical = `c=${country}&from=${start.id}&h=${hours}&lang=${lang}&slot=${encodeURIComponent(String(q.slot || ""))}${listing ? "&styles=1" : style ? `&style=${style}` : ""}`;
   if (raw !== canonical) return json(res, 400, { error: "Unexpected query." });
   if (!slotAccepted(String(q.slot || ""), now)) return json(res, 409, { error: "Stale half hour.", slot: slotOf(now) });
 
@@ -131,10 +134,14 @@ export default async function handler(req, res) {
 
   const weather = await weatherAt(start);
   const all = nowCandidates(rows, { country, zone, now: at });
-  const candidates = style ? strollCandidates(all, country) : all;
+  const candidates = styleCandidates(all, style, country);
   // The ferry's wait by the month in Klaipėda (walkable.js, FERRIES).
   const month = (() => { try { return Number(new Intl.DateTimeFormat("en", { timeZone: zone, month: "numeric" }).format(at)); } catch { return 0; } })();
   const ctx = { country, start, startClock, budget, margin, wet: weather.wet, temp: weather.temp, weather, style, lang, ferryWait: ferryWait(country, month) };
+
+  if (listing) {
+    return json(res, 200, { slot: q.slot, country, from: start.id, hours, styles: stylesThatFit(all, ctx) }, "public, s-maxage=1800, stale-while-revalidate=120");
+  }
 
   let walk = null, made = "rules";
   if (candidates.length && startClock.minutes >= AI_FROM && startClock.minutes < AI_TO) {
