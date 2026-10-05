@@ -415,7 +415,7 @@ writeFileSync(entry, `
   export { headingSkeleton, skeletonKey, openingKey, spreadBy, skeletonSpread, openingSpread, describeSameness, samenessReport } from ${JSON.stringify(join(root, "src/utils/sameness.js"))};
   export { moneyTraceable, COMPRESSION_GLANCE, glanceShapeProblem, EXTRACTABLE_GLANCE, EDITORIAL_GLANCE, NEVER_EXTRACT, CLOSED_OR_DERIVED, glanceFieldsFor, numbersTraceable, freeClaimTraceable, saysFreeOnly, statesAnAmount, GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, describeGlance, staleUncertainties, describeStale } from ${JSON.stringify(join(root, "src/utils/glanceExtract.js"))};
   export { walkWeatherFrom } from ${JSON.stringify(join(root, "src/utils/walkWeather.js"))};
-  export { walkLegs, headingAt, SPIN_MS } from ${JSON.stringify(join(root, "src/components/GoogleWalkMap.jsx"))};
+  export { walkLegs, flightPoints, flightMs, cameraAt, bearingOf, flightZoom, FLY_LEG_MS, FLY_HOLD_MS } from ${JSON.stringify(join(root, "src/components/GoogleWalkMap.jsx"))};
   export { fromRoutes, durationWords, distanceWords as routeDistanceWords } from ${JSON.stringify(join(root, "api/directions.js"))};
   export { DANISH_MARKERS, LITHUANIAN_MARKERS, looksLocalPage, danishWordsIn, looksUntranslated, looksDanishPage, hasEnglishVersion, languageBarrier } from ${JSON.stringify(join(root, "src/utils/languageBarrier.js"))};
   export { readerLanguage, languageName, answerInLanguage, languageBlock, nativeBlock } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
@@ -81594,8 +81594,9 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const legs = M.walkLegs(walk);
   ok("the legs run start to start through every stop", legs.length === 3 && legs[0][0] === walk.start && legs[2][1] === walk.start);
   ok("and a walk with nothing to draw draws nothing", M.walkLegs({ start: walk.start, stops: [] }).length === 0 && M.walkLegs(null).length === 0);
-  ok("one turn, timed by the clock and not the frame", M.headingAt(0) === 0 && Math.abs(M.headingAt(M.SPIN_MS / 2) - 180) < 1e-9 && M.headingAt(M.SPIN_MS) === null);
-  ok("it stops when touched, and never starts after a touch", /\["pointerdown", "wheel", "touchstart", "keydown"\]/.test(comp) && /if \(turned\.current \|\| moved\.current \|\| reducedMotion\(\)\) return;/.test(comp) && /if \(moved\.current\) \{ raf = 0; map\.moveCamera\(\{ heading: 0, tilt: 0 \}\); return; \}/.test(comp));
+  // Batch 207: the turn became the fly-along, still timed by the clock.
+  ok("one flight, timed by the clock and not the frame", !!M.cameraAt(M.flightPoints(walk), 0) && M.cameraAt(M.flightPoints(walk), M.flightMs(M.flightPoints(walk))) === null);
+  ok("it stops when touched, and never starts after a touch", /\["pointerdown", "wheel", "touchstart", "keydown"\]/.test(comp) && /if \(turned\.current \|\| moved\.current \|\| reducedMotion\(\)\) return;/.test(comp) && /if \(moved\.current\) \{ raf = 0; settle\(\); return; \}/.test(comp));
   // Found on the live page, 4 Oct 2026: the "idle" listener went on after the
   // walking lines came back, by when the map had gone idle, so it never turned.
   ok("the turn waits for the map, not for the walking lines",
@@ -81872,9 +81873,29 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const comp = readFileSync(join(root, "src/components/GoogleWalkMap.jsx"), "utf8");
   ok("every leg out says which way it runs, with an arrow on a white edge", /path: maps\.SymbolPath\.FORWARD_CLOSED_ARROW[^}]*\}, offset: "50%"/.test(comp) && /strokeColor: "#FFFFFF", strokeOpacity: 0\.9, strokeWeight: 8, zIndex: 2/.test(comp));
   ok("the way back is dashed, never drawn like the walk", /if \(i === last\) \{\s*drawn\.push\(new maps\.Polyline\(\{\s*map, path, strokeOpacity: 0, zIndex: 1,\s*icons: \[\{ icon: \{ path: "M 0,-1 0,1"/.test(comp) && /repeat: "14px"/.test(comp));
-  ok("the map lies flat with the whole walk in view, and after its one turn", /map\.moveCamera\(\{ heading: 0, tilt: 0 \}\);\s*map\.fitBounds\(bounds, PAD\);/.test(comp) && /if \(heading === null\) \{ raf = 0; map\.moveCamera\(\{ heading: 0, tilt: 0 \}\); map\.fitBounds\(bounds, PAD\); return; \}/.test(comp));
-  ok("and only tilts while it turns", comp.indexOf("if (turned.current || moved.current || reducedMotion()) return;") < comp.indexOf("map.moveCamera({ tilt: SPIN_TILT, heading: 0 });"));
+  ok("the map lies flat with the whole walk in view, and after its flight", /map\.moveCamera\(\{ heading: 0, tilt: 0 \}\);\s*map\.fitBounds\(bounds, PAD\);/.test(comp) && /const settle = \(\) => \{ map\.moveCamera\(\{ heading: 0, tilt: 0 \}\); map\.fitBounds\(bounds, PAD\); \};/.test(comp) && /if \(!cam\) \{ raf = 0; settle\(\); return; \}/.test(comp));
+  ok("and only tilts while it flies", (comp.match(/tilt: FLY_TILT/g) || []).length === 2 && comp.indexOf("if (turned.current || moved.current || reducedMotion()) return;") < comp.indexOf("flyNow();\n"));
   ok("smaller pins, the start on top, Google's own places not clickable", (comp.match(/scale: PIN_SCALE/g) || []).length === 2 && /zIndex: 100 \}\)\);/.test(comp) && /clickableIcons: false/.test(comp));
+  const shown = comp.replace(/\/\/ ── .*$/gm, "");
+  ok("no dashes and none of his banned words", !/[—–]/.test(shown) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(shown));
+}
+
+// ── Batch 207: the fly-along ──
+// Oliver, 5 Oct 2026, with Google's photorealistic 3D not covering Klaipėda:
+// fly the walk on the map Gemlyx already has, tilted over the buildings.
+{
+  const comp = readFileSync(join(root, "src/components/GoogleWalkMap.jsx"), "utf8");
+  const walk = { start: { lat: 55.70526, lon: 21.12217 }, stops: [{ lat: 55.70660, lon: 21.12682 }, { lat: 55.70592, lon: 21.12891 }, { lat: 55.70780, lon: 21.13163 }] };
+  const pts = M.flightPoints(walk);
+  ok("the camera flies through the start and every stop, in order", pts.length === 4 && pts[0].lat === 55.70526 && pts[3].lon === 21.13163);
+  is("and takes a leg and a pause per stop", M.flightMs(pts), 3 * (M.FLY_LEG_MS + M.FLY_HOLD_MS));
+  const c0 = M.cameraAt(pts, 0), cEnd = M.cameraAt(pts, M.FLY_LEG_MS), cHold = M.cameraAt(pts, M.FLY_LEG_MS + M.FLY_HOLD_MS - 1);
+  ok("it starts at the start, reaches the first stop, and holds there", Math.abs(c0.lat - pts[0].lat) < 1e-9 && Math.abs(cEnd.lat - pts[1].lat) < 1e-9 && Math.abs(cHold.lng - pts[1].lon) < 1e-9);
+  ok("facing the way the walk goes", Math.abs(c0.heading - M.bearingOf(pts[0], pts[1])) < 1e-9 && Math.abs(M.bearingOf({ lat: 55, lon: 21 }, { lat: 56, lon: 21 })) < 1e-9 && Math.abs(M.bearingOf({ lat: 55, lon: 21 }, { lat: 55, lon: 22 }) - 90) < 1);
+  ok("and lands when the last stop is reached", M.cameraAt(pts, M.flightMs(pts)) === null && M.cameraAt([pts[0]], 0) === null);
+  ok("close in over the old town, further out when a leg is long", M.flightZoom(pts) === 17 && M.flightZoom([{ lat: 55.7053, lon: 21.1222 }, { lat: 55.7382, lon: 21.0834 }]) === 15);
+  ok("a touch ends it with the walk in view, and Fly the walk plays it again", /if \(moved\.current\) \{ raf = 0; settle\(\); return; \}/.test(comp) && /onClick=\{\(\) => flyRef\.current\?\.\(\)\}/.test(comp) && /moved\.current = false;/.test(comp));
+  ok("never for a phone set to reduce motion", /if \(gone \|\| pts\.length < 2 \|\| reducedMotion\(\)\) return;/.test(comp) && /setCanFly\(pts\.length >= 2 && !reducedMotion\(\)\)/.test(comp));
   const shown = comp.replace(/\/\/ ── .*$/gm, "");
   ok("no dashes and none of his banned words", !/[—–]/.test(shown) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(shown));
 }
