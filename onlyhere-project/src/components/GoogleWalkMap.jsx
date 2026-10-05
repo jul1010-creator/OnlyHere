@@ -65,10 +65,8 @@ export const GLIDE_MS = 1700;
 export const FOCUS = { zoom: 17.5, tilt: 50 };
 // Walking: close in, tilted, and the camera this many metres ahead of the dot.
 export const NAV = { zoom: 18, tilt: 55, ahead: 45 };
-// Walking: within JOIN_ON_M of the leg you are on it; up to JOIN_MAX_M away
-// you are joined to its nearest point; further than that, to the stop itself.
+// Walking: closer than JOIN_ON_M to the place, the dotted line to it goes.
 export const JOIN_ON_M = 15;
-export const JOIN_MAX_M = 250;
 // How long a stop's card stays up while walking.
 export const CARD_WALKING_MS = 6000;
 const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - ((-2 * t + 2) ** 3) / 2);
@@ -177,7 +175,40 @@ const HHMM = (m) => `${String(Math.floor((((m % 1440) + 1440) % 1440) / 60)).pad
 
 // Room for the pins at the top and the card at the bottom.
 const PAD = { top: 52, right: 28, bottom: 28, left: 28 };
-const PIN_SCALE = 0.85;
+
+// ── KLAIPĖDA'S OWN PINS ─────────────────────────────────────────────
+// Oliver, 6 Oct 2026, of a map pin with a woman's photo inside it: "can they
+// be designed cool? ... It could be cool with something similar, themed for
+// Klaipeda. Then with the photos of the attractions inside." So a place is a
+// gold drop with the place's own photo in a round window, its number on a
+// navy badge, and a small wave across the tip for the port town. With no
+// photo, the place's sign sits in the window. The start is the same drop in
+// navy with the anchor. Drawn here, the same on every map.
+const NAVY = "#0F1A2E";
+const escapeHtml = (v) => String(v ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+export const PLACE_PIN = { w: 44, h: 56, window: 32 };
+export const placePinHtml = ({ n = null, photo = "", sign = "📍", home = false } = {}) => {
+  const body = home ? NAVY : C.gold, rim = home ? C.gold : NAVY;
+  const safePhoto = /^https:\/\//i.test(String(photo || "")) ? String(photo) : "";
+  // The sign always sits in the window, and the photo over it, so a photo
+  // that fails to load leaves the sign, not a broken picture.
+  const inside = `<span style="font-size:17px;line-height:1">${escapeHtml(home ? "⚓" : sign)}</span>`
+    + (safePhoto ? `<img src="${escapeHtml(safePhoto)}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block" />` : "");
+  return `<svg width="${PLACE_PIN.w}" height="${PLACE_PIN.h}" viewBox="0 0 44 56" style="position:absolute;inset:0;overflow:visible">`
+    + `<path d="M22 55 C22 55 3 35 3 21 A19 19 0 1 1 41 21 C41 35 22 55 22 55 Z" fill="${body}" stroke="${rim}" stroke-width="2" />`
+    + `<path d="M13.5 44.5 q4.25 -3 8.5 0 t8.5 0" fill="none" stroke="${home ? C.gold : "#FFFFFF"}" stroke-width="1.7" stroke-linecap="round" opacity=".9" />`
+    + `</svg>`
+    + `<span style="position:absolute;left:6px;top:5px;width:${PLACE_PIN.window}px;height:${PLACE_PIN.window}px;border-radius:50%;overflow:hidden;border:2px solid #FFFFFF;background:${home ? "#1C2A44" : "#FFF6E0"};display:flex;align-items:center;justify-content:center;box-sizing:border-box">${inside}</span>`
+    + (n !== null ? `<span style="position:absolute;right:-5px;top:-5px;min-width:18px;height:18px;padding:0 4px;border-radius:18px;background:${NAVY};color:${C.gold};border:1.5px solid ${C.gold};font:800 10.5px/15px Inter, sans-serif;text-align:center;box-sizing:border-box">${Number(n)}</span>` : "");
+};
+const placePin = (opts) => {
+  const el = document.createElement("div");
+  el.setAttribute("data-testid", opts?.home ? "pin-start" : "pin-place");
+  el.style.cssText = `position:relative;width:${PLACE_PIN.w}px;height:${PLACE_PIN.h}px;filter:drop-shadow(0 3px 5px rgba(0,0,0,.45));cursor:default`;
+  el.innerHTML = placePinHtml(opts);
+  el.querySelector("img")?.addEventListener("error", (e) => { try { e.target.remove(); } catch { /* gone */ } });
+  return el;
+};
 
 // `madeAt` is the walk's start, in minutes after midnight, for the times on
 // the card. `cardFor(stop)` may add { emoji, photo } for a stop. `focus` is
@@ -217,7 +248,7 @@ export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = nul
       try {
         const maps = await loadGoogleMaps();
         const { Map } = await maps.importLibrary("maps");
-        const { AdvancedMarkerElement, PinElement } = await maps.importLibrary("marker");
+        const { AdvancedMarkerElement } = await maps.importLibrary("marker");
         if (gone || !box.current) return;
         const at = (p) => ({ lat: Number(p.lat), lng: Number(p.lon) });
         const bounds = new maps.LatLngBounds();
@@ -233,6 +264,23 @@ export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = nul
         }
         const map = mapRef.current;
 
+        // Each pin sits in a box the sparkle can burst out of.
+        const pinBoxes = [], stopMarkers = [];
+        let startBox = null, startMarker = null;
+        const holder = (el) => { const box = document.createElement("div"); box.style.cssText = "position:relative;display:inline-block;overflow:visible"; box.appendChild(el); return box; };
+        // The sparkle, on the pin itself: a flash, a ring and a burst of gold
+        // stars, the same as the one the glide arrives with, then gone.
+        const sparkleOn = (box) => {
+          if (!box || reducedMotion()) return;
+          const fx = document.createElement("div");
+          fx.setAttribute("aria-hidden", "true");
+          fx.setAttribute("data-testid", "pin-sparkle");
+          fx.style.cssText = "position:absolute;left:50%;top:35%;width:0;height:0;pointer-events:none;z-index:5";
+          fx.innerHTML = `<div style="position:absolute;left:0;top:0;width:60px;height:60px;border-radius:50%;background:radial-gradient(circle, rgba(255,255,255,0.95), rgba(255,226,150,0.6) 35%, rgba(217,164,65,0) 70%);animation:gxFlash 520ms ease-out both"></div><div style="position:absolute;left:0;top:0;width:56px;height:56px;border-radius:50%;border:3px solid ${C.gold};box-shadow:0 0 22px ${C.gold}, inset 0 0 12px ${C.gold};animation:gxRing 800ms ease-out both"></div>`
+            + SPARKS.map(p => `<span style="position:absolute;left:0;top:0;font-size:17px;line-height:1;color:${p.white ? "#FFFFFF" : "#FFD875"};text-shadow:0 0 8px ${C.gold}, 0 0 16px rgba(255,216,117,0.8);--dx:${p.dx}px;--dy:${p.dy}px;--s:${p.s};--r:${p.r}deg;animation:gxSpark 1150ms ${p.delay}ms cubic-bezier(.12,.75,.3,1) both">${p.ch}</span>`).join("");
+          box.appendChild(fx);
+          setTimeout(() => { try { fx.remove(); } catch { /* gone */ } }, 1700);
+        };
         const popPin = (i) => pinEls.forEach((el, j) => { try { el.style.transform = j === i ? "scale(1.45) translateY(-4px)" : ""; } catch { /* pin gone */ } });
         // Flat, north up, on the plain map, the whole walk in view.
         const overview = () => {
@@ -254,7 +302,7 @@ export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = nul
           // up, with its sparkle and card, where it stands.
           // Walking, the card comes up at the top for a few seconds, so it
           // never sits over the dot or the way ahead (5 Oct 2026).
-          if (follow) { popPin(i); setCard({ stop: i, n }); setTimeout(() => { if (!gone) setCard(c => (c && c.n === n ? null : c)); }, CARD_WALKING_MS); return; }
+          if (follow) { popPin(i); sparkleOn(pinBoxes[i]); setCard({ stop: i, n }); setTimeout(() => { if (!gone) setCard(c => (c && c.n === n ? null : c)); }, CARD_WALKING_MS); return; }
           if (raf) { cancelAnimationFrame(raf); raf = 0; }
           moved.current = false;
           popPin(-1); setCard(null);
@@ -351,7 +399,26 @@ export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = nul
         // are pale. Over the whole walk, before walking, every leg is gold.
         const legLines = [];
         const styleLegs = (active) => {
+          const walking0 = active !== null && active !== undefined;
+          // ── ONE PLACE AT A TIME ──────────────────────────────────────
+          // Oliver, 6 Oct 2026: "only one of the areas pop up, and it pops up
+          // with a sparkle", on Start walking. While walking, the map shows
+          // the place being walked to and nothing ahead of it: the other
+          // pins, and the legs past it, wait for their turn. Back to the
+          // start, the anchor comes up with its sparkle.
+          if (follow && walking0) {
+            stopMarkers.forEach((m, i) => { try { m.map = i === active ? map : null; } catch { /* gone */ } });
+            const home = active >= walk.stops.length;
+            try {
+              if (home && !startMarker.map) { startMarker.map = map; sparkleOn(startBox); }
+              if (!home) startMarker.map = null;
+            } catch { /* gone */ }
+          }
           legLines.forEach((l, i) => {
+            if (follow && walking0) {
+              const show = i <= active;
+              try { l.line.setOptions({ visible: show }); l.casing?.setOptions({ visible: show }); l.dash?.setOptions({ visible: show }); } catch { /* gone */ }
+            }
             const walking = active !== null && active !== undefined;
             const now = walking && i === active, done = walking && i < active;
             const color = done ? "#9AA0A6" : C.gold;
@@ -361,59 +428,29 @@ export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = nul
             } catch { /* line gone */ }
           });
         };
-        // ── FROM WHERE YOU STAND TO THE WAY ──────────────────────────
-        // Oliver, 5 Oct 2026: "Is it not possible to improve the map? Like
-        // make line between the destination and current position". While
-        // walking: a blue dotted line from the dot to the nearest point of
-        // the leg being walked, the way Google Maps joins you to a route
-        // when you are off it, and the part of the leg already behind you
-        // goes grey, so what is left to walk is the gold. A leg with no
-        // measured line is joined straight to the stop.
-        // Worked out here from the walk's own line and the dot. Nothing is
-        // asked of Google as you walk, and no turn is given: see WalkMode.jsx
-        // on Google's terms (3.2.3(d)).
-        let joinLine = null, behindLine = null, joinedLeg = null;
-        const nearestOn = (pos, path) => {
-          const kx = 111320 * Math.cos((pos.lat * Math.PI) / 180), ky = 110540;
-          let best = { d: Infinity, k: 0, p: path[0] };
-          for (let k = 0; k < path.length - 1; k++) {
-            const a = path[k], b = path[k + 1];
-            const ax = (a.lng - pos.lng) * kx, ay = (a.lat - pos.lat) * ky, bx = (b.lng - pos.lng) * kx, by = (b.lat - pos.lat) * ky;
-            const dx = bx - ax, dy = by - ay, len = dx * dx + dy * dy;
-            const t = len ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / len)) : 0;
-            const x = ax + dx * t, y = ay + dy * t, d = Math.hypot(x, y);
-            if (d < best.d) best = { d, k, p: { lat: a.lat + (b.lat - a.lat) * t, lng: a.lng + (b.lng - a.lng) * t } };
-          }
-          return best;
-        };
+        // ── FROM WHERE YOU STAND TO THE PLACE ────────────────────────
+        // Oliver, 5 Oct 2026: "make line between the destination and current
+        // position". While walking: a blue dotted line, straight from the dot
+        // to the place being walked to, measured here from the two points.
+        // 6 Oct 2026, after Oliver read that live GPS navigation is not
+        // allowed: the line no longer joins the dot to Google's route, and
+        // the route no longer greys out behind the walker. Tracking a walker
+        // along Google's own route is the part of navigation Google keeps for
+        // itself (Maps Platform Terms 3.2.3(d)); a dot on a Google map is
+        // what Google's own geolocation tutorial shows, and the straight line
+        // and the distance are Gemlyx's own.
+        let joinLine = null;
         joinUp = (pos) => {
           const active = activeLegRef.current;
           const leg = follow && active !== null && active !== undefined ? legLines[active] : null;
-          if (joinedLeg && joinedLeg !== leg) { try { joinedLeg.line.setPath(joinedLeg.path); } catch { /* gone */ } }
-          joinedLeg = leg;
-          if (!leg || !pos) { joinLine?.setMap(null); behindLine?.setMap(null); return; }
-          const near = leg.measured && leg.path.length > 1 ? nearestOn(pos, leg.path) : { d: Infinity, k: 0, p: leg.to };
-          const to = near.d <= JOIN_MAX_M ? near.p : leg.to;
-          // Within a few metres of the line, you are on it: no join.
-          if (near.d > JOIN_ON_M || to === leg.to) {
-            const path = [pos, to];
-            if (!joinLine) {
-              joinLine = new maps.Polyline({ map, path, strokeOpacity: 0, zIndex: 6, clickable: false, icons: [{ icon: { path: maps.SymbolPath.CIRCLE, scale: 2.6, fillColor: "#4285F4", fillOpacity: 1, strokeColor: "#FFFFFF", strokeWeight: 1 }, offset: "0", repeat: "11px" }] });
-              drawn.push(joinLine);
-            } else { joinLine.setPath(path); joinLine.setMap(map); }
-          } else joinLine?.setMap(null);
-          // What is behind you on this leg, grey; what is left, gold.
-          if (leg.measured && near.d <= JOIN_MAX_M) {
-            const behind = [...leg.path.slice(0, near.k + 1), near.p], ahead = [near.p, ...leg.path.slice(near.k + 1)];
-            try { leg.line.setPath(ahead); } catch { /* gone */ }
-            if (!behindLine) {
-              behindLine = new maps.Polyline({ map, path: behind, strokeColor: "#9AA0A6", strokeOpacity: 0.85, strokeWeight: 6, zIndex: 4, clickable: false });
-              drawn.push(behindLine);
-            } else { behindLine.setPath(behind); behindLine.setMap(map); }
-          } else {
-            try { leg.line.setPath(leg.path); } catch { /* gone */ }
-            behindLine?.setMap(null);
-          }
+          const to = leg ? leg.to : null;
+          const far = to && pos ? kmBetween({ lat: pos.lat, lon: pos.lng }, { lat: to.lat, lon: to.lng }) * 1000 : 0;
+          if (!to || !pos || far <= JOIN_ON_M) { joinLine?.setMap(null); return; }
+          const path = [pos, to];
+          if (!joinLine) {
+            joinLine = new maps.Polyline({ map, path, strokeOpacity: 0, zIndex: 6, clickable: false, icons: [{ icon: { path: maps.SymbolPath.CIRCLE, scale: 2.6, fillColor: "#4285F4", fillOpacity: 1, strokeColor: "#FFFFFF", strokeWeight: 1 }, offset: "0", repeat: "11px" }] });
+            drawn.push(joinLine);
+          } else { joinLine.setPath(path); joinLine.setMap(map); }
         };
         api.current = { focusStop, overview, showMe, recenter, styleLegs, joinUp: () => joinUp(mePos) };
 
@@ -422,14 +459,23 @@ export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = nul
         map.fitBounds(bounds, PAD);
 
         // The start, then every stop numbered in the order it is walked.
-        const startPin = new PinElement({ glyph: "⚓", background: C.surface, borderColor: C.gold, glyphColor: C.gold, scale: PIN_SCALE });
-        drawn.push(new AdvancedMarkerElement({ map, position: at(walk.start), content: startPin.element, title: walk.start.name || "Start", zIndex: 100 }));
+        const startPin = { element: placePin({ home: true }) };
+        startBox = holder(startPin.element);
+        startMarker = new AdvancedMarkerElement({ map, position: at(walk.start), content: startBox, title: walk.start.name || "Start", zIndex: 100 });
+        drawn.push(startMarker);
         walk.stops.forEach((s, i) => {
-          const pin = new PinElement({ glyph: String(i + 1), background: C.gold, borderColor: C.onGold, glyphColor: C.onGold, scale: PIN_SCALE });
+          const look = (cardFor && cardFor(s)) || {};
+          const pin = { element: placePin({ n: i + 1, photo: look.photo, sign: look.emoji || "📍" }) };
           try { pin.element.style.transition = "transform 280ms cubic-bezier(.2,1.6,.4,1)"; pin.element.style.transformOrigin = "50% 100%"; } catch { /* no element */ }
           pinEls.push(pin.element);
-          drawn.push(new AdvancedMarkerElement({ map, position: at(s), content: pin.element, title: s.name || "", zIndex: 50 - i }));
+          const box = holder(pin.element);
+          pinBoxes.push(box);
+          const m = new AdvancedMarkerElement({ map, position: at(s), content: box, title: s.name || "", zIndex: 50 - i });
+          stopMarkers.push(m);
+          drawn.push(m);
         });
+        // Walking, the other places are off the map before the lines come in.
+        if (follow && activeLegRef.current !== null) styleLegs(activeLegRef.current);
 
         // The legs as Google measured them. Out and on: a gold line on a
         // white edge with an arrow halfway, so the order reads off the map.
@@ -437,7 +483,11 @@ export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = nul
         // part of the walk.
         // A trail that ends where it ends (the sculptures) has no way back.
         const legs = loop ? walkLegs(walk) : walkLegs(walk).slice(0, -1);
-        const lines = await Promise.all(legs.map(([a, b]) => legLine(a, b)));
+        // Oliver, 6 Oct 2026: "The map at the front page (default map) should
+        // not have the route. Only the places." So the legs are asked for and
+        // drawn only while walking; looking at the walk, the numbered places
+        // show the order.
+        const lines = follow ? await Promise.all(legs.map(([a, b]) => legLine(a, b))) : [];
         if (gone) return;
         const last = loop ? legs.length - 1 : -1;
         lines.forEach((line, i) => {
@@ -453,7 +503,7 @@ export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = nul
             // a line then, under the dashes.
             const solid = new maps.Polyline({ map, path, strokeColor: C.gold, strokeOpacity: 0, strokeWeight: 4, zIndex: 1 });
             drawn.push(solid);
-            legLines[i] = { line: solid, casing: null, measured, dashed: true, path, to: at(legs[i][1]) };
+            legLines[i] = { line: solid, casing: null, measured, dashed: true, path, to: at(legs[i][1]), dash };
             return;
           }
           const casing = measured ? new maps.Polyline({ map, path, strokeColor: "#FFFFFF", strokeOpacity: 0.9, strokeWeight: 8, zIndex: 2 }) : null;
@@ -527,26 +577,13 @@ export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = nul
       <style>{FX_CSS}</style>
       {st && (
         <>
-          {!reducedMotion() && <Burst key={`burst${card.n}`} />}
-          {/* Walking, the stop arrives as a slim strip that leaves the map be;
-              the full card is for looking at the walk before setting out. */}
-          {follow ? (
-            <div key={`card${card.n}`} data-testid="map-card" style={{
-              position: "absolute", left: 10, right: 10, top: 10, background: C.surface, border: `1px solid ${C.gold}`, borderRadius: 100, padding: "6px 14px 6px 6px", overflow: "hidden", pointerEvents: "none", fontFamily: "'Inter', sans-serif",
-              display: "flex", gap: 9, alignItems: "center",
-              animation: reducedMotion() ? "none" : "gxCardIn 560ms cubic-bezier(.2,.9,.3,1) both, gxGlow 1800ms 560ms ease-in-out infinite",
-            }}>
-              {extra.photo
-                ? <img src={extra.photo} alt="" style={{ width: 30, height: 30, borderRadius: 30, objectFit: "cover", display: "block", flex: "0 0 auto" }} />
-                : <span style={{ width: 30, height: 30, borderRadius: 30, background: `${C.gold}22`, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 16, flex: "0 0 auto" }}>{extra.emoji || "📍"}</span>}
-              <span style={{ minWidth: 0, flex: 1, fontSize: 13.5, fontWeight: 700, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {st.name}{st.stay ? <span style={{ color: C.gold, fontWeight: 700, fontSize: 12 }}> · {uiT("now.stay", lang).replace("{n}", st.stay)}</span> : null}
-              </span>
-              <span aria-hidden="true" style={{ color: C.gold, fontSize: 13, textShadow: `0 0 8px ${C.gold}`, animation: "gxTwinkle 1400ms ease-in-out infinite" }}>✦</span>
-            </div>
-          ) : (
+          {!follow && !reducedMotion() && <Burst key={`burst${card.n}`} />}
+          {/* Walking, the next place arrives with its full card at the top,
+              for a few seconds (Oliver, 6 Oct 2026: "it pops up with a sparkle
+              and the captions of it that you made earlier"). */}
+          {(
           <div key={`card${card.n}`} data-testid="map-card" style={{
-            position: "absolute", left: 10, right: 10, bottom: 26, background: C.surface, border: `1px solid ${C.gold}`, borderRadius: 14, padding: "11px 13px", overflow: "hidden", pointerEvents: "none", fontFamily: "'Inter', sans-serif",
+            position: "absolute", left: 10, right: 10, ...(follow ? { top: 10 } : { bottom: 26 }), background: C.surface, border: `1px solid ${C.gold}`, borderRadius: 14, padding: "11px 13px", overflow: "hidden", pointerEvents: "none", fontFamily: "'Inter', sans-serif",
             display: "flex", gap: 11, alignItems: "flex-start",
             animation: reducedMotion() ? "none" : "gxCardIn 560ms cubic-bezier(.2,.9,.3,1) both, gxGlow 1800ms 560ms ease-in-out infinite",
           }}>
