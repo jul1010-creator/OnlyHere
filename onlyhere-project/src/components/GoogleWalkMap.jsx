@@ -65,6 +65,10 @@ export const GLIDE_MS = 1700;
 export const FOCUS = { zoom: 17.5, tilt: 50 };
 // Walking: close in, tilted, and the camera this many metres ahead of the dot.
 export const NAV = { zoom: 18, tilt: 55, ahead: 45 };
+// Walking: within JOIN_ON_M of the leg you are on it; up to JOIN_MAX_M away
+// you are joined to its nearest point; further than that, to the stop itself.
+export const JOIN_ON_M = 15;
+export const JOIN_MAX_M = 250;
 const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - ((-2 * t + 2) ** 3) / 2);
 const turnBy = (from, to, t) => (((from + ((((to - from) % 360) + 540) % 360 - 180) * t) % 360) + 360) % 360;
 export const glideAt = (from, to, t) => {
@@ -247,6 +251,8 @@ export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = nul
         // the phone points, and a pale circle shows how sure the fix is.
         // Touch the map to look around; Re-centre puts it back.
         let meMarker = null, meBeam = null, meRing = null, meRaf = 0, mePos = null, meHeading = null;
+        // Set further down, once the legs are drawn: joins the dot to the leg.
+        let joinUp = () => {};
         const ahead = (p, h, m) => {
           const r = Math.PI / 180, d = m / 6371000, la = p.lat * r, lo = p.lng * r, b = h * r;
           const la2 = Math.asin(Math.sin(la) * Math.cos(d) + Math.cos(la) * Math.sin(d) * Math.cos(b));
@@ -276,6 +282,7 @@ export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = nul
             }
             mePos = pos;
             placeCamera(pos);
+            joinUp(pos);
           } else {
             // Glide from the last fix to this one.
             const from = mePos || pos, t0 = performance.now(), ms = reducedMotion() ? 0 : 900;
@@ -288,6 +295,7 @@ export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = nul
               if (meRing) meRing.setCenter(at2);
               if (keepInView) placeCamera(at2);
               meRaf = t < 1 ? requestAnimationFrame(step) : 0;
+              if (t >= 1) joinUp(at2);
             };
             meRaf = requestAnimationFrame(step);
             if (meRing && Number(p.accuracy) > 0) meRing.setRadius(Number(p.accuracy));
@@ -315,7 +323,61 @@ export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = nul
             } catch { /* line gone */ }
           });
         };
-        api.current = { focusStop, overview, showMe, recenter, styleLegs };
+        // ── FROM WHERE YOU STAND TO THE WAY ──────────────────────────
+        // Oliver, 5 Oct 2026: "Is it not possible to improve the map? Like
+        // make line between the destination and current position". While
+        // walking: a blue dotted line from the dot to the nearest point of
+        // the leg being walked, the way Google Maps joins you to a route
+        // when you are off it, and the part of the leg already behind you
+        // goes grey, so what is left to walk is the gold. A leg with no
+        // measured line is joined straight to the stop.
+        // Worked out here from the walk's own line and the dot. Nothing is
+        // asked of Google as you walk, and no turn is given: see WalkMode.jsx
+        // on Google's terms (3.2.3(d)).
+        let joinLine = null, behindLine = null, joinedLeg = null;
+        const nearestOn = (pos, path) => {
+          const kx = 111320 * Math.cos((pos.lat * Math.PI) / 180), ky = 110540;
+          let best = { d: Infinity, k: 0, p: path[0] };
+          for (let k = 0; k < path.length - 1; k++) {
+            const a = path[k], b = path[k + 1];
+            const ax = (a.lng - pos.lng) * kx, ay = (a.lat - pos.lat) * ky, bx = (b.lng - pos.lng) * kx, by = (b.lat - pos.lat) * ky;
+            const dx = bx - ax, dy = by - ay, len = dx * dx + dy * dy;
+            const t = len ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / len)) : 0;
+            const x = ax + dx * t, y = ay + dy * t, d = Math.hypot(x, y);
+            if (d < best.d) best = { d, k, p: { lat: a.lat + (b.lat - a.lat) * t, lng: a.lng + (b.lng - a.lng) * t } };
+          }
+          return best;
+        };
+        joinUp = (pos) => {
+          const active = activeLegRef.current;
+          const leg = follow && active !== null && active !== undefined ? legLines[active] : null;
+          if (joinedLeg && joinedLeg !== leg) { try { joinedLeg.line.setPath(joinedLeg.path); } catch { /* gone */ } }
+          joinedLeg = leg;
+          if (!leg || !pos) { joinLine?.setMap(null); behindLine?.setMap(null); return; }
+          const near = leg.measured && leg.path.length > 1 ? nearestOn(pos, leg.path) : { d: Infinity, k: 0, p: leg.to };
+          const to = near.d <= JOIN_MAX_M ? near.p : leg.to;
+          // Within a few metres of the line, you are on it: no join.
+          if (near.d > JOIN_ON_M || to === leg.to) {
+            const path = [pos, to];
+            if (!joinLine) {
+              joinLine = new maps.Polyline({ map, path, strokeOpacity: 0, zIndex: 6, clickable: false, icons: [{ icon: { path: maps.SymbolPath.CIRCLE, scale: 2.6, fillColor: "#4285F4", fillOpacity: 1, strokeColor: "#FFFFFF", strokeWeight: 1 }, offset: "0", repeat: "11px" }] });
+              drawn.push(joinLine);
+            } else { joinLine.setPath(path); joinLine.setMap(map); }
+          } else joinLine?.setMap(null);
+          // What is behind you on this leg, grey; what is left, gold.
+          if (leg.measured && near.d <= JOIN_MAX_M) {
+            const behind = [...leg.path.slice(0, near.k + 1), near.p], ahead = [near.p, ...leg.path.slice(near.k + 1)];
+            try { leg.line.setPath(ahead); } catch { /* gone */ }
+            if (!behindLine) {
+              behindLine = new maps.Polyline({ map, path: behind, strokeColor: "#9AA0A6", strokeOpacity: 0.85, strokeWeight: 6, zIndex: 4, clickable: false });
+              drawn.push(behindLine);
+            } else { behindLine.setPath(behind); behindLine.setMap(map); }
+          } else {
+            try { leg.line.setPath(leg.path); } catch { /* gone */ }
+            behindLine?.setMap(null);
+          }
+        };
+        api.current = { focusStop, overview, showMe, recenter, styleLegs, joinUp: () => joinUp(mePos) };
 
         map.moveCamera({ heading: 0, tilt: 0 });
         try { map.setMapTypeId("roadmap"); } catch { /* keep going */ }
@@ -353,7 +415,7 @@ export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = nul
             // a line then, under the dashes.
             const solid = new maps.Polyline({ map, path, strokeColor: C.gold, strokeOpacity: 0, strokeWeight: 4, zIndex: 1 });
             drawn.push(solid);
-            legLines[i] = { line: solid, casing: null, measured, dashed: true };
+            legLines[i] = { line: solid, casing: null, measured, dashed: true, path, to: at(legs[i][1]) };
             return;
           }
           const casing = measured ? new maps.Polyline({ map, path, strokeColor: "#FFFFFF", strokeOpacity: 0.9, strokeWeight: 8, zIndex: 2 }) : null;
@@ -364,9 +426,9 @@ export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = nul
             icons: [{ icon: { path: maps.SymbolPath.FORWARD_CLOSED_ARROW, scale: 3.2, fillColor: C.gold, fillOpacity: 1, strokeColor: "#FFFFFF", strokeWeight: 1.5 }, offset: "50%" }],
           });
           drawn.push(gold);
-          legLines[i] = { line: gold, casing, measured, dashed: false };
+          legLines[i] = { line: gold, casing, measured, dashed: false, path, to: at(legs[i][1]) };
         });
-        if (activeLegRef.current !== null) styleLegs(activeLegRef.current);
+        if (activeLegRef.current !== null) { styleLegs(activeLegRef.current); joinUp(mePos); }
       } catch {
         if (!gone) setFailed(true);
       }
@@ -407,7 +469,7 @@ export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = nul
 
   // The leg being walked, for the walk mode.
   const activeLegRef = useRef(activeLeg);
-  useEffect(() => { activeLegRef.current = activeLeg; api.current?.styleLegs(activeLeg); }, [activeLeg]);
+  useEffect(() => { activeLegRef.current = activeLeg; api.current?.styleLegs(activeLeg); api.current?.joinUp(); }, [activeLeg]);
 
   if (!googleMapsReady() || failed || !walkLegs(walk).length) return null;
   const stops = Array.isArray(walk?.stops) ? walk.stops : [];
