@@ -152,6 +152,41 @@ const reducedMotion = () => {
 const PAD = { top: 52, right: 28, bottom: 28, left: 28 };
 const PIN_SCALE = 0.85;
 
+// ── THE SPARKLE ─────────────────────────────────────────────────────
+// Oliver, 5 Oct 2026, of the cards: "can it fade in a little better? Maybe
+// with bling bling? Like disney type?" So each arrival is a small burst of
+// gold stars from the pin with a ring of light, the card blurs into focus
+// with a sweep of light across it and a slow glow, a star twinkles in its
+// corner, and it fades out again before the next leg. The flight opens out
+// of a dark curtain with a burst in the middle, and the landing gets the
+// biggest burst. Laid out once, the same every time, so nothing jumps
+// about between runs.
+export const SPARKS = Array.from({ length: 22 }, (_, i) => {
+  const a = (i / 22) * Math.PI * 2 + (i % 3) * 0.19;
+  const d = 48 + ((i * 17) % 64);
+  return { dx: Math.round(Math.cos(a) * d), dy: Math.round(Math.sin(a) * d), s: 0.8 + (i % 4) * 0.35, r: (i * 47) % 360, ch: i % 3 === 0 ? "•" : i % 5 === 0 ? "★" : "✦", white: i % 4 === 0, delay: (i % 6) * 35 };
+});
+const FX_CSS = `
+@keyframes gxSpark { 0% { opacity: 0; transform: translate(-50%, -50%) scale(0) rotate(0deg); } 12% { opacity: 1; } 45% { opacity: 1; transform: translate(calc(-50% + var(--dx) * .75), calc(-50% + var(--dy) * .75)) scale(var(--s)) rotate(calc(var(--r) * .6)); } 100% { opacity: 0; transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy) + 14px)) scale(.25) rotate(var(--r)); } }
+@keyframes gxRing { 0% { opacity: 1; transform: translate(-50%, -50%) scale(.2); } 100% { opacity: 0; transform: translate(-50%, -50%) scale(3.2); } }
+@keyframes gxFlash { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.3); } 25% { opacity: .95; transform: translate(-50%, -50%) scale(1); } 100% { opacity: 0; transform: translate(-50%, -50%) scale(1.6); } }
+@keyframes gxCardIn { 0% { opacity: 0; filter: blur(10px); transform: translateY(18px) scale(.86); } 60% { opacity: 1; filter: blur(0); transform: translateY(-4px) scale(1.03); } 100% { opacity: 1; filter: blur(0); transform: none; } }
+@keyframes gxCardOut { 0% { opacity: 1; filter: blur(0); transform: none; } 100% { opacity: 0; filter: blur(6px); transform: translateY(8px) scale(.96); } }
+@keyframes gxShimmer { 0% { transform: translateX(-130%) skewX(-20deg); } 100% { transform: translateX(330%) skewX(-20deg); } }
+@keyframes gxGlow { 0%, 100% { box-shadow: 0 8px 24px rgba(0,0,0,.45), 0 0 0 rgba(217,164,65,0); } 50% { box-shadow: 0 8px 24px rgba(0,0,0,.45), 0 0 22px rgba(217,164,65,.55); } }
+@keyframes gxTwinkle { 0%, 100% { opacity: .15; transform: scale(.5) rotate(0deg); } 50% { opacity: 1; transform: scale(1.1) rotate(45deg); } }
+@keyframes gxCurtain { 0% { opacity: 1; } 100% { opacity: 0; } }
+`;
+const Burst = ({ top = "calc(50% - 30px)", size = 1 }) => (
+  <div aria-hidden="true" style={{ position: "absolute", left: "50%", top, width: 0, height: 0, pointerEvents: "none" }}>
+    <div style={{ position: "absolute", left: 0, top: 0, width: 60 * size, height: 60 * size, borderRadius: "50%", background: "radial-gradient(circle, rgba(255,255,255,0.95), rgba(255,226,150,0.6) 35%, rgba(217,164,65,0) 70%)", animation: "gxFlash 520ms ease-out both" }} />
+    <div style={{ position: "absolute", left: 0, top: 0, width: 56 * size, height: 56 * size, borderRadius: "50%", border: `3px solid ${C.gold}`, boxShadow: `0 0 22px ${C.gold}, inset 0 0 12px ${C.gold}`, animation: "gxRing 800ms ease-out both" }} />
+    {SPARKS.map((p, i) => (
+      <span key={i} style={{ position: "absolute", left: 0, top: 0, fontSize: 17 * size, lineHeight: 1, color: p.white ? "#FFFFFF" : "#FFD875", textShadow: `0 0 8px ${C.gold}, 0 0 16px rgba(255,216,117,0.8)`, "--dx": `${p.dx * size}px`, "--dy": `${p.dy * size}px`, "--s": p.s, "--r": `${p.r}deg`, animation: `gxSpark 1150ms ${p.delay}ms cubic-bezier(.12,.75,.3,1) both` }}>{p.ch}</span>
+    ))}
+  </div>
+);
+
 const HHMM = (m) => `${String(Math.floor((((m % 1440) + 1440) % 1440) / 60)).padStart(2, "0")}:${String((((m % 60) + 60) % 60)).padStart(2, "0")}`;
 
 // `madeAt` is the walk's start, in minutes after midnight, for the times on
@@ -172,6 +207,8 @@ export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = nul
   const [canFly, setCanFly] = useState(false);
   // What pops up during the flight: { stop: index } or { end: true }.
   const [card, setCard] = useState(null);
+  // Bumped at each flight, so the curtain and its burst play again.
+  const [intro, setIntro] = useState(0);
 
   // A touch anywhere on the map, before or during the turn, ends it for good.
   useEffect(() => {
@@ -244,7 +281,15 @@ export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = nul
           moved.current = false;
           let shown = "";
           try { map.setMapTypeId("satellite"); } catch { /* the plain map flies too */ }
-          const show = (key, value, pin) => { if (shown === key) return; shown = key; setCard(value); popPin(pin); };
+          // A card going away fades out first; the next one replaces it.
+          const show = (key, value, pin) => {
+            if (shown === key) return;
+            shown = key; popPin(pin);
+            if (value) { setCard(value); return; }
+            setCard(c => (c && !c.out ? { ...c, out: true } : c));
+            setTimeout(() => { if (!gone) setCard(c => (c && c.out ? null : c)); }, 320);
+          };
+          setIntro(n => n + 1);
           const first = cameraAt(pts, 0);
           map.moveCamera({ center: { lat: first.lat, lng: first.lng }, zoom, tilt: FLY_TILT, heading: first.heading });
           const t0 = performance.now();
@@ -336,17 +381,37 @@ export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = nul
         aria-label="Map of this walk"
         style={{ height, borderRadius: 14, overflow: "hidden", border: `1px solid ${C.border}`, background: C.surface }}
       />
-      <style>{`@keyframes gxCardPop { 0% { opacity: 0; transform: translateY(16px) scale(.9); } 70% { opacity: 1; transform: translateY(-3px) scale(1.02); } 100% { opacity: 1; transform: none; } }`}</style>
+      <style>{FX_CSS}</style>
+      {intro > 0 && (
+        <div key={`curtain${intro}`} aria-hidden="true" style={{ position: "absolute", inset: 0, borderRadius: 14, background: C.bg, animation: "gxCurtain 900ms ease-out both", pointerEvents: "none" }}>
+          <Burst top="50%" size={1.6} />
+        </div>
+      )}
       {card && (() => {
         const stops = Array.isArray(walk?.stops) ? walk.stops : [];
-        const box = { position: "absolute", left: 10, right: 10, bottom: 26, background: C.surface, border: `1px solid ${C.gold}`, borderRadius: 14, padding: "11px 13px", boxShadow: "0 8px 24px rgba(0,0,0,0.45)", animation: "gxCardPop 420ms cubic-bezier(.2,.9,.3,1) both", pointerEvents: "none", fontFamily: "'Inter', sans-serif" };
+        const box = {
+          position: "absolute", left: 10, right: 10, bottom: 26, background: C.surface, border: `1px solid ${C.gold}`, borderRadius: 14, padding: "11px 13px", overflow: "hidden", pointerEvents: "none", fontFamily: "'Inter', sans-serif",
+          animation: card.out ? "gxCardOut 300ms ease-in both" : "gxCardIn 560ms cubic-bezier(.2,.9,.3,1) both, gxGlow 1800ms 560ms ease-in-out infinite",
+        };
+        // A sweep of light across the card once it is in, and a star that
+        // twinkles in its corner while it stays.
+        const shine = (
+          <>
+            <div aria-hidden="true" style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: "38%", background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.28), transparent)", animation: "gxShimmer 950ms 300ms ease-out both", pointerEvents: "none" }} />
+            <span aria-hidden="true" style={{ position: "absolute", top: 7, right: 9, color: C.gold, fontSize: 13, textShadow: `0 0 8px ${C.gold}`, animation: "gxTwinkle 1400ms ease-in-out infinite" }}>✦</span>
+          </>
+        );
         if (card.end) {
           const back = madeAt != null && walk?.back?.at != null ? HHMM(madeAt + walk.back.at) : "";
           return (
-            <div key="end" data-testid="fly-card-end" style={box}>
-              <div style={{ fontSize: 15, fontWeight: 700, fontFamily: "'Fraunces', serif", color: C.text }}>{stops.length} stops{back ? `, back by ${back}` : ""}</div>
-              <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>⚓ {walk?.start?.name || "Start"} and back</div>
-            </div>
+            <>
+              {!card.out && <Burst key="burst-end" top="45%" size={2} />}
+              <div key="end" data-testid="fly-card-end" style={box}>
+                {shine}
+                <div style={{ fontSize: 15, fontWeight: 700, fontFamily: "'Fraunces', serif", color: C.text }}>{stops.length} stops{back ? `, back by ${back}` : ""}</div>
+                <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>⚓ {walk?.start?.name || "Start"} and back</div>
+              </div>
+            </>
           );
         }
         const st = stops[card.stop];
@@ -354,7 +419,10 @@ export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = nul
         const extra = (cardFor && cardFor(st)) || {};
         const time = madeAt != null && Number.isFinite(Number(st.arrive)) ? HHMM(madeAt + Number(st.arrive)) : "";
         return (
+          <>
+          {!card.out && <Burst key={`burst${card.stop}`} />}
           <div key={`s${card.stop}`} data-testid="fly-card" style={{ ...box, display: "flex", gap: 11, alignItems: "flex-start" }}>
+            {shine}
             <div style={{ position: "relative", flex: "0 0 auto" }}>
               {extra.photo
                 ? <img src={extra.photo} alt="" style={{ width: 54, height: 54, borderRadius: 10, objectFit: "cover", display: "block" }} />
@@ -373,6 +441,7 @@ export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = nul
               )}
             </div>
           </div>
+          </>
         );
       })()}
       {canFly && !card && (
