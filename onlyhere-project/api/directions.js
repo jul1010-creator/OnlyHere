@@ -84,6 +84,26 @@ const ROUTES_FIELDS = [
   "routes.polyline.encodedPolyline", "geocodingResults",
 ].join(",");
 
+// ── THE TURNS OF A WALK, AS A LIST ──────────────────────────────────
+// Oliver, 6 Oct 2026, choosing between three ways to give directions through
+// town: "Turn list only". So a walking answer also carries Google's own steps,
+// written out ("Turn left onto Tiltų g.", 80 m), for the walk screen to list
+// beside the Google map. The list is shown as a written route; nothing moves
+// it along with the walker's position, which is the live navigation Google
+// keeps for its own apps (Maps Platform Terms 3.2.3(d)).
+export const TURN_LANGS = ["en", "da", "de", "lt"];
+export const turnsFrom = (raw = []) => raw.map(s => {
+  const n = s?.navigationInstruction || {};
+  const text = String(n.instructions || "").replace(/\s+/g, " ").trim();
+  return text ? { text: text.slice(0, 200), maneuver: String(n.maneuver || "").toUpperCase().slice(0, 40), meters: Math.round(Number(s.distanceMeters) || 0) } : null;
+}).filter(Boolean).slice(0, 60);
+// The older Directions answer writes its steps in HTML and its turns in
+// lower case with dashes: "turn-left". Both are read into the same shape.
+export const turnsFromDirections = (raw = []) => raw.map(s => {
+  const text = String(s?.html_instructions || "").replace(/<div[^>]*>/gi, ". ").replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ").replace(/\.\s*\./g, ".").trim();
+  return text ? { text: text.slice(0, 200), maneuver: String(s.maneuver || "").toUpperCase().replace(/-/g, "_").slice(0, 40), meters: Math.round(Number(s.distance?.value) || 0) } : null;
+}).filter(Boolean).slice(0, 60);
+
 const secondsOf = (d) => {
   const m = String(d || "").match(/^(\d+(?:\.\d+)?)s$/);
   return m ? Number(m[1]) : NaN;
@@ -176,6 +196,7 @@ export const fromRoutes = (data) => {
   const meters = Number(leg.distanceMeters) || 0;
   return {
     steps,
+    ...(rawSteps.length && rawSteps.every(s => s.travelMode === "WALK") ? { turns: turnsFrom(rawSteps) } : {}),
     ferries,
     hasFerry: ferries.length > 0 || drivingFerryStep,
     ferryUnnamed: ferries.length === 0 && drivingFerryStep,
@@ -196,12 +217,12 @@ export const fromRoutes = (data) => {
 
 // One Routes API call. Null means "it did not answer", and the Directions call
 // runs instead; an answer with no route is an answer, and is returned.
-const askRoutes = async ({ key, origin, destination, travelMode, departAt, avoid }) => {
+const askRoutes = async ({ key, origin, destination, travelMode, departAt, avoid, lang = "en" }) => {
   const body = {
     origin: waypointOf(origin),
     destination: waypointOf(destination),
     travelMode: ROUTES_MODE[travelMode] || "TRANSIT",
-    languageCode: "en",
+    languageCode: TURN_LANGS.includes(lang) ? lang : "en",
     units: "METRIC",
   };
   if (travelMode === "driving") body.routingPreference = "TRAFFIC_UNAWARE";
@@ -230,6 +251,8 @@ export default async function handler(req, res) {
     return res.status(403).json({ error: NOT_FROM_SITE });
   }
   const { origin, destination, mode, departure_time, avoid } = req.query;
+  // The language of the turns, for a walk only; everything else stays English.
+  const lang = mode === "walking" && TURN_LANGS.includes(String(req.query.lang || "")) ? String(req.query.lang) : "en";
   if (!origin || !destination) {
     return res.status(400).json({ error: "origin and destination required" });
   }
@@ -278,11 +301,11 @@ export default async function handler(req, res) {
 
   // The departure time is read once, for both calls.
   const departAt = /^\d{9,11}$/.test(String(departure_time || "")) ? String(departure_time) : "";
-  const routed = await askRoutes({ key, origin: originParam, destination: destinationParam, travelMode, departAt, avoid });
+  const routed = await askRoutes({ key, origin: originParam, destination: destinationParam, travelMode, departAt, avoid, lang });
   if (routed) return res.status(200).json(routed);
 
   try {
-    let url = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(originParam)}&destination=${encodeURIComponent(destinationParam)}&mode=${travelMode}&key=${key}`;
+    let url = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(originParam)}&destination=${encodeURIComponent(destinationParam)}&mode=${travelMode}&key=${key}${lang !== "en" ? `&language=${lang}` : ""}`;
     // departure_time is optional — only transit/driving use it (transit for real
     // schedule-based predictions like late-night checks, driving for live traffic).
     // Must be a future Unix timestamp in seconds; Google rejects a past one.
@@ -403,6 +426,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       steps,
+      ...(travelMode === "walking" ? { turns: turnsFromDirections(leg.steps || []) } : {}),
       ferries,
       // Named ferries when the transit feed carries them, otherwise the honest
       // weaker fact: this journey requires a crossing, we just cannot name it
