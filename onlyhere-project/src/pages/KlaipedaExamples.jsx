@@ -157,7 +157,8 @@ export const KlaipedaExamples = () => {
             </div>
           )}
           {/* Google's own map, turning once. Left out until its key is set. */}
-          <GoogleWalkMap walk={shownWalk} />
+          <GoogleWalkMap walk={shownWalk} madeAt={run.startClock.minutes}
+            cardFor={(st) => { const pg = pageFor(st.id); return pg ? { emoji: pg.item.emoji, photo: pg.item.photo } : null; }} />
           <EditableWalk walk={shownWalk} madeAt={run.startClock.minutes} lang="en" country="LT" tag={(s) => isExamplePartner(s.id) ? "Example" : null} onOpen={(s) => openPage(s.id)} />
           {run.left.length > 0 && (
             <div data-testid="example-left" style={{ borderTop: `1px solid ${C.border}`, marginTop: 14, paddingTop: 12 }}>
