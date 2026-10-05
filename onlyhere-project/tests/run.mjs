@@ -82086,5 +82086,8 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("in four languages, no dashes, none of his banned words", keys.every(k => ["en", "da", "de", "lt"].every(l => M.UI_STRINGS[k]?.[l])) && !/[—–]/.test(words) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(words));
 }
 
+// ── Batch 216b: no zoom buttons under the strip while walking (pinch zooms) ──
+ok("walking, the map has no zoom buttons, and pinching still zooms", /zoomControl: !follow, gestureHandling: follow \? "greedy"/.test(readFileSync(join(root, "src/components/GoogleWalkMap.jsx"), "utf8")));
+
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
 if (failed) { fails.forEach(f => console.log("  FAIL " + f + "\n")); process.exit(1); }
