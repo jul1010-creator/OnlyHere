@@ -81595,7 +81595,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("the legs run start to start through every stop", legs.length === 3 && legs[0][0] === walk.start && legs[2][1] === walk.start);
   ok("and a walk with nothing to draw draws nothing", M.walkLegs({ start: walk.start, stops: [] }).length === 0 && M.walkLegs(null).length === 0);
   ok("one turn, timed by the clock and not the frame", M.headingAt(0) === 0 && Math.abs(M.headingAt(M.SPIN_MS / 2) - 180) < 1e-9 && M.headingAt(M.SPIN_MS) === null);
-  ok("it stops when touched, and never starts after a touch", /\["pointerdown", "wheel", "touchstart", "keydown"\]/.test(comp) && /if \(turned\.current \|\| moved\.current \|\| reducedMotion\(\)\) return;/.test(comp) && /if \(moved\.current\) \{ raf = 0; return; \}/.test(comp));
+  ok("it stops when touched, and never starts after a touch", /\["pointerdown", "wheel", "touchstart", "keydown"\]/.test(comp) && /if \(turned\.current \|\| moved\.current \|\| reducedMotion\(\)\) return;/.test(comp) && /if \(moved\.current\) \{ raf = 0; map\.moveCamera\(\{ heading: 0, tilt: 0 \}\); return; \}/.test(comp));
   // Found on the live page, 4 Oct 2026: the "idle" listener went on after the
   // walking lines came back, by when the map had gone idle, so it never turned.
   ok("the turn waits for the map, not for the walking lines",
@@ -81604,7 +81604,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
     /if \(!mapRef\.current\) \{\s*mapRef\.current = new Map\(/.test(comp) && (comp.match(/new Map\(box\.current/g) || []).length === 1);
   ok("and does not move for anyone who asked for less motion", /prefers-reduced-motion: reduce/.test(comp));
   ok("the lines are Google's own walking routes, on Google's map", /\/api\/directions\?origin=\$\{a\.lat\},\$\{a\.lon\}&destination=\$\{b\.lat\},\$\{b\.lon\}&mode=walking/.test(comp) && /mapId: GOOGLE_MAP_ID/.test(comp));
-  ok("a leg Google could not measure is drawn faint, never confident", /strokeOpacity: measured \? 0\.9 : 0\.35/.test(comp));
+  ok("a leg Google could not measure is drawn faint, never confident", /strokeOpacity: measured \? 0\.9 : 0\.35/.test(comp) && /strokeOpacity: measured \? 0\.85 : 0\.35/.test(comp));
   ok("a separate browser key, never the server one", /import\.meta\.env\.VITE_GOOGLE_MAPS_BROWSER_KEY/.test(loader) && !/GOOGLE_MAPS_KEY\b/.test(loader.replace(/\/\/.*$/gm, "").replace(/VITE_GOOGLE_MAPS_BROWSER_KEY/g, "")) && !/process\.env/.test(loader));
   ok("without the key and a Map ID nothing loads", /if \(!googleMapsReady\(\)\) return Promise\.reject/.test(loader) && /if \(!googleMapsReady\(\) \|\| failed \|\| !walkLegs\(walk\)\.length\) return null;/.test(comp));
   ok("the examples page shows it for the walk on screen", /<GoogleWalkMap walk=\{shownWalk\} \/>/.test(pageG));
@@ -81648,7 +81648,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
     ["Panevėžys", "Rokiškis", "Šiauliai", "Marijampolė", "Biržai"]);
   ok("a quarter after a comma is not a town", /const looksLikeATown = !!afterComma && \(!!townPointFor\(afterComma\) \|\| /.test(app));
   ok("the map's waiting listener is removed when the walk changes, and a stopped turn goes back to north",
-    /idle = maps\.event\.addListenerOnce\(map, "idle"/.test(comp) && /idle\?\.remove\(\)/.test(comp) && /moveCamera\(\{ heading: 0 \}\); \} catch/.test(comp));
+    /idle = maps\.event\.addListenerOnce\(map, "idle"/.test(comp) && /idle\?\.remove\(\)/.test(comp) && /moveCamera\(\{ heading: 0, tilt: 0 \}\); \} catch/.test(comp));
   ok("a failed walking line is asked again rather than kept faint", /if \(line\) legCache\.set\(key, line\);/.test(comp));
   ok("the Lithuanian Studio links the three Klaipėda pages",
     /\{studioCountry === "LT" && \(\s*<div data-testid="studio-klaipeda-pages"/.test(app) && /\[\[KLAIPEDA_EXAMPLES_PATH, "Examples"\], \[KLAIPEDA_DEMO_PATH, "QR walk"\], \[KLAIPEDA_SCULPTURES_PATH, "Sculptures"\]\]/.test(app));
@@ -81863,6 +81863,20 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const keys = ["now.fromHere", "now.whereYouAre", "now.backHere", "now.notHere", "now.noLocation"];
   const words = keys.map(k => ["en", "da", "de", "lt"].map(l => M.UI_STRINGS[k]?.[l] || "").join(" ")).join(" ");
   ok("in four languages, with no dashes or banned words", keys.every(k => ["en", "da", "de", "lt"].every(l => M.UI_STRINGS[k]?.[l])) && !/[—–]/.test(words) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(words));
+}
+
+// ── Batch 206: a walk map you can read as a route ──
+// Oliver, 5 Oct 2026: "confusing and messy map.. you don't look at this and
+// think 'looks like a good route'.. nobody can tell what this route is".
+{
+  const comp = readFileSync(join(root, "src/components/GoogleWalkMap.jsx"), "utf8");
+  ok("every leg out says which way it runs, with an arrow on a white edge", /path: maps\.SymbolPath\.FORWARD_CLOSED_ARROW[^}]*\}, offset: "50%"/.test(comp) && /strokeColor: "#FFFFFF", strokeOpacity: 0\.9, strokeWeight: 8, zIndex: 2/.test(comp));
+  ok("the way back is dashed, never drawn like the walk", /if \(i === last\) \{\s*drawn\.push\(new maps\.Polyline\(\{\s*map, path, strokeOpacity: 0, zIndex: 1,\s*icons: \[\{ icon: \{ path: "M 0,-1 0,1"/.test(comp) && /repeat: "14px"/.test(comp));
+  ok("the map lies flat with the whole walk in view, and after its one turn", /map\.moveCamera\(\{ heading: 0, tilt: 0 \}\);\s*map\.fitBounds\(bounds, PAD\);/.test(comp) && /if \(heading === null\) \{ raf = 0; map\.moveCamera\(\{ heading: 0, tilt: 0 \}\); map\.fitBounds\(bounds, PAD\); return; \}/.test(comp));
+  ok("and only tilts while it turns", comp.indexOf("if (turned.current || moved.current || reducedMotion()) return;") < comp.indexOf("map.moveCamera({ tilt: SPIN_TILT, heading: 0 });"));
+  ok("smaller pins, the start on top, Google's own places not clickable", (comp.match(/scale: PIN_SCALE/g) || []).length === 2 && /zIndex: 100 \}\)\);/.test(comp) && /clickableIcons: false/.test(comp));
+  const shown = comp.replace(/\/\/ ── .*$/gm, "");
+  ok("no dashes and none of his banned words", !/[—–]/.test(shown) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(shown));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
