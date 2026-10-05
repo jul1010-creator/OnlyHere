@@ -81143,7 +81143,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const w = N.scheduleWalk([{ id: "food:3" }], cands, { country: "LT", start: terminal, startClock: { day: 2, minutes: 15 * 60 + 15 }, budget: 240, margin: 30 });
   ok("a deal is not shown as on for a visit that can begin as it ends", w.stops[0] && w.stops[0].deal === null);
   const api = readFileSync(join(root, "api/plan-now.js"), "utf8");
-  ok("the walk route answers one spelling of each request only", /if \(keys !== \(style \? "c,from,h,lang,slot,style" : "c,from,h,lang,slot"\)\) return json\(res, 400/.test(api) && /const style = q\.style === STROLL \? STROLL : "";/.test(api) && /Object\.prototype\.hasOwnProperty\.call\(starts, String\(q\.from \|\| ""\)\)/.test(api) && /\/\^\[0-9\]\$\/\.test\(String\(q\.h \|\| ""\)\)/.test(api));
+  ok("the walk route answers one spelling of each request only", /if \(keys !== \(listing \? "c,from,h,lang,slot,styles" : style \? "c,from,h,lang,slot,style" : "c,from,h,lang,slot"\)\) return json\(res, 400/.test(api) && /const style = NOW_STYLES\.includes\(String\(q\.style \|\| ""\)\) \? String\(q\.style\) : "";/.test(api) && /const listing = q\.styles === "1";/.test(api) && /Object\.prototype\.hasOwnProperty\.call\(starts, String\(q\.from \|\| ""\)\)/.test(api) && /\/\^\[0-9\]\$\/\.test\(String\(q\.h \|\| ""\)\)/.test(api));
   const np = readFileSync(join(root, "src/components/NowPlanner.jsx"), "utf8");
   ok("an answer for an older choice is dropped", /if \(asked\.current !== mine\) return;/.test(np));
   const store = readFileSync(join(root, "src/utils/studioDraftStore.js"), "utf8");
@@ -81313,7 +81313,8 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("and keeps every stop short", N.scheduleWalk([{ id: "free:1", stay: 60 }], town, { ...base, style: N.STROLL }).stops[0].stay === N.STROLL_STAY);
   ok("and is told to the model in words", /easy walk around the Old Town/.test(N.planPrompt(town, { ...base, style: N.STROLL })));
   const np = readFileSync(join(root, "src/components/NowPlanner.jsx"), "utf8");
-  ok("the planner offers it where a country has an Old Town drawn, and asks for it in one spelling", /\{OLD_TOWN\[country\] && \(/.test(np) && /\$\{stroll \? `&style=\$\{STROLL\}` : ""\}/.test(np));
+  // Batch 204: the Old Town walk is now one of the kinds, offered when it fits.
+  ok("the planner offers it when it fits, and asks for it in one spelling", /data-testid=\{k === STROLL \? "now-old-town" : `now-style-\$\{k\}`\}/.test(np) && /\$\{style \? `&style=\$\{style\}` : ""\}/.test(np));
   ok("and says what snow and a storm wind did to the walk", /uiT\(walk\.weather\?\.snow \? "now\.snow" : "now\.wet", lang\)/.test(np) && /uiT\("now\.windy", lang\)/.test(np));
   // On the examples page.
   const run = (id) => X.runExample(X.WEATHER_WALKS.find(w => w.id === id));
@@ -81805,6 +81806,40 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const keys = ["deals.examples", "deals.example", "deals.exampleMadeUp"];
   const words = keys.map(k => ["en", "da", "de", "lt"].map(l => M.UI_STRINGS[k]?.[l] || "").join(" ")).join(" ");
   ok("in four languages, with no dashes and none of his banned words", keys.every(k => ["en", "da", "de", "lt"].every(l => M.UI_STRINGS[k]?.[l])) && !/[—–]/.test(words) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(words));
+}
+
+// ── Batch 204: walks of one kind, offered only when one fits ──
+// Oliver, 5 Oct 2026, of a 03:20 walk with two places in it: "Perhaps
+// different categories?", "anything possible in Klaipeda. But Only if the
+// timing fits", and only that category in the walk.
+{
+  const N = M.NP;
+  const bar = { id: "pub", type: "nightlife", payload: { name: "Test Pub", country: "LT", __lat: 55.7080, __lon: 21.1350, __hours: { hours: ["Monday: 16:00 to 02:00", "Tuesday: 16:00 to 02:00", "Wednesday: 16:00 to 02:00", "Thursday: 16:00 to 02:00", "Friday: 16:00 to 02:00", "Saturday: 16:00 to 02:00", "Sunday: 16:00 to 02:00"] } } };
+  const rows = [...M.KEX.exampleRows(), bar];
+  const at = (iso) => N.nowCandidates(rows, { country: "LT", zone: "Europe/Vilnius", now: new Date(iso) });
+  const ctxAt = (day, minutes, h) => ({ country: "LT", start: N.NOW_STARTS.LT.terminal, startClock: { day, minutes }, budget: h * 60, margin: 30, weather: { wet: false, snow: false, wind: 3 }, ferryWait: 60 });
+  const tue = at("2026-10-06T09:00:00Z");
+  ok("a bar is a candidate of its own kind, and never in the everyday walk", tue.some(c => c.kind === "Nightlife") && !N.styleCandidates(tue, "", "LT").some(c => c.kind === "Nightlife") && !N.strollCandidates(tue, "LT").some(c => c.kind === "Nightlife"));
+  ok("each kind keeps only its own", N.styleCandidates(tue, "food", "LT").every(c => c.kind === "Food") && N.styleCandidates(tue, "museums", "LT").every(c => c.kind === "Museum") && N.styleCandidates(tue, "outdoors", "LT").every(c => c.kind === "Attraction" && !c.indoor));
+  const noon = N.stylesThatFit(tue, ctxAt(2, 12 * 60, 3));
+  ok("at Tuesday noon, food, museums and outdoors all fit", ["food", "museums", "outdoors"].every(k => noon.includes(k)));
+  ok("and a night out does not, at noon", !noon.includes("nightlife"));
+  const night = N.stylesThatFit(at("2026-10-06T00:20:00Z"), ctxAt(2, 3 * 60 + 20, 6));
+  ok("at 03:20 nothing with a door is offered", !night.includes("food") && !night.includes("museums") && !night.includes("nightlife"));
+  const evening = N.stylesThatFit(at("2026-10-06T16:00:00Z"), ctxAt(2, 19 * 60, 2));
+  ok("in the evening a night out fits", evening.includes("nightlife"));
+  const food = N.styleCandidates(tue, "food", "LT");
+  const fw = N.scheduleWalk(N.ruleOrder(food, { ...ctxAt(2, 12 * 60, 4), style: "food" }), food, { ...ctxAt(2, 12 * 60, 4), style: "food" });
+  ok("a food walk has more than one food stop", fw.stops.filter(x => x.kind === "Food").length >= 2);
+  ok("the model is told what kind of walk it is", /The visitor wants a walk of museums\./.test(N.planPrompt(N.styleCandidates(tue, "museums", "LT"), { ...ctxAt(2, 12 * 60, 3), style: "museums" })) && /easy walk around the Old Town/.test(N.planPrompt(N.strollCandidates(tue, "LT"), { ...ctxAt(2, 12 * 60, 3), style: N.STROLL })));
+  const api = readFileSync(join(root, "api/plan-now.js"), "utf8");
+  ok("the route lists what fits, by the rules alone, cached for the half hour", /if \(listing\) \{\s*return json\(res, 200, \{ slot: q\.slot, country, from: start\.id, hours, styles: stylesThatFit\(all, ctx\) \}, "public, s-maxage=1800/.test(api) && api.indexOf("if (listing)") < api.indexOf("askModel(planPrompt"));
+  ok("and reads the bars too", /type=in\.\(free,food,booking,festival,nightlife\)/.test(api));
+  const np = readFileSync(join(root, "src/components/NowPlanner.jsx"), "utf8");
+  ok("the planner asks what fits and offers only that", /&styles=1`\)/.test(np) && /\{kinds\.length > 0 && \(/.test(np) && /setStyle\(cur => \(cur && !fit\.includes\(cur\) \? "" : cur\)\);/.test(np));
+  const keys = ["food", "museums", "outdoors", "workshops", "events", "nightlife"].map(k => `now.style.${k}`);
+  const words = keys.map(k => ["en", "da", "de", "lt"].map(l => M.UI_STRINGS[k]?.[l] || "").join(" ")).join(" ");
+  ok("every kind is named in four languages, with no dashes or banned words", keys.every(k => ["en", "da", "de", "lt"].every(l => M.UI_STRINGS[k]?.[l])) && !/[—–]/.test(words) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(words));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
