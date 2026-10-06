@@ -21,6 +21,11 @@ import {
 } from "../data/klaipedaExamples";
 import { KLAIPEDA_SCULPTURES_PATH } from "../data/klaipedaSculptures";
 import { GoogleWalkMap } from "../components/GoogleWalkMap";
+import { ensureLiveContentLoaded } from "../utils/liveContent";
+import { freeEntrance } from "../data/freeEntrance";
+import { foodSpots } from "../data/food";
+import { rowCountry } from "../utils/countries";
+import { livePhotoFor } from "../utils/livePhoto";
 
 const WARN = "#FFB347";
 
@@ -70,13 +75,35 @@ export const KlaipedaExamples = () => {
   const skyRun = useMemo(() => (sky ? runExample(sky) : null), [sky]);
   // The page a listing opens, in the window. See EXAMPLE_PAGES.
   const [open, setOpen] = useState(null);
-  const openPage = (id) => { const p = pageFor(id); if (p) setOpen({ id, ...p }); };
+  // ── THE PLACES' OWN PHOTOS ─────────────────────────────────────────
+  // Oliver, 6 Oct 2026: "with the photos of the attractions inside". A real
+  // place here takes the photo of the same place as published in the Studio,
+  // credited on its page (utils/livePhoto.js). The made-up partners keep
+  // their signs.
+  const [liveRows, setLiveRows] = useState([]);
+  useEffect(() => {
+    let gone = false;
+    ensureLiveContentLoaded().then(() => { if (!gone) setLiveRows([...freeEntrance, ...foodSpots].filter(r => rowCountry(r) === "LT")); }).catch(() => { /* signs, then */ });
+    return () => { gone = true; };
+  }, []);
+  const photoOf = (id) => {
+    const pg = pageFor(id);
+    if (!pg || isExamplePartner(id)) return null;
+    if (pg.item.photo) return { photo: pg.item.photo, credit: pg.item.__photoCredit || null };
+    return livePhotoFor(pg.item, liveRows);
+  };
+  const cardOf = (st) => { const pg = pageFor(st.id); if (!pg) return null; const ph = photoOf(st.id); return { emoji: pg.item.emoji, ...(ph ? { photo: ph.photo } : {}) }; };
+  const openPage = (id) => {
+    const p = pageFor(id);
+    if (!p) return;
+    const ph = photoOf(id);
+    setOpen({ id, ...p, item: ph && !p.item.photo ? { ...p.item, photo: ph.photo, __photoCredit: ph.credit || undefined } : p.item });
+  };
   // Show on map (5 Oct 2026): the stop the map glides to, and the walk as
   // the reader has changed it, so the map and the list agree.
   const [mapFocus, setMapFocus] = useState(null);
   const [mapWalk, setMapWalk] = useState(null);
   const mapBox = useRef(null);
-  const cardOf = (st) => { const pg = pageFor(st.id); return pg ? { emoji: pg.item.emoji, photo: pg.item.photo } : null; };
 
   // Kept out of search (noindex), like every Klaipėda page.
   useEffect(() => keepOutOfSearch("Klaipėda for visitors · Gemlyx"), []);
