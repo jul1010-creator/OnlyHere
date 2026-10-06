@@ -426,6 +426,12 @@ const NOT_YET_ABROAD = [];
 // guides already works without one (on the device). Signing in stays possible
 // from the menu for anybody who wants their saves on another device.
 const OPEN_ABROAD = PAGE_ABROAD;
+// ── A SAVED GUIDE BELONGS TO ITS OWN COUNTRY'S PAGE ─────────────────
+// Oliver's laptop, 7 Oct 2026: the Lithuanian page listed his Danish saved
+// guides and their weather notices, the page he is about to show in
+// Klaipėda. A guide made on another country's page carries _country (set
+// where the guide is built); one without it is Danish, as in GuidePage.
+const guideOnThisPage = (g) => String(g?._country || DEFAULT_COUNTRY) === PAGE_COUNTRY;
 
 // ── THE SAVED DRAFTS, READ ONCE ────────────────────────────────────
 // Oliver, 19 Aug 2026: "I'd actually like if we could make it possible for my
@@ -21537,7 +21543,7 @@ If the conversation only covers a single day or a few stops with no explicit day
     // actually open, checked once per session against whatever's saved locally.
     const checkSavedGuidesWeather = async () => {
       const alerts = [];
-      for (const guide of savedGuides.slice(0, 5)) { // cap it — this is a nice-to-have, not worth 20 fetches on every load
+      for (const guide of savedGuides.filter(guideOnThisPage).slice(0, 5)) { // capped: this is a nice-to-have, not worth 20 fetches on every load
         // dayStart, not new Date plus setHours. This reads the SAME stored
         // value GuidePage reads, and the two disagreed by a day west of
         // Greenwich: GuidePage was fixed tonight and this one was missed, so a
@@ -30077,10 +30083,10 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 </div>
               )}
 
-              {savedGuides.length > 0 && (
+              {savedGuides.some(guideOnThisPage) && (
                 <div id="gx-saved-trips" style={{ marginBottom: 20 }}>
                   <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>Your Saved Guides</div>
-                  {savedGuides.map(g => (
+                  {savedGuides.filter(guideOnThisPage).map(g => (
                     <div key={g.id} onClick={() => openSavedGuide(g)}
                       style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px 14px", marginBottom: 8, cursor: "pointer" }}>
                       <div>
