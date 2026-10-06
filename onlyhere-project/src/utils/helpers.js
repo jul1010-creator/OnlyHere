@@ -338,6 +338,8 @@ export const weatherIcon = (code, night = false) => {
   if (code.includes("rain") || code.includes("sleet")) return "🌧";
   if (code.includes("snow")) return "❄️";
   if (code.includes("thunder")) return "⛈";
+  // "partlycloudy" holds the word "cloudy", and drew a full cloud (7 Oct 2026).
+  if (code.includes("partlycloudy")) return (night || /_night\b/.test(code)) ? "☁️" : "⛅";
   if (code.includes("cloudy") || code.includes("fog")) return "☁️";
   if (code.includes("clearsky") || code.includes("fair")) return "☀️";
   return "⛅";

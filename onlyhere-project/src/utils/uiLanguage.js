@@ -96,6 +96,8 @@ export const UI_STRINGS = {
   // business has a real deal live.
   "deals.examples":  { en: "These are examples. The businesses and their offers are made up, to show how a deal from a Klaipėda business looks here.", da: "Det er eksempler. Stederne og deres tilbud er opdigtede, for at vise hvordan et tilbud fra en virksomhed i Klaipėda ser ud her.", de: "Das sind Beispiele. Die Geschäfte und ihre Angebote sind erfunden, um zu zeigen, wie ein Angebot eines Geschäfts in Klaipėda hier aussieht.", lt: "Tai pavyzdžiai. Verslai ir jų pasiūlymai išgalvoti, kad matytumėte, kaip čia atrodo Klaipėdos verslo pasiūlymas." },
   "deals.example":   { en: "Example", da: "Eksempel", de: "Beispiel", lt: "Pavyzdys" },
+  // Under a QR walk with a made-up partner in it, 7 Oct 2026.
+  "walk.examplesNote": { en: "Places marked Example are made up, to show how a Gemlyx partner and its offer appear on a walk.", da: "Steder markeret Eksempel er opdigtede, for at vise hvordan en Gemlyx-partner og dens tilbud ser ud på en gåtur.", de: "Orte mit der Markierung Beispiel sind erfunden, um zu zeigen, wie ein Gemlyx-Partner und sein Angebot auf einem Spaziergang erscheinen.", lt: "Vietos, pažymėtos „Pavyzdys“, yra išgalvotos. Jos rodo, kaip Gemlyx partneris ir jo pasiūlymas atrodo maršrute." },
   "deals.exampleMadeUp": { en: "Example page · made-up business", da: "Eksempelside · opdigtet virksomhed", de: "Beispielseite · erfundenes Geschäft", lt: "Puslapio pavyzdys · išgalvotas verslas" },
   // The menu groups, 30 Sep 2026. See utils/navGroups.js.
   "nav.group.advice":     { en: "Advice",      da: "Råd",           de: "Ratgeber", lt: "Naudinga žinoti" },
@@ -719,6 +721,7 @@ export const UI_STRINGS = {
   "busy.quieter":  { en: "quieter from {time}", da: "roligere fra {time}", de: "ruhiger ab {time}", lt: "ramiau nuo {time}" },
   // The Klaipėda walks, for people off a cruise ship (1 Oct 2026).
   "trips.onToday":   { en: "On today in Klaipėda", da: "I dag i Klaipėda", de: "Heute in Klaipėda", lt: "Šiandien Klaipėdoje" },
+  "trips.weatherNow": { en: "Weather in Klaipėda now", da: "Vejret i Klaipėda lige nu", de: "Wetter in Klaipėda jetzt", lt: "Orai Klaipėdoje dabar" },
   "trips.deals":     { en: "Special deals in town", da: "Særlige tilbud i byen", de: "Sonderangebote in der Stadt", lt: "Specialūs pasiūlymai mieste" },
   "ride.far":        { en: "Too far to walk? {app} works here. Order a car in the app and see the price first.", da: "For langt at gå? {app} findes her. Bestil en bil i appen og se prisen først.", de: "Zu weit zu Fuß? {app} gibt es hier. Bestell ein Auto in der App und sieh den Preis vorher.", lt: "Per toli eiti pėsčiomis? Čia veikia {app}. Užsisakykite automobilį programėlėje ir pirmiausia pamatysite kainą." },
   "trips.intro":       { en: "Walks for the time you have, on foot from the ship. Gemlyx is opening Lithuania, starting here.", da: "Gåture til den tid, du har, til fods fra skibet. Gemlyx åbner i Litauen og begynder her.", de: "Spaziergänge für die Zeit, die du hast, zu Fuß vom Schiff. Gemlyx startet in Litauen, und zwar hier.", lt: "Pasivaikščiojimai pagal turimą laiką, pėsčiomis nuo laivo. Gemlyx pradeda Lietuvoje būtent čia." },
@@ -776,6 +779,8 @@ export const UI_STRINGS = {
   "walk.wayBack":    { en: "The way back", da: "Vejen tilbage", de: "Der Rückweg", lt: "Kelias atgal" },
   "walk.start":      { en: "The start", da: "Starten", de: "Der Start", lt: "Pradžia" },
   "walk.end":        { en: "End walk", da: "Afslut", de: "Beenden", lt: "Baigti" },
+  "map.openPage":    { en: "Open the page ›", da: "Åbn siden ›", de: "Seite öffnen ›", lt: "Atidaryti puslapį ›" },
+  "walk.far":        { en: "{dist} away. The walk starts in town", da: "{dist} væk. Turen starter i byen", de: "{dist} entfernt. Der Spaziergang beginnt in der Stadt", lt: "Už {dist}. Maršrutas prasideda mieste" },
   "walk.here":       { en: "You are here", da: "Du er her", de: "Du bist da", lt: "Jūs čia" },
   "walk.minutes":    { en: "about {n} min", da: "cirka {n} min.", de: "etwa {n} Min.", lt: "apie {n} min" },
   "walk.head":       { en: "head {dir}", da: "gå mod {dir}", de: "Richtung {dir}", lt: "eikite į {dir}" },

@@ -280,7 +280,10 @@ export const nowCandidates = (rows, { country = "LT", zone = "", now = new Date(
       hours: Array.isArray(p.__hours?.hours) ? p.__hours.hours : null,
       offer: offerOf(p.__offer, today),
       about: words(p.desc || p.description || p.popularityTag || "", 160),
-      stay: STAY[museum ? "Museum" : kind] || 40,
+      // A row can say how long a visit takes (__stay, in minutes): the
+      // Klaipėda examples do, so the Black Ghost is a quarter of an hour and
+      // not the forty minutes of a museum (7 Oct 2026).
+      stay: (Number.isFinite(Number(p.__stay)) && Number(p.__stay) >= 10 && Number(p.__stay) <= 120 ? Math.round(Number(p.__stay)) : 0) || STAY[museum ? "Museum" : kind] || 40,
       // The place's own photo, for its pin on the walk map (6 Oct 2026).
       ...(/^https:\/\/\S+$/i.test(String(p.photo || "").trim()) ? { photo: String(p.photo).trim().slice(0, 600) } : {}),
     });
@@ -572,7 +575,15 @@ const loopKm = (start, pts, ctx = null) => {
   return km + step(here, start);
 };
 
-export const untangle = (order, candidates, ctx) => {
+// `accept`, when given, is asked of every shorter order before it is taken,
+// so a step that would break the walk is passed over and the search goes on
+// to the next one, instead of the whole tidier order being thrown away at the
+// end. Oliver, 7 Oct 2026, of the walk off the ship: "wouldn't theatre square
+// be more convinient to walk to? Is that the closest one to #1 and #2?" It
+// was: Castle, amber, Theatre Square walked about a hundred metres more than
+// Castle, Theatre Square, amber, and the only tidier order found moved the
+// lunch, so none was used.
+export const untangle = (order, candidates, ctx, accept = null) => {
   const { start } = ctx;
   const byId = new Map(candidates.map(c => [c.id, c]));
   let list = (Array.isArray(order) ? order : []).filter(o => o && byId.has(o.id));
@@ -601,7 +612,7 @@ export const untangle = (order, candidates, ctx) => {
     }
     for (const l of tries) {
       const km = length(l);
-      if (km < best - 0.005) { best = km; list = l; better = true; }
+      if (km < best - 0.005 && (!accept || accept(l))) { best = km; list = l; better = true; }
     }
   }
   return list;
@@ -612,17 +623,21 @@ const walkedKm = (w, start, ctx = null) => loopKm(start, w.stops, ctx);
 
 export const tidyWalk = (order, candidates, ctx) => {
   const first = scheduleWalk(order, candidates, ctx);
-  const tidy = untangle(order, candidates, ctx);
+  // Whether a reordered walk is as good as the first one: every place kept,
+  // no meal moved more than MEAL_SHIFT minutes, and a partner's offer the
+  // first order reached in time still reached. A tidier line is not worth a
+  // deal the walker would have had.
+  const holds = (second) => {
+    const kept = new Map(second.stops.map(s => [s.id, s]));
+    const keepsAll = first.stops.every(s => kept.has(s.id));
+    const mealStays = keepsAll && first.stops.every(s => s.kind !== "Food" || Math.abs(kept.get(s.id).arrive - s.arrive) <= MEAL_SHIFT);
+    return mealStays && first.stops.every(s => !s.deal || !!kept.get(s.id)?.deal);
+  };
+  const tidy = untangle(order, candidates, ctx, (l) => holds(scheduleWalk(l, candidates, ctx)));
   const same = tidy.length === (order || []).length && tidy.every((o, i) => o.id === order[i].id);
   if (same) return first;
   const second = scheduleWalk(tidy, candidates, ctx);
-  const kept = new Map(second.stops.map(s => [s.id, s]));
-  const keepsAll = first.stops.every(s => kept.has(s.id));
-  const mealStays = keepsAll && first.stops.every(s => s.kind !== "Food" || Math.abs(kept.get(s.id).arrive - s.arrive) <= MEAL_SHIFT);
-  // And a partner's offer the first order reached in time is still reached.
-  // A tidier line is not worth a deal the walker would have had.
-  const dealsStay = mealStays && first.stops.every(s => !s.deal || !!kept.get(s.id)?.deal);
-  return dealsStay && walkedKm(second, ctx.start, ctx) < walkedKm(first, ctx.start, ctx) - 0.005 ? second : first;
+  return holds(second) && walkedKm(second, ctx.start, ctx) < walkedKm(first, ctx.start, ctx) - 0.005 ? second : first;
 };
 
 // ── THE SAME PLACES THE OTHER WAY ROUND ─────────────────────────────

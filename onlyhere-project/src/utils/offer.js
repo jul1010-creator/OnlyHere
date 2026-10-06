@@ -172,6 +172,16 @@ const dayName = (d, lang, style) => {
   catch { return DAY_FALLBACK[d]; }
 };
 const capital = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+// Three or more days in a row, Monday first, read as one run: "Mon to Fri",
+// not "Mon, Tue, Wed, Thu, Fri" (the business page for Klaipėda, 7 Oct 2026).
+// null when the days are not one unbroken run.
+const RUN_WORD = { en: " to ", da: " til ", de: " bis ", lt: "-" };
+const dayRun = (days, lang) => {
+  const order = [...new Set(days)].map(d => (d + 6) % 7).sort((a, b) => a - b);
+  if (order.length < 3 || order.some((d, i) => i > 0 && d !== order[i - 1] + 1)) return null;
+  const first = (order[0] + 1) % 7, last = (order[order.length - 1] + 1) % 7;
+  return capital(`${dayName(first, lang, "short")}${RUN_WORD[lang] || RUN_WORD.en}${dayName(last, lang, "short")}`);
+};
 export const offerHoursLabel = (offer, { timing = "", lang = "en" } = {}) => {
   const w = offerWindow(offer);
   if (!w) return "";
@@ -180,7 +190,7 @@ export const offerHoursLabel = (offer, { timing = "", lang = "en" } = {}) => {
   if (timing === "later") return uiT("offer.todayAt", lang).replace("{range}", range);
   const days = w.days.length === 0 || w.days.length === 7 ? uiT("offer.everyDay", lang)
     : w.days.length === 1 ? (lang === "en" ? `${dayName(w.days[0], "en", "long")}s` : capital(dayName(w.days[0], lang, "long")))
-    : w.days.map(d => dayName(d, lang, "short")).join(", ");
+    : dayRun(w.days, lang) || w.days.map(d => dayName(d, lang, "short")).join(", ");
   return [days, range].filter(Boolean).join(" ");
 };
 
