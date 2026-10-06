@@ -621,6 +621,7 @@ export const untangle = (order, candidates, ctx, accept = null) => {
 export const MEAL_SHIFT = 45;
 // At most 8 places, 40,320 orders, measured in a few milliseconds.
 export const EXACT_MAX = 8;
+export const REVERSE_SLACK = 1.03;
 const orders = function* (list) {
   if (list.length <= 1) { yield list; return; }
   for (let i = 0; i < list.length; i++) {
@@ -660,7 +661,19 @@ export const tidyWalk = (order, candidates, ctx) => {
       const w = scheduleWalk(p, candidates, ctx);
       if (w.stops.length === first.stops.length && holds(w)) { best = w; bestKm = km; }
     }
-    return best;
+    // Half of a ship walks each walk the other way round (reversedWalk), so
+    // within 3% of the shortest, an order that also works backwards wins.
+    // Without it the shortest walk off the ship had no other way round: the
+    // smokehouse came before it opened.
+    if (best.stops.length && reversedWalk(best, candidates, ctx)) return best;
+    let both = null, bothKm = Infinity;
+    for (const p of orders(kept)) {
+      const km = loopKm(ctx.start, p.map(o => byId.get(o.id)), ctx);
+      if (km > bestKm * REVERSE_SLACK || km >= bothKm) continue;
+      const w = scheduleWalk(p, candidates, ctx);
+      if (w.stops.length === first.stops.length && holds(w) && reversedWalk(w, candidates, ctx)) { both = w; bothKm = km; }
+    }
+    return both || best;
   }
   const tidy = untangle(order, candidates, ctx, (l) => holds(scheduleWalk(l, candidates, ctx)));
   const same = tidy.length === (order || []).length && tidy.every((o, i) => o.id === order[i].id);
