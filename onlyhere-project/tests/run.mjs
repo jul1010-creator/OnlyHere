@@ -417,6 +417,7 @@ writeFileSync(entry, `
   export { walkWeatherFrom } from ${JSON.stringify(join(root, "src/utils/walkWeather.js"))};
   export { placePinHtml, PLACE_PIN, turnSign, JOIN_ON_M, CARD_WALKING_MS, walkLegs, bearingOf, kmBetween as mapKm, glideAt, GLIDE_MS, FOCUS, SPARKS } from ${JSON.stringify(join(root, "src/components/GoogleWalkMap.jsx"))};
   export { guideTo, compassOf, distanceWords as walkDistanceWords, ARRIVE_M, COMPASS } from ${JSON.stringify(join(root, "src/components/WalkMode.jsx"))};
+  export * as LP from ${JSON.stringify(join(root, "src/utils/livePhoto.js"))};
   export * as CR from ${JSON.stringify(join(root, "src/utils/cruiseDays.js"))};
   export * as CRD from ${JSON.stringify(join(root, "src/data/klaipedaCruises.js"))};
   export { trailWalk } from ${JSON.stringify(join(root, "src/data/klaipedaSculptures.js"))};
@@ -81210,7 +81211,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const pageX = readFileSync(join(root, "src/pages/KlaipedaExamples.jsx"), "utf8");
   ok("the examples have their own address, apart from the QR one, and stay out of search", X.KLAIPEDA_EXAMPLES_PATH === "/lithuania/examples" && X.KLAIPEDA_EXAMPLES_PATH !== M.KLAIPEDA_DEMO_PATH && /<Route path=\{KLAIPEDA_EXAMPLES_PATH\} element=\{<KlaipedaExamples \/>\} \/>/.test(appX) && /noindex/.test(pageX));
   ok("the page says at the top that the businesses and offers are made up", /These are examples/.test(pageX) && /Every business, every offer and every number about them is made up/.test(pageX));
-  ok("and every made-up partner carries the Example mark, in the walk and in the list", /tag=\{\(s\) => isExamplePartner\(s\.id\) \? "Example" : null\}/.test(pageX) && /<Tag>Example<\/Tag>/.test(readFileSync(join(root, "src/pages/KlaipedaBusiness.jsx"), "utf8")) && X.EXAMPLE_PARTNERS.every(p => X.isExamplePartner(`${p.type}:${p.key}`)) && !X.isExamplePartner("free:castle"));
+  ok("and every made-up partner carries the Example mark, in the walk and in the list", /tag=\{\(s\) => isExamplePartner\(s\.id\) \? "Example" : null\}/.test(pageX) && /<Tag>\{T\.example\}<\/Tag>/.test(readFileSync(join(root, "src/pages/KlaipedaBusiness.jsx"), "utf8")) && X.EXAMPLE_PARTNERS.every(p => X.isExamplePartner(`${p.type}:${p.key}`)) && !X.isExamplePartner("free:castle"));
   ok("no percentage off anything", X.EXAMPLE_PARTNERS.every(p => !/%|percent|discount/i.test(p.offer.text)));
   ok("no partner is pointed at a real door: a street, never a house number", X.EXAMPLE_PARTNERS.every(p => /^[^\d]+ g\.$/.test(p.street)));
   const runs = Object.fromEntries(X.EXAMPLE_WALKS.map(e => [e.id, X.runExample(e)]));
@@ -81945,7 +81946,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("after the last call of the season there is nothing to show", CR.cruiseDaysAhead(new Date("2026-11-01T10:00:00Z")).length === 0);
   const np = readFileSync(join(root, "src/components/NowPlanner.jsx"), "utf8");
   ok("from the ship, walk lengths past sailing are greyed out and the ship is named", /const ships = from === "terminal" && country === "LT" \? inPortNow\(new Date\(\)\) : \[\];/.test(np) && /const off = !!sailing && !sailing\.fit\.includes\(h\);/.test(np) && /data-testid="now-sailing"/.test(np) && /disabled=\{state\.busy \|\| noTime\}/.test(np));
-  ok("the ships are on the business page and in the Lithuanian Studio, not on the visitor's", /<CruiseDays lang="en" count=\{6\} compact \/>/.test(readFileSync(join(root, "src/pages/KlaipedaBusiness.jsx"), "utf8")) && !/CruiseDays/.test(readFileSync(join(root, "src/pages/KlaipedaDemo.jsx"), "utf8").replace(/\/\/.*$/gm, "").replace(/\{\/\*[\s\S]*?\*\/\}/g, "")) && /\{studioCountry === "LT" && <CruiseDays lang="en" count=\{6\} compact \/>\}/.test(readFileSync(join(root, "src/App.jsx"), "utf8")));
+  ok("the ships are on the business page and in the Lithuanian Studio, not on the visitor's", /<CruiseDays lang=\{lang\} count=\{6\} compact \/>/.test(readFileSync(join(root, "src/pages/KlaipedaBusiness.jsx"), "utf8")) && !/CruiseDays/.test(readFileSync(join(root, "src/pages/KlaipedaDemo.jsx"), "utf8").replace(/\/\/.*$/gm, "").replace(/\{\/\*[\s\S]*?\*\/\}/g, "")) && /\{studioCountry === "LT" && <CruiseDays lang="en" count=\{6\} compact \/>\}/.test(readFileSync(join(root, "src/App.jsx"), "utf8")));
   // The sculpture trail.
   const trail = { stops: [{ id: "kiss", name: "A Kiss", lat: 55.70617, lon: 21.12306, arrive: 0 }, { id: "ghost", name: "The Black Ghost", lat: 55.7066, lon: 21.12682, arrive: 9, line: "A dark figure." }], used: 13 };
   const rw = M.trailWalk(trail);
@@ -81992,9 +81993,9 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const centreSc = strip(sc.slice(sc.indexOf("export const KlaipedaSculpturesCentre")));
   ok("the business side has its own address and route", M.KEX.KLAIPEDA_BUSINESS_PATH === "/lithuania/business" && /<Route path=\{KLAIPEDA_BUSINESS_PATH\} element=\{<KlaipedaBusiness \/>\} \/>/.test(app) && /<Route path=\{KLAIPEDA_CENTRE_PATH\} element=\{<KlaipedaSculpturesCentre \/>\} \/>/.test(app));
   ok("no visitor page shows the ships' guests, the partner numbers or how offers are set", [trips, ex, visitorSc].every(p => !/CruiseDays|cruiseDaysAhead|aboutGuests|PARTNER_WEEK|EXAMPLE_PARTNERS|What a partner would see|Offers, the way|EXAMPLE_WEEK|What the centre would see/.test(p)));
-  ok("the business page has the ships, how it works, the offers, what a partner sees and a way to join", /<CruiseDays lang="en" count=\{6\} compact \/>/.test(biz) && /How it works for you/.test(biz) && /Offers, the way you set them/.test(biz) && /data-testid="business-partner-stats"/.test(biz) && /mailto:hello@gemlyxtravel\.com/.test(biz));
+  ok("the business page has the ships, how it works, the offers, what a partner sees and a way to join", /<CruiseDays lang=\{lang\} count=\{6\} compact \/>/.test(biz) && /How it works for you/.test(biz) && /Offers, the way you set them/.test(biz) && /data-testid="business-partner-stats"/.test(biz) && /mailto:hello@gemlyxtravel\.com/.test(biz));
   ok("the centre's numbers are on the centre's own page", /What the centre would see/.test(centreSc) && /data-testid="sculpture-week"/.test(centreSc) && !/data-testid="sculpture-week"/.test(visitorSc));
-  ok("every page says which side it is on, and the QR page shows no switch", /<KlaipedaTop side="visitors" \/>/.test(ex) && /<KlaipedaTop side="visitors" \/>/.test(visitorSc) && /<KlaipedaTop side="business" \/>/.test(biz) && /<KlaipedaTop side="business" \/>/.test(centreSc) && /<KlaipedaTop place=\{null\} \/>/.test(trips) && /\{side && \(/.test(top));
+  ok("every page says which side it is on, and the QR page shows no switch", /<KlaipedaTop side="visitors" \/>/.test(ex) && /<KlaipedaTop side="visitors" \/>/.test(visitorSc) && /<KlaipedaTop side="business" lang=\{lang\} \/>/.test(biz) && /<KlaipedaTop side="business" \/>/.test(centreSc) && /<KlaipedaTop place=\{null\} \/>/.test(trips) && /\{side && \(/.test(top));
   ok("and the QR page no longer says Preview", !/>Preview</.test(trips));
   ok("a passenger still sees when their own ship sails, in the walk", /data-testid="now-sailing"/.test(read("src/components/NowPlanner.jsx")));
   const S = M.CRD, season = M.CR.seasonOf(2026);
@@ -82143,9 +82144,50 @@ is("Google's line break becomes a full stop", M.turnsFrom([{ travelMode: "WALK",
   const home = M.placePinHtml({ home: true });
   ok("a place's pin is a gold drop with its photo in a round window, its number, and a wave across the tip", /<img src="https:\/\/example\.org\/castle\.jpg"/.test(withPhoto) && />2<\/span>$/.test(withPhoto) && /q4\.25 -3 8\.5 0 t8\.5 0/.test(withPhoto) && /fill="#0F1A2E"/.test(home) === true && /⚓/.test(home));
   ok("with no photo the place's sign sits in the window, and an address that is not https is never put in", /🗿/.test(noPhoto) && !/<img/.test(M.placePinHtml({ photo: "javascript:alert(1)" })) && !/<img/.test(M.placePinHtml({ photo: "http://x.org/a.jpg" })) && !/"><script/.test(M.placePinHtml({ photo: 'https://x.org/a.jpg"><script>' })));
-  ok("the photo comes from the same place card the map already shows", /const look = \(cardFor && cardFor\(s\)\) \|\| \{\};/.test(gm) && /photo: look\.photo/.test(gm));
+  ok("the photo comes from the same place card the map already shows, and fills in when it arrives late", (gm.match(/const look = \(lookRef\.current && lookRef\.current\(s\)\) \|\| \{\};/g) || []).length === 2 && /photo: look\.photo/.test(gm) && /useEffect\(\(\) => \{ if \(looks\.replace\(\/\\\|\/g, ""\)\) api\.current\?\.relook\?\.\(\); \}, \[looks\]\);/.test(gm));
   ok("the live position is a dot on Google's map, the way Google's own tutorial shows it", /6 Oct 2026, after Oliver read that live GPS navigation is not/.test(gm));
 }
+
+// ── Batch 220: the places' own photos in their pins ──
+// Oliver, 6 Oct 2026: "with the photos of the attractions inside", and "I'll
+// replace the pictures if Klaipeda gives me some."
+{
+  const P = M.LP;
+  const castle = { name: "Castle Museum", __lat: 55.70592, __lon: 21.12891 };
+  const rows = [
+    { name: "Klaipėda Castle Museum", __lat: 55.70610, __lon: 21.12930, photo: "https://upload.wikimedia.org/castle.jpg", __photoCredit: { photographer: "A" } },
+    { name: "Some café", __lat: 55.70595, __lon: 21.12895, photo: "https://x.org/cafe.jpg" },
+    { name: "Castle Museum", __lat: 55.7300, __lon: 21.1000, photo: "https://x.org/far.jpg" },
+  ];
+  const got = P.livePhotoFor(castle, rows);
+  ok("a place takes the photo of the same place, close by and sharing its name, with its credit", got?.photo === "https://upload.wikimedia.org/castle.jpg" && got.credit?.photographer === "A");
+  ok("a different place a few metres off, with no word in common, wins only when nothing named matches", P.livePhotoFor({ name: "Nameless corner", __lat: 55.70595, __lon: 21.12895 }, rows)?.photo === "https://x.org/cafe.jpg");
+  ok("the same name far away is not the same place, and a photo that is not https is never used", P.livePhotoFor({ name: "Castle Museum", __lat: 55.7200, __lon: 21.1300 }, rows) === null && P.livePhotoFor(castle, [{ name: "Castle Museum", __lat: 55.70592, __lon: 21.12891, photo: "http://x.org/a.jpg" }]) === null);
+  ok("common words like Klaipėda and museum do not make two places one", P.sameNameish("Klaipėda Museum", "Museum of Klaipėda") === false && P.sameNameish("Theatre Square", "Teatro aikštė Theatre") === true);
+  const N = M.NP;
+  const cand = N.nowCandidates([{ id: 7, type: "free", payload: { name: "Castle Museum", country: "LT", __lat: 55.70592, __lon: 21.12891, photo: "https://upload.wikimedia.org/castle.jpg" } }, { id: 8, type: "free", payload: { name: "Square", country: "LT", __lat: 55.708, __lon: 21.13, photo: "javascript:x" } }], { country: "LT", today: "2026-10-06" });
+  ok("the live walk carries each place's own https photo, and nothing else", cand[0]?.photo === "https://upload.wikimedia.org/castle.jpg" && !("photo" in (cand[1] || {})));
+  const np = readFileSync(join(root, "src/components/NowPlanner.jsx"), "utf8");
+  ok("and the live walk's map shows it, or a sign by kind", /cardFor=\{\(s\) => placeLook\(walk, s\)\}/.test(np) && /export const KIND_SIGN = \{ Museum: "🏛️"/.test(np));
+  const ex = readFileSync(join(root, "src/pages/KlaipedaExamples.jsx"), "utf8"), sc = readFileSync(join(root, "src/pages/KlaipedaSculptures.jsx"), "utf8");
+  ok("the examples and the sculpture trail take the published photos, and the made-up partners keep their signs", /if \(!pg \|\| isExamplePartner\(id\)\) return null;/.test(ex) && /livePhotoFor\(pg\.item, liveRows\)/.test(ex) && /__photoCredit: ph\.credit/.test(ex) && /cardFor=\{lookOf\}/.test(sc));
+}
+
+// ── Batch 221: the business page in Lithuanian ──
+{
+  const B = readFileSync(join(root, "src/pages/KlaipedaBusiness.jsx"), "utf8");
+  const X = M.KEX;
+  ok("every made-up partner reads in Lithuanian too", X.EXAMPLE_PARTNERS.every(p => p.lt && p.lt.what && p.lt.offer && p.lt.idea && !/%|procent|nuolaid[ao]s? \d/i.test(p.lt.offer)));
+  ok("the page switches between English and Lithuanian, and ?lang=lt opens it in Lithuanian", /data-testid="business-lang"/.test(B) && /export const BUSINESS_LANGS = \["en", "lt"\];/.test(B) && /new URLSearchParams\(search\)\.get\("lang"\)/.test(B) && /<CruiseDays lang=\{lang\} count=\{6\} compact \/>/.test(B) && /<KlaipedaTop side="business" lang=\{lang\} \/>/.test(B));
+  ok("the switch at the top reads in Lithuanian too", /lt: "Lankytojams"/.test(readFileSync(join(root, "src/components/KlaipedaTop.jsx"), "utf8")));
+  const keysOf = (o) => Object.keys(o).sort().join();
+  const text = B.slice(B.indexOf("export const BUSINESS_TEXT"), B.indexOf("const DAY_LOCALE"));
+  ok("both languages say the same things", /lt: \{\s*title: "Klaipėda verslui/.test(text) && (text.match(/steps: \[/g) || []).length === 2 && (text.match(/stats: \[\[/g) || []).length === 2);
+  const shown = text + JSON.stringify(X.EXAMPLE_PARTNERS.map(p => p.lt));
+  ok("no dashes and none of his banned words, in either language", !/[—–]| - /.test(shown) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(shown));
+}
+
+ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,900" && /^1\s900$/.test(M.CR.aboutGuests(1936, "lt")));
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
 if (failed) { fails.forEach(f => console.log("  FAIL " + f + "\n")); process.exit(1); }
