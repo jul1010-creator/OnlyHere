@@ -304,6 +304,7 @@ writeFileSync(entry, `
   export { SCAN_KINDS, scanKindOf, scanPrompt } from ${JSON.stringify(join(root, "src/utils/scanKinds.js"))};
   export * as NP from ${JSON.stringify(join(root, "src/utils/nowPlanner.js"))};
   export * as TR from ${JSON.stringify(join(root, "src/utils/entryTranslate.js"))};
+  export * as KXR from ${JSON.stringify(join(root, "src/data/klaipedaExampleRows.js"))};
   export * as KEX from ${JSON.stringify(join(root, "src/data/klaipedaExamples.js"))};
   export * as SCU from ${JSON.stringify(join(root, "src/data/klaipedaSculptures.js"))};
   export * as OC from ${JSON.stringify(join(root, "src/utils/offerClock.js"))};
@@ -416,7 +417,7 @@ writeFileSync(entry, `
   export { moneyTraceable, COMPRESSION_GLANCE, glanceShapeProblem, EXTRACTABLE_GLANCE, EDITORIAL_GLANCE, NEVER_EXTRACT, CLOSED_OR_DERIVED, glanceFieldsFor, numbersTraceable, freeClaimTraceable, saysFreeOnly, statesAnAmount, GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, describeGlance, staleUncertainties, describeStale } from ${JSON.stringify(join(root, "src/utils/glanceExtract.js"))};
   export { walkWeatherFrom } from ${JSON.stringify(join(root, "src/utils/walkWeather.js"))};
   export { placePinHtml, PLACE_PIN, turnSign, JOIN_ON_M, CARD_WALKING_MS, walkLegs, bearingOf, kmBetween as mapKm, glideAt, GLIDE_MS, FOCUS, SPARKS } from ${JSON.stringify(join(root, "src/components/GoogleWalkMap.jsx"))};
-  export { guideTo, compassOf, distanceWords as walkDistanceWords, ARRIVE_M, COMPASS } from ${JSON.stringify(join(root, "src/components/WalkMode.jsx"))};
+  export { guideTo, compassOf, distanceWords as walkDistanceWords, ARRIVE_M, COMPASS, FAR_M } from ${JSON.stringify(join(root, "src/components/WalkMode.jsx"))};
   export * as SF from ${JSON.stringify(join(root, "src/utils/safeFetch.js"))};
   export * as LP from ${JSON.stringify(join(root, "src/utils/livePhoto.js"))};
   export * as CR from ${JSON.stringify(join(root, "src/utils/cruiseDays.js"))};
@@ -81486,13 +81487,18 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ], { country: "LT", zone: "Europe/Vilnius", now: new Date("2026-10-15T11:00:00Z") });
   const first = [{ id: "free:4", stay: 15 }, { id: "free:1", stay: 15 }, { id: "free:2", stay: 15 }, { id: "free:3", stay: 15 }];
   const kept = N.tidyWalk(first, late, ctx);
-  ok("an opening hour wins over a tidier line on the map", N.untangle(first, late, ctx).map(o => o.id).join() !== first.map(o => o.id).join() && kept.stops.map(s => s.id).join() === "free:4,free:1,free:2,free:3");
+  // 7 Oct 2026: the tidying now passes over a step that would break the walk
+  // and keeps looking, so the ship stays last and the rest may still tidy up.
+  ok("an opening hour wins over a tidier line on the map", N.untangle(first, late, ctx).map(o => o.id).join() !== first.map(o => o.id).join() && kept.stops.length === 4 && kept.stops[3].id === "free:3");
   const api = readFileSync(join(root, "api/plan-now.js"), "utf8");
   ok("the live route untangles both the model's order and the rules' order", (api.match(/tidyWalk\(withMustSee\(/g) || []).length === 2);
   const thursday = X.runExample(X.EXAMPLE_WALKS.find(e => e.id === "thursday"));
   is("the Thursday example walks the ship before the square and the castle", thursday.walk.stops.map(s => s.id), ["food:bakery", "free:meridianas", "free:theatre", "free:castle"]);
   const tuesday = X.runExample(X.EXAMPLE_WALKS.find(e => e.id === "tuesday"));
-  ok("a walk that was already tidy off the ship is unchanged", tuesday.walk.stops.map(s => s.id).join() === "free:ghost,free:castle,booking:amber,free:theatre,food:fish,free:meridianas");
+  // Oliver, 7 Oct 2026: "wouldn't theatre square be more convinient to walk
+  // to? Is that the closest one to #1 and #2?" It was, so it now comes
+  // straight after the castle.
+  ok("off the ship, Theatre Square comes straight after the castle", tuesday.walk.stops.map(s => s.id).join() === "free:castle,free:theatre,booking:amber,free:meridianas,food:fish,free:ghost");
   ok("a meal may move by no more than three quarters of an hour", N.MEAL_SHIFT === 45 && /Math\.abs\(kept\.get\(s\.id\)\.arrive - s\.arrive\) <= MEAL_SHIFT/.test(readFileSync(join(root, "src/utils/nowPlanner.js"), "utf8")));
   ok("no example still calls the History Museum next door to the castle", !/Next door/.test(JSON.stringify(X.WEATHER_WALKS)));
 }
@@ -81647,7 +81653,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const got = M.fromRoutes(reply);
   ok("a walk given turn by turn comes back as one walk, so it is not counted as waiting",
     got.steps.length === 3 && got.steps[0].mode === "walking" && got.steps[0].mins === 1 && got.steps[2].mins === 1 && got.steps[2].distance === "30 m");
-  ok("a tidier order may not lose a partner's offer", /const dealsStay = mealStays && first\.stops\.every\(s => !s\.deal \|\| !!kept\.get\(s\.id\)\?\.deal\);/.test(np));
+  ok("a tidier order may not lose a partner's offer", /return mealStays && first\.stops\.every\(s => !s\.deal \|\| !!kept\.get\(s\.id\)\?\.deal\);/.test(np) && /const tidy = untangle\(order, candidates, ctx, \(l\) => holds\(scheduleWalk\(l, candidates, ctx\)\)\);/.test(np));
   ok("two words in another order are not enough: the church is not the village",
     !M.sameWordsReordered("Hvalsø Kirke", "Kirke Hvalsø") && !M.listingMatchesSubject("Hvalsø Kirke", "", "Kirke Hvalsø")
     && M.sameWordsReordered("Museum of the History of Lithuania Minor", "History Museum of Lithuania Minor"));
@@ -82003,7 +82009,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("no visitor page shows the ships' guests, the partner numbers or how offers are set", [trips, ex, visitorSc].every(p => !/CruiseDays|cruiseDaysAhead|aboutGuests|PARTNER_WEEK|EXAMPLE_PARTNERS|What a partner would see|Offers, the way|EXAMPLE_WEEK|What the centre would see/.test(p)));
   ok("the business page has the ships, how it works, the offers, what a partner sees and a way to join", /<CruiseDays lang=\{lang\} count=\{6\} compact \/>/.test(biz) && /How it works for you/.test(biz) && /Offers, the way you set them/.test(biz) && /data-testid="business-partner-stats"/.test(biz) && /mailto:hello@gemlyxtravel\.com/.test(biz));
   ok("the centre's numbers are on the centre's own page", /What the centre would see/.test(centreSc) && /data-testid="sculpture-week"/.test(centreSc) && !/data-testid="sculpture-week"/.test(visitorSc));
-  ok("every page says which side it is on, and the QR page shows no switch", /<KlaipedaTop side="visitors" \/>/.test(ex) && /<KlaipedaTop side="visitors" \/>/.test(visitorSc) && /<KlaipedaTop side="business" lang=\{lang\} \/>/.test(biz) && /<KlaipedaTop side="business" \/>/.test(centreSc) && /<KlaipedaTop place=\{null\} \/>/.test(trips) && /\{side && \(/.test(top));
+  ok("every page says which side it is on, and the QR page shows no switch", /<KlaipedaTop side="visitors" \/>/.test(ex) && /<KlaipedaTop side="visitors" \/>/.test(visitorSc) && /<KlaipedaTop side="business" lang=\{lang\} \/>/.test(biz) && /<KlaipedaTop side="business" \/>/.test(centreSc) && /<KlaipedaTop place=\{null\} corner=\{corner\} \/>/.test(trips) && /\{side && \(/.test(top));
   ok("and the QR page no longer says Preview", !/>Preview</.test(trips));
   ok("a passenger still sees when their own ship sails, in the walk", /data-testid="now-sailing"/.test(read("src/components/NowPlanner.jsx")));
   const S = M.CRD, season = M.CR.seasonOf(2026);
@@ -82086,7 +82092,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const wm = readFileSync(join(root, "src/components/WalkMode.jsx"), "utf8");
   const gm = readFileSync(join(root, "src/components/GoogleWalkMap.jsx"), "utf8");
   ok("the walk says place, not stop, in four languages", M.UI_STRINGS["walk.stopOf"].en === "Place {i} of {n}" && M.UI_STRINGS["walk.nextStop"].en === "On to the next place" && !/\b(stop|Halt|sustojim)/i.test(["da", "de", "lt"].map(l => M.UI_STRINGS["walk.stopOf"][l] + M.UI_STRINGS["walk.nextStop"][l]).join(" ")));
-  ok("the top of the walk is one slim bar", /data-testid="walk-bar"/.test(wm) && /width: 44, height: 44/.test(wm) && !/marginTop: 8 \}\}>\s*<div aria-hidden="true" data-testid="walk-arrow"/.test(wm));
+  ok("the top of the walk is one slim bar", /data-testid="walk-bar"/.test(wm) && /width: 46, height: 46/.test(wm) && /<GemlyxCompass size=\{46\} angle=\{arrow\}/.test(wm) && !/marginTop: 8 \}\}>\s*<div aria-hidden="true" data-testid="walk-arrow"/.test(wm));
   ok("Whole walk stays off the walking map", /\{!follow && \(\s*<button onClick=\{\(\) => api\.current\?\.overview\(\)\} data-testid="map-whole-walk"/.test(gm));
   ok("full screen hides both bars and leaves one strip with the arrow, the distance and the way out", /\{!full && <div data-testid="walk-bar"/.test(wm) && /\{!full && <div style=\{\{ padding: "8px 12px/.test(wm) && /data-testid="walk-full-strip"/.test(wm) && /data-testid="walk-exit-full"/.test(wm) && /lift=\{full \? 62 : 0\}/.test(wm));
   ok("and asks the phone for its own full screen, coming out when the phone does", /shell\.current\?\.requestFullscreen\?\.\(\)/.test(wm) && /document\.addEventListener\("fullscreenchange", left\)/.test(wm));
@@ -82260,6 +82266,101 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("finding 11: founder routes send the cause to the log, not the browser", !/error: String\(err\)/.test(read("api/places-hours.js")) && !/error: String\(e\?\.message \|\| e\)/.test(read("api/places-locate.js")) && !/error: String\(err\)\.slice/.test(read("api/commons-photo.js")) && !/detail: String\(err\)/.test(read("api/tickets.js")) && !/keyLength: key\.length,\n\s*trimmed/.test(read("api/tickets.js")));
   ok("and places-hours, places-locate and places check the answer before reading it", ["api/places-hours.js", "api/places-locate.js", "api/places.js"].every(f => /await r\.json\(\)\.catch\(\(\) => null\);\s*\n?\s*if \(!r\.ok \|\| !data\)/.test(read(f))));
   const shown = ["src/utils/safeFetch.js", "api/delete-account.js"].map(read).join("\n").replace(/\/\/.*$/gm, "");
+  ok("no dashes and none of his banned words in the new text", !/[—–]/.test(shown) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(shown));
+}
+
+// ── Batch 224: the Klaipėda demo, before the trip ──
+// Oliver, 7 Oct 2026: "Right now, we're not trying to build it all. We're
+// getting the examples in play", for "everything about the QR planners and the
+// special deals", and "what we will present to restaurants and other places".
+{
+  const X = M.KXR, NP = M.NP;
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const two = [
+    { id: 1, type: "free", payload: { name: "Danė Square", country: "LT", __lat: 55.7115, __lon: 21.1374 } },
+    { id: 2, type: "free", payload: { name: "Melnragė Park", country: "LT", __lat: 55.725, __lon: 21.083 } },
+  ];
+  const f = X.withExampleRows(two, "LT");
+  ok("with few published Klaipėda places, the QR walk also reads the examples", f.examples && f.rows.length > two.length);
+  ok("and a published place wins over its example of the same name", f.rows.filter(r => /^Dan/.test(r.payload.name)).length === 1 && f.rows.some(r => r.id === 1));
+  const many = Array.from({ length: X.EXAMPLE_FILL_UNDER }, (_, i) => ({ id: i, type: "free", payload: { name: `P${i}`, country: "LT", __lat: 55.71, __lon: 21.13 } }));
+  ok("enough real places push the examples out, and Denmark never gets them", !X.withExampleRows(many, "LT").examples && X.withExampleRows(many, "LT").rows.length === many.length && !X.withExampleRows(two, "DK").examples);
+  ok("the examples module imports nothing, so the walk route can load it", !/^import /m.test(read("src/data/klaipedaExampleRows.js")));
+  ok("the walk route fills with them and says so", /const filled = withExampleRows\(rows, country\);\s*\n\s*rows = filled\.rows;/.test(read("api/plan-now.js")) && /examples: filled\.examples,/.test(read("api/plan-now.js")));
+  ok("the examples page still reads the same partners", M.KEX.EXAMPLE_PARTNERS === X.EXAMPLE_PARTNERS && M.KEX.isExamplePartner("food:fish"));
+
+  // A row can say how long a visit takes.
+  const at = new Date("2026-10-14T07:30:00Z");
+  const c = NP.nowCandidates(f.rows, { country: "LT", zone: "Europe/Vilnius", now: at });
+  const by = (id) => c.find(x => x.id === id);
+  ok("a row's own visit length is kept, and a strange one falls back to its kind", by("free:ghost").stay === 15 && by("free:castle").stay === 40 && by("free:1").stay === 40
+    && NP.nowCandidates([{ id: 5, type: "free", payload: { name: "Odd", country: "LT", __lat: 55.71, __lon: 21.13, __stay: 999 } }], { country: "LT", zone: "Europe/Vilnius", now: at })[0].stay === 40);
+  const ctx = { country: "LT", start: NP.NOW_STARTS.LT.terminal, startClock: M.placeClock(at, "Europe/Vilnius"), budget: 180, margin: NP.SHIP_MARGIN, wet: false, weather: {}, style: "", lang: "en", ferryWait: 0 };
+  const walk = NP.tidyWalk(NP.withMustSee(NP.ruleOrder(c, ctx), c, ctx), c, ctx);
+  ok("so a three hour walk off the ship has four places and no taxi", walk.stops.length >= 4 && walk.stops.every(s => !s.ride) && !walk.back.ride);
+
+  // The QR page.
+  const np = read("src/components/NowPlanner.jsx"), demo = read("src/pages/KlaipedaDemo.jsx");
+  ok("a made-up partner on the QR walk is marked Example, with a line saying so", /tag=\{\(s\) => \(isExamplePartner\(s\.id\) \? uiT\("deals\.example", lang\) : null\)\}/.test(np) && /uiT\("walk\.examplesNote", lang\)/.test(np));
+  ok("and the note reads in all four languages", ["en", "da", "de", "lt"].every(l => M.t("walk.examplesNote", l) && M.t("walk.examplesNote", l) !== "walk.examplesNote"));
+  ok("the QR page shows the example deals until a real one is live, marked Example", /const examples = real\.length === 0;/.test(demo) && /livePromotions\(examplePromotionPools\(\)\)/.test(demo) && /data-testid="trips-deals-examples"/.test(demo));
+  ok("only today's, on now first, with what the visitor gets", /\.filter\(x => x\.card\.timing in RANK\)/.test(demo) && /\.slice\(0, 5\)/.test(demo) && /data-testid="trips-deal-offer"/.test(demo));
+  const pools = M.KEX.examplePromotionPools();
+  ok("the example deals are read on Klaipėda's clock", Object.values(pools).flat().length > 0 && Object.values(pools).flat().every(p => p.country === "LT"));
+
+  // Special deals.
+  const promo = read("src/components/PromotionsPage.jsx");
+  ok("an example deal shows its sign, not a letter, and no placeholder end date", /sign=\{p\._exampleId \? p\.emoji \|\| "" : ""\}/.test(promo) && /\{!p\._exampleId && <div[^>]*>\{untilLabel\(card\.until, today\)\}/.test(promo));
+  const app = read("src/App.jsx");
+  ok("saved guides and their weather notices stay on their own country's page", /const guideOnThisPage = \(g\) => String\(g\?\._country \|\| DEFAULT_COUNTRY\) === PAGE_COUNTRY;/.test(app)
+    && /for \(const guide of savedGuides\.filter\(guideOnThisPage\)\.slice\(0, 5\)\)/.test(app) && /\{savedGuides\.filter\(guideOnThisPage\)\.map\(g => \(/.test(app));
+
+  // The business page.
+  const wk = { text: "x", until: "2027-12-31", days: [1, 2, 3, 4, 5], from: "14:00", to: "16:00" };
+  is("weekdays in a row read as one run", M.offerHoursLabel(wk), "Mon to Fri 14:00-16:00");
+  ok("in each language, and two days or a broken run stay a list", M.offerHoursLabel(wk, { lang: "de" }) === "Mo bis Fr 14:00-16:00" && M.offerHoursLabel(wk, { lang: "da" }) === "Man. til fre. 14.00-16.00"
+    && /^Pr-Pn 14:00-16:00$/i.test(M.offerHoursLabel(wk, { lang: "lt" })) && M.offerHoursLabel({ ...wk, days: [6, 0] }) === "Sat, Sun 14:00-16:00" && M.offerHoursLabel({ ...wk, days: [1, 2, 4] }) === "Mon, Tue, Thu 14:00-16:00"
+    && M.offerHoursLabel({ ...wk, days: [5, 6, 0] }) === "Fri to Sun 14:00-16:00");
+
+  // The weather in the corner of the QR page.
+  ok("the QR page shows Klaipėda's weather now in its top corner, read again every ten minutes", /<KlaipedaTop place=\{null\} corner=\{corner\} \/>/.test(demo) && /mode=walk`\)/.test(demo) && /setInterval\(read, SKY_EVERY_MS\)/.test(demo) && /const SKY_EVERY_MS = 10 \* 60 \* 1000;/.test(demo) && /\{!side && corner\}/.test(read("src/components/KlaipedaTop.jsx")));
+  ok("and only once it is known, with no wind called 'now'", /w && w\.known && Number\.isFinite\(Number\(w\.temp\)\)/.test(demo) && !/sky\.wind/.test(demo));
+  ok("a partly cloudy sky is drawn as one", M.weatherIcon("partlycloudy_day") === "⛅" && M.weatherIcon("cloudy") === "☁️");
+  // Saving time: random walks against the shortest order of the same places.
+  {
+    let seed = 11;
+    const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+    const pickOne = (a) => a[Math.floor(rnd() * a.length)];
+    const km = (a, b) => { const r = Math.PI / 180, x = (b.lon - a.lon) * r * Math.cos((a.lat + b.lat) * r / 2), y = (b.lat - a.lat) * r; return Math.sqrt(x * x + y * y) * 6371; };
+    const loopOf = (st, pts) => { let k = 0, h = st; for (const p of pts) { k += km(h, p); h = p; } return k + km(h, st); };
+    const perms = function* (a) { if (a.length <= 1) { yield a; return; } for (let i = 0; i < a.length; i++) for (const r of perms([...a.slice(0, i), ...a.slice(i + 1)])) yield [a[i], ...r]; };
+    const base = X.withExampleRows([], "LT").rows;
+    let n = 0, sum = 0, worst = 1;
+    for (let run = 0; run < 60; run++) {
+      const at = new Date(Date.UTC(2026, 9, 12 + Math.floor(rnd() * 7), 6 + Math.floor(rnd() * 8), 0));
+      const startW = NP.NOW_STARTS.LT[pickOne(Object.keys(NP.NOW_STARTS.LT))];
+      const cands = NP.nowCandidates(base, { country: "LT", zone: "Europe/Vilnius", now: at });
+      const c2 = { country: "LT", start: startW, startClock: M.placeClock(at, "Europe/Vilnius"), budget: pickOne(NP.NOW_HOURS) * 60, margin: startW.ship ? NP.SHIP_MARGIN : 0, wet: false, weather: {}, style: "", lang: "en", ferryWait: 0 };
+      const shuffled = cands.map(c => ({ c, k: rnd() })).sort((a, b) => a.k - b.k).slice(0, 8).map(x => ({ id: x.c.id }));
+      const w = NP.tidyWalk(NP.withMustSee(shuffled, cands, c2), cands, c2);
+      if (w.stops.length < 3 || w.stops.length > 7) continue;
+      const by = new Map(cands.map(c => [c.id, c]));
+      const served = loopOf(startW, w.stops.map(s => by.get(s.id)));
+      let best = Infinity;
+      for (const p of perms(w.stops.map(s => by.get(s.id)))) best = Math.min(best, loopOf(startW, p));
+      n++; sum += served / best; worst = Math.max(worst, served / best);
+    }
+    ok(`random walks are within a whisker of the shortest order (${n} walks, average ${(sum / n).toFixed(3)})`, n >= 30 && sum / n < 1.03 && worst < 1.2);
+    ok("a walk of up to eight places is solved outright", NP.EXACT_MAX === 8 && /for \(const p of orders\(kept\)\)/.test(read("src/utils/nowPlanner.js")));
+  }
+
+  // The walk: a Gemlyx compass, a far walker told so, and pins that open.
+  const wm = read("src/components/WalkMode.jsx"), gm = read("src/components/GoogleWalkMap.jsx"), logo = read("src/components/GemlyxLogo.jsx");
+  ok("the walk's compass is the Gemlyx mark, turned to the next place", /export const GemlyxCompass = /.test(logo) && /<GemlyxCompass size=\{46\} angle=\{arrow\} dim=\{!g\}/.test(wm) && /<GemlyxCompass size=\{34\} angle=\{arrow\} dim=\{!g\} \/>/.test(wm) && !/M12 2 L19 20 L12 16 L5 20 Z/.test(wm));
+  ok("a walker far from town is told how far, not 11483 minutes", M.FAR_M === 20000 && /g\.metres > FAR_M \? fill\(uiT\("walk\.far", lang\)/.test(wm) && ["en", "da", "de", "lt"].every(l => /\{dist\}/.test(M.t("walk.far", l))));
+  ok("a pin on the map can be tapped, and the card opens the place's page where it has one", /gmpClickable: true/.test(gm) && /m\.addListener\("gmp-click", \(\) => \{ if \(!gone\) focusStop\(i, Date\.now\(\)\); \}\)/.test(gm)
+    && /const opens = !!\(st && onOpen && !follow && \(!canOpen \|\| canOpen\(st\)\)\);/.test(gm) && /onOpen=\{\(st\) => openPage\(st\.id\)\} canOpen=\{\(st\) => !!pageFor\(st\.id\)\}/.test(read("src/pages/KlaipedaExamples.jsx")));
+  const shown = ["src/data/klaipedaExampleRows.js", "src/pages/KlaipedaDemo.jsx", "src/components/PromotionsPage.jsx"].map(read).join("\n").replace(/\/\/.*$/gm, "") + ["en", "da", "de", "lt"].map(l => M.t("walk.examplesNote", l)).join(" ");
   ok("no dashes and none of his banned words in the new text", !/[—–]/.test(shown) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(shown));
 }
 
