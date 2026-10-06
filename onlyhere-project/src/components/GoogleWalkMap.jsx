@@ -452,7 +452,16 @@ export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = nul
             drawn.push(joinLine);
           } else { joinLine.setPath(path); joinLine.setMap(map); }
         };
-        api.current = { focusStop, overview, showMe, recenter, styleLegs, joinUp: () => joinUp(mePos) };
+        // A place's photo can arrive after its pin (the published pages load
+        // on their own): the window is filled again then.
+        const relook = () => walk.stops.forEach((s, i) => {
+          const el = pinEls[i];
+          if (!el) return;
+          const look = (lookRef.current && lookRef.current(s)) || {};
+          el.innerHTML = placePinHtml({ n: i + 1, photo: look.photo, sign: look.emoji || "📍" });
+          el.querySelector("img")?.addEventListener("error", (e) => { try { e.target.remove(); } catch { /* gone */ } });
+        });
+        api.current = { focusStop, overview, showMe, recenter, styleLegs, joinUp: () => joinUp(mePos), relook };
 
         map.moveCamera({ heading: 0, tilt: 0 });
         try { map.setMapTypeId("roadmap"); } catch { /* keep going */ }
@@ -464,7 +473,7 @@ export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = nul
         startMarker = new AdvancedMarkerElement({ map, position: at(walk.start), content: startBox, title: walk.start.name || "Start", zIndex: 100 });
         drawn.push(startMarker);
         walk.stops.forEach((s, i) => {
-          const look = (cardFor && cardFor(s)) || {};
+          const look = (lookRef.current && lookRef.current(s)) || {};
           const pin = { element: placePin({ n: i + 1, photo: look.photo, sign: look.emoji || "📍" }) };
           try { pin.element.style.transition = "transform 280ms cubic-bezier(.2,1.6,.4,1)"; pin.element.style.transformOrigin = "50% 100%"; } catch { /* no element */ }
           pinEls.push(pin.element);
@@ -556,6 +565,12 @@ export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = nul
   }, [me?.lat, me?.lon, me?.accuracy, follow, heading === null ? null : Math.round(heading / 5)]);
 
   // The leg being walked, for the walk mode.
+  // The place photos, as they stand: when one arrives, the pins are filled again.
+  const lookRef = useRef(cardFor);
+  lookRef.current = cardFor;
+  const looks = Array.isArray(walk?.stops) ? walk.stops.map(s => (cardFor && cardFor(s))?.photo || "").join("|") : "";
+  useEffect(() => { if (looks.replace(/\|/g, "")) api.current?.relook?.(); }, [looks]);
+
   const activeLegRef = useRef(activeLeg);
   useEffect(() => { activeLegRef.current = activeLeg; api.current?.styleLegs(activeLeg); api.current?.joinUp(); }, [activeLeg]);
 

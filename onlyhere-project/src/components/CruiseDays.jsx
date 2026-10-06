@@ -29,7 +29,7 @@ export const CruiseDays = ({ lang = "en", count = 4, compact = false }) => {
           <div style={{ minWidth: 92, fontWeight: 700, color: d.day === today ? C.gold : C.text }}>{d.day === today ? uiT("ships.today", lang) : dayWords(d.day, lang)}</div>
           <div style={{ flex: 1, minWidth: 0 }}>
             {d.calls.map(c => <div key={`${c.ship}${c.arrives}`}><strong style={{ color: C.text }}>{c.ship}</strong> · {c.arrives}-{c.leaves}</div>)}
-            {d.guests > 0 && <div style={{ fontSize: 12, color: C.muted }}>{fill(uiT("ships.guests", lang), { n: aboutGuests(d.guests) })}</div>}
+            {d.guests > 0 && <div style={{ fontSize: 12, color: C.muted }}>{fill(uiT("ships.guests", lang), { n: aboutGuests(d.guests, lang) })}</div>}
           </div>
         </div>
       ))}

@@ -12,11 +12,12 @@ import { GemlyxLogo } from "./GemlyxLogo";
 import { KLAIPEDA_EXAMPLES_PATH, KLAIPEDA_BUSINESS_PATH } from "../data/klaipedaExamples";
 
 export const KLAIPEDA_SIDES = [
-  { id: "visitors", label: "For visitors", href: KLAIPEDA_EXAMPLES_PATH },
-  { id: "business", label: "For businesses", href: KLAIPEDA_BUSINESS_PATH },
+  { id: "visitors", label: "For visitors", lt: "Lankytojams", href: KLAIPEDA_EXAMPLES_PATH },
+  { id: "business", label: "For businesses", lt: "Verslui", href: KLAIPEDA_BUSINESS_PATH },
 ];
 
-export const KlaipedaTop = ({ side = null, place = "Klaipėda" }) => (
+// `lang` "lt" labels the switch in Lithuanian, and the business side keeps it.
+export const KlaipedaTop = ({ side = null, place = "Klaipėda", lang = "en" }) => (
   <div data-testid="klaipeda-top" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 30, flexWrap: "wrap" }}>
     <a href={side ? KLAIPEDA_EXAMPLES_PATH : undefined} style={{ display: "inline-flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
       <GemlyxLogo size={18} color={C.text} />
@@ -27,9 +28,9 @@ export const KlaipedaTop = ({ side = null, place = "Klaipėda" }) => (
         {KLAIPEDA_SIDES.map(s => {
           const on = s.id === side;
           return (
-            <a key={s.id} href={s.href} aria-current={on ? "page" : undefined} data-testid={`klaipeda-side-${s.id}`}
+            <a key={s.id} href={lang === "lt" && s.id === "business" ? `${s.href}?lang=lt` : s.href} aria-current={on ? "page" : undefined} data-testid={`klaipeda-side-${s.id}`}
               style={{ fontSize: 12, fontWeight: 700, borderRadius: 100, padding: "6px 13px", textDecoration: "none", whiteSpace: "nowrap", background: on ? C.gold : "transparent", color: on ? C.onGold : C.light }}>
-              {s.label}
+              {lang === "lt" ? s.lt : s.label}
             </a>
           );
         })}

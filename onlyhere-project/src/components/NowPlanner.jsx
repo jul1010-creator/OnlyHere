@@ -342,9 +342,17 @@ export const NowPlanner = ({ country = "LT", lang: langProp = "", defaultFrom = 
 
       {state.error && <div style={{ fontSize: 12.5, color: "#FFB347", marginTop: 12 }}>{state.error}</div>}
 
-      {walk && <EditableWalk walk={walk} madeAt={madeAt} lang={lang} country={country} />}
+      {walk && <EditableWalk walk={walk} madeAt={madeAt} lang={lang} country={country} cardFor={(s) => placeLook(walk, s)} />}
     </div>
   );
+};
+
+// A place's look on the walk map: its own photo where it has one, and a sign
+// by kind where it does not (6 Oct 2026).
+export const KIND_SIGN = { Museum: "🏛️", Food: "🍽️", Nightlife: "🍸", Event: "🎟️", Workshop: "🛠️", Shop: "🛍️" };
+export const placeLook = (walk, s) => {
+  const p = Array.isArray(walk?.places) ? walk.places.find(x => x.id === s?.id) : null;
+  return { emoji: KIND_SIGN[p?.kind] || "📍", ...(p?.photo ? { photo: p.photo } : {}) };
 };
 
 export default NowPlanner;
