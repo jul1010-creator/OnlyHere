@@ -23,6 +23,7 @@ import { walkWeatherFrom } from "../src/utils/walkWeather.js";
 import { ferryWait } from "../src/utils/walkable.js";
 import { takeDaily, visitorKey, SUPABASE_FALLBACK_URL } from "../src/utils/aiGate.js";
 import { copenhagenDay } from "../src/utils/guideAllowance.js";
+import { withExampleRows } from "../src/data/klaipedaExampleRows.js";
 import {
   NOW_STARTS, NOW_HOURS, NOW_LANGS, SHIP_MARGIN, slotAccepted, slotOf, slotDate,
   nowCandidates, ruleOrder, planPrompt, readOrder, goodWalk,
@@ -144,6 +145,11 @@ export default async function handler(req, res) {
   try { rows = await rowsFor(country); }
   catch { return json(res, 503, { error: "Could not read the places just now." }); }
 
+  // Few Klaipėda places are published yet, so the examples fill in until
+  // there are enough (data/klaipedaExampleRows.js, 7 Oct 2026).
+  const filled = withExampleRows(rows, country);
+  rows = filled.rows;
+
   const weather = await weatherAt(start);
   const all = nowCandidates(rows, { country, zone, now: at });
   const candidates = styleCandidates(all, style, country);
@@ -186,7 +192,7 @@ export default async function handler(req, res) {
   const alt = reversedWalk(walk, candidates, ctx);
 
   return json(res, 200, {
-    slot: q.slot, country, from: start.id, hours, lang, made, style,
+    slot: q.slot, country, from: start.id, hours, lang, made, style, examples: filled.examples,
     start: { id: start.id, name: start.name, lat: start.lat, lon: start.lon, ship: !!start.ship },
     weather, margin, ...walk,
     alt: alt ? { stops: alt.stops, back: alt.back, deadline: alt.deadline } : null,
