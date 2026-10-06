@@ -168,7 +168,7 @@ export const KlaipedaExamples = () => {
           )}
           {/* Google's own map, turning once. Left out until its key is set. */}
           <div ref={mapBox}>
-            <GoogleWalkMap walk={mapWalk || shownWalk} madeAt={run.startClock.minutes} cardFor={cardOf} focus={mapFocus} />
+            <GoogleWalkMap walk={mapWalk || shownWalk} madeAt={run.startClock.minutes} cardFor={cardOf} focus={mapFocus} onOpen={(st) => openPage(st.id)} canOpen={(st) => !!pageFor(st.id)} />
           </div>
           <EditableWalk walk={shownWalk} madeAt={run.startClock.minutes} lang="en" country="LT" tag={(s) => isExamplePartner(s.id) ? "Example" : null} onOpen={(s) => openPage(s.id)}
             cardFor={cardOf} onWalk={setMapWalk}
