@@ -281,6 +281,8 @@ export const nowCandidates = (rows, { country = "LT", zone = "", now = new Date(
       offer: offerOf(p.__offer, today),
       about: words(p.desc || p.description || p.popularityTag || "", 160),
       stay: STAY[museum ? "Museum" : kind] || 40,
+      // The place's own photo, for its pin on the walk map (6 Oct 2026).
+      ...(/^https:\/\/\S+$/i.test(String(p.photo || "").trim()) ? { photo: String(p.photo).trim().slice(0, 600) } : {}),
     });
   }
   return out;
@@ -666,5 +668,5 @@ export const canStayLonger = (walk, edits, id, ctx) => {
 // rules read it.
 export const placesOf = (walk, candidates) => {
   const ids = new Set((walk?.stops || []).map(s => s.id));
-  return candidates.filter(c => ids.has(c.id)).map(c => ({ id: c.id, name: c.name, kind: c.kind, lat: c.lat, lon: c.lon, tier: c.tier, indoor: c.indoor, exposed: c.exposed, hours: c.hours, offer: c.offer, stay: c.stay }));
+  return candidates.filter(c => ids.has(c.id)).map(c => ({ id: c.id, name: c.name, kind: c.kind, lat: c.lat, lon: c.lon, tier: c.tier, indoor: c.indoor, exposed: c.exposed, hours: c.hours, offer: c.offer, stay: c.stay, ...(c.photo ? { photo: c.photo } : {}) }));
 };

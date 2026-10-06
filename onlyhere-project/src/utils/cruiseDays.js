@@ -51,7 +51,9 @@ export const cruiseDaysAhead = (now = new Date(), count = 4, calls = CRUISE_CALL
 };
 
 // "about 1,900": rounded to the hundred, because it is an estimate.
-export const aboutGuests = (n) => (n >= 100 ? (Math.round(n / 100) * 100).toLocaleString("en-GB") : String(n));
+// Written the way the reader's language writes a number: "1,900", "1 900".
+const NUMBER_LOCALE = { en: "en-GB", da: "da-DK", de: "de-DE", lt: "lt-LT" };
+export const aboutGuests = (n, lang = "en") => (n >= 100 ? (Math.round(n / 100) * 100).toLocaleString(NUMBER_LOCALE[lang] || "en-GB") : String(n));
 
 // Which walk lengths still get a passenger back before the ship sails. The
 // walk itself keeps SHIP_MARGIN in hand before its end (utils/nowPlanner.js),
