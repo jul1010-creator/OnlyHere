@@ -130,7 +130,7 @@ import {
   getEnclosingJSONStringBounds, nextWeekdayTimestamp,
   getDistance, getDistanceRaw, tiltMove, tiltLeave, arrivalRow, hasArrivalField, departureParam, transitDepartureAnchor,
   daCompare, byName, seasonFit, isConfirmedUpcoming,
-  hostMatchesName, officialSiteFromCandidates, stripDashes, stripDashesDeep, storeKindOf, trimFillerForChat, TRAVEL_ORIGIN } from "./utils/helpers";
+  hostMatchesName, officialSiteFromCandidates, stripDashes, stripDashesDeep, storeKindOf, trimFillerForChat, TRAVEL_ORIGIN, externalHref } from "./utils/helpers";
 import { checkNightTransport, geocodePlace, geocodeIsASettlement, findRealNearestStation, geocodePostcode } from "./utils/geo";
 import { runOnce } from "./utils/inFlight";
 import { Pill } from "./components/Pill";
@@ -2197,7 +2197,10 @@ function GemlyxApp() {
   // neither of them is reachable from a browser at all.
   useEffect(() => {
     const token = studioSession?.access_token;
-    if (!token || !String(FOUNDER_IDS || "").trim()) return;
+    // An empty VITE_FOUNDER_IDS is not a reason to skip this: isFounder reads
+    // an empty list as Oliver's own id, the same as the routes (security
+    // review, 6 Oct 2026, finding 9).
+    if (!token) return;
     let alive = true;
     (async () => {
       try {
@@ -3501,7 +3504,16 @@ function GemlyxApp() {
     setDeletingId(null);
   };
 
+  // ── AND THE SESSION ENDS ON SUPABASE TOO ─────────────────────────
+  // Security review, 6 Oct 2026, finding 4: Log out only cleared this browser,
+  // so the refresh token stayed good, and a copied one kept Studio open. Now
+  // Supabase is told to end the session as well. This browser is cleared
+  // whatever Supabase answers, so a bad connection never keeps him logged in.
   const studioLogout = () => {
+    const token = studioSession?.access_token;
+    if (token) {
+      fetch(`${SUPABASE_URL}/auth/v1/logout?scope=local`, { method: "POST", headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}` } }).catch(() => { /* cleared here either way */ });
+    }
     localStorage.removeItem("gemlyx_studio_session");
     setStudioSession(null);
   };
@@ -13185,7 +13197,9 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
         setTourCheck({ done: i, total: rows.length, list, summary: "" });
         let answer = { url, status: 0, finalUrl: "", error: "the check did not run" };
         try {
-          const res = await fetch(`/api/link-alive?url=${encodeURIComponent(url)}`);
+          // With the Studio token: link-alive is founder only, and a bare fetch
+          // was refused on every call (security review, 6 Oct 2026, finding 6).
+          const res = await studioFetch(`/api/link-alive?url=${encodeURIComponent(url)}`);
           const data = await res.json();
           if (res.ok && !data.error) answer = data;
           else answer = { url, status: 0, finalUrl: "", error: data?.error || `HTTP ${res.status}` };
@@ -27089,7 +27103,8 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         onLocate={saveGemBranches}
                         onPublish={publishGems}
                         readPage={readSourcePage}
-                        readImage={readPosterText} />
+                        readImage={readPosterText}
+                        studioFetch={studioFetch} />
                     )}
 
                     {/* ── AND THE ONE THING NO PAGE CAN TELL IT ──────
@@ -35152,8 +35167,8 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         {entry.license && (lic
                           ? <a href={lic} target="_blank" rel="noreferrer" style={{ color: C.light, textDecoration: "underline" }}>{entry.license}</a>
                           : <span>{entry.license}</span>)}
-                        {entry.sourceUrl ? (
-                          <> · <a href={entry.sourceUrl} target="_blank" rel="noreferrer" style={{ color: C.light, textDecoration: "underline" }}>source</a></>
+                        {externalHref(entry.sourceUrl) ? (
+                          <> · <a href={externalHref(entry.sourceUrl)} target="_blank" rel="noreferrer" style={{ color: C.light, textDecoration: "underline" }}>source</a></>
                         ) : null}
                       </div>
                     </div>
