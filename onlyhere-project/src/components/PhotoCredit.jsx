@@ -3,6 +3,7 @@ import { readableAuthor } from "../utils/photoAuthor";
 import { C } from "../utils/theme";
 import { loadImageCredits, creditFor, licenseUrl } from "../utils/imageCredits";
 import { aiLabel, isAiImage } from "../utils/aiImages";
+import { externalHref } from "../utils/helpers";
 
 // The caption that sits under a photo: who took it, where it came from, and
 // under what licence, with the licence name linked to its real deed.
@@ -68,8 +69,10 @@ export const PhotoCredit = ({ photo, credit, align = "left", style }) => {
       {!more ? null : (
         <>
       {generated ? "Made with AI" : "Photo:"}{" "}
-      {entry.sourceUrl ? (
-        <a href={entry.sourceUrl} target="_blank" rel="noreferrer" style={linkStyle}>
+      {/* Only an http(s) address becomes a link (security review, 6 Oct 2026,
+          finding 10): a credit is data a draft filled in. */}
+      {externalHref(entry.sourceUrl) ? (
+        <a href={externalHref(entry.sourceUrl)} target="_blank" rel="noreferrer" style={linkStyle}>
           {said || "source"}
         </a>
       ) : said ? (

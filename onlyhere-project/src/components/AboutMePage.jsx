@@ -14,6 +14,7 @@ import { currentTrip, tripStatusLine } from "../utils/tripStatus";
 import { ProfileQuestions } from "./ProfileQuestions";
 import { AFFILIATES_PATH } from "../utils/affiliateRoster";
 import { LIBRARY_PATH } from "../utils/tripLibrary";
+import { externalHref } from "../utils/helpers";
 
 // ── INFO ABOUT ME ────────────────────────────────────────────────────
 //
@@ -770,8 +771,8 @@ export const AboutMePage = ({
           {/* WHERE IT CAME FROM, because this is the one thing on Gemlyx that
               has not been through the pipeline. A reader deciding whether to
               drive an hour deserves to see the post it came from. */}
-          {n.sourceUrl && (
-            <a href={n.sourceUrl} target="_blank" rel="noreferrer"
+          {externalHref(n.sourceUrl) && (
+            <a href={externalHref(n.sourceUrl)} target="_blank" rel="noreferrer"
               style={{ display: "inline-block", marginTop: 10, fontSize: 11.5, fontWeight: 700, color: C.gold, textDecoration: "none" }}>
               Where this was posted ↗
             </a>

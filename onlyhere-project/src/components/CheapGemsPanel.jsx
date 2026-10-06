@@ -26,7 +26,9 @@ const parseJson = (text) => {
   try { return JSON.parse(raw.slice(a, b + 1)); } catch { return null; }
 };
 
-export const CheapGemsPanel = ({ existing = [], published = [], onPublish, onLocate = null, readPage = null, readImage = null }) => {
+// `studioFetch` carries the Studio token: places-locate is founder only, and a
+// bare fetch was refused on every call (security review, 6 Oct 2026, finding 6).
+export const CheapGemsPanel = ({ existing = [], published = [], onPublish, onLocate = null, readPage = null, readImage = null, studioFetch = null }) => {
   const [place, setPlace] = useState("");
   const [named, setNamed] = useState("");
   // ── WHAT HE ALREADY KNOWS THE DEAL IS ─────────────────────────────
@@ -151,9 +153,9 @@ export const CheapGemsPanel = ({ existing = [], published = [], onPublish, onLoc
   // like the brand is ticked, anything else is shown and left for him.
   const toLocate = gemsToLocate(published);
   const sweepOne = async (row) => {
-    const res = await fetch(`/api/places-locate?limit=12&name=${encodeURIComponent(row.gem.name)}${countryParam()}`);
+    const res = await (studioFetch || fetch)(`/api/places-locate?limit=12&name=${encodeURIComponent(row.gem.name)}${countryParam()}`);
     const data = await res.json().catch(() => null);
-    if (data?.error) throw new Error(String(data.error).slice(0, 120));
+    if (!res.ok || data?.error) throw new Error(String(data?.error || `HTTP ${res.status}`).slice(0, 120));
     const found = gemBranchesFound(row.gem, data?.candidates);
     return { ...row, found, chosen: new Set(found.map((c, i) => (c.matches ? i : -1)).filter(i => i >= 0)) };
   };
