@@ -483,7 +483,14 @@ export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = nul
           // Oliver, 7 Oct 2026: "make me able to click the places on the
           // map". A tap on a pin does what "Show on map" does: the glide in,
           // the sparkle and the place's card.
-          try { m.addListener("gmp-click", () => { if (!gone) focusStop(i, Date.now()); }); } catch { /* an older map: the list still opens it */ }
+          // The element's own "gmp-click" is the current way to hear it, and
+          // the map's "click" the older one; both are listened to, and a tap
+          // heard twice counts once. "gmp-click" through addListener, the
+          // first version of this, was never heard on the live site.
+          let lastTap = 0;
+          const tap = () => { const now = Date.now(); if (gone || now - lastTap < 400) return; lastTap = now; focusStop(i, now); };
+          try { m.addEventListener("gmp-click", tap); } catch { /* the older event below */ }
+          try { m.addListener("click", tap); } catch { /* the list still opens it */ }
           stopMarkers.push(m);
           drawn.push(m);
         });
