@@ -415,7 +415,7 @@ writeFileSync(entry, `
   export { headingSkeleton, skeletonKey, openingKey, spreadBy, skeletonSpread, openingSpread, describeSameness, samenessReport } from ${JSON.stringify(join(root, "src/utils/sameness.js"))};
   export { moneyTraceable, COMPRESSION_GLANCE, glanceShapeProblem, EXTRACTABLE_GLANCE, EDITORIAL_GLANCE, NEVER_EXTRACT, CLOSED_OR_DERIVED, glanceFieldsFor, numbersTraceable, freeClaimTraceable, saysFreeOnly, statesAnAmount, GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, describeGlance, staleUncertainties, describeStale } from ${JSON.stringify(join(root, "src/utils/glanceExtract.js"))};
   export { walkWeatherFrom } from ${JSON.stringify(join(root, "src/utils/walkWeather.js"))};
-  export { turnSign, JOIN_ON_M, JOIN_MAX_M, CARD_WALKING_MS, walkLegs, bearingOf, kmBetween as mapKm, glideAt, GLIDE_MS, FOCUS, SPARKS } from ${JSON.stringify(join(root, "src/components/GoogleWalkMap.jsx"))};
+  export { placePinHtml, PLACE_PIN, turnSign, JOIN_ON_M, CARD_WALKING_MS, walkLegs, bearingOf, kmBetween as mapKm, glideAt, GLIDE_MS, FOCUS, SPARKS } from ${JSON.stringify(join(root, "src/components/GoogleWalkMap.jsx"))};
   export { guideTo, compassOf, distanceWords as walkDistanceWords, ARRIVE_M, COMPASS } from ${JSON.stringify(join(root, "src/components/WalkMode.jsx"))};
   export * as CR from ${JSON.stringify(join(root, "src/utils/cruiseDays.js"))};
   export * as CRD from ${JSON.stringify(join(root, "src/data/klaipedaCruises.js"))};
@@ -81876,7 +81876,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("the way back is dashed, never drawn like the walk", /if \(i === last\) \{\s*const dash = new maps\.Polyline\(\{\s*map, path, strokeOpacity: 0, zIndex: 1,\s*icons: \[\{ icon: \{ path: "M 0,-1 0,1"/.test(comp) && /repeat: "14px"/.test(comp));
   ok("the map opens flat, north up, on the plain map, over the whole walk", /map\.moveCamera\(\{ heading: 0, tilt: 0 \}\);\s*try \{ map\.setMapTypeId\("roadmap"\); \} catch \{ \/\* keep going \*\/ \}\s*map\.fitBounds\(bounds, PAD\);/.test(comp));
   ok("and only tilts when a place is shown", (comp.match(/tilt: FOCUS|FOCUS = \{ zoom: 17\.5, tilt: 50 \}/g) || []).length >= 1 && !/addListenerOnce\(map, "idle"/.test(comp));
-  ok("smaller pins, the start on top, Google's own places not clickable", (comp.match(/scale: PIN_SCALE/g) || []).length === 2 && /zIndex: 100 \}\)\);/.test(comp) && /clickableIcons: false/.test(comp));
+  ok("Klaipėda's own pins, the start on top, Google's own places not clickable", (comp.match(/placePin\(\{/g) || []).length === 2 && /zIndex: 100 \}\);/.test(comp) && /clickableIcons: false/.test(comp));
   const shown = comp.replace(/\/\/ ── .*$/gm, "");
   ok("no dashes and none of his banned words", !/[—–]/.test(shown) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(shown));
 }
@@ -81968,7 +81968,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("a beam shows which way the phone points, and a pale circle how sure the fix is", /<span data-beam/.test(gm) && /meBeam\.style\.display = meHeading === null \? "none" : "block";/.test(gm) && /meRing = new maps\.Circle\(\{ map, center: pos, radius: Number\(p\.accuracy\)/.test(gm));
   ok("the leg being walked stands out, legs walked go grey, legs ahead are pale", /const styleLegs = \(active\) => \{/.test(gm) && /#9AA0A6/.test(gm) && /strokeWeight: now \? 7 : 4/.test(gm) && /useEffect\(\(\) => \{ activeLegRef\.current = activeLeg; api\.current\?\.styleLegs\(activeLeg\);/.test(gm));
   ok("touch the map to look around, and Re-centre puts it back", /if \(follow\) setAway\(true\);/.test(gm) && /const recenter = \(\) => \{ moved\.current = false; setAway\(false\);/.test(gm) && /data-testid="map-recenter"/.test(gm));
-  ok("while walking, arriving at a stop pops it up without flying off", /if \(follow\) \{ popPin\(i\); setCard\(\{ stop: i, n \}\); setTimeout\(/.test(gm) && /CARD_WALKING_MS\); return; \}/.test(gm) && /api\.current\.showMe\(me, follow, heading\)/.test(gm));
+  ok("while walking, arriving at a stop pops it up without flying off", /if \(follow\) \{ popPin\(i\); sparkleOn\(pinBoxes\[i\]\); setCard\(\{ stop: i, n \}\); setTimeout\(/.test(gm) && /CARD_WALKING_MS\); return; \}/.test(gm) && /api\.current\.showMe\(me, follow, heading\)/.test(gm));
   ok("walk mode hands the map the compass, or the GPS course, and the leg", /heading=\{heading \?\? course\} activeLeg=\{idx\}/.test(wm) && /const h = p\.coords\.heading;/.test(wm));
   ok("the position still never leaves the phone", !/fetch\(/.test(wm) && !/fetch\(/.test(gm.slice(gm.indexOf("THE WALKER, THE WAY A SAT NAV"), gm.indexOf("const recenter"))));
   const words = ["en", "da", "de", "lt"].map(l => M.UI_STRINGS["map.recenter"]?.[l] || "").join(" ");
@@ -82055,8 +82055,8 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
 // between the destination and current position"
 {
   const gm = readFileSync(join(root, "src/components/GoogleWalkMap.jsx"), "utf8");
-  ok("walking, a blue dotted line joins the dot to the leg, or to the stop when far off", /joinUp = \(pos\) => \{/.test(gm) && /const to = near\.d <= JOIN_MAX_M \? near\.p : leg\.to;/.test(gm) && /fillColor: "#4285F4"/.test(gm) && M.JOIN_ON_M === 15 && M.JOIN_MAX_M === 250);
-  ok("what is behind you on the leg goes grey, and a new leg puts the old one back whole", /const behind = \[\.\.\.leg\.path\.slice\(0, near\.k \+ 1\), near\.p\]/.test(gm) && /joinedLeg\.line\.setPath\(joinedLeg\.path\)/.test(gm) && /api\.current\?\.joinUp\(\); \}, \[activeLeg\]\);/.test(gm));
+  ok("walking, a blue dotted line runs straight from the dot to the place", /joinUp = \(pos\) => \{/.test(gm) && /const path = \[pos, to\];/.test(gm) && /fillColor: "#4285F4"/.test(gm) && M.JOIN_ON_M === 15);
+  ok("and it never tracks the walker along Google's route: no join to the route, nothing greyed behind", !/nearestOn|behindLine|JOIN_MAX_M/.test(gm) && /api\.current\?\.joinUp\(\); \}, \[activeLeg\]\);/.test(gm));
   ok("it joins on the first fix and at the end of each glide, never while just looking at the walk", /placeCamera\(pos\);\s*joinUp\(pos\);/.test(gm) && /if \(t >= 1\) joinUp\(at2\);/.test(gm) && /const leg = follow && active !== null/.test(gm));
   ok("nothing is asked of Google as you walk", !/fetch\(|legLine\(|DirectionsService/.test(gm.slice(gm.indexOf("FROM WHERE YOU STAND TO THE WAY"), gm.indexOf("api.current = { focusStop"))));
   const shown = gm.replace(/\/\/ ── .*$/gm, "");
@@ -82066,7 +82066,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
 // ── Batch 215, seen live: the card sat over the dot ──
 {
   const gm = readFileSync(join(root, "src/components/GoogleWalkMap.jsx"), "utf8");
-  ok("walking, a stop's card comes up at the top and goes after a few seconds", /position: "absolute", left: 10, right: 10, top: 10, background: C\.surface, border: `1px solid \$\{C\.gold\}`, borderRadius: 100/.test(gm) && /setCard\(c => \(c && c\.n === n \? null : c\)\); \}, CARD_WALKING_MS\)/.test(gm) && M.CARD_WALKING_MS === 6000 && /bottom: \(st && !follow \? 150 : 26\) \+ lift/.test(gm));
+  ok("walking, a stop's card comes up at the top and goes after a few seconds", /\.\.\.\(follow \? \{ top: 10 \} : \{ bottom: 26 \}\)/.test(gm) && /setCard\(c => \(c && c\.n === n \? null : c\)\); \}, CARD_WALKING_MS\)/.test(gm) && M.CARD_WALKING_MS === 6000 && /bottom: \(st && !follow \? 150 : 26\) \+ lift/.test(gm));
 }
 
 // ── Batch 216: places, not stops; a slimmer walk screen; full screen ──
@@ -82078,7 +82078,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const gm = readFileSync(join(root, "src/components/GoogleWalkMap.jsx"), "utf8");
   ok("the walk says place, not stop, in four languages", M.UI_STRINGS["walk.stopOf"].en === "Place {i} of {n}" && M.UI_STRINGS["walk.nextStop"].en === "On to the next place" && !/\b(stop|Halt|sustojim)/i.test(["da", "de", "lt"].map(l => M.UI_STRINGS["walk.stopOf"][l] + M.UI_STRINGS["walk.nextStop"][l]).join(" ")));
   ok("the top of the walk is one slim bar", /data-testid="walk-bar"/.test(wm) && /width: 44, height: 44/.test(wm) && !/marginTop: 8 \}\}>\s*<div aria-hidden="true" data-testid="walk-arrow"/.test(wm));
-  ok("walking, a place arrives as a slim strip, and Whole walk stays off the walking map", /\{follow \? \(\s*<div key=\{`card\$\{card\.n\}`\} data-testid="map-card"/.test(gm) && /borderRadius: 100, padding: "6px 14px 6px 6px"/.test(gm) && /\{!follow && \(\s*<button onClick=\{\(\) => api\.current\?\.overview\(\)\} data-testid="map-whole-walk"/.test(gm));
+  ok("Whole walk stays off the walking map", /\{!follow && \(\s*<button onClick=\{\(\) => api\.current\?\.overview\(\)\} data-testid="map-whole-walk"/.test(gm));
   ok("full screen hides both bars and leaves one strip with the arrow, the distance and the way out", /\{!full && <div data-testid="walk-bar"/.test(wm) && /\{!full && <div style=\{\{ padding: "8px 12px/.test(wm) && /data-testid="walk-full-strip"/.test(wm) && /data-testid="walk-exit-full"/.test(wm) && /lift=\{full \? 62 : 0\}/.test(wm));
   ok("and asks the phone for its own full screen, coming out when the phone does", /shell\.current\?\.requestFullscreen\?\.\(\)/.test(wm) && /document\.addEventListener\("fullscreenchange", left\)/.test(wm));
   const keys = ["walk.fullScreen", "walk.exitFull", "walk.stopOf", "walk.nextStop"];
@@ -82115,6 +82115,37 @@ ok("walking, the map has no zoom buttons, and pinching still zooms", /zoomContro
 
 // ── Batch 217b: a turn's second line reads as a second sentence ──
 is("Google's line break becomes a full stop", M.turnsFrom([{ travelMode: "WALK", distanceMeters: 10, navigationInstruction: { maneuver: "TURN_SLIGHT_LEFT", instructions: "Slight left\nDestination will be on the left" } }])[0].text, "Slight left. Destination will be on the left");
+
+// ── Batch 218: one place at a time, with its sparkle and card ──
+// Oliver, 6 Oct 2026: "when click directions, only one of the areas pop up,
+// and it pops up with a sparkle and the captions of it that you made
+// earlier", and "Start walking" when asked which button.
+{
+  const gm = readFileSync(join(root, "src/components/GoogleWalkMap.jsx"), "utf8");
+  ok("walking, only the place being walked to is on the map, and only the legs up to it", /stopMarkers\.forEach\(\(m, i\) => \{ try \{ m\.map = i === active \? map : null; \}/.test(gm) && /const show = i <= active;/.test(gm) && /if \(follow && walking0\)/.test(gm));
+  ok("it pops up with the sparkle on its own pin, and the full card with its caption", /if \(follow\) \{ popPin\(i\); sparkleOn\(pinBoxes\[i\]\); setCard\(\{ stop: i, n \}\);/.test(gm) && /data-testid", "pin-sparkle"/.test(gm) && /\{st\.why && <div/.test(gm) && !/padding: "6px 14px 6px 6px"/.test(gm));
+  ok("on the way back, the start comes up with its sparkle", /if \(home && !startMarker\.map\) \{ startMarker\.map = map; sparkleOn\(startBox\); \}/.test(gm));
+  ok("the sparkle in the middle of the map is for the glide only", /\{!follow && !reducedMotion\(\) && <Burst key=/.test(gm));
+  ok("looking at the walk before setting out, every place still shows", /const pinBoxes = \[\], stopMarkers = \[\];/.test(gm) && /if \(follow && walking0\) \{\s*stopMarkers/.test(gm));
+}
+
+// ── Batch 219: the overview without the route, Klaipėda's own pins, and no
+// tracking along Google's route ──
+// Oliver, 6 Oct 2026: "The map at the front page (default map) should not
+// have the route. Only the places. and can they be designed cool? ... themed
+// for Klaipeda. Then with the photos of the attractions inside." And: "using
+// live GPS is not allowed. So now we know."
+{
+  const gm = readFileSync(join(root, "src/components/GoogleWalkMap.jsx"), "utf8");
+  ok("looking at the walk, no route is asked for or drawn, only the places", /const lines = follow \? await Promise\.all\(legs\.map\(\(\[a, b\]\) => legLine\(a, b\)\)\) : \[\];/.test(gm));
+  const withPhoto = M.placePinHtml({ n: 2, photo: "https://example.org/castle.jpg" });
+  const noPhoto = M.placePinHtml({ n: 3, sign: "🗿" });
+  const home = M.placePinHtml({ home: true });
+  ok("a place's pin is a gold drop with its photo in a round window, its number, and a wave across the tip", /<img src="https:\/\/example\.org\/castle\.jpg"/.test(withPhoto) && />2<\/span>$/.test(withPhoto) && /q4\.25 -3 8\.5 0 t8\.5 0/.test(withPhoto) && /fill="#0F1A2E"/.test(home) === true && /⚓/.test(home));
+  ok("with no photo the place's sign sits in the window, and an address that is not https is never put in", /🗿/.test(noPhoto) && !/<img/.test(M.placePinHtml({ photo: "javascript:alert(1)" })) && !/<img/.test(M.placePinHtml({ photo: "http://x.org/a.jpg" })) && !/"><script/.test(M.placePinHtml({ photo: 'https://x.org/a.jpg"><script>' })));
+  ok("the photo comes from the same place card the map already shows", /const look = \(cardFor && cardFor\(s\)\) \|\| \{\};/.test(gm) && /photo: look\.photo/.test(gm));
+  ok("the live position is a dot on Google's map, the way Google's own tutorial shows it", /6 Oct 2026, after Oliver read that live GPS navigation is not/.test(gm));
+}
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
 if (failed) { fails.forEach(f => console.log("  FAIL " + f + "\n")); process.exit(1); }
