@@ -140,22 +140,27 @@ export const reportAge = (createdAt, now = Date.now()) => {
 //
 // That is still right for anon. What it also did was lock HIM out, which is why
 // the only way to read a report until now was the Supabase dashboard. These two
-// policies open it to one account, matched on the email in the token, exactly
-// as gemlyx_content's "only me" already does. The anon key carries no email
-// claim at all, so it cannot satisfy either of them.
+// policies open it to one account, the founder, as public.is_founder() names
+// him (see below). The anon key is no account, so it satisfies neither.
 //
 // Named as its own constant rather than added to SUPPORT_SETUP_SQL, because
 // that one has already been run and a person re-running a whole setup block to
 // pick up two lines at the end is a person who misses them.
+// 6 Oct 2026, security review finding 3: matched on the email, these brought
+// back the rule the 30 Sep lockdown took out everywhere else, since any account
+// that signs up with that address and is not asked to confirm it carries the
+// claim. Now they ask public.is_founder(), the same as every other table. If
+// that function is missing, the paste fails and changes nothing, which is the
+// safe way round: run SECURITY_LOCKDOWN_30SEP.sql first.
 export const INBOX_SETUP_SQL = `-- Gemlyx reports, readable in Studio. Run once.
 drop policy if exists gemlyx_support_read on public.gemlyx_support;
 create policy gemlyx_support_read on public.gemlyx_support
   for select to authenticated
-  using ((auth.jwt() ->> 'email'::text) = 'oliververhein@gmail.com'::text);
+  using (public.is_founder());
 
 drop policy if exists gemlyx_support_handled on public.gemlyx_support;
 create policy gemlyx_support_handled on public.gemlyx_support
   for update to authenticated
-  using ((auth.jwt() ->> 'email'::text) = 'oliververhein@gmail.com'::text)
-  with check ((auth.jwt() ->> 'email'::text) = 'oliververhein@gmail.com'::text);
+  using (public.is_founder())
+  with check (public.is_founder());
 `;

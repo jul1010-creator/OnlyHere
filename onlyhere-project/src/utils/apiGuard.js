@@ -133,6 +133,13 @@ export const STUDIO_ONLY_ENDPOINTS = [
   // 1 Oct 2026. BestTime forecasts, paid per request, for the busyness line
   // on an entry. Studio fetches it about once a month per place.
   "busyness",
+  // 6 Oct 2026, security review finding 6: three founder routes were gated in
+  // their own files but missing here, so the suite never checked that Studio
+  // calls them with its token. Two Studio tools did not, and were refused on
+  // every call.
+  "places",          // Google's dearer Nearby Search, Studio's only since 5 Oct
+  "link-alive",
+  "calendar",
 ];
 
 // Resolve a bearer token with Supabase. Lifted from api/ask.js rather than
@@ -154,7 +161,11 @@ export const resolveUser = async (headers, { supabaseUrl, serviceKey, fetchImpl 
     const who = await f(`${supabaseUrl}/auth/v1/user`, {
       headers: { apikey: serviceKey, Authorization: `Bearer ${token}` },
     });
-    if (!who.ok) return { ok: false, status: 401, error: "Your Studio session has expired. Log out and back in." };
+    // Only a refusal of the token is an expired session. Supabase being down
+    // or busy is not, and saying so sent Oliver to log out for nothing
+    // (security review, 6 Oct 2026, finding 8).
+    if (who.status === 401 || who.status === 403) return { ok: false, status: 401, error: "Your Studio session has expired. Log out and back in." };
+    if (!who.ok) return { ok: false, status: 503, error: "Could not verify your session just now." };
     const u = await who.json();
     const id = u?.id ? String(u.id) : "";
     if (!id) return { ok: false, status: 401, error: "Sign in to Studio to use this." };
@@ -173,8 +184,11 @@ export const resolveUser = async (headers, { supabaseUrl, serviceKey, fetchImpl 
 // account and nobody else: never wider than intended, and still not a lockout
 // on a four in the morning deploy.
 export const FOUNDER_FALLBACK_ID = "467fb712-e3e9-4d43-b1b8-e4e1bb32b76d";
-export const isFounder = (userId, allowList) => {
-  const list = String(allowList || "").split(",").map(s => s.trim()).filter(Boolean);
-  const ids = list.length ? list : [FOUNDER_FALLBACK_ID];
-  return !!userId && ids.includes(String(userId));
+// Ids only, in any case: an email in the list never matches an id and is left
+// out, and capitals do not lock him out (security review, 6 Oct 2026, finding
+// 9). A list that holds nothing but emails is an empty list.
+export const founderIds = (allowList) => {
+  const list = String(allowList || "").split(",").map(s => s.trim().toLowerCase()).filter(s => s && !s.includes("@"));
+  return list.length ? list : [FOUNDER_FALLBACK_ID];
 };
+export const isFounder = (userId, allowList) => !!userId && founderIds(allowList).includes(String(userId).toLowerCase());

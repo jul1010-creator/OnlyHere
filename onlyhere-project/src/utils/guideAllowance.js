@@ -78,12 +78,16 @@ export const uncappedList = (env = {}) =>
   String(env.GEMLYX_UNCAPPED || env.GEMLYX_FOUNDER_IDS || "")
     .split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
 
-export const isUncapped = (list, { userId = "", email = "" } = {}) => {
+// An email on the list counts only once that email is confirmed: anybody can
+// sign up with an address they do not own, and an unconfirmed one on the list
+// would build uncapped (security review, 6 Oct 2026, finding 9). An id counts
+// as it is, because Supabase gave it.
+export const isUncapped = (list, { userId = "", email = "", confirmed = false } = {}) => {
   const l = Array.isArray(list) ? list : [];
   if (!l.length) return false;
   const id = String(userId || "").trim().toLowerCase();
   const mail = String(email || "").trim().toLowerCase();
-  return (!!id && l.includes(id)) || (!!mail && l.includes(mail));
+  return (!!id && l.includes(id)) || (!!mail && !!confirmed && l.includes(mail));
 };
 
 // The id a browser keeps for itself. Anything else is ignored rather than

@@ -101,6 +101,10 @@ export const readAiLimits = (env = {}) => ({
   // A member had no Opus ceiling at all (security review, 5 Oct 2026, finding
   // 2). 120 a day is above what a long guide's writer uses, retries included.
   opusPerUser: limitOf(env.GEMLYX_AI_OPUS_PER_USER, 120),
+  // And all members together (security review, 6 Oct 2026, still open High):
+  // a crowd of throwaway accounts each under their own 120 is still a ceiling
+  // the site sets, not the crowd.
+  membersOpusPerDay: limitOf(env.GEMLYX_AI_MEMBERS_OPUS_PER_DAY, 1000),
 });
 export const AI_OFF = "Gemlyx's AI is switched off just now.";
 
@@ -157,7 +161,7 @@ const takeCalls = ({ day, userId = "", visitor = "", opus = false, limits, supab
     ]
     : [
       { key: `ai:u:${userId.toLowerCase()}`, limit: limits.perUser }, { key: "ai:site", limit: limits.perDay },
-      ...(opus ? [{ key: `ai:u:${userId.toLowerCase()}:opus`, limit: limits.opusPerUser }] : []),
+      ...(opus ? [{ key: `ai:u:${userId.toLowerCase()}:opus`, limit: limits.opusPerUser }, { key: "ai:members:opus", limit: limits.membersOpusPerDay }] : []),
     ],
 });
 // The model a visitor's Anthropic call will run on, after shapeAnthropic.
@@ -206,7 +210,7 @@ export const gateAi = async ({ headers, body, endpoint, env = {}, fetchImpl = fe
       if (!serviceKey) return { ok: false, status: 503, error: "This is not available just now." };
       const got = await takeCalls({ day, userId: who.id, opus: asksForOpus(endpoint, body), limits, supabaseUrl, serviceKey, fetchImpl });
       if (got.closed) return { ok: false, status: 503, error: "This is not available just now. Try again in a moment." };
-      if (!got.ok) return { ok: false, status: 429, error: got.over === "ai:site" ? "Gemlyx has used its AI for today. Try again tomorrow." : "You have used today's allowance. It resets at midnight, Danish time." };
+      if (!got.ok) return { ok: false, status: 429, error: ["ai:site", "ai:members:opus"].includes(got.over) ? "Gemlyx has used its AI for today. Try again tomorrow." : "You have used today's allowance. It resets at midnight, Danish time." };
       return { ok: true, founder: false, anon: false, userId: who.id, endpoint };
     }
   }
@@ -269,9 +273,33 @@ export const shapeAnthropic = (body = {}, { founder = false, anon = false } = {}
   return out;
 };
 
+// ── AND OPENAI, THE SAME WAY ────────────────────────────────────────
+// Security review, 6 Oct 2026, the High still open: the OpenAI body was still
+// copied whole for everybody but the founder, so a priority service tier,
+// stored completions, audio or image parts, or many answers could ride along.
+// Now it keeps the fields the app sends, text parts only, and the roles a chat
+// has.
+export const OPENAI_FIELDS = ["model", "messages", "response_format", "max_completion_tokens", "max_tokens", "reasoning_effort", "temperature", "top_p", "tools", "tool_choice", "stop"];
+const OPENAI_ROLES = new Set(["system", "developer", "user", "assistant", "tool"]);
+export const keepOpenAIFields = (body = {}) => {
+  const out = {};
+  for (const k of OPENAI_FIELDS) if (body[k] !== undefined) out[k] = body[k];
+  if (Array.isArray(out.messages)) {
+    out.messages = out.messages.filter(m => m && OPENAI_ROLES.has(m.role)).map(m => {
+      const keep = { role: m.role, content: Array.isArray(m.content) ? m.content.filter(p => p && p.type === "text" && typeof p.text === "string").map(p => ({ type: "text", text: p.text })) : (typeof m.content === "string" || m.content === null ? m.content : "") };
+      if (m.role === "tool" && m.tool_call_id) keep.tool_call_id = String(m.tool_call_id);
+      if (m.role === "assistant" && Array.isArray(m.tool_calls)) keep.tool_calls = m.tool_calls;
+      if (m.name) keep.name = String(m.name).slice(0, 64);
+      return keep;
+    });
+  }
+  if (out.response_format && !["json_object", "text", "json_schema"].includes(out.response_format?.type)) delete out.response_format;
+  return out;
+};
+
 export const shapeOpenAI = (body = {}, { founder = false, anon = false } = {}) => {
   const c = AI_CEILINGS.openai;
-  const out = { ...body };
+  const out = founder ? { ...body } : keepOpenAIFields(body);
   if (!founder) out.model = c.models.includes(out.model) ? out.model : c.defaultModel;
   // No server tools on OpenAI either: web search there is billed per call.
   if (!founder && Array.isArray(out.tools)) out.tools = out.tools.filter(t => t && t.type === "function").slice(0, 12);

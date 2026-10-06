@@ -107,15 +107,19 @@ const addressVariants = (url) => {
   return out.slice(0, 4);
 };
 
-export const readPage = async (url, { key = "", fetchImpl = fetch, fresh = false } = {}) => {
-  let plain = await readPlain(url, fetchImpl);
+// `pageFetch` reads the page itself and `fetchImpl` asks Firecrawl. The routes
+// pass safeFetch.js as pageFetch, so a page address is only ever fetched on
+// the public internet (security review, 6 Oct 2026, finding 1); Firecrawl is
+// one fixed address and keeps the plain fetch. Tests pass one fake for both.
+export const readPage = async (url, { key = "", fetchImpl = fetch, pageFetch = fetchImpl, fresh = false } = {}) => {
+  let plain = await readPlain(url, pageFetch);
   let first = pageReadVerdict(plain.status, plain.text, plain.err);
   // Only when the first attempt found NOTHING. A bot wall is not an address
   // problem and retrying three spellings of it wastes three requests to be told
   // the same thing, so the retry is for empty and unreachable only.
   if (!first.usable && /^(?:empty|thin|fetch-failed|http-40[34]|http-5\d\d)$/.test(String(first.reason))) {
     for (const alt of addressVariants(url).slice(1)) {
-      const again = await readPlain(alt, fetchImpl);
+      const again = await readPlain(alt, pageFetch);
       const verdict = pageReadVerdict(again.status, again.text, again.err);
       if (verdict.usable) {
         return { text: again.text, via: "fetch", read: verdict.reason, blocked: false, credits: 0, sample: "", tickets: again.tickets, banners: again.banners || [], reachedAt: alt, firstTry: first.reason };
