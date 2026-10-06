@@ -180,8 +180,8 @@ writeFileSync(entry, `
   export { sweepRow, sweepAll, deepCheckPlan, checkAge, stampCheck, CHECKABLE_FIELDS, RULES_VERSION, SEVERITY } from ${JSON.stringify(join(root, "src/utils/factSweep.js"))};
   export { startLog, endLog, note, decide, recentLogs, summariseLog, formatLog, formatLogs, logChips, OUTCOMES } from ${JSON.stringify(join(root, "src/utils/runLog.js"))};
   export { fieldProvenance, correctionProvenance, entrySources, untracedFields, describeProvenance, readerCorrection, readerCorrections, isCheckerVoice, readerUncertainty, readerUncertainties, READER_UNCERTAINTY_LIMIT } from ${JSON.stringify(join(root, "src/utils/provenance.js"))};
-  export { ALLOWED_ORIGINS, originOf, isAllowedOrigin, requestIsFromSite, NOT_FROM_SITE, STUDIO_ONLY_ENDPOINTS, resolveUser, isFounder } from ${JSON.stringify(join(root, "src/utils/apiGuard.js"))};
-  export { keepAnthropicFields, MAX_IMAGES, gateAi, shapeAnthropic, shapeOpenAI, shapePerplexity, searchCeiling, AI_CEILINGS, readAiLimits, visitorKey, visitorAddress, takeDaily, AI_OFF, addressBlock, limitOf } from ${JSON.stringify(join(root, "src/utils/aiGate.js"))};
+  export { ALLOWED_ORIGINS, originOf, isAllowedOrigin, requestIsFromSite, NOT_FROM_SITE, STUDIO_ONLY_ENDPOINTS, resolveUser, isFounder, FOUNDER_FALLBACK_ID, founderIds } from ${JSON.stringify(join(root, "src/utils/apiGuard.js"))};
+  export { keepOpenAIFields, keepAnthropicFields, MAX_IMAGES, gateAi, shapeAnthropic, shapeOpenAI, shapePerplexity, searchCeiling, AI_CEILINGS, readAiLimits, visitorKey, visitorAddress, takeDaily, AI_OFF, addressBlock, limitOf } from ${JSON.stringify(join(root, "src/utils/aiGate.js"))};
   export { gateMaps, readMapsLimits, MAPS_BUSY, MAPS_DONE } from ${JSON.stringify(join(root, "src/utils/mapsGate.js"))};
   export { cleanErrorMessage, safeUpstreamError } from ${JSON.stringify(join(root, "src/utils/upstreamError.js"))};
   export { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_KEY } from ${JSON.stringify(join(root, "src/utils/supabasePublic.js"))};
@@ -417,6 +417,7 @@ writeFileSync(entry, `
   export { walkWeatherFrom } from ${JSON.stringify(join(root, "src/utils/walkWeather.js"))};
   export { placePinHtml, PLACE_PIN, turnSign, JOIN_ON_M, CARD_WALKING_MS, walkLegs, bearingOf, kmBetween as mapKm, glideAt, GLIDE_MS, FOCUS, SPARKS } from ${JSON.stringify(join(root, "src/components/GoogleWalkMap.jsx"))};
   export { guideTo, compassOf, distanceWords as walkDistanceWords, ARRIVE_M, COMPASS } from ${JSON.stringify(join(root, "src/components/WalkMode.jsx"))};
+  export * as SF from ${JSON.stringify(join(root, "src/utils/safeFetch.js"))};
   export * as LP from ${JSON.stringify(join(root, "src/utils/livePhoto.js"))};
   export * as CR from ${JSON.stringify(join(root, "src/utils/cruiseDays.js"))};
   export * as CRD from ${JSON.stringify(join(root, "src/data/klaipedaCruises.js"))};
@@ -33410,13 +33411,15 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 
   // ── AND THE FIVE THAT NEED A REAL SESSION ────────────────────────
   const okFetch = async () => ({ ok: true, json: async () => ({ id: "user-1", email: "o@example.com" }) });
-  const noFetch = async () => ({ ok: false, json: async () => ({}) });
+  const noFetch = async () => ({ ok: false, status: 401, json: async () => ({}) });
   const boom = async () => { throw new Error("network"); };
   const cfg = { supabaseUrl: "https://s.example", serviceKey: "k" };
   is("no token is a 401", (await resolveUser({}, cfg)).status, 401);
   is("a bare token with no Bearer prefix is a 401", (await resolveUser({ authorization: "abc" }, cfg)).status, 401);
   is("a token Supabase rejects is a 401",
      (await resolveUser({ authorization: "Bearer t" }, { ...cfg, fetchImpl: noFetch })).status, 401);
+  is("Supabase answering with its own fault is a 503, not an expired session",
+     (await resolveUser({ authorization: "Bearer t" }, { ...cfg, fetchImpl: async () => ({ ok: false, status: 502, json: async () => ({}) }) })).status, 503);
   is("Supabase being unreachable is a 503, not a pass",
      (await resolveUser({ authorization: "Bearer t" }, { ...cfg, fetchImpl: boom })).status, 503);
   is("a missing service key is a 503, not a pass",
@@ -33654,6 +33657,9 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     "/auth/v1/user",
     "/auth/v1/token?grant_type=refresh_token",
     "/auth/v1/token?grant_type=password",
+    // 6 Oct 2026: Log out tells Supabase to end the session (security review,
+    // finding 4). It carries the session's own token, not the anon key alone.
+    "/auth/v1/logout?scope=local",
     "/rest/v1/gemlyx_suggestions",
     "/rest/v1/craft_requests",
   ]);
@@ -49351,7 +49357,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("and hands it to the scraper", /readFirecrawl\(url, key, fetchImpl, \{ fresh \}\)/.test(rp));
   const api = stripComments(readFileSync(join(root, "api/scan-source.js"), "utf8"));
   ok("the endpoint reads it off the query", /req\.query\.fresh/.test(api));
-  ok("and passes it on", /readPage\(url, \{ key, fresh \}\)/.test(api));
+  ok("and passes it on, with the page itself read on the public internet only", /readPage\(url, \{ key, fresh, pageFetch: safeFetch \}\)/.test(api));
 
   // And the caller marks a redraft. editingId is the app's own word for "this
   // run is about a row that already exists", which is exactly when the cache is
@@ -72098,7 +72104,9 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     ok("and a refused lookup is left alone too", /if \(!alive \|\| !r\.ok\) return;/.test(verify));
     // Nothing to check when the list is unset, which is the open state the
     // panel already warns about. One request, not one per render.
-    ok("it does not run when there is no list to check against", /if \(!token \|\| !String\(FOUNDER_IDS \|\| ""\)\.trim\(\)\) return;/.test(verify));
+    // 6 Oct 2026, security review finding 9: an empty list is Oliver's own id,
+    // the same as on the routes, so the check runs then too.
+    ok("it runs whenever there is a token, list or no list", /if \(!token\) return;/.test(verify) && !/!String\(FOUNDER_IDS \|\| ""\)\.trim\(\)\) return;/.test(verify));
     ok("and is keyed on the token rather than the session object", /\}, \[studioSession\?\.access_token\]\);/.test(verify));
   }
 
@@ -72401,14 +72409,14 @@ SOURCE: https://www.tripadvisor.com/whatever`;
      /supaFetch\(`\$\{SUPABASE_URL\}\/rest\/v1\/\$\{SUPPORT_TABLE\}\?select=/.test(appF));
   ok("and never with the anon key",
      !/apikey: SUPABASE_KEY[\s\S]{0,200}gemlyx_support\?select=/.test(appF));
-  ok("the SQL opens select to one account",
-     /for select to authenticated/.test(INBOX_SETUP_SQL)
-     && /auth\.jwt\(\) ->> 'email'::text\) = 'oliververhein@gmail\.com'/.test(INBOX_SETUP_SQL));
+  ok("the SQL opens select to one account, the founder as is_founder() names him, never by email",
+     /for select to authenticated\s*\n\s*using \(public\.is_founder\(\)\);/.test(INBOX_SETUP_SQL)
+     && !/oliververhein|auth\.jwt\(\) ->> 'email'/.test(INBOX_SETUP_SQL));
   ok("and update, so handled can be written", /for update to authenticated/.test(INBOX_SETUP_SQL));
   // with check as well as using, or the update policy lets a row be edited into
   // one the policy would not have allowed.
   is("both halves of the update are pinned",
-     (INBOX_SETUP_SQL.match(/oliververhein@gmail\.com/g) || []).length, 3);
+     (INBOX_SETUP_SQL.match(/public\.is_founder\(\)/g) || []).length, 3);
 
   // ── AND A 204 IS NOT PROOF THAT ANYTHING WAS WRITTEN ────────────
   //
@@ -79707,7 +79715,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("0 is the off switch for the day, and only for the day", lim.perDay === 0 && lim.perVisitor === 1);
   ok("the defaults are one per visitor and account, a few per network", JSON.stringify(M.readLimits({})) === JSON.stringify({ perVisitor: 1, perAccount: 1, perIp: 4, perDay: 40, retries: 1, refunds: 2 }));
   ok("nobody is uncapped by default, not even any signed in account", M.uncappedList({}).length === 0 && !M.isUncapped(M.uncappedList({}), { userId: "u1", email: "a@b.c" }));
-  ok("the uncapped list takes ids or emails, any case", M.isUncapped(M.uncappedList({ GEMLYX_UNCAPPED: " U1 , Me@X.dk" }), { userId: "u1" }) && M.isUncapped(M.uncappedList({ GEMLYX_UNCAPPED: "me@x.dk" }), { email: "ME@x.dk" }) && !M.isUncapped(M.uncappedList({ GEMLYX_UNCAPPED: "me@x.dk" }), { email: "you@x.dk" }));
+  ok("the uncapped list takes ids or emails, any case", M.isUncapped(M.uncappedList({ GEMLYX_UNCAPPED: " U1 , Me@X.dk" }), { userId: "u1" }) && M.isUncapped(M.uncappedList({ GEMLYX_UNCAPPED: "me@x.dk" }), { email: "ME@x.dk", confirmed: true }) && !M.isUncapped(M.uncappedList({ GEMLYX_UNCAPPED: "me@x.dk" }), { email: "ME@x.dk" }) && !M.isUncapped(M.uncappedList({ GEMLYX_UNCAPPED: "me@x.dk" }), { email: "you@x.dk" }));
   is("a visitor id that is not an id is dropped", M.cleanVisitor("x'; drop"), "");
   const keys = M.allowanceKeys({ visitor: "abcdefgh-1", ipHash: "h1", userId: "U9" }, M.readLimits({}));
   is("counted per visitor, account and network, then the site last", keys.map(k => `${k.key}=${k.limit}`), ["v:abcdefgh-1=1", "u:u9=1", "ip:h1=4", "site=40"]);
@@ -82188,6 +82196,72 @@ is("Google's line break becomes a full stop", M.turnsFrom([{ travelMode: "WALK",
 }
 
 ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,900" && /^1\s900$/.test(M.CR.aboutGuests(1936, "lt")));
+
+// ── Batch 223: the security review of 6 Oct 2026 ──
+// Oliver sent the night's review. Finding 1 (Medium) and the High still open
+// from 5 Oct, then the Lows that are code.
+{
+  const SF = M.SF;
+  // Finding 1: page readers only reach the public internet.
+  const pub = ["93.184.216.34", "8.8.8.8", "2606:4700:4700::1111", "1.1.1.1"];
+  const priv = ["127.0.0.1", "10.1.2.3", "172.16.5.4", "192.168.1.1", "169.254.169.254", "100.64.0.1", "0.0.0.0", "224.0.0.1", "::1", "::", "fc00::1", "fd12:3456::1", "fe80::1", "::ffff:127.0.0.1", "::ffff:10.0.0.1", "64:ff9b::a00:1", "2001:db8::1", "not-an-ip"];
+  ok("public addresses pass and every private, loopback, link local and mapped one is refused", pub.every(SF.isPublicAddress) && priv.every(a => !SF.isPublicAddress(a)));
+  const lookupTo = (...addrs) => (h, o, cb) => cb(null, addrs.map(address => ({ address, family: address.includes(":") ? 6 : 4 })));
+  const checks = await Promise.all([
+    SF.checkUrl("http://shop.example.com/", { lookup: lookupTo("93.184.216.34") }),
+    SF.checkUrl("http://shop.example.com/", { lookup: lookupTo("93.184.216.34", "10.0.0.2") }),
+    SF.checkUrl("http://127.0.0.1/admin"),
+    SF.checkUrl("http://[::1]/"),
+    SF.checkUrl("http://localhost/"),
+    SF.checkUrl("http://metadata.internal/"),
+    SF.checkUrl("https://user:pw@shop.example.com/", { lookup: lookupTo("93.184.216.34") }),
+    SF.checkUrl("http://shop.example.com:8080/", { lookup: lookupTo("93.184.216.34") }),
+    SF.checkUrl("file:///etc/passwd"),
+    SF.checkUrl("http://shop.example.com/", { lookup: lookupTo("93.184.216.34"), httpsOnly: true }),
+  ]);
+  ok("a name is looked up, and every address it gives must be public", checks[0].ok && checks[0].address === "93.184.216.34" && !checks[1].ok);
+  ok("private literals, local names, credentials, other ports and other schemes are refused", checks.slice(2, 9).every(c => !c.ok) && !checks[9].ok);
+  // The connection goes to the checked address: Node asks the lookup two ways.
+  const lk = SF.pinnedLookup("93.184.216.34", 4);
+  let one = null, all = null;
+  lk("x", {}, (e, a, f) => { one = [a, f]; });
+  lk("x", { all: true }, (e, list) => { all = list; });
+  ok("the lookup is pinned to the checked address in both of Node's shapes", one[0] === "93.184.216.34" && one[1] === 4 && all[0].address === "93.184.216.34");
+  // Redirects are followed one hop at a time, and each hop is checked.
+  const hops = [];
+  const send = async (url) => { hops.push(url.toString()); return url.pathname === "/start" ? { status: 302, location: "http://inside.example.com/x", headers: {} } : { status: 200, headers: { "content-type": "text/plain" }, buf: Buffer.from("fine") }; };
+  const lookupBy = (h, o, cb) => cb(null, [{ address: h === "inside.example.com" ? "10.0.0.9" : "93.184.216.34", family: 4 }]);
+  let refused = "";
+  try { await SF.safeFetch("http://shop.example.com/start", {}, { lookup: lookupBy, send }); } catch (e) { refused = `${e.name} ${e.message}`; }
+  ok("a redirect into the private network is refused before it is fetched", /RefusedAddress/.test(refused) && hops.length === 1);
+  const okRes = await SF.safeFetch("http://shop.example.com/page", {}, { lookup: lookupBy, send });
+  ok("and a public page answers in fetch's own shape", okRes.ok && okRes.status === 200 && (await okRes.text()) === "fine" && okRes.headers.get("Content-Type") === "text/plain");
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  ok("every Studio page reader fetches through it", /pageFetch: safeFetch/.test(read("api/scan-source.js")) && /await safeFetch\(url, \{ headers/.test(read("api/find-email.js")) && /await safeFetch\(url, \{\s*signal: ctrl\.signal/.test(read("api/social-find.js")) && /await safeFetch\(url\.toString\(\)/.test(read("api/calendar.js")) && /\}, \{ httpsOnly: true \}\);/.test(read("api/calendar.js")) && /await safeFetch\(raw, \{/.test(read("api/link-alive.js")));
+  ok("and nothing in the browser imports it", !/safeFetch/.test(read("src/App.jsx")) && !readdirSync(join(root, "src/components")).some(f => /safeFetch/.test(read(`src/components/${f}`))));
+
+  // The High still open: the OpenAI body, and Opus across all members.
+  const o = M.keepOpenAIFields({ model: "gpt-5.6-sol", service_tier: "priority", store: true, n: 5, audio: {}, modalities: ["audio"], max_completion_tokens: 10, reasoning_effort: "low", response_format: { type: "json_object" },
+    messages: [{ role: "system", content: "s" }, { role: "user", content: [{ type: "text", text: "a" }, { type: "image_url", image_url: { url: "https://x/y.png" } }, { type: "input_audio", input_audio: {} }] }, { role: "bogus", content: "x" }] });
+  ok("the OpenAI body keeps the fields the app sends and nothing else", !("service_tier" in o) && !("store" in o) && !("n" in o) && !("audio" in o) && !("modalities" in o) && o.reasoning_effort === "low" && o.response_format.type === "json_object");
+  ok("and text parts only, in the roles a chat has", o.messages.length === 2 && JSON.stringify(o.messages[1].content) === JSON.stringify([{ type: "text", text: "a" }]));
+  ok("the founder's OpenAI request is left as he sent it", M.shapeOpenAI({ service_tier: "priority" }, { founder: true }).service_tier === "priority" && !("service_tier" in M.shapeOpenAI({ service_tier: "priority" })));
+  ok("all members together have an Opus ceiling", M.readAiLimits({}).membersOpusPerDay === 1000 && /\{ key: "ai:members:opus", limit: limits\.membersOpusPerDay \}/.test(read("src/utils/aiGate.js")));
+
+  // The Lows.
+  ok("finding 3: the inbox SQL asks is_founder(), never an email", /using \(public\.is_founder\(\)\)/.test(M.INBOX_SETUP_SQL) && !/'email'/.test(M.INBOX_SETUP_SQL));
+  ok("finding 4: Log out ends the session on Supabase too", /\/auth\/v1\/logout\?scope=local/.test(read("src/App.jsx")));
+  ok("finding 5: the founder's account cannot be deleted from the reader's button", /founderIds\(process\.env\.GEMLYX_FOUNDER_IDS\)\.includes\(String\(who\.userId\)\.toLowerCase\(\)\) \|\| who\.userId === FOUNDER_FALLBACK_ID/.test(read("api/delete-account.js")));
+  ok("finding 6: the three missing founder routes are on the list, and the two tools carry the token", ["places", "link-alive", "calendar"].every(e => M.STUDIO_ONLY_ENDPOINTS.includes(e)) && /await studioFetch\(`\/api\/link-alive\?url=/.test(read("src/App.jsx")) && /\(studioFetch \|\| fetch\)\(`\/api\/places-locate/.test(read("src/components/CheapGemsPanel.jsx")) && /studioFetch=\{studioFetch\} \/>/.test(read("src/App.jsx")));
+  ok("finding 7: scan-source answers 200 and puts the site's status in the body", /return res\.status\(200\)\.json\(\{\s*siteStatus: Number\(r\.status\) \|\| 0,/.test(read("api/scan-source.js")) && !/res\.status\(httpStatus\)/.test(read("api/scan-source.js")));
+  ok("finding 9: the founder list is ids, any case, and emails are left out", M.isFounder("ABC-1", "abc-1") && !M.isFounder("me@x.dk", "me@x.dk") && M.isFounder(M.FOUNDER_FALLBACK_ID, "me@x.dk") && !M.isFounder("someone", "me@x.dk"));
+  ok("and an unconfirmed email on the uncapped list builds capped", !M.isUncapped(["me@x.dk"], { email: "me@x.dk" }) && M.isUncapped(["me@x.dk"], { email: "me@x.dk", confirmed: true }));
+  ok("finding 10: credit and notice links go through externalHref", /href=\{externalHref\(entry\.sourceUrl\)\}/.test(read("src/components/PhotoCredit.jsx")) && /href=\{externalHref\(entry\.sourceUrl\)\}/.test(read("src/App.jsx")) && /href=\{externalHref\(n\.sourceUrl\)\}/.test(read("src/components/AboutMePage.jsx")));
+  ok("finding 11: founder routes send the cause to the log, not the browser", !/error: String\(err\)/.test(read("api/places-hours.js")) && !/error: String\(e\?\.message \|\| e\)/.test(read("api/places-locate.js")) && !/error: String\(err\)\.slice/.test(read("api/commons-photo.js")) && !/detail: String\(err\)/.test(read("api/tickets.js")) && !/keyLength: key\.length,\n\s*trimmed/.test(read("api/tickets.js")));
+  ok("and places-hours, places-locate and places check the answer before reading it", ["api/places-hours.js", "api/places-locate.js", "api/places.js"].every(f => /await r\.json\(\)\.catch\(\(\) => null\);\s*\n?\s*if \(!r\.ok \|\| !data\)/.test(read(f))));
+  const shown = ["src/utils/safeFetch.js", "api/delete-account.js"].map(read).join("\n").replace(/\/\/.*$/gm, "");
+  ok("no dashes and none of his banned words in the new text", !/[—–]/.test(shown) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(shown));
+}
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
 if (failed) { fails.forEach(f => console.log("  FAIL " + f + "\n")); process.exit(1); }
