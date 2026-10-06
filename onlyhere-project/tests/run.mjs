@@ -81496,9 +81496,10 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   is("the Thursday example walks the ship before the square and the castle", thursday.walk.stops.map(s => s.id), ["food:bakery", "free:meridianas", "free:theatre", "free:castle"]);
   const tuesday = X.runExample(X.EXAMPLE_WALKS.find(e => e.id === "tuesday"));
   // Oliver, 7 Oct 2026: "wouldn't theatre square be more convinient to walk
-  // to? Is that the closest one to #1 and #2?" It was, so it now comes
-  // straight after the castle.
-  ok("off the ship, Theatre Square comes straight after the castle", tuesday.walk.stops.map(s => s.id).join() === "free:castle,free:theatre,booking:amber,free:meridianas,food:fish,free:ghost");
+  // to? Is that the closest one to #1 and #2?" It was. The walk off the ship
+  // is now the shortest order that also works the other way round, so
+  // Theatre Square comes second, beside the ghost, and the castle last.
+  ok("off the ship, Theatre Square comes early and the walk works both ways round", tuesday.walk.stops.map(s => s.id).join() === "free:ghost,free:theatre,booking:amber,free:meridianas,food:fish,free:castle" && !!tuesday.alt);
   ok("a meal may move by no more than three quarters of an hour", N.MEAL_SHIFT === 45 && /Math\.abs\(kept\.get\(s\.id\)\.arrive - s\.arrive\) <= MEAL_SHIFT/.test(readFileSync(join(root, "src/utils/nowPlanner.js"), "utf8")));
   ok("no example still calls the History Museum next door to the castle", !/Next door/.test(JSON.stringify(X.WEATHER_WALKS)));
 }
@@ -82358,7 +82359,7 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   const wm = read("src/components/WalkMode.jsx"), gm = read("src/components/GoogleWalkMap.jsx"), logo = read("src/components/GemlyxLogo.jsx");
   ok("the walk's compass is the Gemlyx mark, turned to the next place", /export const GemlyxCompass = /.test(logo) && /<GemlyxCompass size=\{46\} angle=\{arrow\} dim=\{!g\}/.test(wm) && /<GemlyxCompass size=\{34\} angle=\{arrow\} dim=\{!g\} \/>/.test(wm) && !/M12 2 L19 20 L12 16 L5 20 Z/.test(wm));
   ok("a walker far from town is told how far, not 11483 minutes", M.FAR_M === 20000 && /g\.metres > FAR_M \? fill\(uiT\("walk\.far", lang\)/.test(wm) && ["en", "da", "de", "lt"].every(l => /\{dist\}/.test(M.t("walk.far", l))));
-  ok("a pin on the map can be tapped, and the card opens the place's page where it has one", /gmpClickable: true/.test(gm) && /m\.addListener\("gmp-click", \(\) => \{ if \(!gone\) focusStop\(i, Date\.now\(\)\); \}\)/.test(gm)
+  ok("a pin on the map can be tapped, and the card opens the place's page where it has one", /gmpClickable: true/.test(gm) && /m\.addEventListener\("gmp-click", tap\)/.test(gm) && /m\.addListener\("click", tap\)/.test(gm) && /if \(gone \|\| now - lastTap < 400\) return;/.test(gm)
     && /const opens = !!\(st && onOpen && !follow && \(!canOpen \|\| canOpen\(st\)\)\);/.test(gm) && /onOpen=\{\(st\) => openPage\(st\.id\)\} canOpen=\{\(st\) => !!pageFor\(st\.id\)\}/.test(read("src/pages/KlaipedaExamples.jsx")));
   const shown = ["src/data/klaipedaExampleRows.js", "src/pages/KlaipedaDemo.jsx", "src/components/PromotionsPage.jsx"].map(read).join("\n").replace(/\/\/.*$/gm, "") + ["en", "da", "de", "lt"].map(l => M.t("walk.examplesNote", l)).join(" ");
   ok("no dashes and none of his banned words in the new text", !/[—–]/.test(shown) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(shown));
