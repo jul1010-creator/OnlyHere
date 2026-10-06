@@ -37,7 +37,7 @@ export const PromotionsPage = ({ promos = [], title = "Special deals", paid = fa
               <button key={`${p._src}-${p.id ?? p.name}`} onClick={() => onOpen?.(p)}
                 style={{ textAlign: "left", background: C.surface, border: `1px solid ${C.gold}55`, borderRadius: 16, padding: 0, overflow: "hidden", cursor: "pointer", fontFamily: "'Inter', sans-serif", display: "flex", flexDirection: "column" }}>
                 <div style={{ height: 130, position: "relative" }}>
-                  <PhotoPlate photo={p.photo} name={p.name} color={p.color || C.gold} />
+                  <PhotoPlate photo={p.photo} name={p.name} color={p.color || C.gold} sign={p._exampleId ? p.emoji || "" : ""} />
                   {p._exampleId && (
                     <span data-testid="deal-example-tag" style={{ position: "absolute", top: 10, left: 10, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, color: C.text, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 100, padding: "3px 9px" }}>{uiT("deals.example", lang)}</span>
                   )}
@@ -66,7 +66,8 @@ export const PromotionsPage = ({ promos = [], title = "Special deals", paid = fa
                       </div>
                     ) : null;
                   })()}
-                  <div style={{ fontSize: 11, color: C.light, fontWeight: 600 }}>{untilLabel(card.until, today)}</div>
+                  {/* A made-up partner's end date is a placeholder, so it is not shown. */}
+                  {!p._exampleId && <div style={{ fontSize: 11, color: C.light, fontWeight: 600 }}>{untilLabel(card.until, today)}</div>}
                 </div>
               </button>
             );

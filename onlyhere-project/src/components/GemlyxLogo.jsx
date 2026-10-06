@@ -67,6 +67,43 @@ export const GemlyxWordmark = ({ height = 13, color = "#EDF0F7", style }) => (
 );
 
 // Nav / footer lockup: gem + wordmark side by side.
+// ── THE GEMLYX COMPASS, FOR THE WALK ────────────────────────────────
+// Oliver, 7 Oct 2026, of the plain arrow in the corner of the walk: "Make the
+// compass in the left corner a 'Gemlyx compass' looking similar to our icon".
+// The mark's own eight points in its ring, with the north point as the
+// needle: it is the long bright one, the other seven sit back, and the whole
+// rose turns to `angle` (degrees, clockwise from up). `dim` while there is no
+// position yet.
+export const GemlyxCompass = ({ size = 44, angle = 0, dim = false, north = false, style }) => {
+  const t = TONES.gold;
+  return (
+    <svg width={size} height={size} viewBox="0 0 120 120" data-testid="gemlyx-compass" aria-hidden="true"
+      style={{ display: "block", flexShrink: 0, opacity: dim ? 0.35 : 1, ...style }}>
+      <circle cx="60" cy="60" r="56" fill="rgba(10,15,30,0.55)" stroke={t.mid} strokeWidth="4" />
+      {north && <text x="60" y="17" textAnchor="middle" fontSize="13" fontWeight="800" fill="#94A3C7" fontFamily="Inter, sans-serif">N</text>}
+      <g style={{ transform: `rotate(${angle}deg)`, transformOrigin: "60px 60px", transition: "transform 300ms ease-out" }}>
+        {[45, 135, 225, 315].map(r => (
+          <g key={r} transform={`rotate(${r} 60 60)`} opacity="0.45">
+            <path d="M 60 34 L 68 60 L 60 60 Z" fill={t.deep} />
+            <path d="M 60 34 L 52 60 L 60 60 Z" fill={t.deep} opacity="0.55" />
+          </g>
+        ))}
+        {[90, 180, 270].map(r => (
+          <g key={r} transform={`rotate(${r} 60 60)`} opacity="0.5">
+            <path d="M 60 22 L 71 60 L 60 60 Z" fill={t.mid} />
+            <path d="M 60 22 L 49 60 L 60 60 Z" fill={t.deep} />
+          </g>
+        ))}
+        <path d="M 60 9 L 73 60 L 60 60 Z" fill={t.bright} />
+        <path d="M 60 9 L 47 60 L 60 60 Z" fill={t.mid} />
+        <g transform="rotate(45 60 60)">
+          <rect x="53" y="53" width="14" height="14" fill="rgba(10,15,30,0.7)" stroke={t.bright} strokeWidth="3" />
+        </g>
+      </g>
+    </svg>
+  );
+};
+
 export const GemlyxLogo = ({ size = 20, color = "#EDF0F7", gap = 8, tone = "gold", style }) => (
   <span style={{ display: "inline-flex", alignItems: "center", gap, ...style }}>
     <GemlyxMark size={size} ring={true} ringColor={color} tone={tone} />

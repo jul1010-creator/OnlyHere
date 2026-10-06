@@ -27,6 +27,7 @@ import { t as uiT } from "../utils/uiLanguage";
 import { WALK_DETOUR, WALK_M_PER_MIN } from "../utils/nowPlanner";
 import { GoogleWalkMap, bearingOf, kmBetween, walkLegs, legTurns, turnSign } from "./GoogleWalkMap";
 import { googleMapsReady } from "../utils/googleMapsLoader";
+import { GemlyxCompass } from "./GemlyxLogo";
 
 // Close enough to say you are there: GPS on a phone in a street is good to
 // twenty or thirty metres.
@@ -52,6 +53,10 @@ export const COMPASS = ["n", "ne", "e", "se", "s", "sw", "w", "nw"];
 export const compassOf = (bearing) => COMPASS[Math.round((((bearing % 360) + 360) % 360) / 45) % 8];
 
 // "450 m", "1.2 km": rounded the way a sign rounds.
+// Further than this, the walker is not in town yet: Oliver opened a Klaipėda
+// walk in Aalborg on 7 Oct 2026 and read "918.6 km · about 11483 min". Past it
+// the bar says how far, and that the walk starts in town.
+export const FAR_M = 20000;
 export const distanceWords = (m) => (m >= 1000 ? `${(Math.round(m / 100) / 10).toFixed(1)} km` : `${Math.max(10, Math.round(m / 10) * 10)} m`);
 
 const fill = (s, vars) => Object.entries(vars).reduce((out, [k, v]) => out.split(`{${k}}`).join(String(v)), s);
@@ -186,11 +191,8 @@ export const WalkMode = ({ walk, madeAt, lang = "en", country = "LT", onClose, c
           has the screen (Oliver, 6 Oct 2026: "do you think the display of the
           attraction takes up too much of the screen? Making the GPS annoying"). */}
       {!full && <div data-testid="walk-bar" style={{ padding: "calc(8px + env(safe-area-inset-top, 0px)) 12px 8px", borderBottom: `1px solid ${C.border}`, background: C.surface, display: "flex", alignItems: "center", gap: 11 }}>
-        <div aria-hidden="true" data-testid="walk-arrow" style={{ flex: "0 0 auto", width: 44, height: 44, borderRadius: "50%", background: `${C.gold}22`, border: `2px solid ${C.gold}`, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
-          {heading === null && g && <span style={{ position: "absolute", top: 0, fontSize: 8, fontWeight: 800, color: C.muted }}>N</span>}
-          <svg width="22" height="22" viewBox="0 0 24 24" style={{ transform: `rotate(${arrow}deg)`, transition: "transform 300ms ease-out", opacity: g ? 1 : 0.3 }}>
-            <path d="M12 2 L19 20 L12 16 L5 20 Z" fill={C.gold} stroke={C.onGold} strokeWidth="1" />
-          </svg>
+        <div aria-hidden="true" data-testid="walk-arrow" style={{ flex: "0 0 auto", width: 46, height: 46 }}>
+          <GemlyxCompass size={46} angle={arrow} dim={!g} north={heading === null && !!g} />
         </div>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 0.8, color: C.muted, textTransform: "uppercase", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -202,7 +204,7 @@ export const WalkMode = ({ walk, madeAt, lang = "en", country = "LT", onClose, c
           </div>
           {g ? (
             <div data-testid="walk-distance" style={{ fontSize: 13, fontWeight: 700, color: C.gold, marginTop: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {g.here ? uiT("walk.here", lang) : `${distanceWords(g.metres)} · ${fill(uiT("walk.minutes", lang), { n: g.minutes })} · ${fill(uiT("walk.head", lang), { dir: uiT(`walk.dir.${compassOf(g.bearing)}`, lang) })}`}
+              {g.here ? uiT("walk.here", lang) : g.metres > FAR_M ? fill(uiT("walk.far", lang), { dist: distanceWords(g.metres) }) : `${distanceWords(g.metres)} · ${fill(uiT("walk.minutes", lang), { n: g.minutes })} · ${fill(uiT("walk.head", lang), { dir: uiT(`walk.dir.${compassOf(g.bearing)}`, lang) })}`}
             </div>
           ) : (
             <div style={{ fontSize: 12, color: gpsOff ? "#FFB347" : C.muted, marginTop: 1 }}>{uiT(gpsOff ? "walk.noGps" : "walk.finding", lang)}</div>
@@ -230,14 +232,12 @@ export const WalkMode = ({ walk, madeAt, lang = "en", country = "LT", onClose, c
           )
         ) : (
           <div data-testid="walk-full-strip" style={{ position: "absolute", left: 10, right: 10, bottom: "calc(12px + env(safe-area-inset-bottom, 0px))", background: C.surface, border: `1px solid ${C.gold}`, borderRadius: 100, padding: "5px 5px 5px 6px", display: "flex", alignItems: "center", gap: 9, boxShadow: "0 3px 12px rgba(0,0,0,0.4)" }}>
-            <span aria-hidden="true" style={{ flex: "0 0 auto", width: 34, height: 34, borderRadius: "50%", background: `${C.gold}22`, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" style={{ transform: `rotate(${arrow}deg)`, transition: "transform 300ms ease-out", opacity: g ? 1 : 0.3 }}>
-                <path d="M12 2 L19 20 L12 16 L5 20 Z" fill={C.gold} stroke={C.onGold} strokeWidth="1" />
-              </svg>
+            <span aria-hidden="true" style={{ flex: "0 0 auto", width: 34, height: 34 }}>
+              <GemlyxCompass size={34} angle={arrow} dim={!g} />
             </span>
             <span style={{ minWidth: 0, flex: 1, fontSize: 13, fontWeight: 700, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
               {back ? (walk.start?.name || uiT("walk.start", lang)) : target?.name}
-              {g && <span style={{ color: C.gold }}> · {g.here ? uiT("walk.here", lang) : `${distanceWords(g.metres)} · ${fill(uiT("walk.minutes", lang), { n: g.minutes })}`}</span>}
+              {g && <span style={{ color: C.gold }}> · {g.here ? uiT("walk.here", lang) : g.metres > FAR_M ? fill(uiT("walk.far", lang), { dist: distanceWords(g.metres) }) : `${distanceWords(g.metres)} · ${fill(uiT("walk.minutes", lang), { n: g.minutes })}`}</span>}
             </span>
             {g?.here && !back && !(!loop && idx + 1 >= stops.length) && (
               <button onClick={() => setIdx(i => i + 1)} data-testid="walk-full-next" style={{ ...btn(true), flex: "0 0 auto", borderRadius: 100, padding: "7px 12px", fontSize: 12 }}>

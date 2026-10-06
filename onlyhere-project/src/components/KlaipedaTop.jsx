@@ -17,12 +17,15 @@ export const KLAIPEDA_SIDES = [
 ];
 
 // `lang` "lt" labels the switch in Lithuanian, and the business side keeps it.
-export const KlaipedaTop = ({ side = null, place = "Klaipėda", lang = "en" }) => (
+// `corner` is drawn on the right where a page has no switch: the live weather
+// on the QR page (7 Oct 2026).
+export const KlaipedaTop = ({ side = null, place = "Klaipėda", lang = "en", corner = null }) => (
   <div data-testid="klaipeda-top" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 30, flexWrap: "wrap" }}>
     <a href={side ? KLAIPEDA_EXAMPLES_PATH : undefined} style={{ display: "inline-flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
       <GemlyxLogo size={18} color={C.text} />
       {place && <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 1.4, textTransform: "uppercase", color: C.muted, borderLeft: `1px solid ${C.border}`, paddingLeft: 10 }}>{place}</span>}
     </a>
+    {!side && corner}
     {side && (
       <nav aria-label="Who this page is for" data-testid="klaipeda-sides" style={{ display: "inline-flex", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 100, padding: 3 }}>
         {KLAIPEDA_SIDES.map(s => {

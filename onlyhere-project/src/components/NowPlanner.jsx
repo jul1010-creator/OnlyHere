@@ -8,6 +8,7 @@
 // it is served in.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { C } from "../utils/theme";
+import { isExamplePartner } from "../data/klaipedaExampleRows";
 import { t as uiT, resolveUiLanguage, UI_LANGUAGE_KEY } from "../utils/uiLanguage";
 import { countryProfile } from "../utils/countries";
 import { placeClock } from "../utils/offerClock";
@@ -342,7 +343,16 @@ export const NowPlanner = ({ country = "LT", lang: langProp = "", defaultFrom = 
 
       {state.error && <div style={{ fontSize: 12.5, color: "#FFB347", marginTop: 12 }}>{state.error}</div>}
 
-      {walk && <EditableWalk walk={walk} madeAt={madeAt} lang={lang} country={country} cardFor={(s) => placeLook(walk, s)} />}
+      {walk && <EditableWalk walk={walk} madeAt={madeAt} lang={lang} country={country} cardFor={(s) => placeLook(walk, s)}
+        tag={(s) => (isExamplePartner(s.id) ? uiT("deals.example", lang) : null)} />}
+      {/* While few Klaipėda places are published, the walk also reads the
+          examples (data/klaipedaExampleRows.js), and says so when one of the
+          made-up partners is in it. */}
+      {walk && (walk.stops || []).some(s => isExamplePartner(s.id)) && (
+        <div data-testid="now-examples-note" style={{ fontSize: 12, color: C.muted, lineHeight: 1.55, border: `1px dashed ${C.gold}66`, borderRadius: 10, padding: "9px 12px", marginTop: 12 }}>
+          {uiT("walk.examplesNote", lang)}
+        </div>
+      )}
     </div>
   );
 };

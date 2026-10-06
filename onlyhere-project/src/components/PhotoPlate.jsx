@@ -32,7 +32,10 @@ import { C } from "../utils/theme";
 //
 // Usage: the parent must be position:relative and own its own size; PhotoPlate
 // fills it absolutely so existing badge/heart overlays keep working untouched.
-export const PhotoPlate = ({ photo, name, color }) => {
+// `sign`, when given, is drawn in place of the monogram: an emoji for the
+// made-up Klaipėda partners on Special deals, which have no photos and all
+// started with the same few letters (7 Oct 2026).
+export const PhotoPlate = ({ photo, name, color, sign = "" }) => {
   const [failed, setFailed] = useState(false);
   const src = typeof photo === "string" ? photo.trim() : "";
   const tint = typeof color === "string" && color.startsWith("#") ? color : C.gold;
@@ -47,7 +50,9 @@ export const PhotoPlate = ({ photo, name, color }) => {
         // (caught on a static replica screenshot before this shipped).
         background: `radial-gradient(130% 100% at 20% 0%, ${tint}26 0%, transparent 62%), linear-gradient(165deg, #131A2C 0%, ${C.bg} 72%)`,
       }}>
-        <span style={{ fontFamily: "'Fraunces', serif", fontStyle: "italic", fontWeight: 500, fontSize: 48, lineHeight: 1, color: "rgba(148,163,199,0.3)" }}>{initial}</span>
+        {sign
+          ? <span data-testid="plate-sign" style={{ fontSize: 46, lineHeight: 1 }}>{sign}</span>
+          : <span style={{ fontFamily: "'Fraunces', serif", fontStyle: "italic", fontWeight: 500, fontSize: 48, lineHeight: 1, color: "rgba(148,163,199,0.3)" }}>{initial}</span>}
       </div>
       {src.length > 0 && !failed && (
         <img src={src} alt={name || ""} onError={() => setFailed(true)}

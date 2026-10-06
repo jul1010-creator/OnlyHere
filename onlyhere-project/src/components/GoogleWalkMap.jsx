@@ -214,7 +214,7 @@ const placePin = (opts) => {
 // the card. `cardFor(stop)` may add { emoji, photo } for a stop. `focus` is
 // { id, n }: a new n glides to the stop with that id. `me` is the walker's
 // position { lat, lon }, drawn as a blue dot, and `follow` keeps it in view.
-export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = null, focus = null, me = null, follow = false, round = true, lang = "en", loop = true, heading = null, activeLeg = null, lift = 0 }) => {
+export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = null, focus = null, me = null, follow = false, round = true, lang = "en", loop = true, heading = null, activeLeg = null, lift = 0, onOpen = null, canOpen = null }) => {
   const box = useRef(null);
   // ONE map for the life of the page. Google bills every map it creates, and
   // making a new one each time a visitor picks another walk would bill each
@@ -479,7 +479,11 @@ export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = nul
           pinEls.push(pin.element);
           const box = holder(pin.element);
           pinBoxes.push(box);
-          const m = new AdvancedMarkerElement({ map, position: at(s), content: box, title: s.name || "", zIndex: 50 - i });
+          const m = new AdvancedMarkerElement({ map, position: at(s), content: box, title: s.name || "", zIndex: 50 - i, gmpClickable: true });
+          // Oliver, 7 Oct 2026: "make me able to click the places on the
+          // map". A tap on a pin does what "Show on map" does: the glide in,
+          // the sparkle and the place's card.
+          try { m.addListener("gmp-click", () => { if (!gone) focusStop(i, Date.now()); }); } catch { /* an older map: the list still opens it */ }
           stopMarkers.push(m);
           drawn.push(m);
         });
@@ -579,6 +583,7 @@ export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = nul
   const st = card ? stops[card.stop] : null;
   const extra = st ? (cardFor && cardFor(st)) || {} : {};
   const time = st && madeAt != null && Number.isFinite(Number(st.arrive)) ? HHMM(madeAt + Number(st.arrive)) : "";
+  const opens = !!(st && onOpen && !follow && (!canOpen || canOpen(st)));
   const pill = { background: C.surface, color: C.text, border: `1px solid ${C.gold}`, borderRadius: 100, padding: "6px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", boxShadow: "0 2px 8px rgba(0,0,0,0.35)" };
   return (
     <div style={{ position: "relative", margin: round ? "12px 0 4px" : 0, height: round ? undefined : "100%" }}>
@@ -597,8 +602,8 @@ export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = nul
               for a few seconds (Oliver, 6 Oct 2026: "it pops up with a sparkle
               and the captions of it that you made earlier"). */}
           {(
-          <div key={`card${card.n}`} data-testid="map-card" style={{
-            position: "absolute", left: 10, right: 10, ...(follow ? { top: 10 } : { bottom: 26 }), background: C.surface, border: `1px solid ${C.gold}`, borderRadius: 14, padding: "11px 13px", overflow: "hidden", pointerEvents: "none", fontFamily: "'Inter', sans-serif",
+          <div key={`card${card.n}`} data-testid="map-card" onClick={opens ? () => onOpen(st) : undefined} role={opens ? "button" : undefined} style={{
+            position: "absolute", left: 10, right: 10, ...(follow ? { top: 10 } : { bottom: 26 }), background: C.surface, border: `1px solid ${C.gold}`, borderRadius: 14, padding: "11px 13px", overflow: "hidden", pointerEvents: opens ? "auto" : "none", cursor: opens ? "pointer" : "default", fontFamily: "'Inter', sans-serif",
             display: "flex", gap: 11, alignItems: "flex-start",
             animation: reducedMotion() ? "none" : "gxCardIn 560ms cubic-bezier(.2,.9,.3,1) both, gxGlow 1800ms 560ms ease-in-out infinite",
           }}>
@@ -620,6 +625,8 @@ export const GoogleWalkMap = ({ walk, height = 340, madeAt = null, cardFor = nul
                   {st.deal && <span style={{ fontSize: 10.5, fontWeight: 700, border: `1px solid ${C.gold}`, color: C.gold, borderRadius: 100, padding: "2px 8px" }}>● {st.deal.text}</span>}
                 </div>
               )}
+              {/* The card opens the place's page, where the page has one. */}
+              {opens && <div data-testid="map-card-open" style={{ fontSize: 12, fontWeight: 700, color: C.gold, marginTop: 6 }}>{uiT("map.openPage", lang)}</div>}
             </div>
           </div>
           )}
