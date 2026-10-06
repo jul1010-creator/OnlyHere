@@ -27,6 +27,8 @@
 // Vercel is on the PRO plan, so the old twelve-function ceiling that several
 // stale comments in this repo still quote does not apply.
 import { requestIsFromSite, NOT_FROM_SITE, resolveUser, isFounder } from "../src/utils/apiGuard.js";
+// Public internet only, at every redirect (security review, 6 Oct 2026, finding 1).
+import { safeFetch } from "../src/utils/safeFetch.js";
 
 export default async function handler(req, res) {
   // ── BOTH HALVES, BECAUSE ONLY THE STUDIO CALLS THIS ───────────────
@@ -76,7 +78,7 @@ export default async function handler(req, res) {
     // status that does not match the page, and a wrong answer here deletes a
     // working link. `redirect: follow` is the default and is the point, since
     // where it LANDS is the question.
-    const r = await fetch(raw, {
+    const r = await safeFetch(raw, {
       method: "GET",
       redirect: "follow",
       headers: {
@@ -106,6 +108,9 @@ export default async function handler(req, res) {
   } catch (e) {
     // Reported rather than swallowed. "We could not ask" and "it is gone" are
     // different facts and the verdict function tells them apart.
-    return res.status(200).json({ url: raw, status: 0, finalUrl: "", error: String(e?.message || e).slice(0, 200) });
+    // A refused address says why; anything else goes to the log (security
+    // review, 6 Oct 2026, finding 11).
+    if (e?.name !== "RefusedAddress") console.error("link check:", e);
+    return res.status(200).json({ url: raw, status: 0, finalUrl: "", error: e?.name === "RefusedAddress" ? String(e.message) : "The link could not be reached." });
   }
 }

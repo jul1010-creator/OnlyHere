@@ -24,6 +24,7 @@
 // the paid half is worth buying: until something records WHICH domains fail,
 // "sites that block AI" is a hunch with no list behind it.
 import { readPage } from "../src/utils/readPage.js";
+import { safeFetch } from "../src/utils/safeFetch.js";
 import { domainOf } from "../src/utils/pageScan.js";
 
 const errorFor = (url, r) =>
@@ -63,7 +64,7 @@ export default async function handler(req, res) {
   // page changed, so serving it from a copy taken before the suspicion is the
   // one answer it must not give. See FIRECRAWL_CACHE_MS in utils/pageScan.js.
   const fresh = String(req.query.fresh || "") === "1";
-  const r = await readPage(url, { key, fresh });
+  const r = await readPage(url, { key, fresh, pageFetch: safeFetch });
 
   if (!r.blocked) {
     // tickets: the outbound ticket links this page carries, best first. The draft
@@ -79,8 +80,13 @@ export default async function handler(req, res) {
   // CONTENT ... more reliable than a search snippet for exact current prices,
   // hours, tour days and ferry times". A sample is returned separately so a
   // human can see what the site actually said.
-  const httpStatus = Number(r.status) >= 400 ? Number(r.status) : 200;
-  return res.status(httpStatus).json({
+  // ── AND ALWAYS 200 ───────────────────────────────────────────────
+  // Security review, 6 Oct 2026, finding 7: this answered with the scanned
+  // site's own status, so a site's 401 made Studio renew its token as if
+  // Gemlyx had refused it. The site's status travels in the body instead
+  // (siteStatus); the HTTP status is this route's own, and this route worked.
+  return res.status(200).json({
+    siteStatus: Number(r.status) || 0,
     text: "",
     via: r.via,
     blocked: true,

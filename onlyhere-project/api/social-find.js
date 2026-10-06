@@ -33,6 +33,9 @@
 //    hand back any account in Denmark whose name is close.
 import { accountsOnPage, accountFits, socialRecord, asUrl, searchCandidates, websiteInPageDetails, OWN_PAGE } from "../src/utils/socialAccounts.js";
 import { requestIsFromSite, NOT_FROM_SITE, resolveUser, isFounder } from "../src/utils/apiGuard.js";
+// The page itself is read on the public internet only (security review, 6 Oct
+// 2026, finding 1); the search API below is one fixed address.
+import { safeFetch } from "../src/utils/safeFetch.js";
 
 // The markup, not the readable text. readPage.js strips tags, and a footer icon
 // linking a Facebook page has no text at all: the account is in the href and
@@ -65,7 +68,7 @@ const rawPage = async (url) => {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), RAW_TIMEOUT_MS);
   try {
-    const r = await fetch(url, {
+    const r = await safeFetch(url, {
       signal: ctrl.signal,
       redirect: "follow",
       headers: {

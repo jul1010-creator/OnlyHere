@@ -12,6 +12,8 @@
 
 import { requestIsFromSite, NOT_FROM_SITE, resolveUser, isFounder } from "../src/utils/apiGuard.js";
 import { findContactEmails } from "../src/utils/contactEmail.js";
+// Public internet only (security review, 6 Oct 2026, finding 1).
+import { safeFetch } from "../src/utils/safeFetch.js";
 
 const UA = "Mozilla/5.0 (compatible; GemlyxContentScan/1.0)";
 const TIMEOUT_MS = 8000;
@@ -20,7 +22,7 @@ const fetchHtml = async (url) => {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   try {
-    const r = await fetch(url, { headers: { "User-Agent": UA }, signal: ctrl.signal, redirect: "follow" });
+    const r = await safeFetch(url, { headers: { "User-Agent": UA }, signal: ctrl.signal, redirect: "follow" });
     if (!r.ok) return "";
     return (await r.text()).slice(0, 2000000);
   } catch {

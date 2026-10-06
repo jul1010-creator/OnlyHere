@@ -16,6 +16,10 @@
 // request has to come from the site, and it has to carry a real Supabase
 // session belonging to a founder. See src/utils/apiGuard.js.
 import { requestIsFromSite, NOT_FROM_SITE, resolveUser, isFounder } from "../src/utils/apiGuard.js";
+// The name check below is the cheap first net; safeFetch then checks the
+// address the name points at, and https, at every redirect (security review,
+// 6 Oct 2026, finding 1).
+import { safeFetch } from "../src/utils/safeFetch.js";
 
 // Fifteen seconds and two megabytes. A village calendar is a few kilobytes; a
 // feed that needs more than this is not the thing this route is for, and an
@@ -59,11 +63,11 @@ export default async function handler(req, res) {
 
   const stop = AbortSignal.timeout ? AbortSignal.timeout(TIMEOUT_MS) : undefined;
   try {
-    const r = await fetch(url.toString(), {
+    const r = await safeFetch(url.toString(), {
       signal: stop,
       redirect: "follow",
       headers: { "User-Agent": "Gemlyx/1.0 (+https://www.gemlyxtravel.com)", Accept: "text/calendar, text/html;q=0.8, */*;q=0.5" },
-    });
+    }, { httpsOnly: true });
     if (!r.ok) return res.status(200).json({ text: "", status: r.status, error: `The feed answered ${r.status}.` });
     const type = String(r.headers.get("content-type") || "");
     const text = (await r.text()).slice(0, MAX_BYTES);
@@ -80,6 +84,7 @@ export default async function handler(req, res) {
       ...(looksIcs ? {} : { error: "That URL answered, but what came back is not a calendar feed. A Google calendar that is not public answers with a sign-in page." }),
     });
   } catch (err) {
-    return res.status(200).json({ text: "", error: `Could not read the feed: ${String(err?.message || err).slice(0, 200)}` });
+    if (err?.name !== "RefusedAddress") console.error("calendar:", err);
+    return res.status(200).json({ text: "", error: err?.name === "RefusedAddress" ? `Could not read the feed: ${String(err.message)}` : "Could not read the feed." });
   }
 }

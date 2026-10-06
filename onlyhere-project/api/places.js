@@ -98,7 +98,9 @@ export default async function handler(req, res) {
         },
       }),
     });
-    const data = await r.json();
+    // Checked before it is read (security review, 6 Oct 2026, finding 11).
+    const data = await r.json().catch(() => null);
+    if (!r.ok || !data) { console.error("places:", r.status, data); return res.status(200).json({ error: "Places lookup failed" }); }
     const places = Array.isArray(data.places) ? data.places : [];
     if (!places.length) {
       return res.status(200).json({ error: data.error?.message || "No nearby place found" });

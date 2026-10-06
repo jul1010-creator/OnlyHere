@@ -34,7 +34,7 @@
 // NOT founder-gated, unlike every other endpoint that uses resolveUser. This
 // one is FOR readers, and isFounder here would lock out everybody it is built
 // for. The guard is the token, and the token only ever unlocks its own row.
-import { requestIsFromSite, NOT_FROM_SITE, resolveUser } from "../src/utils/apiGuard.js";
+import { requestIsFromSite, NOT_FROM_SITE, resolveUser, founderIds, FOUNDER_FALLBACK_ID } from "../src/utils/apiGuard.js";
 
 const SUPABASE_URL = process.env.SUPABASE_URL || "https://vpxfahjnerkkkoueovhl.supabase.co";
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY || "";
@@ -61,6 +61,14 @@ export default async function handler(req, res) {
       ? "You are signed out. Sign in again and the delete button will work."
       : "Could not check who you are just now. Try again in a moment.";
     return res.status(who.status).json({ error: said });
+  }
+  // ── NEVER THE FOUNDER'S ACCOUNT ──────────────────────────────────
+  // Security review, 6 Oct 2026, finding 5: the reader's Delete my account
+  // button could delete the founder account, which every Studio gate and
+  // public.is_founder() are pinned to. Removing it is a job for the Supabase
+  // dashboard, on purpose, not for one tap in a menu.
+  if (founderIds(process.env.GEMLYX_FOUNDER_IDS).includes(String(who.userId).toLowerCase()) || who.userId === FOUNDER_FALLBACK_ID) {
+    return res.status(403).json({ error: "This account cannot be deleted from here." });
   }
 
   // ── AND THE DELETE ITSELF ────────────────────────────────────────

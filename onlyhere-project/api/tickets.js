@@ -121,11 +121,14 @@ export default async function handler(req, res) {
       // returned: this endpoint is public.
       const body = await r.json().catch(() => null);
       const fault = body?.fault?.faultstring || body?.fault?.detail?.errorcode || "";
+      console.error("tickets: key rejected", { status: r.status, keyLength: key.length, environment: process.env.VERCEL_ENV || "unknown", commit: String(process.env.VERCEL_GIT_COMMIT_SHA || "").slice(0, 7) });
       return res.status(200).json({
         error: "key-rejected",
         status: r.status,
         ticketmasterSaid: fault || "(no reason given)",
-        keyLength: key.length,
+        // The key's length, the environment and the commit are no longer
+        // handed to the browser (security review, 6 Oct 2026, finding 11):
+        // they go to the function log, where Oliver can read them in Vercel.
         trimmed: String(raw || "").length !== key.length,
         // ── WHICH COPY OF THE VARIABLE IS THIS ────────────────────
         // A Vercel variable is scoped per environment, so a value edited under
@@ -134,9 +137,7 @@ export default async function handler(req, res) {
         // redeploy" went past before this was askable from the response itself.
         // VERCEL_ENV is set by the platform, not by us, so it says which copy
         // of the variable the running code actually read.
-        environment: process.env.VERCEL_ENV || "unknown",
-        deployedCommit: String(process.env.VERCEL_GIT_COMMIT_SHA || "").slice(0, 7),
-        detail: `Ticketmaster rejected the key with ${r.status}${fault ? `: "${fault}"` : ""}. Three things cause this and the key length tells you which: the value in Vercel is the Consumer SECRET rather than the Consumer KEY (they are different lengths, compare ${key.length} against what the portal shows), the key belongs to an app that is not active yet, or the value picked up stray characters when it was pasted${String(raw || "").length !== key.length ? " (it did have surrounding whitespace, which has been trimmed here, so redeploy before re-reading this)" : ""}.`,
+        detail: `Ticketmaster rejected the key with ${r.status}${fault ? `: "${fault}"` : ""}. Three things cause this, and the key length in the Vercel function log tells you which: the value in Vercel is the Consumer SECRET rather than the Consumer KEY (they are different lengths), the key belongs to an app that is not active yet, or the value picked up stray characters when it was pasted${String(raw || "").length !== key.length ? " (it did have surrounding whitespace, which has been trimmed here, so redeploy before re-reading this)" : ""}.`,
       });
     }
     const data = await r.json().catch(() => null);
@@ -174,6 +175,7 @@ export default async function handler(req, res) {
     // would be the same two-copies-of-one-thing that keeps biting this codebase.
     return res.status(200).json({ query: name, country, total, events });
   } catch (err) {
-    return res.status(200).json({ error: "failed", detail: String(err) });
+    console.error("tickets:", err);
+    return res.status(200).json({ error: "failed", detail: "The Ticketmaster request failed." });
   }
 }

@@ -546,6 +546,7 @@ export default async function handler(req, res) {
     return res.status(200).json({ results, subject: token, sources, resolved: { da: daTitle, en: enTitle, categories: catCandidates } });
 
   } catch (err) {
-    return res.status(200).json({ error: String(err).slice(0, 200) });
+    console.error("commons-photo:", err);
+    return res.status(200).json({ error: "The photo search failed." });
   }
 }

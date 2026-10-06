@@ -114,8 +114,10 @@ export default async function handler(req, res) {
       body: JSON.stringify({ textQuery, languageCode, regionCode: land.googleRegion, maxResultCount: want }),
     });
     const r = await ask(land.googleLanguage);
-    const data = await r.json();
-    if (!r.ok) return res.status(r.status).json({ error: data?.error?.message || "Places text search failed" });
+    // Checked before it is read, and the cause goes to the log (security
+    // review, 6 Oct 2026, finding 11).
+    const data = await r.json().catch(() => null);
+    if (!r.ok || !data) { console.error("places-locate:", r.status, data); return res.status(502).json({ error: "Places text search failed" }); }
     // ── AND ABROAD, THE ENGLISH NAME AS WELL ──────────────────────
     // Oliver's Klaipėda runs, 3 Oct 2026: Google answered "Mažosios Lietuvos
     // istorijos muziejus" for the Museum of the History of Lithuania Minor and
@@ -173,6 +175,7 @@ export default async function handler(req, res) {
       candidates,
     });
   } catch (e) {
-    return res.status(500).json({ error: String(e?.message || e) });
+    console.error("places-locate:", e);
+    return res.status(500).json({ error: "Places text search failed" });
   }
 }

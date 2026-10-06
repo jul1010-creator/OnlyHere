@@ -60,10 +60,11 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify(body),
     });
-    const data = await r.json();
-    if (!r.ok) {
-      console.error("Places (text search) error:", data);
-      return res.status(200).json({ error: data.error?.message || "Places lookup failed" });
+    // Checked before it is read (security review, 6 Oct 2026, finding 11).
+    const data = await r.json().catch(() => null);
+    if (!r.ok || !data) {
+      console.error("Places (text search) error:", r.status, data);
+      return res.status(200).json({ error: "Places lookup failed" });
     }
     const place = data.places?.[0];
     if (!place) {
@@ -95,6 +96,7 @@ export default async function handler(req, res) {
     });
   } catch (err) {
     console.error("Places hours fetch failed:", err);
-    return res.status(500).json({ error: String(err) });
+    console.error("places-hours:", err);
+    return res.status(500).json({ error: "Places lookup failed" });
   }
 }
