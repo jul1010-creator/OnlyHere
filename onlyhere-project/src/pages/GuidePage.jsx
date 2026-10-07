@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { getSession } from "../utils/auth";
+import { VISITOR_KEY, cleanVisitor } from "../utils/guideAllowance";
 import { readableAuthor } from "../utils/photoAuthor";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { C } from "../utils/theme";
@@ -542,11 +543,13 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
     // takes a row from an account (30 Sep 2026), and a guide saved by a member
     // is theirs.
     const member = await getSession().catch(() => null);
-    const bearer = member?.token || SUPABASE_KEY;
+    // Saved by the server, counted per browser and network (security review,
+    // 7 Oct 2026). No account is needed, as before. See api/save-guide.js.
+    const visitor = (() => { try { return cleanVisitor(localStorage.getItem(VISITOR_KEY)); } catch { return ""; } })();
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_guides`, {
+      const res = await fetch("/api/save-guide", {
         method: "POST",
-        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${bearer}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+        headers: { "Content-Type": "application/json" },
         // TEST SCAFFOLDING NEVER GETS SAVED. _testProfile and _testPlan exist
         // so Oliver can see what went into a Random-guide run; they are for him
         // and nobody else. Saving them puts them in the payload permanently, and
@@ -571,7 +574,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
         // It is only ever read in the session that built it (lastBuiltGuide in
         // App.jsx), never from a saved link, and a link is readable by anybody
         // who is sent it.
-        body: JSON.stringify({ id, payload: (({ _testProfile, _testPlan, _planProblems, _convoText, ...rest }) => rest)(guide) }),
+        body: JSON.stringify({ id, visitor, payload: (({ _testProfile, _testPlan, _planProblems, _convoText, ...rest }) => rest)(guide) }),
       });
       if (!res.ok) { setSaveError(uiT("guide.saveFailed", uiLang)); setSaving(false); return; }
       // Also bookmark it into the same "gemlyx_saved_guides" localStorage list
@@ -3341,15 +3344,12 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
             // them either way, on purpose: a thank you they have earned is not
             // withheld over a failed post, and there is nothing they could do
             // about it if it were.
-            onSend={({ answer, note, title }) => fetch(`${SUPABASE_URL}/rest/v1/${SUPPORT_TABLE}`, {
+            // Since 7 Oct 2026 through the counted form route, which sets
+            // created_at itself (security review). See api/send-form.js.
+            onSend={({ answer, note, title }) => fetch("/api/send-form", {
               method: "POST",
-              headers: {
-                apikey: SUPABASE_KEY,
-                Authorization: `Bearer ${SUPABASE_KEY}`,
-                "Content-Type": "application/json",
-                Prefer: "return=minimal",
-              },
-              body: JSON.stringify({
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ form: SUPPORT_TABLE, row: {
                 topic: "feedback",
                 created_at: new Date().toISOString(),
                 // A just-built guide has no id yet, so the title is the only
@@ -3371,7 +3371,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                   `Satisfied with the build: ${answer === "yes" ? "yes" : "not really"}\nGuide: ${title || "untitled"}\n\n${note || "(no note)"}`,
                   readBrowserFacts({ version: APP_VERSION }),
                 ),
-              }),
+              } }),
             })}
           />
         )}
