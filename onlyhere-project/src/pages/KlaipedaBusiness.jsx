@@ -17,7 +17,7 @@ import { useEffect, useMemo, useState } from "react";
 import { C } from "../utils/theme";
 import { KlaipedaTop, keepOutOfSearch } from "../components/KlaipedaTop";
 import { CruiseDays } from "../components/CruiseDays";
-import { cruiseDaysAhead, aboutGuests, seasonOf } from "../utils/cruiseDays";
+import { cruiseDaysAhead, aboutGuests } from "../utils/cruiseDays";
 import { CRUISE_ZONE } from "../data/klaipedaCruises";
 import { placeDate } from "../utils/offerClock";
 import { offerHoursLabel } from "../utils/offer";
@@ -41,7 +41,6 @@ export const BUSINESS_TEXT = {
     shipsLead: "Cruise ships due in Klaipėda, from the port's own schedule, with about how many guests each one carries.",
     inPortToday: "In port today", nextDay: "Next ship day", about: "about", onBoard: "guests on board", inPort: "in port {from} to {to}",
     noShips: "No more ships are due this season. The port lists the next season over the winter, and it shows here then.",
-    calls: "ship calls in {year}", ships: "different ships", guests: "guests on board (about)",
     howH: "How it works for you",
     steps: [
       ["You set the offer", "Write what a visitor gets and pick the days and hours it is on. A coffee refill in the quiet hour, a lunch plate until three."],
@@ -72,7 +71,6 @@ export const BUSINESS_TEXT = {
     shipsLead: "Į Klaipėdą atplaukiantys kruiziniai laivai pagal uosto tvarkaraštį ir apytikslis svečių skaičius kiekviename laive.",
     inPortToday: "Šiandien uoste", nextDay: "Kita laivų diena", about: "apie", onBoard: "svečių laive", inPort: "uoste nuo {from} iki {to}",
     noShips: "Šį sezoną daugiau laivų nebeatplauks. Kito sezono tvarkaraštį uostas paskelbia žiemą, ir jis atsiras čia.",
-    calls: "laivų apsilankymų {year} m.", ships: "skirtingų laivų", guests: "svečių laive (apytiksliai)",
     howH: "Kaip tai veikia jums",
     steps: [
       ["Jūs nustatote pasiūlymą", "Parašykite, ką gauna lankytojas, ir pasirinkite dienas bei valandas, kada jis galioja. Kavos papildymas ramią valandą, pietų patiekalas iki trečios."],
@@ -136,7 +134,6 @@ export const KlaipedaBusiness = () => {
   const now = useMemo(() => new Date(), []);
   const today = placeDate(now, CRUISE_ZONE);
   const next = useMemo(() => cruiseDaysAhead(now, 1)[0] || null, [now]);
-  const season = useMemo(() => seasonOf(Number(today.slice(0, 4))), [today]);
   // The offers are shown as they stand at the moment of the first example walk.
   const run = useMemo(() => runExample(EXAMPLE_WALKS[0]), []);
   const momentLabel = `${T.days[run.startClock.day]} ${hhmm(run.startClock.minutes)}`;
@@ -181,17 +178,9 @@ export const KlaipedaBusiness = () => {
         ) : (
           <div data-testid="business-no-ships" style={{ ...card, marginBottom: 10, fontSize: 13, lineHeight: 1.6, color: C.light }}>{T.noShips}</div>
         )}
-        <CruiseDays lang={lang} count={6} compact />
-        {season.calls > 0 && (
-          <div data-testid="business-season" style={{ ...card, display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10, margin: "2px 0 40px" }}>
-            {[[String(season.calls), fill(T.calls, { year: season.year })], [String(season.ships), T.ships], [aboutGuests(season.guests, lang), T.guests]].map(([n, what]) => (
-              <div key={what}>
-                <div style={{ fontSize: 20, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.gold }}>{n}</div>
-                <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.4 }}>{what}</div>
-              </div>
-            ))}
-          </div>
-        )}
+        {/* The year's totals sat under this, and Oliver: "I think this is
+            irrelevant to point out." A business owner wants the next ship. */}
+        <div style={{ marginBottom: 40 }}><CruiseDays lang={lang} count={6} compact /></div>
 
         {/* ── HOW IT WORKS ────────────────────────────────────── */}
         <H2>{T.howH}</H2>
