@@ -1,3 +1,7 @@
+// ── DO NOT RUN OR COPY FROM THIS FILE ───────────────────────────────
+// Security review, 7 Oct 2026: a stale copy. Its Studio "Copy the SQL"
+// scripts open the tables wider than SECURITY_LOCKDOWN_30SEP.sql allows.
+// Nothing builds or reads it; the app is onlyhere-project/. Oliver may delete it.
 import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from "react";
 import { Routes, Route, useNavigate, useParams, useLocation } from "react-router-dom";
 // One string, named once. The route table and the effect that opens the page
