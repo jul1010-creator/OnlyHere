@@ -115,7 +115,7 @@ import { journeyFigure } from "./journey";
 // three already exist and are already tested; what was missing was anything
 // asking them about a link HE pastes. See citationRefusal below.
 import { factAge } from "./pageScan";
-import { isNeverASource } from "./sourcePolicy";
+import { isNeverASource, isOfficialBoard, sameSite } from "./sourcePolicy";
 import { wrongEdition } from "./ticketLink";
 export const PROSE_FIELDS = [...NARRATIVE_FIELDS, "blogBody", "intro", "body"];
 
@@ -544,7 +544,7 @@ export const ownSiteFor = (entry, name) => {
   try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return ""; }
 };
 
-export const OWN_SITE_PROMPT = (name, host, claim) => `Search ${host}, the official website of "${name}" in Denmark, and answer ONE question from that site alone.
+export const OWN_SITE_PROMPT = (name, host, claim, where = "Denmark") => `Search ${host}, the official website of "${name}" in ${where}, and answer ONE question from that site alone.
 
 The claim to check: ${claim?.says || ""}${claim?.proposed ? `\nThe correction proposed: ${claim.proposed}` : ""}
 
@@ -603,8 +603,9 @@ export const settleOwnSite = ({ parsed, host } = {}) => {
 // ── AND WHO OWNS THE PAGE DECIDES HOW FAR IT GETS ───────────────────
 //
 // The same hierarchy the rest of this file uses. The operator's own site is a
-// primary source and settles a claim on its own; an aggregator is supporting
-// evidence and never the deciding one, so a supported claim on a listings site
+// primary source and settles a claim on its own; so does an official tourism
+// board since 7 Oct 2026, one rung below it (see isOfficialBoard in
+// sourcePolicy.js); an aggregator is supporting evidence and never the deciding one, so a supported claim on a listings site
 // still goes through the ordinary verification and only gains the right to say
 // that a real page, opened by us, does back it.
 //
@@ -757,7 +758,7 @@ ${String(pageText || "").slice(0, 12000)}`;
 // The settler, pure and separate, for the reason settleVerdict and settleOwnSite
 // are: a rule that lives inside a network call cannot be tested, and this one
 // decides whether a fact-check's own evidence gets to reject it.
-export const settleCitation = ({ parsed, url = "", isOwnSite = false, stale = "" } = {}) => {
+export const settleCitation = ({ parsed, url = "", isOwnSite = false, isBoard = false, stale = "" } = {}) => {
   const said = String(parsed?.says || "");
   const quote = String(parsed?.quote || "").trim();
   let host = "";
@@ -789,12 +790,19 @@ export const settleCitation = ({ parsed, url = "", isOwnSite = false, stale = ""
     };
   }
   if (said === "supports") {
+    // An official tourism board settles it too, one rung below the operator.
+    // byBoard tells the loop to put the claim to the place's own site, which
+    // outranks the board when it says otherwise. See isOfficialBoard.
+    const board = !isOwnSite && isBoard;
     return {
-      verdict: isOwnSite ? "confirmed" : "", read: true, supported: true, sourceUrl: url,
+      verdict: isOwnSite || board ? "confirmed" : "", read: true, supported: true, sourceUrl: url,
+      byBoard: board,
       correctValue: String(parsed?.correctValue || "").trim(),
       evidence: isOwnSite
         ? `${who}, the operator's own site and the page the fact-check cited, states this.${quote ? ` It reads: "${quote}"` : ""}`
-        : `${who}, the page the fact-check cited, does say this${quote ? `: "${quote}"` : ""}. It is not the operator's own site, so it is supporting evidence rather than the deciding source, and the check below still ran.`,
+        : board
+          ? `${who}, the official tourism board and the page the fact-check cited, states this.${quote ? ` It reads: "${quote}"` : ""}`
+          : `${who}, the page the fact-check cited, does say this${quote ? `: "${quote}"` : ""}. It is not the operator's own site or an official tourism board, so it is supporting evidence rather than the deciding source, and the check below still ran.`,
     };
   }
   if (said === "silent") {
@@ -808,19 +816,65 @@ export const settleCitation = ({ parsed, url = "", isOwnSite = false, stale = ""
   return { verdict: "", read: false, supported: false, sourceUrl: "", evidence: "" };
 };
 
-export const VERIFY_PROMPT = (name, claim, rules) => `Check ONE factual claim about "${name}" in Denmark using real, current web search.
+// ── THE BOARD SETTLES IT, AND THE PLACE ITSELF STILL OUTRANKS THE BOARD ──
+//
+// `board` is a settled verdict that rests on an official tourism board.
+// `own` is settleOwnSite's answer, or null when the row carries no own site.
+// The place's own site wins when it answered either way; when it was asked and
+// is silent, the board's verdict stands and the evidence says it was asked.
+export const outrankBoard = (board, own) => {
+  if (own && (own.verdict === "confirmed" || own.verdict === "rejected")) {
+    const agree = own.verdict === board.verdict;
+    return {
+      ...board,
+      verdict: own.verdict,
+      correctValue: own.verdict === "confirmed" ? (own.correctValue || board.correctValue || "") : "",
+      sourceUrl: own.sourceUrl,
+      askedOwnSite: true,
+      evidence: agree
+        ? `${own.evidence} The official tourism board says the same.`.trim()
+        : `${own.evidence} The official tourism board said otherwise, and the place's own site outranks it. ${board.evidence || ""}`.trim(),
+    };
+  }
+  return {
+    ...board,
+    askedOwnSite: !!own,
+    evidence: own ? `${board.evidence || ""} The place's own site was asked as well and does not address it, so the board's page decides.`.trim() : (board.evidence || ""),
+  };
+};
+
+// ── A SILENT PAGE ON A SITE THAT DID SAY IT ─────────────────────────
+//
+// The cited page can be silent while the search finds the fact on another page
+// of the same site: klaipedatravel.lt's page about one sculpture says nothing
+// about the square, and its page about the square does. Printed as it was, the
+// report read "confirmed ... the page the fact-check cited does not mention
+// this at all", which sounds like the pass contradicting itself. The site said
+// it, so the report says that.
+export const citedNoteFor = (cited, citedUrl, settledUrl) => {
+  const note = String(cited?.evidence || "");
+  if (!cited?.read || cited.supported || !citedUrl || !settledUrl) return note;
+  if (!sameSite(citedUrl, settledUrl) || citedUrl === settledUrl) return note;
+  let host = "";
+  try { host = new URL(citedUrl).hostname.replace(/^www\./, ""); } catch { host = ""; }
+  return `The page the fact-check cited does not mention it, but another page on ${host || "the same site"} does (${settledUrl}).`;
+};
+
+export const VERIFY_PROMPT = (name, claim, rules, where = "Denmark") => `Check ONE factual claim about "${name}" in ${where} using real, current web search.
 
 The claim: ${claim.says}${claim.proposed ? `\nThe correction proposed: ${claim.proposed}` : ""}
 
 Rules for your answer, and they are strict:
-- A PRIMARY SOURCE settles this. For an official site, opening hours, prices, programmes or dates that is the place's own website. For a ferry it is the operator's own timetable. Wikipedia, tourist boards and aggregators are supporting evidence, never the deciding one.
+- A PRIMARY SOURCE settles this. For an official site, opening hours, prices, programmes or dates that is the place's own website. For a ferry it is the operator's own timetable.
+- AN OFFICIAL TOURISM BOARD IS ALSO A PROPER SOURCE and settles this on its own: the city's or region's own tourist office, such as klaipedatravel.lt, lithuania.travel, visitdenmark.com or a regional visit... or destination... site. Any page on that site counts. It ranks BELOW the place's own site: if the place's own site, or a Google listing marking the place permanently closed, says otherwise, that wins, and you say both.
+- Wikipedia, blogs, review sites, listings and aggregators, and answers written by another AI are supporting evidence, never the deciding one.
 - If sources disagree, say so and name both, rather than silently picking one. An operator's own timetable page outranks its own marketing front page.
 - If you cannot find a primary source, say so plainly. "Could not confirm" is a correct and useful answer here. Do not reason your way to a conclusion.
 
 Respond with ONLY strict JSON:
-{"verdict": "confirmed" | "rejected" | "unresolved", "entryIsAlreadyCorrect": true | false | null, "correctValue": "the real verified value, or an empty string", "evidence": "one or two sentences on what the source says", "sourceUrl": "the primary source URL, or an empty string"}
+{"verdict": "confirmed" | "rejected" | "unresolved", "entryIsAlreadyCorrect": true | false | null, "correctValue": "the real verified value, or an empty string", "evidence": "one or two sentences on what the source says", "sourceUrl": "the URL of the primary source or official tourism board page that settled it, or an empty string"}
 
-"confirmed" means the criticism is right and the entry needs changing. "rejected" means the criticism is wrong and the entry is already correct, and your evidence must say why. "unresolved" means no primary source settled it.
+"confirmed" means the criticism is right and the entry needs changing. "rejected" means the criticism is wrong and the entry is already correct, and your evidence must say why. "unresolved" means neither a primary source nor an official tourism board settled it.
 
 ANSWER THE SAME QUESTION TWICE, DELIBERATELY. The field "entryIsAlreadyCorrect" asks, in the opposite direction from the verdict, whether the entry as it currently stands says the right thing: true when the entry is fine as it is, false when the entry says something the source does not support, null when nothing settled it. It must agree with your verdict, because "rejected" and "the entry is already correct" are the same answer, and so are "confirmed" and "the entry is wrong". Two fields rather than one because a verdict and the reasoning under it were coming back saying opposite things, and nothing could tell.
 
@@ -1413,6 +1467,19 @@ export const correctEntry = async ({ entry, criticism, deps }) => {
   // rather than of a claim and asking it per claim would read the same field
   // five times to get the same answer.
   const ownSite = ownSiteFor(entry, name);
+  // Which country the prompts name. A Klaipėda row carries country "LT", and
+  // "in Denmark" sent the search to look for a Lithuanian square in Denmark.
+  const where = /^(?:lt|lithuania)$/i.test(String(entry?.country || deps?.country || "").trim()) ? "Lithuania" : "Denmark";
+  // Ask the place's own site whether it agrees with a board. One search, only
+  // when a board settled something and the row has its own site to ask.
+  const askOwnSite = async (c) => {
+    if (!ownSite) return null;
+    try {
+      const own = await askPerplexity(OWN_SITE_PROMPT(name, ownSite, c, where));
+      const ownParsed = own?.error || !own?.text ? null : await parseJSON(own.text, 2048).catch(() => null);
+      return settleOwnSite({ parsed: ownParsed, host: ownSite });
+    } catch { return null; }
+  };
 
   // 1. split
   stage("Reading the criticism", 10);
@@ -1506,13 +1573,14 @@ export const correctEntry = async ({ entry, criticism, deps }) => {
           // this file, so it is the primary source here too. ownSite is already
           // resolved and already refuses an aggregator sitting in `website`.
           const isOwn = !!ownSite && !!citeHost && citeHost.toLowerCase().endsWith(ownSite.toLowerCase());
+          const isBoard = !isOwn && isOfficialBoard(citedUrl);
           // ── AND HOW OLD THE PAGE IS, MEASURED ON ITS OWN TEXT ──
           // factAge is the research pipeline's own instrument, the one that
           // writes "the newest year on this page is 2022" into the run log.
           // Asked here for the first time about a page somebody pasted.
           const age = factAge(pageText, Date.now());
           const stale = !age.perishableOk && claimIsPerishable(c) ? age.why : "";
-          cited = settleCitation({ parsed: cParsed, url: citedUrl, isOwnSite: isOwn, stale });
+          cited = settleCitation({ parsed: cParsed, url: citedUrl, isOwnSite: isOwn, isBoard, stale });
         } else {
           // A bot wall is not a fact about the claim, so nothing is concluded
           // from it. It is said out loud anyway: "their source could not be
@@ -1523,12 +1591,18 @@ export const correctEntry = async ({ entry, criticism, deps }) => {
         }
       } catch { cited = null; /* a failed fetch is not a reason to lose the claim */ }
     }
+    if (cited?.byBoard && cited.verdict === "confirmed") {
+      const own = await askOwnSite(c);
+      const out = outrankBoard({ verdict: "confirmed", correctValue: cited.correctValue || c.proposed || "", evidence: cited.evidence, sourceUrl: cited.sourceUrl }, own);
+      verified.push({ ...c, kind, verdict: out.verdict, correctValue: out.correctValue, evidence: out.evidence, sourceUrl: out.sourceUrl, citedSource: citedUrl, readTheirSource: true, askedOwnSite: out.askedOwnSite, byBoard: out.sourceUrl === cited.sourceUrl });
+      continue;
+    }
     if (cited && (cited.verdict === "rejected" || cited.verdict === "confirmed")) {
       verified.push({ ...c, kind, verdict: cited.verdict, correctValue: cited.verdict === "confirmed" ? (cited.correctValue || c.proposed || "") : "", evidence: cited.evidence, sourceUrl: cited.sourceUrl, citedSource: citedUrl, readTheirSource: true });
       continue;
     }
 
-    const res = await askPerplexity(VERIFY_PROMPT(name, c, rules));
+    const res = await askPerplexity(VERIFY_PROMPT(name, c, rules, where));
     if (res?.error || !res?.text) {
       verified.push({ ...c, kind, verdict: "unresolved", evidence: `The verification search could not run. ${cited?.evidence || ""}`.trim(), sourceUrl: cited?.supported ? cited.sourceUrl : "", citedSource: citedUrl, readTheirSource: !!cited?.read });
       continue;
@@ -1547,7 +1621,10 @@ export const correctEntry = async ({ entry, criticism, deps }) => {
     // the whole reason the tier above carries `supported` forward: the rule
     // being enforced is "a confirmed with no source is not confirmed", and a
     // cited page we read and checked ourselves is exactly a source.
-    const hasSource = !!String(parsed.sourceUrl || "").trim() || !!cited?.supported;
+    // A review site, a social page or a listing is not a source here, whatever
+    // the search put in sourceUrl: below a board, never the deciding one.
+    const searchUrl = String(parsed.sourceUrl || "").trim();
+    const hasSource = (!!searchUrl && !isNeverASource(searchUrl)) || !!cited?.supported;
     const selfEvidentUrl = kind === "website" && hostMatchesName(parsed.correctValue || c.proposed, name);
     // One implementation, in settleVerdict above, so the rule and the test
     // cannot drift apart the way two copies of a function in this repo have
@@ -1561,7 +1638,7 @@ export const correctEntry = async ({ entry, criticism, deps }) => {
     // claim nobody has put to the operator is not a claim nothing contradicts.
     if (settled.verdict === "unresolved" && ownSite && String(c.proposed || "").trim()) {
       try {
-        const own = await askPerplexity(OWN_SITE_PROMPT(name, ownSite, c));
+        const own = await askPerplexity(OWN_SITE_PROMPT(name, ownSite, c, where));
         const ownParsed = own?.error || !own?.text ? null : await parseJSON(own.text, 2048).catch(() => null);
         const fromThem = settleOwnSite({ parsed: ownParsed, host: ownSite });
         if (fromThem.verdict === "confirmed" || fromThem.verdict === "rejected") {
@@ -1575,14 +1652,23 @@ export const correctEntry = async ({ entry, criticism, deps }) => {
         continue;
       } catch { /* their site failing is not a reason to lose the claim */ }
     }
+    // ── A BOARD SETTLED IT: THE PLACE'S OWN SITE GETS THE LAST WORD ──
+    const boardUrl = searchUrl && isOfficialBoard(searchUrl) && !(ownSite && sameSite(searchUrl, `https://${ownSite}`)) ? searchUrl : "";
+    if (boardUrl && (settled.verdict === "confirmed" || settled.verdict === "rejected") && ownSite) {
+      const own = await askOwnSite(c);
+      const out = outrankBoard({ verdict: settled.verdict, correctValue: parsed.correctValue || "", evidence: settled.evidence, sourceUrl: boardUrl }, own);
+      verified.push({ ...c, kind, verdict: out.verdict, correctValue: out.correctValue || "", evidence: `${out.evidence} ${citedNoteFor(cited, citedUrl, out.sourceUrl)}`.trim(), sourceUrl: out.sourceUrl, citedSource: citedUrl, readTheirSource: !!cited?.read, askedOwnSite: out.askedOwnSite, byBoard: out.sourceUrl === boardUrl });
+      continue;
+    }
     verified.push({
       ...c, kind,
+      byBoard: !!boardUrl,
       verdict: settled.verdict,
       correctValue: parsed.correctValue || "",
       // The citation's sentence goes last, after the search's, because it is
       // context for the verdict rather than the verdict's reason. It is the
       // line that tells him a finding was resting on a page that never said it.
-      evidence: `${settled.evidence} ${cited?.evidence || ""}`.trim(),
+      evidence: `${settled.evidence} ${citedNoteFor(cited, citedUrl, searchUrl)}`.trim(),
       sourceUrl: parsed.sourceUrl || (cited?.supported ? cited.sourceUrl : "") || (selfEvidentUrl ? (parsed.correctValue || c.proposed) : ""),
       citedSource: citedUrl,
       readTheirSource: !!cited?.read,

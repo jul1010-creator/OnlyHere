@@ -288,6 +288,52 @@ export const isNeverASource = (url) => {
   return !!h && NEVER_A_SOURCE.test(h);
 };
 
+// ── AN OFFICIAL TOURISM BOARD IS A PROPER SOURCE ────────────────────
+//
+// Oliver, 7 Oct 2026: "I think we should consider the tourism center's sources
+// as proper." Until now the correction check called every tourist board
+// "supporting evidence, never the deciding one", so a fact klaipedatravel.lt
+// states plainly about a sculpture or a square could never settle anything on
+// its own, and a Studio correction resting on it came back "nothing settled
+// it".
+//
+// The ranking that holds now, top first:
+//
+//   1. the place's own site (and for a ferry, the operator's timetable)
+//   2. an official tourism board: the city's or region's own tourist office
+//   3. everything else, blogs, review sites, listings, AI answers: supporting
+//
+// So a board settles a claim on its own, and the place's own site still
+// outranks it when it says otherwise. Same reason as ever: a board copies
+// opening hours from somebody else, and the copy goes stale first.
+//
+// NAMED, AND THE DANISH PREFIXES MATCHED. The Danish regional companies are
+// all visitSOMETHING or destinationSOMETHING (see NEVER_OWN_SITE above, which
+// refuses the same hosts as a place's OWN site, the other half of this rule).
+// Lithuania's offices do not share a pattern, so they are named.
+export const OFFICIAL_BOARD_HOSTS = [
+  "klaipedatravel.lt", "lithuania.travel", "govilnius.lt", "visit.kaunas.lt",
+  "visitdenmark.com", "visitdenmark.dk", "dansk-kyst-og-naturturisme.dk",
+];
+const BOARD_PREFIX = /^(?:visit|destination)[a-z0-9-]*\.(?:dk|com|lt|eu)$/i;
+export const isOfficialBoard = (url) => {
+  const h = hostOfUrl(url).toLowerCase();
+  if (!h || NEVER_A_SOURCE.test(h)) return false;
+  if (OFFICIAL_BOARD_HOSTS.some(d => h === d || h.endsWith(`.${d}`))) return true;
+  // en.visitaarhus.com is still VisitAarhus. Each shorter tail is tried, so a
+  // language subdomain does not hide the board behind it.
+  const labels = h.split(".");
+  for (let i = 0; i < labels.length - 1; i++) if (BOARD_PREFIX.test(labels.slice(i).join("."))) return true;
+  return false;
+};
+
+// Two addresses on the same site, www or not. "Another page on the same site"
+// is how the reporting below tells a page that was silent from a site that was.
+export const sameSite = (a, b) => {
+  const x = hostOfUrl(a).toLowerCase(), y = hostOfUrl(b).toLowerCase();
+  return !!x && x === y;
+};
+
 // Asserted rather than assumed, because the whole failure was these two drifting
 // apart: anything refused as a SOURCE must also be refused as the own site. The
 // reverse does not hold and that is the point of having two.

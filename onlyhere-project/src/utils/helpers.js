@@ -1548,9 +1548,14 @@ export const hostMatchesName = (url, name) => {
   let host;
   try { host = new URL(url).hostname.toLowerCase(); } catch { return false; }
   host = host.replace(/^www\./, "");
-  const bare = host.replace(/\.(dk|com|net|org|eu|info|travel)$/i, "").replace(/[^a-z0-9]/g, "");
+  // .lt since the Klaipėda demo: without it no Lithuanian place could ever
+  // match its own site, so the correction pass never asked one.
+  const bare = host.replace(/\.(dk|com|net|org|eu|info|travel|lt)$/i, "").replace(/[^a-z0-9]/g, "");
+  // Lithuanian letters fold to their base letter (ė to e, š to s), the way the
+  // site's own address writes them. Danish æ, ø, å keep their spelled forms.
   const flat = (v) => String(v || "").toLowerCase()
     .replace(/æ/g, "ae").replace(/ø/g, "oe").replace(/å/g, "aa")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]/g, "");
   const n = flat(name);
   if (!bare || !n) return false;
