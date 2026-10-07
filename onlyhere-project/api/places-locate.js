@@ -47,6 +47,7 @@ const townFromAddress = (address) => {
   return "";
 };
 
+import { gateFounder } from "../src/utils/founderGate.js";
 import { requestIsFromSite, NOT_FROM_SITE, resolveUser, isFounder } from "../src/utils/apiGuard.js";
 import { COUNTRY_PROFILES, DEFAULT_COUNTRY, plainTownName } from "../src/utils/countries.js";
 
@@ -79,6 +80,9 @@ export default async function handler(req, res) {
   const want = Math.min(Math.max(Number(limit) || 5, 1), 12);
   const key = process.env.GOOGLE_MAPS_KEY;
   if (!key) return res.status(500).json({ error: "GOOGLE_MAPS_KEY not set on the server" });
+  // A daily ceiling on this paid lookup (security review, 6 Oct 2026).
+  const counted = await gateFounder({ route: "places-locate", env: process.env });
+  if (!counted.ok) return res.status(counted.status).json({ error: counted.error });
 
   try {
     // ── WHICH COUNTRY TO ASK GOOGLE ABOUT ─────────────────────────

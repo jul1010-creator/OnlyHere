@@ -7,7 +7,7 @@
 // GOOGLE_MAPS_KEY already used by directions.js.
 
 import { requestIsFromSite, NOT_FROM_SITE, resolveUser, isFounder } from "../src/utils/apiGuard.js";
-import { gateMaps } from "../src/utils/mapsGate.js";
+import { gateFounder } from "../src/utils/founderGate.js";
 
 export default async function handler(req, res) {
   // ── SECURITY, 17 AUG 2026 ─────────────────────────────────────────
@@ -38,7 +38,9 @@ export default async function handler(req, res) {
   }
   const key = process.env.GOOGLE_MAPS_KEY;
   if (!key) {
-    return res.status(500).json({ error: "GOOGLE_MAPS_KEY not set on the server" });
+    // The variable is named in the log only (security review, 4 Oct 2026).
+    console.error("GOOGLE_MAPS_KEY is not set");
+    return res.status(500).json({ error: "This is not available just now." });
   }
   // ── TYPES, PLURAL, AND A RADIUS ────────────────────────────────────
   // Oliver, 7 Aug: "the draft now just made a 'nearestStation' a bus stop. I
@@ -56,18 +58,23 @@ export default async function handler(req, res) {
   // Deciding which of the results wins is deliberately NOT done here: this
   // endpoint stays a thin lookup, and geo.js does the choosing where the rule
   // can be read next to the rest of the transport logic.
-  // The ceiling is 20 km rather than Google's own 50 km because nothing this
+  // (Until 7 Oct 2026 the ceiling was 20 km.) Nothing this
   // app asks about is further than a ferry berth from the village it serves,
   // and a country-wide radius would return a "nearest stop" in another region.
-  const placeTypes = String(type || "transit_station").split(",").map(t => t.trim()).filter(Boolean);
-  const radius = Math.min(Math.max(parseInt(req.query.radius, 10) || 1500, 200), 20000);
+  // Transit types only, up to 6 km: the three tiers in src/utils/geo.js are
+  // the only caller (security review, 6 Oct 2026).
+  const PLACE_TYPES = new Set(["train_station", "subway_station", "light_rail_station", "ferry_terminal", "transit_station", "bus_station"]);
+  const placeTypes = String(type || "transit_station").split(",").map(t => t.trim()).filter(t => PLACE_TYPES.has(t));
+  if (!placeTypes.length) return res.status(400).json({ error: "Only transit place types are looked up here." });
+  const radius = Math.min(Math.max(parseInt(req.query.radius, 10) || 1500, 200), 6000);
   const want = Math.min(Math.max(parseInt(req.query.limit, 10) || 1, 1), 10);
   if (!Number.isFinite(parseFloat(lat)) || !Number.isFinite(parseFloat(lon))) {
     return res.status(400).json({ error: "lat and lon must be numbers" });
   }
   // ── COUNTED BEFORE GOOGLE IS ASKED ────────────────────────────────
-  // Security review, 4 Oct 2026, finding 5: see src/utils/mapsGate.js.
-  const counted = await gateMaps({ headers: req.headers, env: process.env });
+  // Studio's own counter, not the readers' maps pool (security review,
+  // 6 Oct 2026), so a busy reader day cannot turn Studio's stops into "no stop".
+  const counted = await gateFounder({ route: "places", env: process.env });
   if (!counted.ok) return res.status(counted.status).json({ error: counted.error });
 
   try {
@@ -103,7 +110,7 @@ export default async function handler(req, res) {
     if (!r.ok || !data) { console.error("places:", r.status, data); return res.status(200).json({ error: "Places lookup failed" }); }
     const places = Array.isArray(data.places) ? data.places : [];
     if (!places.length) {
-      return res.status(200).json({ error: data.error?.message || "No nearby place found" });
+      return res.status(200).json({ error: "No nearby place found" });
     }
     const shape = (p) => ({
       name: p.displayName?.text || "",
@@ -116,6 +123,7 @@ export default async function handler(req, res) {
     // which read .name/.lat/.lon, keep working untouched.
     return res.status(200).json({ ...shape(places[0]), results: places.map(shape) });
   } catch (err) {
-    return res.status(500).json({ error: String(err) });
+    console.error("Places nearby failed:", err);
+    return res.status(500).json({ error: "Places lookup failed" });
   }
 }

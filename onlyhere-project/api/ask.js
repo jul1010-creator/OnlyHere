@@ -1,6 +1,6 @@
 // /api/ask.js
 import { isFounder, requestIsFromSite, NOT_FROM_SITE } from "../src/utils/apiGuard.js";
-import { takeDaily } from "../src/utils/aiGate.js";
+import { takeDaily, limitOf } from "../src/utils/aiGate.js";
 //
 // ── THE TRAVELER'S ASSISTANT, ANSWERED SERVER SIDE ───────────────────
 // Oliver, 7 Aug 2026: "There is a studio/admin assistant and a paid subscriber
@@ -85,8 +85,22 @@ export default async function handler(req, res) {
     return json(res, 503, { error: "Could not verify your session just now." });
   }
   if (!userId) return json(res, 401, { error: "Sign in to ask a question." });
+  // ── A QUESTION, NOT A PAYLOAD ─────────────────────────────────────────
+  // Security review, 5 Oct 2026, finding 3. Nothing capped the body or the
+  // fields beside the entry, so one question could carry megabytes into two
+  // paid Claude calls. The entry itself is cut to 24,000 characters below.
+  let bodySize = Infinity;
+  try { bodySize = JSON.stringify(req.body || {}).length; } catch { /* stays Infinity */ }
+  if (bodySize > 400_000) return json(res, 413, { error: "That question is too large to send." });
+  const clip = (v, n) => String(v ?? "").slice(0, n);
 
-  const { question, entry, entryName, lang, nearby, traveller } = req.body || {};
+  const { question, entry, traveller } = req.body || {};
+  const entryName = clip(req.body?.entryName, 160);
+  const lang = req.body?.lang ? { tag: clip(req.body.lang.tag, 20), name: clip(req.body.lang.name, 40) } : null;
+  const nearby = Array.isArray(req.body?.nearby) ? req.body.nearby.slice(0, 8).map(r => ({
+    name: clip(r?.name, 120), note: clip(r?.note, 160), away: clip(r?.away, 40),
+    km: Number.isFinite(Number(r?.km)) ? Number(r.km) : "",
+  })) : [];
   // ── ANSWER IN THE LANGUAGE THEY READ IN ─────────────────────────
   // Oliver, 15 Aug 2026, on somebody who only reads Mandarin. Neither prompt in
   // this file said a word about language, so both answered in English and
@@ -171,9 +185,11 @@ export default async function handler(req, res) {
   // log row written only after the answer, so ten questions sent at once all
   // read the same count and all passed. The daily counter takes the place
   // under a lock first; the log above stays as the record and the display.
-  const took = await takeDaily({ day, keys: [{ key: `ask:u:${String(userId).toLowerCase()}`, limit: DAILY_LIMIT }], supabaseUrl: SUPABASE_URL, serviceKey: SERVICE_KEY });
+  const took = await takeDaily({ day, keys: [{ key: `ask:u:${String(userId).toLowerCase()}`, limit: DAILY_LIMIT }, { key: "ask:site", limit: limitOf(process.env.GEMLYX_ASK_PER_DAY, 500) }], supabaseUrl: SUPABASE_URL, serviceKey: SERVICE_KEY });
   if (took.closed) return json(res, 503, { error: "Could not check your question allowance just now. Try again in a moment." });
   if (!took.ok) {
+    // The whole site's day, not this member's: their own count stays true.
+    if (took.over === "ask:site") return json(res, 429, { error: "Gemlyx has answered all the questions it can today. Try again tomorrow.", used, limit: DAILY_LIMIT });
     return json(res, 429, {
       error: `That is your ${DAILY_LIMIT} questions for today. It resets at midnight UTC.`,
       used: DAILY_LIMIT, limit: DAILY_LIMIT,
@@ -315,7 +331,8 @@ Be short and concrete. Prefer the venue's own site, the organiser, or an officia
         const pd = await pr.json();
         if (!pr.ok) throw new Error(pd?.error?.message || `Search failed (${pr.status})`);
         const research = pd?.choices?.[0]?.message?.content || "";
-        sources = Array.isArray(pd?.citations) ? pd.citations.slice(0, 3) : [];
+        // https links only: a citation becomes a link on the page (security review, 5 Oct 2026).
+        sources = Array.isArray(pd?.citations) ? pd.citations.filter(u => /^https:\/\//i.test(String(u))).slice(0, 3).map(u => String(u).slice(0, 500)) : [];
         answer = research.trim()
           ? await askClaude(
               `Answer the traveler's question using ONLY the fresh research below. Short and direct. If the research does not actually settle it, say so plainly rather than hedging. Never use an em dash or an en dash.${answerIn}\n\nQuestion: ${q}\n\nFresh research:\n${research}`,
@@ -326,7 +343,7 @@ Be short and concrete. Prefer the venue's own site, the organiser, or an officia
     }
 
     // 3. CHARGE ONLY FOR AN ANSWER THAT HAPPENED.
-    let spent = used;
+    const spent = used + 1; // taken by takeDaily above, answered or not
     try {
       const logged = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_ask_log`, {
         method: "POST",
@@ -339,11 +356,15 @@ Be short and concrete. Prefer the venue's own site, the organiser, or an officia
         // device, nothing beyond the account that already exists.
         body: JSON.stringify({ user_id: userId, day, question: q, place: entryName || null, looked_up: lookedUp }),
       });
-      if (logged.ok) spent = used + 1;
+      if (!logged.ok) console.warn("ask log not written:", logged.status);
     } catch { /* the answer is already written; losing the log entry is the cheaper failure */ }
 
     return json(res, 200, { answer, sources, lookedUp, used: spent, limit: DAILY_LIMIT });
   } catch (err) {
-    return json(res, 502, { error: String(err?.message || err) });
+    console.error("ask failed:", err);
+    // The question was counted when it was taken (takeDaily above), so the
+    // panel is told so, with the count the counter holds (security review,
+    // 5 Oct 2026).
+    return json(res, 502, { error: "Could not answer that just now. It still counted as one of today's questions.", used: used + 1, limit: DAILY_LIMIT });
   }
 }

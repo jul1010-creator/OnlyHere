@@ -23,6 +23,7 @@
 // it were content. That half is free, and it is the half that tells you whether
 // the paid half is worth buying: until something records WHICH domains fail,
 // "sites that block AI" is a hunch with no list behind it.
+import { gateFounder } from "../src/utils/founderGate.js";
 import { readPage } from "../src/utils/readPage.js";
 import { safeFetch } from "../src/utils/safeFetch.js";
 import { domainOf } from "../src/utils/pageScan.js";
@@ -30,7 +31,7 @@ import { domainOf } from "../src/utils/pageScan.js";
 const errorFor = (url, r) =>
   r.read.startsWith("http-") ? `Source returned ${r.status}`
   : r.read === "challenge-page" ? `${domainOf(url)} answered with a bot wall rather than the page. Nothing readable came back.`
-  : r.read === "fetch-failed" ? `Could not reach ${domainOf(url)}: ${r.detail}`
+  : r.read === "fetch-failed" ? `Could not reach ${domainOf(url)}.`
   : r.read.startsWith("firecrawl-") ? `Could not read ${domainOf(url)}. The plain fetch gave "${r.firstTry}" and Firecrawl gave "${r.read}".`
   : `${domainOf(url)} returned almost no readable text, which usually means the page builds itself in JavaScript.`;
 
@@ -64,7 +65,7 @@ export default async function handler(req, res) {
   // page changed, so serving it from a copy taken before the suspicion is the
   // one answer it must not give. See FIRECRAWL_CACHE_MS in utils/pageScan.js.
   const fresh = String(req.query.fresh || "") === "1";
-  const r = await readPage(url, { key, fresh, pageFetch: safeFetch });
+  const r = await readPage(url, { key, fresh, pageFetch: safeFetch, canEscalate: async () => (await gateFounder({ route: "firecrawl", env: process.env })).ok });
 
   if (!r.blocked) {
     // tickets: the outbound ticket links this page carries, best first. The draft

@@ -21,7 +21,9 @@ export default async function handler(req, res) {
   }
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) {
-    return res.status(500).json({ error: "ANTHROPIC_API_KEY not set on the server" });
+    // The variable is named in the log only (security review, 4 Oct 2026).
+    console.error("ANTHROPIC_API_KEY is not set");
+    return res.status(500).json({ error: "This is not available just now." });
   }
   // 30 Sep 2026: a signed-in, confirmed account or the founder, counted per
   // day, with the model and length decided here. See src/utils/aiGate.js.

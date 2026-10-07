@@ -41,7 +41,9 @@ export default async function handler(req, res) {
   }
   const key = process.env.PERPLEXITY_API_KEY;
   if (!key) {
-    return res.status(500).json({ error: "PERPLEXITY_API_KEY not set on the server" });
+    // The variable is named in the log only (security review, 4 Oct 2026).
+    console.error("PERPLEXITY_API_KEY is not set");
+    return res.status(500).json({ error: "This is not available just now." });
   }
   const gate = await gateAi({ headers: req.headers, body: req.body, endpoint: "perplexity", env: process.env });
   if (!gate.ok) return res.status(gate.status).json({ error: gate.error, gate: true });

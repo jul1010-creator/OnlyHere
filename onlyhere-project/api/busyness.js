@@ -11,6 +11,7 @@
 // and every reader is shown the stored copy: one paid request per place per
 // month rather than one per visitor. The key stays on the server as
 // BESTTIME_API_KEY_PRIVATE, set in Vercel; without it this says so.
+import { gateFounder } from "../src/utils/founderGate.js";
 import { requestIsFromSite, NOT_FROM_SITE, resolveUser, isFounder } from "../src/utils/apiGuard.js";
 import { busyFromBestTime } from "../src/utils/dealExtras.js";
 
@@ -30,11 +31,17 @@ export default async function handler(req, res) {
   }
   if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
   const key = process.env.BESTTIME_API_KEY_PRIVATE;
-  if (!key) return res.status(503).json({ error: "BESTTIME_API_KEY_PRIVATE is not set in Vercel. Create a BestTime account, copy the private key, add it, and redeploy." });
+  if (!key) {
+    console.error("BESTTIME_API_KEY_PRIVATE is not set");
+    return res.status(503).json({ error: "Busyness is not set up on the server." });
+  }
 
   const name = String(req.body?.name || "").trim().slice(0, 160);
   const address = String(req.body?.address || "").trim().slice(0, 240);
   if (!name || !address) return res.status(400).json({ error: "A name and an address are both needed. BestTime finds the place by the two together." });
+  // A daily ceiling on this paid lookup (security review, 6 Oct 2026).
+  const counted = await gateFounder({ route: "busyness", env: process.env });
+  if (!counted.ok) return res.status(counted.status).json({ error: counted.error });
 
   try {
     const q = new URLSearchParams({ api_key_private: key, venue_name: name, venue_address: address });

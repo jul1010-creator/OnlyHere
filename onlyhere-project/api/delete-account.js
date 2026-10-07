@@ -37,7 +37,7 @@
 import { requestIsFromSite, NOT_FROM_SITE, resolveUser, founderIds, FOUNDER_FALLBACK_ID } from "../src/utils/apiGuard.js";
 
 const SUPABASE_URL = process.env.SUPABASE_URL || "https://vpxfahjnerkkkoueovhl.supabase.co";
-const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY || "";
+const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || "";
 
 export default async function handler(req, res) {
   if (!requestIsFromSite(req.headers)) {
@@ -81,17 +81,29 @@ export default async function handler(req, res) {
   // The id is who.userId and nothing else. See the paragraph at the top.
   // ── WHAT THEY WROTE IN PUBLIC GOES WITH THEM ──────────────────────
   // 1 Oct 2026. Reviews carry the account's id since the lockdown SQL, and the
-  // privacy policy says nothing of theirs is kept after deletion. Best effort:
-  // a failure here must not stop the login from being deleted, and the daily
-  // AI counters, which hold the id, go too.
+  // privacy policy says nothing of theirs is kept after deletion. The daily
+  // counters, which hold the id, go too. Since the security review of 4 Oct
+  // 2026 the answers are read: a failed data delete stops here, before the
+  // login goes, so the reader can try again.
   const svc = { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` };
   const uid = encodeURIComponent(who.userId);
-  await Promise.all([
+  const lower = String(who.userId).toLowerCase();
+  const removed = await Promise.all([
     fetch(`${SUPABASE_URL}/rest/v1/gemlyx_reviews?user_id=eq.${uid}`, { method: "DELETE", headers: svc }).catch(() => null),
-    // Both counters that hold the id: the AI allowance (ai:u:) and the guide
-    // allowance (u:), which the privacy policy also promises go (review, 2 Oct 2026).
-    fetch(`${SUPABASE_URL}/rest/v1/gemlyx_guide_allowance?key=in.(${encodeURIComponent(`"ai:u:${String(who.userId).toLowerCase()}"`)},${encodeURIComponent(`"u:${String(who.userId).toLowerCase()}"`)})`, { method: "DELETE", headers: svc }).catch(() => null),
+    // Every counter that holds the id: the AI allowance (ai:u:, and its Opus
+    // count), the guide allowance (u:), its stop count (c:u:) and the question
+    // count (ask:u:), which the privacy policy promises go too.
+    fetch(`${SUPABASE_URL}/rest/v1/gemlyx_guide_allowance?key=in.(${[`"ai:u:${lower}"`, `"u:${String(who.userId).toLowerCase()}"`, `"ai:u:${lower}:opus"`, `"c:u:${lower}"`, `"ask:u:${lower}"`].map(encodeURIComponent).join(",")})`, { method: "DELETE", headers: svc }).catch(() => null),
   ]);
+  // Library trips carry the account since section 3c of the lockdown SQL
+  // (7 Oct 2026). Best effort and not checked: until that section has run the
+  // column does not exist, and that must not stop a deletion.
+  await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_trip_library?user_id=eq.${uid}`, { method: "DELETE", headers: svc }).catch(() => null);
+  // Checked before the login goes: once it is gone, the id that finds these
+  // rows is gone too (security review, 4 Oct 2026).
+  if (removed.some(r => !r?.ok)) {
+    return res.status(502).json({ error: "Nothing was deleted yet, because your data could not be removed just now. Try again in a moment, or mail hello@gemlyxtravel.com." });
+  }
   try {
     const gone = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${encodeURIComponent(who.userId)}`, {
       method: "DELETE",

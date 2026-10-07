@@ -11,6 +11,7 @@
 // existing paid Google Maps Platform billing (same GOOGLE_MAPS_KEY, same
 // Cloud project — no new account or key needed).
 
+import { gateFounder } from "../src/utils/founderGate.js";
 import { requestIsFromSite, NOT_FROM_SITE, resolveUser, isFounder } from "../src/utils/apiGuard.js";
 import { COUNTRY_PROFILES, DEFAULT_COUNTRY } from "../src/utils/countries.js";
 
@@ -40,6 +41,9 @@ export default async function handler(req, res) {
   if (!key) {
     return res.status(500).json({ error: "GOOGLE_MAPS_KEY not set on the server" });
   }
+  // A daily ceiling on this paid lookup (security review, 6 Oct 2026).
+  const counted = await gateFounder({ route: "places-hours", env: process.env });
+  if (!counted.ok) return res.status(counted.status).json({ error: counted.error });
 
   try {
     // Same country rule as places-locate.js: Denmark unless Studio says otherwise.

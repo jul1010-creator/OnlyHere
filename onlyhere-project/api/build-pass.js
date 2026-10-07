@@ -181,6 +181,9 @@ export default async function handler(req, res) {
   const out = await decide({ headers: req.headers, body: req.body || {}, env: process.env, fetchImpl: fetch });
   // Visible in the Vercel logs, so a cap that is not counting is never silent.
   if (out.json?.open) console.warn("build-pass not counting:", out.json.open);
+  // The reason stays in the Vercel log above; the browser hears only that the
+  // cap is open (security review, 5 Oct 2026).
+  if (out.json?.open) out.json = { ...out.json, open: true };
   res.setHeader("Cache-Control", "no-store");
   return res.status(out.status).json(out.json);
 }

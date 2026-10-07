@@ -31,7 +31,9 @@ export default async function handler(req, res) {
   }
 
   if (!process.env.TAVILY_API_KEY) {
-    return res.status(500).json({ error: "Search not configured — missing TAVILY_API_KEY" });
+    // The variable is named in the log only (security review, 4 Oct 2026).
+    console.error("TAVILY_API_KEY is not set");
+    return res.status(500).json({ error: "This is not available just now." });
   }
 
   try {

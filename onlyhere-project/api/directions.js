@@ -263,7 +263,9 @@ export default async function handler(req, res) {
   }
   const key = process.env.GOOGLE_MAPS_KEY;
   if (!key) {
-    return res.status(500).json({ error: "GOOGLE_MAPS_KEY not set on the server" });
+    // The variable is named in the log only (security review, 4 Oct 2026).
+    console.error("GOOGLE_MAPS_KEY is not set");
+    return res.status(500).json({ error: "This is not available just now." });
   }
   // ── COUNTED BEFORE GOOGLE IS ASKED ────────────────────────────────
   // Security review, 4 Oct 2026, finding 5: see src/utils/mapsGate.js.
@@ -480,6 +482,7 @@ export default async function handler(req, res) {
       via: "directions",
     });
   } catch (err) {
-    return res.status(500).json({ error: String(err) });
+    console.error("Directions failed:", err);
+    return res.status(500).json({ error: "Directions lookup failed" });
   }
 }
