@@ -168,6 +168,7 @@ import { StoreBadge } from "./components/StoreBadge";
 import { DateTimePicker } from "./components/DateTimePicker";
 import { PlanAbroadForm } from "./components/PlanAbroadForm";
 import { PromotionsPage } from "./components/PromotionsPage";
+import { RandomWalkTest } from "./components/RandomWalkTest";
 import { livePromotions } from "./utils/promotions";
 import { groupNav, childActive, groupActive } from "./utils/navGroups";
 import { NavGroupButtons } from "./components/NavGroups";
@@ -24708,10 +24709,15 @@ ${languageBlock()}`;
                         or typing — cheap way to exercise the whole build (draft, geocode,
                         weather, exact durations) without hand-writing a trip. Restored per
                         Oliver's repeated ask, had dropped out somewhere in an earlier pass. */}
+                    {/* On another country's page the test is a QR walk, not a guide.
+                        Oliver, 7 Oct 2026: "it's highly unlike people will use such a
+                        guide. Make it for QR codes." See components/RandomWalkTest.jsx. */}
+                    {PAGE_ABROAD ? <RandomWalkTest country={PAGE_COUNTRY} /> : (
                     <button onClick={generateRandomGuide} disabled={guideModal === "loading"}
                       style={{ width: "100%", background: "none", border: `1px dashed ${C.gold}66`, color: C.gold, borderRadius: 10, padding: "9px 14px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 12 }}>
                       {guideModal === "loading" ? "Building…" : "🎲 Random guide (test the pipeline)"}
                     </button>
+                    )}
 
                     {/* ── "MAKE ME ABLE TO SEND YOU A REPORT OF MY CHATS" ──
                         Oliver, 17 Aug 2026. He asked once, it did not get built,
