@@ -655,6 +655,7 @@ create table if not exists gemlyx_user_data (
   updated_at timestamptz default now()
 );
 alter table gemlyx_user_data enable row level security;
+-- DO NOT RUN: superseded by SECURITY_LOCKDOWN_30SEP.sql (security review, 7 Oct 2026).
 create policy "own data" on gemlyx_user_data for all to authenticated
   using (auth.uid() = user_id) with check (auth.uid() = user_id);
 ```
@@ -965,7 +966,9 @@ create table if not exists gemlyx_facts (
   created_at timestamptz default now()
 );
 alter table gemlyx_facts enable row level security;
+-- DO NOT RUN: superseded by SECURITY_LOCKDOWN_30SEP.sql (security review, 7 Oct 2026).
 create policy "read gemlyx_facts" on gemlyx_facts for select to anon using (published);
+-- DO NOT RUN: superseded by SECURITY_LOCKDOWN_30SEP.sql (security review, 7 Oct 2026).
 create policy "auth all gemlyx_facts" on gemlyx_facts for all to authenticated using (true) with check (true);
 ```
 
@@ -1101,6 +1104,7 @@ Verified: full real-import esbuild bundle, minify scope-check on every new ident
 
 create table if not exists gemlyx_research (name text not null, type text not null, notes text, urls jsonb, created_at timestamptz default now(), primary key (name, type));
 alter table gemlyx_research enable row level security;
+-- DO NOT RUN: superseded by SECURITY_LOCKDOWN_30SEP.sql (security review, 7 Oct 2026).
 create policy "auth all gemlyx_research" on gemlyx_research for all to authenticated using (true) with check (true);
 
 If the table doesn't exist, drafting still works exactly as before — memory just silently stays off.
@@ -1120,7 +1124,9 @@ An "⬆ Upload photos" button that works from your phone (pick from camera roll,
 **One-time setup needed before the first upload** (Supabase dashboard → SQL editor, run once):
 
 insert into storage.buckets (id, name, public) values ('gemlyx-media','gemlyx-media', true);
+-- DO NOT RUN: superseded by SECURITY_LOCKDOWN_30SEP.sql (security review, 7 Oct 2026).
 create policy "auth upload gemlyx-media" on storage.objects for insert to authenticated with check (bucket_id = 'gemlyx-media');
+-- DO NOT RUN: superseded by SECURITY_LOCKDOWN_30SEP.sql (security review, 7 Oct 2026).
 create policy "public read gemlyx-media" on storage.objects for select using (bucket_id = 'gemlyx-media');
 
 If you skip this, the upload button will tell you exactly that instead of failing silently. Also worth knowing: an earlier session's "📷 Photos" panel (the photo_overrides approach) is completely gone from the current code — it was lost in one of the big rebuilds, which is why uploading felt missing. This new editor replaces it with a better fit for the Supabase-only content model: media attaches directly to the published entry, not to a side table.
@@ -1500,10 +1506,13 @@ I spot-checked a handful of the other newly-downloaded photos too (a few festiva
 ```sql
 insert into storage.buckets (id, name, public) values ('event-photos', 'event-photos', true);
 
+-- DO NOT RUN: superseded by SECURITY_LOCKDOWN_30SEP.sql (security review, 7 Oct 2026).
 create policy "Public read event photos" on storage.objects for select
   using (bucket_id = 'event-photos');
+-- DO NOT RUN: superseded by SECURITY_LOCKDOWN_30SEP.sql (security review, 7 Oct 2026).
 create policy "Authenticated upload event photos" on storage.objects for insert
   to authenticated with check (bucket_id = 'event-photos');
+-- DO NOT RUN: superseded by SECURITY_LOCKDOWN_30SEP.sql (security review, 7 Oct 2026).
 create policy "Authenticated update event photos" on storage.objects for update
   to authenticated using (bucket_id = 'event-photos');
 
@@ -1513,8 +1522,11 @@ create table photo_overrides (
   updated_at timestamptz default now()
 );
 alter table photo_overrides enable row level security;
+-- DO NOT RUN: superseded by SECURITY_LOCKDOWN_30SEP.sql (security review, 7 Oct 2026).
 create policy "Public read photo overrides" on photo_overrides for select using (true);
+-- DO NOT RUN: superseded by SECURITY_LOCKDOWN_30SEP.sql (security review, 7 Oct 2026).
 create policy "Authenticated write photo overrides" on photo_overrides for insert to authenticated with check (true);
+-- DO NOT RUN: superseded by SECURITY_LOCKDOWN_30SEP.sql (security review, 7 Oct 2026).
 create policy "Authenticated update photo overrides" on photo_overrides for update to authenticated using (true);
 ```
 Until you run this, the Photos panel will show an upload error (bucket/table not found) rather than silently failing, and every photo on the site keeps working exactly as it does today, this is purely additive.
@@ -2063,7 +2075,7 @@ Two changes fix this at the source: precise coordinates (real data on file, or a
 
 **2. The weekly "Update current events" check now runs on its own, every Monday** — no need to open the app or click the button yourself. New `api/update-events-check.js` does the exact same Perplexity re-verification as the in-app button, but as a plain server endpoint a schedule can call directly. I've set up a scheduled task that runs it every Monday morning and sends you a push notification with a report of anything that changed (cancelled, rescheduled, ticket status changed) — or a quick "all clear" if nothing did. Nothing gets auto-edited in your data; you still update `src/data/events.js` by hand from the report, same as before.
 
-**One thing you need to do in Vercel before this works**: add a new environment variable named exactly `UPDATE_EVENTS_SECRET` with this value: `Y5Hx7N9i10USdlqmL0PEB502ig4sa4Gt` (any random string works, this one's already wired into the scheduled task, so use this exact one). This just stops a random visitor who finds the URL from running up Perplexity calls on your key — without it set, every call to the new endpoint fails safely with an error instead of running.
+**One thing you need to do in Vercel before this works**: add a new environment variable named exactly `UPDATE_EVENTS_SECRET` with this value: `<redacted>` (any random string works, this one's already wired into the scheduled task, so use this exact one). This just stops a random visitor who finds the URL from running up Perplexity calls on your key — without it set, every call to the new endpoint fails safely with an error instead of running.
 
 **Also on your notes:** the "Hit a snag on my end" chat error you saw was almost certainly the `/api/perplexity` 405 bug from earlier in this pass (that error path is one of the places askPerplexity gets called from during guide-building) — should already be resolved now that the missing file's in place. Still queued from this same odt: Flixbus/Kombardo Expresbus mentioned more prominently + real weather worked into the chat essentials (not just the guide page), the vintage-journal/parchment loading screen restyle, and the "show towns/attractions/diners first, essentials after, full route last" guide-flow redesign. I'll keep going on those next.
 

@@ -1,3 +1,5 @@
+> **DO NOT RUN the SQL in this file any more.** Security review, 7 Oct 2026: it opens the tables wider than `SECURITY_LOCKDOWN_30SEP.sql` allows. The lockdown file is the only SQL to run.
+
 # PLAN: the Studio fact generator
 
 **Status: written, not built.** This is the plan for what you asked for on 5 Aug 2026, so you can change the shape before any code exists.
@@ -30,6 +32,11 @@ Either way it goes through the same pipeline as a Studio draft: real research, t
 A `gemlyx_facts` table rather than a new type inside `gemlyx_content`. Reasoning: everything in `gemlyx_content` is a browsable place with a name, a payload shaped by `shapeForLive`, and a detail page. A fact is not a place, has no detail page, and would need special casing in every list that reads that table. A separate small table keeps both clean.
 
 ```sql
+-- ── DO NOT RUN THIS FILE ANY MORE ───────────────────────────────────
+-- Security review, 7 Oct 2026. The policies below open the tables wider than
+-- SECURITY_LOCKDOWN_30SEP.sql allows, and running them now would undo it.
+-- The lockdown file is the only SQL to run.
+--
 create table if not exists gemlyx_facts (
   id bigserial primary key,
   fact text not null,
@@ -41,7 +48,9 @@ create table if not exists gemlyx_facts (
   created_at timestamptz default now()
 );
 alter table gemlyx_facts enable row level security;
+-- DO NOT RUN: superseded by SECURITY_LOCKDOWN_30SEP.sql (security review, 7 Oct 2026).
 create policy "read gemlyx_facts" on gemlyx_facts for select to anon using (published);
+-- DO NOT RUN: superseded by SECURITY_LOCKDOWN_30SEP.sql (security review, 7 Oct 2026).
 create policy "auth all gemlyx_facts" on gemlyx_facts for all to authenticated using (true) with check (true);
 ```
 

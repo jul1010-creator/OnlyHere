@@ -1,3 +1,5 @@
+> **DO NOT RUN the SQL in this file any more.** Security review, 7 Oct 2026: it opens the tables wider than `SECURITY_LOCKDOWN_30SEP.sql` allows. The lockdown file is the only SQL to run.
+
 # Gemlyx security pass, 17 August 2026
 
 Oliver, going for a nap: *"perhaps install some security while I'm black out."*
@@ -127,6 +129,11 @@ question. Run this in the Supabase SQL editor and check the output of the last
 statement:
 
 ```sql
+-- ── DO NOT RUN THIS FILE ANY MORE ───────────────────────────────────
+-- Security review, 7 Oct 2026. The policies below open the tables wider than
+-- SECURITY_LOCKDOWN_30SEP.sql allows, and running them now would undo it.
+-- The lockdown file is the only SQL to run.
+--
 -- 1. Which tables have RLS on at all. Anything false here is world-writable
 --    with the key that ships in the bundle.
 select relname as table, relrowsecurity as rls_on
@@ -146,42 +153,56 @@ alter table public.gemlyx_suggestions enable row level security;
 alter table public.craft_requests     enable row level security;
 
 -- 3. Read: published content is public, everything else is not.
+-- DO NOT RUN: superseded by SECURITY_LOCKDOWN_30SEP.sql (security review, 7 Oct 2026).
 create policy "published content is readable"
   on public.gemlyx_content for select using (published = true);
+-- DO NOT RUN: superseded by SECURITY_LOCKDOWN_30SEP.sql (security review, 7 Oct 2026).
 create policy "sources are readable"
   on public.gemlyx_sources for select using (true);
+-- DO NOT RUN: superseded by SECURITY_LOCKDOWN_30SEP.sql (security review, 7 Oct 2026).
 create policy "facts are readable"
   on public.gemlyx_facts for select using (true);
+-- DO NOT RUN: superseded by SECURITY_LOCKDOWN_30SEP.sql (security review, 7 Oct 2026).
 create policy "guides are readable by link"
   on public.gemlyx_guides for select using (true);
 
 -- 4. Write to the content tables: signed in only. Every one of these calls
 --    already sends the founder's own token, so this changes no behaviour and
 --    closes the hole.
+-- DO NOT RUN: superseded by SECURITY_LOCKDOWN_30SEP.sql (security review, 7 Oct 2026).
 create policy "signed in may write content"
   on public.gemlyx_content for all to authenticated using (true) with check (true);
+-- DO NOT RUN: superseded by SECURITY_LOCKDOWN_30SEP.sql (security review, 7 Oct 2026).
 create policy "signed in may write sources"
   on public.gemlyx_sources for all to authenticated using (true) with check (true);
+-- DO NOT RUN: superseded by SECURITY_LOCKDOWN_30SEP.sql (security review, 7 Oct 2026).
 create policy "signed in may write facts"
   on public.gemlyx_facts for all to authenticated using (true) with check (true);
+-- DO NOT RUN: superseded by SECURITY_LOCKDOWN_30SEP.sql (security review, 7 Oct 2026).
 create policy "signed in may write research"
   on public.gemlyx_research for all to authenticated using (true) with check (true);
 
 -- 5. A visitor's own data, and only their own.
+-- DO NOT RUN: superseded by SECURITY_LOCKDOWN_30SEP.sql (security review, 7 Oct 2026).
 create policy "own row only"
   on public.gemlyx_user_data for all
   using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 -- 6. Insert-only for the public forms. No select, so nobody can read the
 --    inbox with the key from the bundle.
+-- DO NOT RUN: superseded by SECURITY_LOCKDOWN_30SEP.sql (security review, 7 Oct 2026).
 create policy "anyone may suggest"
   on public.gemlyx_suggestions for insert to anon, authenticated with check (true);
+-- DO NOT RUN: superseded by SECURITY_LOCKDOWN_30SEP.sql (security review, 7 Oct 2026).
 create policy "anyone may request a craft"
   on public.craft_requests for insert to anon, authenticated with check (true);
+-- DO NOT RUN: superseded by SECURITY_LOCKDOWN_30SEP.sql (security review, 7 Oct 2026).
 create policy "anyone may save a guide"
   on public.gemlyx_guides for insert to anon, authenticated with check (true);
+-- DO NOT RUN: superseded by SECURITY_LOCKDOWN_30SEP.sql (security review, 7 Oct 2026).
 create policy "signed in may review"
   on public.gemlyx_reviews for insert to authenticated with check (true);
+-- DO NOT RUN: superseded by SECURITY_LOCKDOWN_30SEP.sql (security review, 7 Oct 2026).
 create policy "reviews are readable"
   on public.gemlyx_reviews for select using (true);
 
