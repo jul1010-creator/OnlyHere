@@ -406,6 +406,16 @@ import "leaflet/dist/leaflet.css";
 // loads: "/" and "/denmark/..." are Denmark exactly as before, "/lithuania..."
 // is Lithuania. Moving between the two is a full page load (a link, not a tab),
 // so the lists liveContent loaded always match the page.
+// ── A SCAN-SOURCE REPLY, CHECKED ────────────────────────────────────
+// Security review, 6 Oct 2026, finding 7, the second half (7 Oct): a refused
+// call to our own page reader (401, 403, 429, 500) read as an empty page. It
+// is a failed read now, with its reason, and carries no `read`, which is how
+// the drafting tells a refused call from a page that blocked us.
+const scanReply = async (res) => {
+  const data = await res.json().catch(() => null);
+  if (!res.ok || !data) return { text: "", refused: true, error: data?.error || `Our page reader answered ${res.status}.` };
+  return data;
+};
 const PAGE_COUNTRY = activeCountry();
 const PAGE_LAND = countryProfile(PAGE_COUNTRY);
 const PAGE_ABROAD = PAGE_COUNTRY !== DEFAULT_COUNTRY;
@@ -1918,7 +1928,8 @@ function GemlyxApp() {
       const nextBody = applyBodyEdits(live.blogBody, bodyDraft);
       const problems = bodyEditProblems(live, nextBody, row.type);
       const merged = stampEdit({ ...live, blogBody: nextBody }, {
-        by: studioSession?.email || "",
+        // Not the email: the payload is public (security review, 7 Oct 2026).
+        by: "founder",
         blocks: changedIndexes(live.blogBody, nextBody),
         problems,
       });
@@ -2386,7 +2397,9 @@ function GemlyxApp() {
   const readSourcePage = async (url) => {
     try {
       const res = await studioFetch(`/api/scan-source?fresh=1&url=${encodeURIComponent(url)}`);
-      return await res.json();
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data) return { text: "", refused: true, error: data?.error || `Our page reader answered ${res.status}.` };
+      return data;
     } catch (e) { return { text: "", error: String(e?.message || e) }; }
   };
 
@@ -2566,6 +2579,7 @@ function GemlyxApp() {
   const [manageQuery, setManageQuery] = useState("");
   const [redraftOpen, setRedraftOpen] = useState(false);
   const [manageItems, setManageItems] = useState(null);
+  const [manageLoadError, setManageLoadError] = useState("");
   const [manageLoading, setManageLoading] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
   // ── THE RECORDER, WHICH HAS TO BE ON BEFORE THE PAGE IT WATCHES ──
@@ -2690,7 +2704,9 @@ function GemlyxApp() {
     setReportLoading(true);
     setReportError(null);
     try {
-      const res = await supaFetch(`${SUPABASE_URL}/rest/v1/${SUPPORT_TABLE}?select=id,reference,topic,email,message,url,handled,created_at&order=created_at.desc&limit=200`);
+      // Open reports first, so a burst of rows cannot push one out of the 200
+      // (security review, 7 Oct 2026).
+      const res = await supaFetch(`${SUPABASE_URL}/rest/v1/${SUPPORT_TABLE}?select=id,reference,topic,email,message,url,handled,created_at&order=handled.asc,created_at.desc&limit=200`);
       if (!res.ok) {
         // A refusal is worth saying out loud. The silent case is the empty one
         // below, which is the one that needs the SQL.
@@ -2817,7 +2833,11 @@ function GemlyxApp() {
     setManageLoading(true);
     try {
       const res = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=id,type,payload,published,created_at&order=id.desc`);
+      // A refused read is not an empty library (security review, 4 Oct 2026).
+      if (!res.ok) throw new Error(`the content library answered ${res.status}`);
       const rows = await res.json();
+      if (!Array.isArray(rows)) throw new Error("the content library did not send a list");
+      setManageLoadError("");
       // This page's country only. Every reader of manageItems (the health
       // check, the duplicate finder, "is this already published") is asking
       // about the site he is standing on, so the filter goes here once.
@@ -2831,7 +2851,7 @@ function GemlyxApp() {
         ...bodyProblems(r.payload, r.type),
         ...coordProblems(r.payload, r.type),
       ])));
-    } catch { setManageItems([]); }
+    } catch (e) { setManageItems(null); setManageLoadError(String(e?.message || e).slice(0, 120)); }
     setManageLoading(false);
   };
   // Same job editItem does for a published row, for a payload that is not in
@@ -3048,7 +3068,7 @@ function GemlyxApp() {
     if (!res.ok) {
       const detail = await res.text().catch(() => "");
       throw new Error(res.status === 404 || /bucket/i.test(detail)
-        ? "The gemlyx-media storage bucket doesn't exist yet — run the one-time SQL setup (see the comment above the media editor in App.jsx, or CHANGES_THIS_PASS.md)."
+        ? "The gemlyx-media storage bucket doesn't exist yet. Create it in Supabase Storage, then run section 7 of SECURITY_LOCKDOWN_30SEP.sql."
         : `Upload failed (${res.status})${detail ? `: ${detail.slice(0, 140)}` : ""}`);
     }
     return `${SUPABASE_URL}/storage/v1/object/public/gemlyx-media/${path}`;
@@ -3166,7 +3186,7 @@ function GemlyxApp() {
         if (!url) return null;
         try {
           const res = await studioFetch(`/api/scan-source?fresh=1&url=${encodeURIComponent(url)}`);
-          const data = await res.json();
+          const data = await scanReply(res);
           const text = String(data?.text || "");
           if (!text.trim()) return null;
           const priced = ticketPriceOn(text);
@@ -3516,8 +3536,15 @@ function GemlyxApp() {
   // so the refresh token stayed good, and a copied one kept Studio open. Now
   // Supabase is told to end the session as well. This browser is cleared
   // whatever Supabase answers, so a bad connection never keeps him logged in.
-  const studioLogout = () => {
-    const token = studioSession?.access_token;
+  const studioLogout = async () => {
+    let token = studioSession?.access_token;
+    // An expired token ends nothing on the server, so renew it first
+    // (security review, 7 Oct 2026). Bounded, so a bad connection never
+    // keeps him logged in here.
+    if (token && tokenExpiresAt(token) - Date.now() < 60000) {
+      const renewed = await Promise.race([refreshStudioSession(), new Promise(r => setTimeout(() => r(null), 3000))]).catch(() => null);
+      if (renewed?.access_token) token = renewed.access_token;
+    }
     if (token) {
       fetch(`${SUPABASE_URL}/auth/v1/logout?scope=local`, { method: "POST", headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}` } }).catch(() => { /* cleared here either way */ });
     }
@@ -3858,7 +3885,8 @@ function GemlyxApp() {
       const allResults = [];
       for (const q of queries) {
         const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
-        const data = await res.json();
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data || data.error) throw new Error(data?.error || `search answered ${res.status}`);
         (data.results || []).slice(0, 3).forEach(r => allResults.push({
           title: r.title || r.url || "Source",
           url: r.url || "",
@@ -3867,8 +3895,8 @@ function GemlyxApp() {
       }
       if (allResults.length === 0) { setVerifyError("No results found — try checking manually."); }
       setVerifyResults(allResults);
-    } catch {
-      setVerifyError("Couldn't search — check your connection and try again.");
+    } catch (e) {
+      setVerifyError(`Couldn't search: ${String(e?.message || e).slice(0, 120)}`);
     }
     setVerifyLoading(false);
   };
@@ -6724,7 +6752,7 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
         for (const url of toFetch) {
           try {
             const scanRes = await studioFetch(`/api/scan-source?${editingId !== null ? "fresh=1&" : ""}url=${encodeURIComponent(url)}`);
-            const scanData = await scanRes.json();
+            const scanData = await scanReply(scanRes);
             // ── THE LIST THAT DECIDES WHETHER FIRECRAWL IS WORTH PAYING FOR ──
             // A read that failed was indistinguishable from one that returned a
             // thin page, because a Cloudflare wall and a JavaScript-rendered
@@ -6745,10 +6773,10 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
             // read page is accounted for after this — too old goes to
             // staleSkipped, not-the-operator to notOperator, the rest into the
             // two strings — so between them the log now says what became of it.
-            note(`Source ${scanData.blocked ? "blocked" : "read"}: ${domainOf(url)}`, {
+            note(`Source ${scanData.refused ? "not read" : scanData.blocked ? "blocked" : "read"}: ${domainOf(url)}`, {
               provider: scanData.via || "fetch",
               detail: url.slice(0, 120),
-              outcome: scanData.blocked ? "failed" : "ok",
+              outcome: scanData.blocked || scanData.refused ? "failed" : "ok",
               got: scanData.blocked
                 ? ""
                 : scanData.text
@@ -6944,7 +6972,7 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
         for (const l of ticketPages.slice(0, MAX_TICKET_PAGES)) {
           try {
             const tRes = await studioFetch(`/api/scan-source?${editingId !== null ? "fresh=1&" : ""}url=${encodeURIComponent(l.href)}`);
-            const tData = await tRes.json();
+            const tData = await scanReply(tRes);
             const priced = tData.text ? ticketPriceOn(tData.text) : null;
             note(`Ticket agent: ${domainOf(l.href)}`, {
               provider: tData.via || "fetch",
@@ -7074,7 +7102,7 @@ IDENTITY CHECK, IMPORTANT: Danish street names repeat across towns — there is 
                 if (pagesByUrl[u]) continue;                 // already read on this run
                 try {
                   const hRes = await studioFetch(`/api/scan-source?${editingId !== null ? "fresh=1&" : ""}url=${encodeURIComponent(u)}`);
-                  const hData = await hRes.json();
+                  const hData = await scanReply(hRes);
                   const found = hData.text ? ticketPriceOn(hData.text) : null;
                   const real = pricesAdmission(found);
                   note(`Ticket page from Perplexity: ${domainOf(u)}`, {
@@ -8353,7 +8381,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         try {
           setStudioStage({ label: "Reading the operator's own FAQ for what is still empty", percent: 89 });
           const faqRes = await studioFetch(`/api/scan-source?${editingId !== null ? "fresh=1&" : ""}url=${encodeURIComponent(faqPage.href)}`);
-          const faqData = await faqRes.json();
+          const faqData = await scanReply(faqRes);
           const faqText = String(faqData?.text || "").trim();
           if (faqText.length > 200) {
             const faqExtract = await askOpenAI(GLANCE_EXTRACT_PROMPT(name, sType, faqEmpty, `${FAQ_RULE}\n\n${faqText}`), 700);
@@ -10479,7 +10507,7 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
           // a plain fetch and then Firecrawl when the plain fetch came back
           // unreadable.
           const res = await studioFetch(`/api/scan-source?fresh=1&url=${encodeURIComponent(source)}`);
-          const data = await res.json();
+          const data = await scanReply(res);
           const text = String(data?.text || "");
           if (!text.trim()) return { rows: [], notes: [], error: data?.error || "Nothing readable came back from that page." };
           const pulled = await askOpenAI(PAGE_ROWS_PROMPT(place, text.slice(0, 12000)), 2000);
@@ -10608,7 +10636,7 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
               );
           if (said.empty) { unplaced += group.rows.length; continue; }
           if (said.dropped.length) asks.push(noticeAsk({ place: here.name, source: lead.source || "", dropped: said.dropped }));
-          await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_notices`, {
+          const posted = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_notices`, {
             method: "POST",
             headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
             body: JSON.stringify({
@@ -10624,6 +10652,7 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
               source_url: lead.source || "",
             }),
           });
+          if (!posted.ok) { unplaced += group.rows.length; continue; }
           notices += 1;
         } catch { unplaced += group.rows.length; }
       }
@@ -11036,7 +11065,7 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
   // is what has cost four passes.
   const factsErrorFor = (status, body) => {
     const m = studioErrorMessage("the facts", status, body);
-    return m === "MISSING_TABLE" ? "The gemlyx_facts table does not exist yet. Run the SQL from CHANGES_THIS_PASS.md in Supabase." : m;
+    return m === "MISSING_TABLE" ? "The gemlyx_facts table does not exist yet. Run SECURITY_LOCKDOWN_30SEP.sql in Supabase." : m;
   };
 
   const loadSavedFacts = async () => {
@@ -11831,7 +11860,8 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
         const query = `${p.name}${where && !p.name.includes(where) ? ` ${where}` : ""} ${countryProfile(rowCountry(p)).name}`;
         try {
           const r = await studioFetch(`/api/commons-photo?q=${encodeURIComponent(query)}&article=${encodeURIComponent(p.name)}&category=${encodeURIComponent(p.name)}&limit=1${countryParam(rowCountry(p))}`);
-          const d = await r.json();
+          const d = await r.json().catch(() => null);
+          if (!r.ok || !d || d.error) throw new Error(d?.error || `photo search answered ${r.status}`);
           const hit = (d.results || [])[0];
           if (!hit || !hit.url) { notFound.push(p.name); }
           else {
@@ -14211,7 +14241,10 @@ ${researchRules("festival", ev)}`
           max_completion_tokens: 1600,
         }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
+      // An error is not "no flags": thrown, so the earlier flags stay and the
+      // console says why (security review, 4 Oct 2026).
+      if (!res.ok || !data || data.error) throw new Error(data?.error?.message || `voice scan answered ${res.status}`);
       let raw = data.choices?.[0]?.message?.content?.trim() || "[]";
       raw = raw.replace(/^```json\s*|\s*```$/g, "");
       const results = JSON.parse(raw);
@@ -15486,7 +15519,7 @@ ${houseDistanceSays(houseBaseArea, dayPoints(day, stayResolve))}` : ""}`;
           900,
           "claude-opus-4-8",
           true // expectJson — one automatic strict re-ask if the reply comes back as prose (see askClaude)
-        ), r => !!r.error, `Day ${idx + 1} glance (accommodation + legs)`);
+        ), r => !!r.error && ![413, 429, 503].includes(r.status), `Day ${idx + 1} glance (accommodation + legs)`);
         if (enrichResult.error) console.warn(`Day ${idx + 1} glance enrichment failed after retries:`, enrichResult.error);
         const glance = JSON.parse(enrichResult.text?.replace(/^```json\s*|\s*```$/g, "").trim() || "{}");
         // ── THE NIGHT'S PRICE, KEPT ONLY IF THE SEARCH SAID IT ─────
@@ -15539,10 +15572,11 @@ ${houseDistanceSays(houseBaseArea, dayPoints(day, stayResolve))}` : ""}`;
     if (!suggestForm.name.trim()) { setSuggestStatus("error"); return; }
     setSuggestStatus("sending");
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_suggestions`, {
+      // Through the counted form route (security review, 7 Oct 2026).
+      const res = await fetch("/api/send-form", {
         method: "POST",
-        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", Prefer: "return=minimal" },
-        body: JSON.stringify({ name: suggestForm.name, type: suggestForm.type, note: suggestForm.note }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ form: "gemlyx_suggestions", row: { name: suggestForm.name, type: suggestForm.type, note: suggestForm.note } }),
       });
       setSuggestStatus(res.ok ? "sent" : "error");
       if (res.ok) setSuggestForm({ name: "", type: "Event", note: "" });
@@ -16825,7 +16859,7 @@ ${houseDistanceSays(houseBaseArea, dayPoints(day, stayResolve))}` : ""}`;
           if (legMode === "walking" && !onlyWalking && data.durationMinutes > WALK_MAX_MINUTES) {
             const upgrade = primaryMode === "bike" ? "bicycling" : primaryMode === "car" ? "driving" : "transit";
             try {
-              const ures = await fetch(`/api/directions?origin=${encodeURIComponent(originParam)}&destination=${encodeURIComponent(destParam)}&mode=${upgrade}${departureParam(upgrade, tripDate, dayOffset, atTime)}`);
+              const ures = await fetch(`/api/directions?origin=${encodeURIComponent(originParam)}&destination=${encodeURIComponent(destParam)}&mode=${upgrade}${departureParam(upgrade, tripDate, dayOffset, atTime)}${countryParam(PAGE_COUNTRY)}`);
               const udata = await ures.json();
               // AND THE RE-ROUTE HAS TO BEAT THE WALK IT REPLACES. This used to
               // accept any answer that was not an error, which put a 32 minute
@@ -16862,7 +16896,7 @@ ${houseDistanceSays(houseBaseArea, dayPoints(day, stayResolve))}` : ""}`;
           let rescued = false;
           if (legMode === "transit" && ((legKm != null && legKm <= 4) || (legKm == null && sameTown))) {
             try {
-              const wres = await fetch(`/api/directions?origin=${encodeURIComponent(originParam)}&destination=${encodeURIComponent(destParam)}&mode=walking`);
+              const wres = await fetch(`/api/directions?origin=${encodeURIComponent(originParam)}&destination=${encodeURIComponent(destParam)}&mode=walking${countryParam(PAGE_COUNTRY)}`);
               const wdata = await wres.json();
               // ── AND THE RESCUE IS HELD TO THE SAME RULES ────────
               // This took `!wdata.error` and nothing else: no usable() check,
@@ -22166,10 +22200,11 @@ If the conversation only covers a single day or a few stops with no explicit day
     if (!craftForm.email.includes("@") || !craftForm.interest.trim()) { setCraftStatus("invalid"); return; }
     setCraftStatus("sending");
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/craft_requests`, {
+      // Through the counted form route (security review, 7 Oct 2026).
+      const res = await fetch("/api/send-form", {
         method: "POST",
-        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", Prefer: "return=minimal" },
-        body: JSON.stringify({ craft: craftModal.name, location: craftModal.location, name: craftForm.name, email: craftForm.email, interest: craftForm.interest, visit: craftForm.visit })
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ form: "craft_requests", row: { craft: craftModal.name, location: craftModal.location, name: craftForm.name, email: craftForm.email, interest: craftForm.interest, visit: craftForm.visit } }),
       });
       if (res.ok) { setCraftStatus("sent"); }
       else { setCraftStatus("fallback"); }
@@ -25443,6 +25478,8 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px", marginBottom: 16, maxHeight: "min(62vh, 640px)", overflowY: "auto" }}>
                         {manageLoading ? (
                           <div style={{ fontSize: 12, color: C.muted, textAlign: "center", padding: "12px 0" }}>Loading…</div>
+                        ) : manageLoadError ? (
+                          <div style={{ fontSize: 12, color: "#FFB347", textAlign: "center", padding: "12px 0" }}>Could not read the published rows ({manageLoadError}). Nothing was changed. Try again in a moment.</div>
                         ) : !manageItems || manageItems.length === 0 ? (
                           <div style={{ fontSize: 12, color: C.muted, textAlign: "center", padding: "12px 0" }}>Nothing published yet.</div>
                         ) : (<>
