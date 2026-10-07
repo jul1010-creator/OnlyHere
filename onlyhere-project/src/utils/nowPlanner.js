@@ -619,6 +619,8 @@ export const untangle = (order, candidates, ctx, accept = null) => {
 };
 
 export const MEAL_SHIFT = 45;
+// Lunch 11:30 to 14:30 and dinner 17:30 to 20:30, at the place.
+export const mealTime = (m) => (m >= 690 && m <= 870) || (m >= 1050 && m <= 1230);
 // At most 8 places, 40,320 orders, measured in a few milliseconds.
 export const EXACT_MAX = 8;
 export const REVERSE_SLACK = 1.03;
@@ -640,7 +642,11 @@ export const tidyWalk = (order, candidates, ctx) => {
   const holds = (second) => {
     const kept = new Map(second.stops.map(s => [s.id, s]));
     const keepsAll = first.stops.every(s => kept.has(s.id));
-    const mealStays = keepsAll && first.stops.every(s => s.kind !== "Food" || Math.abs(kept.get(s.id).arrive - s.arrive) <= MEAL_SHIFT);
+    // Only a meal at a mealtime is held in place. A café at 14:00 is not
+    // lunch, and holding it there made one random walk 37% longer than it
+    // had to be (7 Oct 2026).
+    const atMeal = (s) => mealTime(ctx.startClock.minutes + s.arrive);
+    const mealStays = keepsAll && first.stops.every(s => s.kind !== "Food" || !atMeal(s) || Math.abs(kept.get(s.id).arrive - s.arrive) <= MEAL_SHIFT);
     return mealStays && first.stops.every(s => !s.deal || !!kept.get(s.id)?.deal);
   };
   // ── A WALK OF A FEW PLACES IS SOLVED OUTRIGHT ──────────────────────
