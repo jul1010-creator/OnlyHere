@@ -185,7 +185,7 @@ writeFileSync(entry, `
   export { gateMaps, readMapsLimits, MAPS_BUSY, MAPS_DONE } from ${JSON.stringify(join(root, "src/utils/mapsGate.js"))};
   export { cleanErrorMessage, safeUpstreamError } from ${JSON.stringify(join(root, "src/utils/upstreamError.js"))};
   export { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_KEY } from ${JSON.stringify(join(root, "src/utils/supabasePublic.js"))};
-  export { sitePath, AI_PATHS, TOKEN_PATHS } from ${JSON.stringify(join(root, "src/utils/apiAuth.js"))};
+  export { sitePath, AI_PATHS, TOKEN_PATHS, tokenExpiresAt } from ${JSON.stringify(join(root, "src/utils/apiAuth.js"))};
   export { citationUrls, askOpenAI, askClaude, localisePrompt } from ${JSON.stringify(join(root, "src/utils/aiClient.js"))};
   export { THEMES, THEME_ORDER, DEFAULT_THEME, storedTheme, THEME_PARAM } from ${JSON.stringify(join(root, "src/utils/theme.js"))};
   export { layoutBody, trimCaption } from ${JSON.stringify(join(root, "src/utils/articleLayout.js"))};
@@ -305,6 +305,9 @@ writeFileSync(entry, `
   export * as NP from ${JSON.stringify(join(root, "src/utils/nowPlanner.js"))};
   export * as TR from ${JSON.stringify(join(root, "src/utils/entryTranslate.js"))};
   export * as RWT from ${JSON.stringify(join(root, "src/components/RandomWalkTest.jsx"))};
+  export * as SFORM from ${JSON.stringify(join(root, "api/send-form.js"))};
+  export * as SGUIDE from ${JSON.stringify(join(root, "api/save-guide.js"))};
+  export * as FG from ${JSON.stringify(join(root, "src/utils/founderGate.js"))};
   export * as KXR from ${JSON.stringify(join(root, "src/data/klaipedaExampleRows.js"))};
   export * as KEX from ${JSON.stringify(join(root, "src/data/klaipedaExamples.js"))};
   export * as SCU from ${JSON.stringify(join(root, "src/data/klaipedaSculptures.js"))};
@@ -17307,7 +17310,8 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // at once, which helps with none of them. Their gateway states the reason,
   // so it is passed through rather than replaced by a paraphrase of it.
   ok("Ticketmaster's own reason is passed through", /body\?\.fault\?\.faultstring/.test(fn));
-  ok("and reported under its own key", /ticketmasterSaid: fault/.test(fn));
+  // 7 Oct 2026: the reason goes to the Vercel log, not the browser (security review).
+  ok("and reported in the log, not to the browser", /console\.error\("tickets: key rejected", \{ status: r\.status, fault,/.test(fn) && !/ticketmasterSaid/.test(fn));
   // Length only. Enough to tell a Consumer Secret from a Consumer Key against
   // what the portal shows, and this endpoint is public, so nothing more.
   ok("the key is fingerprinted by length", /keyLength: key\.length/.test(fn));
@@ -19645,7 +19649,7 @@ rmSync(dir, { recursive: true, force: true });
     const dead = await readPage("https://x.dk", { key: "k", fetchImpl: fake("", 404) });
     is("a dead link is never escalated: it is not a wall", [dead.credits, dead.escalated, dead.read], [0, false, "http-404"]);
   }
-  ok("the app records every source read by domain", /note\(`Source \$\{scanData\.blocked \? "blocked" : "read"\}: \$\{domainOf\(url\)\}`/
+  ok("the app records every source read by domain", /note\(`Source \$\{scanData\.refused \? "not read" : scanData\.blocked \? "blocked" : "read"\}: \$\{domainOf\(url\)\}`/
      .test(readFileSync(join(root, "src/App.jsx"), "utf8")));
 }
 
@@ -27629,8 +27633,9 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("there is one upload helper", /const uploadToMedia = async/.test(appSrc));
   is("and only it posts to the bucket",
     (appSrc.match(/storage\/v1\/object\/gemlyx-media\//g) || []).length, 1);
-  ok("and it says what is actually wrong", /run the one-time SQL setup/.test(appSrc));
-  is("that sentence is written once", (appSrc.match(/run the one-time SQL setup/g) || []).length, 1);
+  // 7 Oct 2026: it points at the lockdown file, not at old notes (security review).
+  ok("and it says what is actually wrong", /Create it in Supabase Storage, then run section 7 of SECURITY_LOCKDOWN_30SEP\.sql/.test(appSrc));
+  is("that sentence is written once", (appSrc.match(/then run section 7 of SECURITY_LOCKDOWN_30SEP\.sql/g) || []).length, 1);
 }
 
 // ── TIQETS, AND A PAID LINK THAT SAYS SO ─────────────────────────────
@@ -33662,8 +33667,9 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // 6 Oct 2026: Log out tells Supabase to end the session (security review,
     // finding 4). It carries the session's own token, not the anon key alone.
     "/auth/v1/logout?scope=local",
-    "/rest/v1/gemlyx_suggestions",
-    "/rest/v1/craft_requests",
+    // 7 Oct 2026: suggestions and workshop requests go through
+    // /api/send-form, counted per network (security review), so they are
+    // off this list.
   ]);
   // AND THE WRITE DOES NOT. A reader may read the notices and may never write
   // one, which is the half a bare fetch on the same table would quietly break.
@@ -35668,8 +35674,9 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // Asserted as ABSENT rather than deleted, because a half-removed second
     // path is worse than either: it would send mail he has stopped reading.
     ok("the message is not also mailed anywhere", !/api\/report-problem/.test(sup));
+    // 7 Oct 2026: written by the counted form route (security review).
     ok("the row is still what records it",
-       /fetch\(`\$\{SUPABASE_URL\}\/rest\/v1\/\$\{SUPPORT_TABLE\}`/.test(sup));
+       /fetch\("\/api\/send-form"/.test(sup) && /form: SUPPORT_TABLE, row/.test(sup));
     // A button that says what it is about should not then ask what it is about.
     ok("arriving from the button skips the dropdown",
        /isTopic\(asked\) \? \{ \.\.\.EMPTY, topic: asked \}/.test(sup));
@@ -35808,7 +35815,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // The same table and the same shape, so the Studio panel reads one list
     // rather than two. It mailed this until 15 Sep; see the note in GuidePage.
     ok("the answer is sent where he will read it",
-       /rest\/v1\/\$\{SUPPORT_TABLE\}/.test(gp) && /topic: "feedback"/.test(gp));
+       /fetch\("\/api\/send-form"/.test(gp) && /form: SUPPORT_TABLE, row: \{/.test(gp) && /topic: "feedback"/.test(gp));
     ok("and not to an inbox he has stopped reading", !/api\/report-problem/.test(gp));
     // reference is `not null` on the table. An untitled guide from somebody who
     // had not saved it would have had the whole row refused, and that is the
@@ -49359,7 +49366,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("and hands it to the scraper", /readFirecrawl\(url, key, fetchImpl, \{ fresh \}\)/.test(rp));
   const api = stripComments(readFileSync(join(root, "api/scan-source.js"), "utf8"));
   ok("the endpoint reads it off the query", /req\.query\.fresh/.test(api));
-  ok("and passes it on, with the page itself read on the public internet only", /readPage\(url, \{ key, fresh, pageFetch: safeFetch \}\)/.test(api));
+  ok("and passes it on, with the page itself read on the public internet only", /readPage\(url, \{ key, fresh, pageFetch: safeFetch, canEscalate: /.test(api));
 
   // And the caller marks a redraft. editingId is the app's own word for "this
   // run is about a row that already exists", which is exactly when the cache is
@@ -59342,7 +59349,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // The number is IN the message, so a slow endpoint and a dead one read
     // differently.
     ok("a timeout says how long it waited",
-       /API Direct did not answer in \$\{Math\.round\(budget \/ 1000\)\}s on \$\{path\}/.test(sf));
+       /API Direct did not answer in \$\{Math\.round\(budget \/ 1000\)\}s`/.test(sf));
     // NO RETRY. API Direct bills per call, and a second attempt at an endpoint
     // that has already spent forty five seconds costs twice for the same wait.
     ok("and nothing retries it", /NO RETRY\. API Direct bills per call/.test(sf));
@@ -79715,7 +79722,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const lim = M.readLimits({ GEMLYX_GUIDES_PER_DAY: "0", GEMLYX_GUIDES_PER_IP: "abc", GEMLYX_GUIDES_PER_VISITOR: "0" });
   ok("a typo in an env var falls back instead of becoming no limit", lim.perIp === 4);
   ok("0 is the off switch for the day, and only for the day", lim.perDay === 0 && lim.perVisitor === 1);
-  ok("the defaults are one per visitor and account, a few per network", JSON.stringify(M.readLimits({})) === JSON.stringify({ perVisitor: 1, perAccount: 1, perIp: 4, perDay: 40, retries: 1, refunds: 2 }));
+  ok("the defaults are one per visitor and account, a few per network", JSON.stringify(M.readLimits({})) === JSON.stringify({ perVisitor: 1, perAccount: 1, perIp: 4, perDay: 40, retries: 1, refunds: 1 }));
   ok("nobody is uncapped by default, not even any signed in account", M.uncappedList({}).length === 0 && !M.isUncapped(M.uncappedList({}), { userId: "u1", email: "a@b.c" }));
   ok("the uncapped list takes ids or emails, any case", M.isUncapped(M.uncappedList({ GEMLYX_UNCAPPED: " U1 , Me@X.dk" }), { userId: "u1" }) && M.isUncapped(M.uncappedList({ GEMLYX_UNCAPPED: "me@x.dk" }), { email: "ME@x.dk", confirmed: true }) && !M.isUncapped(M.uncappedList({ GEMLYX_UNCAPPED: "me@x.dk" }), { email: "ME@x.dk" }) && !M.isUncapped(M.uncappedList({ GEMLYX_UNCAPPED: "me@x.dk" }), { email: "you@x.dk" }));
   is("a visitor id that is not an id is dropped", M.cleanVisitor("x'; drop"), "");
@@ -79976,7 +79983,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("off the visitor and the network, spent as a pass, and never off the day's total", call && call.body.p_keys.join() === `v:abcdefgh-1,ip:${M.buildPassHashIp(M.buildPassSecret("service-key"), "1.2.3.4")}` && call.body.p_spent_key === "r:n0nce1234567" && !call.body.p_keys.includes("site"));
   // Security review, 4 Oct 2026, finding 1: the stop limit is the address's
   // (or the account's), never the id the browser makes up.
-  ok("a visitor can stop only so many a day, counted on the address", call.body.p_refund_key === `c:ip:${M.buildPassHashIp(M.buildPassSecret("service-key"), "1.2.3.4")}` && call.body.p_refund_limit === 2);
+  ok("a visitor can stop only so many a day, counted on the address", call.body.p_refund_key === `c:ip:${M.buildPassHashIp(M.buildPassSecret("service-key"), "1.2.3.4")}` && call.body.p_refund_limit === 1);
   seen.length = 0;
   await M.buildPassDecide({ headers: site, body: { visitor: "fresh-id-99", cancel: M.makePass(sign, { day: "2026-09-28", visitor: "fresh-id-99", nonce: "n0nce7654321" }) }, env, fetchImpl: db("ok"), now });
   const call2 = seen.find(x => x.url.endsWith("/rpc/gemlyx_refund_guide"));
@@ -81725,7 +81732,8 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   is("the limits are read from Vercel", [M.readMapsLimits({}).perVisitor, M.readMapsLimits({ GEMLYX_MAPS_PER_VISITOR: "50" }).perVisitor, M.readMapsLimits({ GEMLYX_MAPS_PER_DAY: "x" }).perDay], [400, 50, 0]);
   for (const f of ["directions", "places"]) {
     const src = readFileSync(join(root, "api", `${f}.js`), "utf8");
-    const gateAt = src.indexOf("await gateMaps({ headers: req.headers, env: process.env })");
+    // 7 Oct 2026: /api/places has Studio's own counter (security review).
+    const gateAt = f === "places" ? src.indexOf('await gateFounder({ route: "places", env: process.env })') : src.indexOf("await gateMaps({ headers: req.headers, env: process.env })");
     const googleAt = f === "directions" ? src.indexOf("const routed = await askRoutes(") : src.indexOf('await fetch("https://places.googleapis.com');
     ok(`/api/${f} counts every call before Google is asked`, gateAt > 0 && googleAt > gateAt && /if \(!counted\.ok\) return res\.status\(counted\.status\)/.test(src));
   }
@@ -82052,7 +82060,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
 // ── Batch 214, finding 4: Google's dearer place search is Studio's only ──
 {
   const pl = readFileSync(join(root, "api/places.js"), "utf8");
-  ok("finding 4: /api/places wants the founder before it counts or calls Google", /if \(!isFounder\(who\.userId, process\.env\.GEMLYX_FOUNDER_IDS\)\)/.test(pl) && pl.indexOf("isFounder(who.userId") < pl.indexOf("await gateMaps(") && pl.indexOf("isFounder(who.userId") < pl.indexOf("places.googleapis.com"));
+  ok("finding 4: /api/places wants the founder before it counts or calls Google", /if \(!isFounder\(who\.userId, process\.env\.GEMLYX_FOUNDER_IDS\)\)/.test(pl) && pl.indexOf("isFounder(who.userId") < pl.indexOf("await gateFounder(") && pl.indexOf("isFounder(who.userId") < pl.indexOf("places.googleapis.com"));
   ok("and the Studio token goes with it, while other paths are left alone", M.TOKEN_PATHS.test("/api/places?lat=1&lon=2") && M.TOKEN_PATHS.test("/api/anthropic") && !M.TOKEN_PATHS.test("/api/places-hours?name=x") && !M.TOKEN_PATHS.test("/api/directions") && /!TOKEN_PATHS\.test\(path\)/.test(readFileSync(join(root, "src/utils/apiAuth.js"), "utf8")));
 }
 
@@ -82391,6 +82399,159 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("only a meal at a mealtime is held in place when a walk is tidied", NP.mealTime(12 * 60) && NP.mealTime(19 * 60) && !NP.mealTime(15 * 60) && !NP.mealTime(10 * 60));
   const shown = read("src/components/RandomWalkTest.jsx").replace(/\/\/.*$/gm, "");
   ok("no dashes and none of his banned words in the test card", !/[—–]/.test(shown) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(shown));
+}
+
+// ── Batch 227: the security review of 7 Oct 2026 ──
+// Oliver sent the night's review with "Also.. the security". The fix brief,
+// most severe first.
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const site = { origin: "https://www.gemlyxtravel.com", authorization: "Bearer tok" };
+  const env = { SUPABASE_SERVICE_ROLE_KEY: "svc", GEMLYX_FOUNDER_IDS: "founder-id" };
+  let counted = 0;
+  const user = (u) => async (url) => {
+    if (String(url).endsWith("/auth/v1/user")) return { ok: true, json: async () => u };
+    counted++;
+    return { ok: true, json: async () => "ok" };
+  };
+  const member = { id: "member", email_confirmed_at: "2026-10-01" };
+  // Fix 1: an Opus call carries less.
+  counted = 0;
+  const big = await M.gateAi({ endpoint: "anthropic", headers: site, env, fetchImpl: user(member), body: { model: "claude-opus-4-8", pad: "x".repeat(260000) } });
+  ok("fix 1: a member's Opus call over 250 KB is refused before any counter", big.status === 413 && counted === 0);
+  counted = 0;
+  const sonnet = await M.gateAi({ endpoint: "anthropic", headers: site, env, fetchImpl: user(member), body: { model: "claude-sonnet-5", pad: "x".repeat(260000) } });
+  ok("and the same body on Sonnet reaches the counter", sonnet.status !== 413 && counted > 0);
+  ok("and a refused glance call is not asked twice more", /r => !!r\.error && !\[413, 429, 503\]\.includes\(r\.status\), `Day \$\{idx \+ 1\} glance/.test(read("src/App.jsx")));
+
+  // Fix 2: the visitor forms.
+  const F = M.SFORM;
+  is("fix 2: a form row keeps only the columns a visitor may set", F.formRow("gemlyx_support", { message: "m", handled: true, id: 7, created_at: "2099-01-01" }), { message: "m" });
+  ok("an unknown form is refused, and a long field is cut", F.formRow("nope", {}) === null && F.formRow("gemlyx_suggestions", { note: "x".repeat(9000) }).note.length === 6000);
+  const sf = read("api/send-form.js");
+  ok("the form route counts before it writes", sf.indexOf("takeDaily(") > 0 && sf.indexOf("takeDaily(") < sf.indexOf("await fetch("));
+  const srcFiles = [];
+  const walk = (d) => readdirSync(join(root, d), { withFileTypes: true }).forEach(e => e.isDirectory() ? walk(`${d}/${e.name}`) : /\.(js|jsx)$/.test(e.name) && srcFiles.push(`${d}/${e.name}`));
+  walk("src");
+  const allSrc = srcFiles.map(read).join("\n");
+  ok("and nothing in the page writes a form table itself", !/rest\/v1\/\$\{SUPPORT_TABLE\}`, \{\s*method: "POST"/.test(allSrc) && !/fetch\(`\$\{SUPABASE_URL\}\/rest\/v1\/(gemlyx_suggestions|craft_requests)`/.test(allSrc));
+  ok("all six forms post to it", (allSrc.match(/fetch\("\/api\/send-form"/g) || []).length === 6);
+  const lock = read("SECURITY_LOCKDOWN_30SEP.sql");
+  ok("the database sets time and handled itself, refuses a flood, and lets him delete", /create or replace function public\.gemlyx_form_guard\(\)/.test(lock) && /new\.created_at := now\(\);/.test(lock) && /new\.handled := false;/.test(lock) && /if recent >= 300 then/.test(lock) && /"founder removes %s"/.test(lock));
+  ok("the browser's own insert is revoked in a section run after the route is live", /-- 4c\. RUN ONLY AFTER api\/send-form\.js IS LIVE/.test(lock) && /revoke insert on public\.%I from anon, authenticated/.test(lock));
+  ok("Studio reads open reports first", /order=handled\.asc,created_at\.desc&limit=200/.test(read("src/App.jsx")));
+
+  // Fix 3: guides are saved by the server, counted.
+  const G = M.SGUIDE.default;
+  const call = async (body, headers = { origin: "https://www.gemlyxtravel.com" }) => {
+    let st = 0;
+    const res = { status(c) { st = c; return this; }, json() { return this; } };
+    await G({ method: "POST", headers, body }, res);
+    return st;
+  };
+  const codes = await Promise.all([
+    call({ id: "abcdefghijklmno", payload: {} }),
+    call({ id: "abcdefghijklmnop", payload: { pad: "x".repeat(900000) } }),
+    call({ id: "abcdefghijklmnop", payload: {} }, { origin: "https://evil.example" }),
+  ]);
+  is("fix 3: save-guide refuses a bad id, a huge guide and another site", codes, [400, 413, 403]);
+  const sg = read("api/save-guide.js");
+  ok("and counts per browser, per network and for the site before it writes", sg.indexOf("takeDaily(") < sg.indexOf("await fetch(") && /save:v:\$\{visitor\}`, limit: 5/.test(sg) && /"save:ip:"\), limit: 60/.test(sg) && /"save:site", limit: 1500/.test(sg));
+  const gp = read("src/pages/GuidePage.jsx");
+  ok("the guide page saves through it, with the strip word for word", /fetch\("\/api\/save-guide"/.test(gp) && /body: JSON\.stringify\(\{ id, visitor, payload: \(\(\{ _testProfile, _testPlan, _planProblems, _convoText, \.\.\.rest \}\) => rest\)\(guide\) \}\)/.test(gp) && !/rest\/v1\/gemlyx_guides`, \{\s*method: "POST"/.test(gp));
+  ok("and the lockdown revokes the browser's insert", /execute 'revoke insert on public\.gemlyx_guides from anon, authenticated';/.test(lock) && !/guides are saved in the app's shape/.test(lock));
+
+  // Fix 4: no old SQL that would reopen the tables, unless it says DO NOT RUN.
+  const open1 = /create policy[\s\S]{0,200}to authenticated[\s\S]{0,80}(using|with check) \((true|bucket_id = '[^']+')\)/gi;
+  const open2 = /on public\.gemlyx_guides for select (to anon|using \(true\))/gi;
+  const found = [];
+  const scan = (base, rel = "") => {
+    let entries = [];
+    try { entries = readdirSync(join(base, rel), { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      const r = rel ? `${rel}/${e.name}` : e.name;
+      if (e.isDirectory()) { if (!/^(node_modules|dist|\.git)$/.test(e.name)) scan(base, r); continue; }
+      if (!/\.(md|sql|js|jsx|mjs)$/.test(e.name) || r === "tests/run.mjs") continue;
+      const text = readFileSync(join(base, r), "utf8");
+      const head = text.split("\n").slice(0, 10).join("\n");
+      for (const re of [open1, open2]) {
+        for (const m of text.matchAll(re)) {
+          const before = text.slice(0, m.index).split("\n").slice(-6).join("\n");
+          if (!/DO NOT RUN/.test(head) && !/DO NOT RUN/.test(before)) found.push(`${r}:${text.slice(0, m.index).split("\n").length}`);
+        }
+      }
+      if (/\.sql$/.test(e.name) && /function public\.is_founder/.test(text) && /auth\.jwt\(\)/.test(text) && !/DO NOT RUN/.test(head)) found.push(`${r}: is_founder reads the email`);
+    }
+  };
+  scan(root);
+  scan(join(root, "..", "Claude outputs"));
+  is("fix 4: no SQL anywhere would reopen the tables without saying DO NOT RUN", found, []);
+  ok("and the app sends him to the lockdown file, which now makes the facts table", /"The gemlyx_facts table does not exist yet\. Run SECURITY_LOCKDOWN_30SEP\.sql in Supabase\."/.test(read("src/App.jsx")) && /\(run SECURITY_LOCKDOWN_30SEP\.sql\)/.test(read("src/utils/liveFacts.js")) && /create table if not exists public\.gemlyx_facts/.test(lock) && /add column if not exists photo_credit text/.test(lock));
+}
+
+// ── Batch 227, continued: the rest of the 7 Oct fix brief ──
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const app = read("src/App.jsx"), ask = read("api/ask.js");
+  // Fix 5.
+  ok("fix 5: a question has a size limit, clipped fields and a site ceiling", /bodySize > 400_000/.test(ask) && /clip\(r\?\.name, 120\)/.test(ask) && /"ask:site"/.test(ask) && /\/\^https:\\\/\\\/\/i\.test\(String\(u\)\)/.test(ask));
+  ok("and a citation is a link only through externalHref", /href=\{externalHref\(u\)\}/.test(read("src/components/AskGemlyx.jsx")));
+  // Fix 6.
+  ok("fix 6: a refused maps call is 'could not check', not 'no night transport'", /NO_ROUTE\.test\(String\(data\.error/.test(read("src/utils/geo.js")));
+  // Fix 7.
+  ok("fix 7: the sign-in checks give up after three seconds, and the clean-up runs once a day", (read("src/utils/aiGate.js").match(/AbortSignal\.timeout\(/g) || []).length >= 2 && /AbortSignal\.timeout\(3000\)/.test(read("src/utils/apiGuard.js")) && /'purge:done'/.test(read("SECURITY_LOCKDOWN_30SEP.sql")));
+  // Fix 8.
+  ok("fix 8: one stopped build handed back a day", /^  refunds: 1,$/m.test(read("src/utils/guideAllowance.js")));
+  // Fix 10.
+  const sent = [];
+  const counter = (answer) => async (url, init) => { sent.push(JSON.parse(init.body)); return { ok: true, json: async () => answer }; };
+  const g1 = await M.FG.gateFounder({ route: "places-hours", env: { SUPABASE_SERVICE_ROLE_KEY: "k" }, fetchImpl: counter("ok") });
+  ok("fix 10: Studio's paid lookups are counted per lookup and in all", g1.ok && JSON.stringify(sent[0].p_keys) === '["founder:places-hours","founder:all"]' && JSON.stringify(sent[0].p_limits) === "[300,3000]");
+  const g0 = await M.FG.gateFounder({ route: "places-hours", env: { SUPABASE_SERVICE_ROLE_KEY: "k", GEMLYX_FOUNDER_PLACES_HOURS: "0" }, fetchImpl: counter("ok") });
+  const gAll = await M.FG.gateFounder({ route: "places-hours", env: { SUPABASE_SERVICE_ROLE_KEY: "k" }, fetchImpl: counter("founder:all") });
+  ok("0 switches a lookup off without asking, and a full day answers 429", g0.status === 503 && sent.length === 2 && gAll.status === 429);
+  const before = (f, host) => { const t = read(f); return t.indexOf("await gateFounder(") > 0 && t.indexOf("await gateFounder(") < t.indexOf(host); };
+  ok("every paid Studio lookup counts before its provider is asked", before("api/places-hours.js", "places.googleapis.com") && before("api/places-locate.js", "places.googleapis.com") && before("api/places.js", "places.googleapis.com") && before("api/busyness.js", "await fetch(") && /canEscalate: async \(\) => \(await gateFounder\(\{ route: "firecrawl"/.test(read("api/scan-source.js")));
+  ok("and the social sweep's free page read is never counted", (read("api/social-find.js").match(/await gateFounder\(/g) || []).length === 4);
+  // Fixes 11 and 12.
+  const lock = read("SECURITY_LOCKDOWN_30SEP.sql");
+  ok("fix 11: members' posts get the server's time and a daily limit, and library rows go with the account", /gemlyx_member_post_guard/.test(lock) && /new\.created_at := now\(\);\s*\n\s*new\.user_id := auth\.uid\(\);/.test(lock) && /gemlyx_trip_library\?user_id=eq\./.test(read("api/delete-account.js")));
+  ok("fix 12: the refund function, the user data sweep and the storage readback are in the lockdown", /create or replace function public\.gemlyx_refund_guide/.test(lock) && /revoke all on function public\.gemlyx_refund_guide/.test(lock) && /revoke all on public\.gemlyx_user_data from anon/.test(lock) && /schemaname = 'storage' order by 1/.test(lock));
+  // Fix 13.
+  const rsp = app.slice(app.indexOf("const readSourcePage = async"), app.indexOf("const readSourcePage = async") + 500);
+  ok("fix 13: a refused page read is a failed read, not an empty page", /!res\.ok/.test(rsp) && /const scanReply = async \(res\) =>/.test(app) && (app.match(/await scanReply\(/g) || []).length === 6);
+  // Fix 14.
+  ok("fix 14: founder routes keep provider text in the log", !/ticketmasterSaid/.test(read("api/tickets.js")) && !/why: [^\n]*String\(e\?\.message \|\| e\)/.test(read("api/social-find.js")) && !/json\(\{ error: "BESTTIME_API_KEY_PRIVATE is not set in Vercel/.test(read("api/busyness.js")));
+  // Fix 15.
+  const fsent = [];
+  const fsite = { origin: "https://www.gemlyxtravel.com", authorization: "Bearer tok" };
+  const fu = (answer) => async (url, init) => String(url).endsWith("/auth/v1/user") ? { ok: true, json: async () => ({ id: "founder-id" }) } : (fsent.push(JSON.parse(init.body)), { ok: true, json: async () => answer });
+  const fenv = { SUPABASE_SERVICE_ROLE_KEY: "svc", GEMLYX_FOUNDER_IDS: "founder-id" };
+  const fOk = await M.gateAi({ endpoint: "anthropic", body: {}, headers: fsite, env: fenv, fetchImpl: fu("ok") });
+  const fOver = await M.gateAi({ endpoint: "anthropic", body: {}, headers: fsite, env: fenv, fetchImpl: fu("ai:founder") });
+  ok("fix 15: the founder's AI calls are counted, with a high ceiling", fOk.ok && fOk.founder && JSON.stringify(fsent[0].p_keys) === '["ai:founder"]' && fsent[0].p_limits[0] === 3000 && fOver.status === 429);
+  // Fix 16.
+  const jwt = "x." + Buffer.from(JSON.stringify({ exp: 2000000000 })).toString("base64url") + ".y";
+  ok("fix 16: a Studio token close to expiry is renewed before an AI call", M.tokenExpiresAt(jwt) === 2000000000000 && M.tokenExpiresAt("bad") === 0 && /studioRefresher\(\)/.test(read("src/utils/apiAuth.js").slice(read("src/utils/apiAuth.js").indexOf("export const aiToken"), read("src/utils/apiAuth.js").indexOf("if (studio) return { token: studio, studio: true };"))));
+  // Fixes 17 to 21.
+  ok("fix 17: build-pass tells the browser only that the cap is open", /out\.json = \{ \.\.\.out\.json, open: true \}/.test(read("api/build-pass.js")));
+  ok("fix 18: a failed question says it still counted, without the provider's words", /It still counted/.test(ask) && !/json\(res, 502, \{ error: String\(err/.test(ask));
+  const tt = app.slice(app.indexOf("const ures = await fetch(`/api/directions?"), app.indexOf("const wres = await fetch(`/api/directions?") + 300);
+  ok("fix 19: every guide direction call says which country", /\$\{countryParam\(PAGE_COUNTRY\)\}`\);\s*$/m.test(tt) && (tt.match(/countryParam\(PAGE_COUNTRY\)/g) || []).length === 2);
+  ok("fix 20: rain figures without wind, or wind without rain, is unknown weather", M.walkWeatherFrom({ properties: { timeseries: [0, 1, 2].map(() => ({ data: { instant: { details: { wind_speed: 4 } } } })) } }) === null && M.walkWeatherFrom({ properties: { timeseries: [0, 1, 2].map(() => ({ data: { instant: { details: {} }, next_1_hours: { summary: { symbol_code: "rain" }, details: { precipitation_amount: 1 } } } })) } }) === null);
+  ok("fix 21: no provider error or variable name reaches a reader", !/json\(\{ error: String\(err\) \}\)/.test(read("api/places.js") + read("api/directions.js")) && ["anthropic", "openai", "perplexity", "search", "places", "directions"].every(f => !/json\(\{ error: "[^"]*(not set on the server|missing TAVILY)/.test(read(`api/${f}.js`))));
+  // Fixes 22 to 24.
+  const del = read("api/delete-account.js");
+  ok("fix 22: account deletion stops if the data did not go, and takes every counter", del.indexOf("removed.some(r => !r?.ok)") > 0 && del.indexOf("removed.some(r => !r?.ok)") < del.indexOf("/auth/v1/admin/users/") && /ask:u:/.test(del) && /c:u:/.test(del) && /:opus/.test(del) && !/SUPABASE_ANON_KEY/.test(del));
+  ok("fix 23: a refused read of the published rows is not an empty library", /if \(!res\.ok\) throw new Error\(`the content library answered/.test(app) && !/catch \{ setManageItems\(\[\]\); \}/.test(app));
+  ok("fix 24: Studio's tools say a failure is a failure", /if \(!posted\.ok\) \{ unplaced \+= group\.rows\.length; continue; \}/.test(app) && /voice scan answered \$\{res\.status\}/.test(app) && /photo search answered \$\{r\.status\}/.test(app) && /search answered \$\{res\.status\}/.test(app));
+  // Fixes 26 to 30.
+  ok("fix 26: Supabase's own words stay in the console", !/error: String\(body\?\.message/.test(read("src/utils/profile.js") + read("src/utils/beenSync.js")) && !/throw new Error\(\(await res\.text\(\)\)/.test(read("src/utils/auth.js")) && /if \(!res\.ok\) \{ console\.warn\("gemlyx_sources read failed:"/.test(read("src/utils/liveSources.js")));
+  ok("fix 27: the founder's email is not written into entries", !/by: studioSession\?\.email/.test(app) && /by: "founder",/.test(app));
+  ok("fix 28: only a plain address becomes a reply link", /PLAIN_ADDRESS\.test\(String\(row\.email\)\) \? `mailto:/.test(read("src/components/StudioReports.jsx")));
+  const lo = app.slice(app.indexOf("const studioLogout = async () => {"), app.indexOf("const studioLogout = async () => {") + 900);
+  ok("fix 29: Log out renews a lapsed token before it ends the session", lo.indexOf("tokenExpiresAt(token)") > 0 && lo.indexOf("tokenExpiresAt(token)") < lo.indexOf("/auth/v1/logout?scope=local"));
+  ok("fix 30: the old events secret is gone from the notes", /`UPDATE_EVENTS_SECRET` with this value: `<redacted>`/.test(read("CHANGES_THIS_PASS.md")));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
