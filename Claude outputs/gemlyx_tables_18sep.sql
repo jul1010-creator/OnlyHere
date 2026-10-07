@@ -1,3 +1,8 @@
+-- ── DO NOT RUN THIS FILE ANY MORE ───────────────────────────────────
+-- Security review, 7 Oct 2026. The policies below open the tables wider than
+-- SECURITY_LOCKDOWN_30SEP.sql allows, and running them now would undo it.
+-- The lockdown file is the only SQL to run.
+--
 -- The three outstanding scripts from the 17 Sep handoff, in one paste.
 -- Safe to run as often as you like: every statement is guarded, and the
 -- policies are dropped before they are created, so Supabase will not roll the

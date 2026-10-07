@@ -1,3 +1,7 @@
+-- ── DO NOT RUN THIS FILE ────────────────────────────────────────────
+-- Security review, 7 Oct 2026: an older copy of the lockdown, with the old
+-- email founder check. Run onlyhere-project/SECURITY_LOCKDOWN_30SEP.sql
+-- instead. Oliver may delete this file.
 -- ── GEMLYX SECURITY LOCKDOWN, 30 SEP 2026 (revised 1 and 2 OCT) ────
 -- After Fable's audit. Safe to run more than once. Supabase runs this as one
 -- transaction, so it either all applies or none of it does.
