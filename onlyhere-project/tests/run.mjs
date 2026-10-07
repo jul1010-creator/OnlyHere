@@ -82629,5 +82629,14 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("and a board the search found is put to the place's own site too", r5.asked.includes("own") && r5.c.verdict === "rejected");
 }
 
+// ── Batch 229: the year's ship totals off the business page ──
+// Oliver, 8 Oct 2026, of "58 ship calls in 2026 / 26 different ships / 85,700
+// guests": "I think this is irrelevant to point out."
+{
+  const B = readFileSync(join(root, "src/pages/KlaipedaBusiness.jsx"), "utf8");
+  ok("the business page no longer shows the season's totals", !/business-season/.test(B) && !/ship calls in/.test(B) && !/seasonOf/.test(B));
+  ok("and still shows the next ship and the ships coming in", /<CruiseDays lang=\{lang\} count=\{6\} compact \/>/.test(B) && /T\.nextDay/.test(B));
+}
+
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
 if (failed) { fails.forEach(f => console.log("  FAIL " + f + "\n")); process.exit(1); }
