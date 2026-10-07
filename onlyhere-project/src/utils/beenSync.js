@@ -125,7 +125,9 @@ export const pushBeen = async (session, been) => {
     if (res.ok) return { ok: true };
     const body = await res.json().catch(() => ({}));
     if (missingBeenColumn(body)) return { ok: false, missingColumn: true };
-    return { ok: false, error: String(body?.message || body?.hint || "") || `Save failed (${res.status})` };
+    // Supabase's own words go to the console, not the reader (security review, 7 Oct 2026).
+    console.warn("been save:", res.status, body);
+    return { ok: false, error: `Save failed (${res.status})` };
   } catch (e) { return { ok: false, error: String(e.message || e) }; }
 };
 

@@ -45,12 +45,13 @@ const doLoad = async () => {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_facts?select=*&published=eq.true`, {
       headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
     });
+    if (!res.ok) { console.warn("gemlyx_facts read failed:", res.status); return; }
     const rows = await res.json();
     // A missing table returns an error object, not an array. That is a normal
     // state before Oliver runs the SQL, so it is a quiet console note rather
     // than a thrown error: the 7 seed facts keep working and the loading card
     // behaves exactly as it did before.
-    if (!Array.isArray(rows)) { console.warn("gemlyx_facts not readable yet (run the SQL in CHANGES_THIS_PASS.md):", rows); return; }
+    if (!Array.isArray(rows)) { console.warn("gemlyx_facts not readable yet (run SECURITY_LOCKDOWN_30SEP.sql):", rows); return; }
     const dupes = [];
     rows.forEach(row => {
       if (mergedIds.has(row.id)) return;

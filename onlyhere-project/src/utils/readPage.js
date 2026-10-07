@@ -111,7 +111,9 @@ const addressVariants = (url) => {
 // pass safeFetch.js as pageFetch, so a page address is only ever fetched on
 // the public internet (security review, 6 Oct 2026, finding 1); Firecrawl is
 // one fixed address and keeps the plain fetch. Tests pass one fake for both.
-export const readPage = async (url, { key = "", fetchImpl = fetch, pageFetch = fetchImpl, fresh = false } = {}) => {
+// `canEscalate` asks Studio's daily counter before a paid Firecrawl read
+// (security review, 6 Oct 2026). The plain read stays free.
+export const readPage = async (url, { key = "", fetchImpl = fetch, pageFetch = fetchImpl, fresh = false, canEscalate = async () => true } = {}) => {
   let plain = await readPlain(url, pageFetch);
   let first = pageReadVerdict(plain.status, plain.text, plain.err);
   // Only when the first attempt found NOTHING. A bot wall is not an address
@@ -159,6 +161,9 @@ export const readPage = async (url, { key = "", fetchImpl = fetch, pageFetch = f
       // page read costs nothing; asking a model to look at a picture does not.
       tickets: plain.tickets || [],
     };
+  }
+  if (!(await canEscalate())) {
+    return { text: "", via: "fetch", read: first.reason, blocked: true, credits: 0, sample: plain.text.slice(0, 200), status: plain.status, detail: "Firecrawl is over today's Studio limit.", escalated: false, banners: plain.banners || [], tickets: plain.tickets || [] };
   }
   const deep = await readFirecrawl(url, key, fetchImpl, { fresh });
   const second = pageReadVerdict(200, deep.text);

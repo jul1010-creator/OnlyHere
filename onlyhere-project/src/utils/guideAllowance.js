@@ -32,10 +32,12 @@ export const ALLOWANCE_DEFAULTS = Object.freeze({
   // One more try for a build that failed halfway. Each retry still takes a
   // slot from the network and from the day, because it spends the same money.
   retries: 1,
-  // Builds a visitor may stop and get back in one day. Stopping still spends
-  // what the build spent so far, so the day's total keeps it, and this caps
-  // how often one browser can start and stop on his money.
-  refunds: 2,
+  // Builds a visitor may stop and get back in one day: one (security review,
+  // 5 Oct 2026, finding 9). A stop hands back the account's own slot but never
+  // the day's, so two stops and a retry let one account take about six of the
+  // day's guides with nothing built. Stopping still spends what the build
+  // spent so far, so the day's total keeps it.
+  refunds: 1,
 });
 
 // The day a guide counts against is Denmark's, so the allowance comes back at

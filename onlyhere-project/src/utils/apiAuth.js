@@ -26,8 +26,21 @@ const studioToken = () => {
   catch { return ""; }
 };
 
+// When a token runs out, in milliseconds; 0 when it cannot be read.
+export const tokenExpiresAt = (jwt) => {
+  try { return JSON.parse(atob(String(jwt).split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).exp * 1000 || 0; }
+  catch { return 0; }
+};
+
 export const aiToken = async () => {
-  const studio = studioToken();
+  let studio = studioToken();
+  // The AI routes treat a lapsed token as a visitor's, without a 401, so the
+  // retry below never fires for it. Renewed here, two minutes early, the way
+  // App.jsx renews it for the guide pass (security review, 4 Oct 2026).
+  if (studio && studioRefresher && tokenExpiresAt(studio) - Date.now() < 120000) {
+    const fresh = await studioRefresher().catch(() => null);
+    if (fresh?.access_token) studio = fresh.access_token;
+  }
   if (studio) return { token: studio, studio: true };
   try {
     const s = await getSession();

@@ -71,7 +71,11 @@ export const AI_CEILINGS = {
 // 5 Oct 2026, security review finding 2: the member figure was 1 MB, which
 // let one call carry a very long and costly prompt. 500 KB still holds the
 // writer's longest prompt with room over.
-export const BODY_LIMIT = { anon: 400_000, member: 500_000, founder: 4_000_000 };
+// An Opus call is the dearest per token, so it may carry less (security
+// review, 5 Oct 2026, finding 2, the part still open on 7 Oct). 250 KB, not
+// the review's 200 KB: the guide writer's prompt could not be measured on a
+// live build, and a member's guide refused for size would be a failed guide.
+export const BODY_LIMIT = { anon: 400_000, member: 500_000, founder: 4_000_000, opus: 250_000 };
 
 // Calls per member per day, and for all members together. A whole guide build
 // is some tens of calls, and a member gets one guide a day.
@@ -144,7 +148,7 @@ const tokenOf = (headers) => {
 // A Supabase user: id, email, and whether the email is confirmed.
 const whoIs = async (token, { supabaseUrl, apiKey, fetchImpl }) => {
   try {
-    const r = await fetchImpl(`${supabaseUrl}/auth/v1/user`, { headers: { apikey: apiKey, Authorization: `Bearer ${token}` } });
+    const r = await fetchImpl(`${supabaseUrl}/auth/v1/user`, { headers: { apikey: apiKey, Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(3000) });
     if (!r.ok) return null;
     const u = await r.json();
     if (!u?.id) return null;
@@ -203,8 +207,14 @@ export const gateAi = async ({ headers, body, endpoint, env = {}, fetchImpl = fe
   const day = copenhagenDay(now);
   if (who) {
     const founder = isFounder(who.id, env.GEMLYX_FOUNDER_IDS);
-    if (size > (founder ? BODY_LIMIT.founder : BODY_LIMIT.member)) return { ok: false, status: 413, error: "That request is too large." };
-    if (founder) return { ok: true, founder: true, anon: false, userId: who.id };
+    if (size > (founder ? BODY_LIMIT.founder : asksForOpus(endpoint, body) ? BODY_LIMIT.opus : BODY_LIMIT.member)) return { ok: false, status: 413, error: "That request is too large." };
+    if (founder) {
+      // A ceiling even for the founder (security review, 5 Oct 2026): one
+      // stolen Studio token was unlimited spend. Far above a working day.
+      const got = await takeDaily({ day, keys: [{ key: "ai:founder", limit: limitOf(env.GEMLYX_AI_FOUNDER_PER_DAY, 3000) }], supabaseUrl, serviceKey, fetchImpl });
+      if (!got.ok) return { ok: false, status: got.closed ? 503 : 429, error: got.closed ? "This is not available just now. Try again in a moment." : "Studio has reached today's AI ceiling. It resets at midnight, Danish time." };
+      return { ok: true, founder: true, anon: false, userId: who.id };
+    }
     if (who.confirmed) {
       if (limits.perUser === 0 || limits.perDay === 0) return { ok: false, status: 503, error: AI_OFF };
       if (!serviceKey) return { ok: false, status: 503, error: "This is not available just now." };

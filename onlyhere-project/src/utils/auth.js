@@ -706,5 +706,5 @@ export const deleteMyData = async (session) => {
     method: "DELETE",
     headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${session.token}` },
   });
-  if (!res.ok) throw new Error((await res.text()).slice(0, 160));
+  if (!res.ok) { console.warn("delete my data:", res.status, (await res.text().catch(() => "")).slice(0, 160)); throw new Error(`Could not delete your saved data (${res.status}).`); }
 };

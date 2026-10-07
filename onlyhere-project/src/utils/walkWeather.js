@@ -20,7 +20,9 @@ export const walkWeatherFrom = (json) => {
   const hourly = next.some(t => t?.data?.next_1_hours);
   const block = (t) => (hourly ? t?.data?.next_1_hours : t?.data?.next_6_hours);
   const winds = next.map(t => Number(t?.data?.instant?.details?.wind_speed)).filter(Number.isFinite);
-  if (!next.some(block) && !winds.length) return null;
+  // Rain figures or wind missing is unknown too, not a dry or a calm day
+  // (security review, 6 Oct 2026; the 5 Oct fix still read one without the other).
+  if (!next.some(block) || !winds.length) return null;
   const rain = (hourly ? next : next.slice(0, 1)).reduce((n, t) => n + (Number(block(t)?.details?.precipitation_amount) || 0), 0);
   const symbol = String(block(next[0])?.summary?.symbol_code || "");
   const temp = Number(next[0]?.data?.instant?.details?.air_temperature);

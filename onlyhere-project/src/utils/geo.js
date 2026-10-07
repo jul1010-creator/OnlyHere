@@ -19,8 +19,13 @@ export const checkNightTransport = async (originLat, originLon, destLat, destLon
   for (const [key, ts] of Object.entries(checks)) {
     try {
       const res = await fetch(`/api/directions?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&mode=transit&departure_time=${ts}`);
-      const data = await res.json();
-      results[key] = data.error ? "no real transit route found at this hour" : `real route exists — ${data.durationText}`;
+      const data = await res.json().catch(() => null);
+      // Only Google's own "no route" is a finding. A refused call (the maps
+      // limit, a 503) or a broken one is "could not check" (security review,
+      // 5 Oct 2026, finding 7), the rule findRealNearestStop already keeps.
+      results[key] = res.ok && data && !data.error && data.durationText ? `real route exists — ${data.durationText}`
+        : res.ok && data && NO_ROUTE.test(String(data.error || "")) ? "no real transit route found at this hour"
+        : "check failed — could not confirm either way";
     } catch {
       results[key] = "check failed — could not confirm either way";
     }

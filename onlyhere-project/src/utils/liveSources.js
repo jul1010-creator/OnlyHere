@@ -18,6 +18,9 @@ import { SUPABASE_URL, SUPABASE_KEY } from "../config";
 import { rowCountry, workingCountry } from "./countries";
 
 export const founderSources = [];
+// True when the last read was refused (security review, 7 Oct 2026): research
+// then runs on the built-in rules, and this says so instead of staying quiet.
+export let sourcesFailed = false;
 let promise = null;
 
 const doLoad = async () => {
@@ -25,6 +28,8 @@ const doLoad = async () => {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_sources?select=*&order=id.asc`, {
       headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
     });
+    if (!res.ok) { console.warn("gemlyx_sources read failed:", res.status); sourcesFailed = true; return; }
+    sourcesFailed = false;
     const rows = await res.json();
     // A missing table returns an error object, not an array. That is the normal
     // state until the SQL is run, and everything must keep working: no list

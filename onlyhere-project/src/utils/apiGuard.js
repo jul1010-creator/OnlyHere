@@ -160,6 +160,9 @@ export const resolveUser = async (headers, { supabaseUrl, serviceKey, fetchImpl 
   try {
     const who = await f(`${supabaseUrl}/auth/v1/user`, {
       headers: { apikey: serviceKey, Authorization: `Bearer ${token}` },
+      // A slow sign-in check is a failed one, not a wait (security review,
+      // 5 Oct 2026, finding 8). The catch below answers 503.
+      signal: AbortSignal.timeout(3000),
     });
     // Only a refusal of the token is an expired session. Supabase being down
     // or busy is not, and saying so sent Oliver to log out for nothing
