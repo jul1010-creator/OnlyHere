@@ -127,7 +127,7 @@ writeFileSync(entry, `
   export { PAID_PLANS_LIVE } from ${JSON.stringify(join(root, "src/config.js"))};
   export { hostMatchesName, officialSiteFromCandidates } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { FERRY, classifyFerry, ferryFindings } from ${JSON.stringify(join(root, "src/utils/transport.js"))};
-  export { MEASURED_BY, remeasureFor, pendingRemeasure, describeRemeasure, looksLikeAPlace, REMEASURE, REMEASURE_CLEARS, enforceScope, resolveField, classifyClaim, routeMessage, allowedFieldsFor, isEditRequest, factsIn, factsPreserved, editEntry, EDITABLE_FIELDS, PROSE_FIELDS as CORRECTION_PROSE_FIELDS, VERIFY_PROMPT, settleVerdict, ownSiteFor, OWN_SITE_PROMPT, settleOwnSite, whoseWord, PASTED_MIN, keepMeasured, isPipelineOwned, MEASURED_FIELDS, claimCitation, urlsIn, sourceLinksIn, citationRefusal, claimIsPerishable, CITATION_PROMPT, settleCitation, SPLIT_PROMPT, correctEntry, dropAppliedClaims, CLAIMS_APPLIED, namesField, verifyTransportClaim, asksWhatItCarries } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
+  export { MEASURED_BY, remeasureFor, pendingRemeasure, describeRemeasure, looksLikeAPlace, REMEASURE, REMEASURE_CLEARS, enforceScope, resolveField, classifyClaim, routeMessage, allowedFieldsFor, isEditRequest, factsIn, factsPreserved, editEntry, EDITABLE_FIELDS, PROSE_FIELDS as CORRECTION_PROSE_FIELDS, VERIFY_PROMPT, settleVerdict, ownSiteFor, OWN_SITE_PROMPT, settleOwnSite, whoseWord, PASTED_MIN, keepMeasured, isPipelineOwned, MEASURED_FIELDS, claimCitation, urlsIn, sourceLinksIn, citationRefusal, claimIsPerishable, CITATION_PROMPT, settleCitation, outrankBoard, citedNoteFor, SPLIT_PROMPT, correctEntry, dropAppliedClaims, CLAIMS_APPLIED, namesField, verifyTransportClaim, asksWhatItCarries } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
   export { FEEDBACK_KINDS, FEEDBACK_TYPE, MIN_REPORT_CHARS, feedbackProblem, feedbackRow } from ${JSON.stringify(join(root, "src/utils/articleFeedback.js"))};
   export { previewReportRow, travellerTurns, PREVIEW_SAID_CAP, PREVIEW_SCREEN_CAP } from ${JSON.stringify(join(root, "src/utils/articleFeedback.js"))};
   export { trimFillerRuns, trimFillerAgainst, trimFillerForChat, CHAT_FILLER_WORDS, guideWithoutFiller } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
@@ -259,7 +259,7 @@ writeFileSync(entry, `
   export { swipeAxis, dragOffset, swipeCommits, swipeTarget, SLOP_PX, AXIS_BIAS, COMMIT_FRACTION, FLICK_SPEED, EDGE_DRAG } from ${JSON.stringify(join(root, "src/utils/swipe.js"))};
   export { verdictInProse, keepProse } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
   export { stayTier, stayTiers, namedProperty, stayProblems, stayTierMismatch } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
-  export { SRC_FOR_TYPE, PLACE_SOURCES, srcForType, ESSENTIAL_CATEGORIES, ESSENTIAL_CATEGORY_NAMES, QUERY_WORDS, DISCOVER_WORDS, sourceIsAboutPlace, nameIsDistinctive, nameCore, isNeverOwnSite, isNeverASource, SOURCE_RULES_NEST } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
+  export { SRC_FOR_TYPE, PLACE_SOURCES, srcForType, ESSENTIAL_CATEGORIES, ESSENTIAL_CATEGORY_NAMES, QUERY_WORDS, DISCOVER_WORDS, sourceIsAboutPlace, nameIsDistinctive, nameCore, isNeverOwnSite, isNeverASource, isOfficialBoard, sameSite, OFFICIAL_BOARD_HOSTS, SOURCE_RULES_NEST } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { ARRIVAL_TYPES, hasArrivalField } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { checkModeOf, splitForCheck, admissible, fieldIn, hasCheckableClaim, CHECK_SCOPE_BLOCK, CHARACTERISATION_FIELDS, REPORT_FIELDS } from ${JSON.stringify(join(root, "src/utils/checkScope.js"))};
   export { accountIn, accountsOnPage, accountFits, socialRecord, asUrl, OWN_PAGE, LINKED, NAMED } from ${JSON.stringify(join(root, "src/utils/socialAccounts.js"))};
@@ -1772,7 +1772,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     /const age = factAge\(pageText, Date\.now\(\)\);/.test(corr));
   ok("and the age only bites on a claim that can go off",
     /const stale = !age\.perishableOk && claimIsPerishable\(c\) \? age\.why : "";/.test(corr));
-  ok("and it reaches the settler", /settleCitation\(\{ parsed: cParsed, url: citedUrl, isOwnSite: isOwn, stale \}\);/.test(corr));
+  ok("and it reaches the settler", /settleCitation\(\{ parsed: cParsed, url: citedUrl, isOwnSite: isOwn, isBoard, stale \}\);/.test(corr));
 }
 
 // ── "NOT applied. Not applied." ─────────────────────────────────────
@@ -82552,6 +82552,81 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   const lo = app.slice(app.indexOf("const studioLogout = async () => {"), app.indexOf("const studioLogout = async () => {") + 900);
   ok("fix 29: Log out renews a lapsed token before it ends the session", lo.indexOf("tokenExpiresAt(token)") > 0 && lo.indexOf("tokenExpiresAt(token)") < lo.indexOf("/auth/v1/logout?scope=local"));
   ok("fix 30: the old events secret is gone from the notes", /`UPDATE_EVENTS_SECRET` with this value: `<redacted>`/.test(read("CHANGES_THIS_PASS.md")));
+}
+
+// ── Batch 228: an official tourism board is a proper source ──
+// Oliver, 7 Oct 2026: "I think we should consider the tourism center's sources
+// as proper.." and "Yes." The board settles a claim on its own; the place's own
+// site still outranks it; reviews, social pages and listings stay below.
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const { isOfficialBoard, sameSite, OFFICIAL_BOARD_HOSTS, settleCitation, outrankBoard, citedNoteFor, VERIFY_PROMPT, OWN_SITE_PROMPT, correctEntry, isNeverOwnSite } = M;
+  ok("klaipedatravel.lt is an official board, on any page and any subdomain", isOfficialBoard("https://klaipedatravel.lt/en/place/sailing-vessel-meridianas/") && isOfficialBoard("https://www.klaipedatravel.lt/") && isOfficialBoard("https://en.klaipedatravel.lt/x"));
+  ok("and so are the Danish visit... and destination... companies", isOfficialBoard("https://www.visitaarhus.com/x") && isOfficialBoard("https://en.visitaarhus.com/x") && isOfficialBoard("https://destinationsjaelland.dk/oplevelser") && isOfficialBoard("https://visitdenmark.com/"));
+  ok("and lithuania.travel and Go Vilnius", isOfficialBoard("https://lithuania.travel/en/") && isOfficialBoard("https://www.govilnius.lt/"));
+  ok("but not a business, a review site or a look-alike host", !isOfficialBoard("https://davincibar.dk/") && !isOfficialBoard("https://www.tripadvisor.com/x") && !isOfficialBoard("https://notklaipedatravel.lt/") && !isOfficialBoard("https://visitaarhus.com.example.org/") && !isOfficialBoard("not a url") && !isOfficialBoard(""));
+  ok("every named board is refused as a place's own site, the other half of the rule", isNeverOwnSite("https://visitaarhus.com/") && OFFICIAL_BOARD_HOSTS.length >= 5);
+  ok("sameSite ignores www and the path", sameSite("https://www.klaipedatravel.lt/a", "https://klaipedatravel.lt/b") && !sameSite("https://klaipedatravel.lt/a", "https://lithuania.travel/a"));
+
+  const b = settleCitation({ parsed: { says: "supports", quote: "Theatre Square is the heart of the Old Town." }, url: "https://klaipedatravel.lt/en/place/theatre-square/", isBoard: true });
+  ok("a board page backing the claim confirms it", b.verdict === "confirmed" && b.byBoard === true && /official tourism board/.test(b.evidence));
+  const agg = settleCitation({ parsed: { says: "supports", quote: "x" }, url: "https://www.mapquest.com/x", isBoard: false });
+  ok("an aggregator backing it still does not", agg.verdict === "" && /not the operator's own site or an official tourism board/.test(agg.evidence));
+  const ownWins = settleCitation({ parsed: { says: "supports", quote: "x" }, url: "https://davincibar.dk/", isOwnSite: true, isBoard: true });
+  ok("the own site is never labelled a board", ownWins.byBoard === false && /operator's own site/.test(ownWins.evidence));
+  const old = settleCitation({ parsed: { says: "supports", quote: "x" }, url: "https://klaipedatravel.lt/x", isBoard: true, stale: "the newest year on it is 2018" });
+  ok("a board page too old for a perishable fact still settles nothing", old.verdict === "");
+
+  const board = { verdict: "confirmed", correctValue: "10-18", evidence: "The board says 10-18.", sourceUrl: "https://klaipedatravel.lt/x" };
+  const over = outrankBoard(board, { verdict: "rejected", evidence: "kmm.lt, their own site, contradicts this.", sourceUrl: "https://kmm.lt/hours" });
+  ok("the place's own site outranks the board", over.verdict === "rejected" && over.sourceUrl === "https://kmm.lt/hours" && /outranks it/.test(over.evidence) && over.correctValue === "");
+  const same = outrankBoard(board, { verdict: "confirmed", correctValue: "10-18", evidence: "kmm.lt states this.", sourceUrl: "https://kmm.lt/hours" });
+  ok("and when they agree the own site is the source named", same.verdict === "confirmed" && same.sourceUrl === "https://kmm.lt/hours" && /says the same/.test(same.evidence));
+  const quiet = outrankBoard(board, { verdict: "unresolved", evidence: "not on their site" });
+  ok("a silent own site leaves the board deciding", quiet.verdict === "confirmed" && quiet.sourceUrl === board.sourceUrl && /board's page decides/.test(quiet.evidence) && quiet.askedOwnSite === true);
+  ok("and with no own site the board stands as it is", outrankBoard(board, null).evidence === board.evidence);
+
+  const silent = { read: true, supported: false, evidence: "klaipedatravel.lt, the page the fact-check cited as its source, does not mention this at all." };
+  ok("another page on the same site that says it is reported as the site saying it", /another page on klaipedatravel\.lt does/.test(citedNoteFor(silent, "https://klaipedatravel.lt/a", "https://www.klaipedatravel.lt/b")));
+  ok("a different site keeps the plain note", citedNoteFor(silent, "https://klaipedatravel.lt/a", "https://lithuania.travel/b") === silent.evidence && citedNoteFor(null, "", "") === "");
+
+  ok("the search is told a board settles it, below the place's own site", /AN OFFICIAL TOURISM BOARD IS ALSO A PROPER SOURCE/.test(VERIFY_PROMPT("Theatre Square", { says: "x" }, "")) && /permanently closed/.test(VERIFY_PROMPT("x", { says: "x" }, "")) && /answers written by another AI are supporting evidence/.test(VERIFY_PROMPT("x", { says: "x" }, "")));
+  ok("and no longer that tourist boards never decide", !/tourist boards and aggregators are supporting evidence/.test(read("src/utils/correction.js")));
+  ok("a Lithuanian place is searched for in Lithuania", /about "Theatre Square" in Lithuania/.test(VERIFY_PROMPT("Theatre Square", { says: "x" }, "", "Lithuania")) && /in Lithuania, and answer/.test(OWN_SITE_PROMPT("x", "x.lt", { says: "y" }, "Lithuania")) && /in Denmark/.test(VERIFY_PROMPT("x", { says: "x" }, "")));
+
+  // The whole pass, no network.
+  const run = async ({ entry, url, cite = "silent", verify, own = { verdict: "unresolved", evidence: "not on their site", sourceUrl: "" } }) => {
+    const asked = [];
+    const result = await correctEntry({
+      entry, criticism: "The opening hours are wrong. Source: " + url,
+      deps: {
+        askClaude: async () => ({ text: JSON.stringify({ claims: [{ field: "hours", says: "it opens at 10", proposed: "10-18", checkable: "yes", sourceUrl: url }] }) }),
+        askPerplexity: async (prompt) => {
+          if (/Your only job is to answer whether that page says/.test(prompt)) { asked.push("cite"); return { text: JSON.stringify({ says: cite, quote: "Open 10-18", correctValue: "10-18" }) }; }
+          if (/answer ONE question from that site alone/.test(prompt)) { asked.push("own"); return { text: JSON.stringify(own) }; }
+          asked.push(/in Lithuania using/.test(prompt) ? "verify:LT" : "verify"); return { text: JSON.stringify(verify) };
+        },
+        parseJSON: async (t) => JSON.parse(t),
+        directions: async () => ({}),
+        readPage: async () => ({ text: "Open 10-18 every day in 2026." }),
+      },
+    });
+    return { c: result.claims[0], asked };
+  };
+  const lt = { name: "Clock Museum", hours: "11-17", country: "LT" };
+  const r1 = await run({ entry: lt, url: "https://klaipedatravel.lt/en/place/clock-museum/", cite: "supports" });
+  ok("a board page the criticism cited confirms it, with no search", r1.c.verdict === "confirmed" && r1.c.byBoard === true && !r1.asked.some(a => a.startsWith("verify")));
+  const ltOwn = { ...lt, website: "https://www.clockmuseum.lt" };
+  const r2 = await run({ entry: ltOwn, url: "https://klaipedatravel.lt/en/place/clock-museum/", cite: "supports", own: { verdict: "rejected", correctValue: "", evidence: "Open 11-17.", sourceUrl: "https://clockmuseum.lt/en/visit" } });
+  ok("and the museum's own site overrules the board", r2.asked.includes("own") && r2.c.verdict === "rejected" && r2.c.sourceUrl === "https://clockmuseum.lt/en/visit");
+  const r3 = await run({ entry: lt, url: "https://klaipedatravel.lt/en/a/", verify: { verdict: "confirmed", entryIsAlreadyCorrect: false, correctValue: "10-18", evidence: "The board's museum page says 10-18.", sourceUrl: "https://klaipedatravel.lt/en/place/clock-museum/" } });
+  ok("the search finding it on another page of the board confirms it, searched in Lithuania", r3.c.verdict === "confirmed" && r3.c.byBoard === true && r3.asked.includes("verify:LT"));
+  ok("and the report says another page on that site said it", /another page on klaipedatravel\.lt does/.test(r3.c.evidence) && !/does not mention this at all/.test(r3.c.evidence));
+  const r4 = await run({ entry: lt, url: "https://klaipedatravel.lt/en/a/", verify: { verdict: "confirmed", entryIsAlreadyCorrect: false, correctValue: "10-18", evidence: "A review says so.", sourceUrl: "https://www.tripadvisor.com/x" } });
+  ok("a review site in sourceUrl is not a source", r4.c.verdict !== "confirmed");
+  const r5 = await run({ entry: ltOwn, url: "https://klaipedatravel.lt/en/a/", verify: { verdict: "confirmed", entryIsAlreadyCorrect: false, correctValue: "10-18", evidence: "Board says so.", sourceUrl: "https://klaipedatravel.lt/en/b/" }, own: { verdict: "rejected", evidence: "Open 11-17.", sourceUrl: "https://clockmuseum.lt/x" } });
+  ok("a Lithuanian place matches its own .lt site, letters folded", M.hostMatchesName("https://www.clockmuseum.lt", "Clock Museum") && M.hostMatchesName("https://klaipeda.lt", "Klaipėda") && !M.hostMatchesName("https://klaipedatravel.lt", "Theatre Square"));
+  ok("and a board the search found is put to the place's own site too", r5.asked.includes("own") && r5.c.verdict === "rejected");
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
