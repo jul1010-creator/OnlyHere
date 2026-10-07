@@ -304,6 +304,7 @@ writeFileSync(entry, `
   export { SCAN_KINDS, scanKindOf, scanPrompt } from ${JSON.stringify(join(root, "src/utils/scanKinds.js"))};
   export * as NP from ${JSON.stringify(join(root, "src/utils/nowPlanner.js"))};
   export * as TR from ${JSON.stringify(join(root, "src/utils/entryTranslate.js"))};
+  export * as RWT from ${JSON.stringify(join(root, "src/components/RandomWalkTest.jsx"))};
   export * as KXR from ${JSON.stringify(join(root, "src/data/klaipedaExampleRows.js"))};
   export * as KEX from ${JSON.stringify(join(root, "src/data/klaipedaExamples.js"))};
   export * as SCU from ${JSON.stringify(join(root, "src/data/klaipedaSculptures.js"))};
@@ -82363,6 +82364,33 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
     && /const opens = !!\(st && onOpen && !follow && \(!canOpen \|\| canOpen\(st\)\)\);/.test(gm) && /onOpen=\{\(st\) => openPage\(st\.id\)\} canOpen=\{\(st\) => !!pageFor\(st\.id\)\}/.test(read("src/pages/KlaipedaExamples.jsx")));
   const shown = ["src/data/klaipedaExampleRows.js", "src/pages/KlaipedaDemo.jsx", "src/components/PromotionsPage.jsx"].map(read).join("\n").replace(/\/\/.*$/gm, "") + ["en", "da", "de", "lt"].map(l => M.t("walk.examplesNote", l)).join(" ");
   ok("no dashes and none of his banned words in the new text", !/[—–]/.test(shown) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(shown));
+}
+
+// ── Batch 226: a random QR walk for the Studio ──
+// Oliver, 7 Oct 2026: "it's highly unlike people will use such a guide. Make
+// it for QR codes."
+{
+  const T = M.RWT, NP = M.NP;
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  let seed = 5;
+  const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+  const at = T.randomMoment("Europe/Vilnius", rnd, new Date("2026-10-07T10:00:00Z"));
+  const clock = M.placeClock(at, "Europe/Vilnius");
+  ok("a random moment is a half hour in the coming week, between 09:00 and 19:00 in Klaipėda", at > new Date("2026-10-07T10:00:00Z") && at - new Date("2026-10-07T10:00:00Z") < 8 * 86400000 && clock.minutes >= 540 && clock.minutes <= 1140 && clock.minutes % 30 === 0);
+  const starts = Array.from({ length: 60 }, () => T.randomStart("LT", rnd));
+  ok("it starts from the ship, the centre or a corner of town", ["terminal", "centre", "here"].every(id => starts.some(s => s.id === id)) && starts.every(s => NP.inNowArea("LT", s)));
+  let n = 0, sum = 0, bad = 0;
+  for (let i = 0; i < 80; i++) {
+    const { card, walk } = T.testWalk([], { country: "LT", start: T.randomStart("LT", rnd), at: T.randomMoment("Europe/Vilnius", rnd, new Date("2026-10-07T10:00:00Z")), hours: NP.NOW_HOURS[Math.floor(rnd() * 4)], sky: T.TEST_SKIES[Math.floor(rnd() * 4)] });
+    if (walk.stops.some(s => s.ride)) bad++;
+    if (card.best) { n++; sum += card.km / card.best; }
+  }
+  ok(`random QR walks keep to the shortest order that keeps the doors open, and nobody takes a taxi in town (${n} walks)`, n > 40 && sum / n < 1.02 && bad === 0);
+  const app = read("src/App.jsx");
+  ok("on another country's page the Studio's test makes a QR walk, and Denmark keeps its guide test", /\{PAGE_ABROAD \? <RandomWalkTest country=\{PAGE_COUNTRY\} \/> : \(/.test(app) && /🎲 Random guide \(test the pipeline\)/.test(app));
+  ok("only a meal at a mealtime is held in place when a walk is tidied", NP.mealTime(12 * 60) && NP.mealTime(19 * 60) && !NP.mealTime(15 * 60) && !NP.mealTime(10 * 60));
+  const shown = read("src/components/RandomWalkTest.jsx").replace(/\/\/.*$/gm, "");
+  ok("no dashes and none of his banned words in the test card", !/[—–]/.test(shown) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(shown));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
