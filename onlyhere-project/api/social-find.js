@@ -31,6 +31,7 @@
 //    with no site still has a Facebook page. Costs a fraction of a penny, and
 //    the answer needs a reason attached (see accountFits), because a search can
 //    hand back any account in Denmark whose name is close.
+import { gateFounder } from "../src/utils/founderGate.js";
 import { accountsOnPage, accountFits, socialRecord, asUrl, searchCandidates, websiteInPageDetails, OWN_PAGE } from "../src/utils/socialAccounts.js";
 import { requestIsFromSite, NOT_FROM_SITE, resolveUser, isFounder } from "../src/utils/apiGuard.js";
 // The page itself is read on the public internet only (security review, 6 Oct
@@ -83,7 +84,9 @@ const rawPage = async (url) => {
     const html = await r.text();
     return { ok: true, html };
   } catch (e) {
-    return { ok: false, why: e?.name === "AbortError" ? "site did not answer in time" : String(e?.message || e) };
+    // The cause goes to the log, not the browser (security review, 6 Oct 2026).
+    console.error("social-find page:", e);
+    return { ok: false, why: e?.name === "AbortError" ? "site did not answer in time" : "site could not be reached" };
   } finally { clearTimeout(t); }
 };
 
@@ -122,13 +125,14 @@ const askApiDirect = async (key, path, params) => {
       signal: ctrl.signal,
       headers: { "X-API-Key": key, "Accept": "application/json" },
     });
-    if (!r.ok) return { ok: false, why: `API Direct returned ${r.status} on ${path}` };
+    if (!r.ok) return { ok: false, why: `API Direct returned ${r.status}` };
     return { ok: true, body: await r.json() };
   } catch (e) {
     // The number is IN the message, so a slow endpoint and a dead one read
     // differently: "did not answer in 45s" is a finding and "did not answer" is
     // a shrug.
-    return { ok: false, why: e?.name === "AbortError" ? `API Direct did not answer in ${Math.round(budget / 1000)}s on ${path}` : String(e?.message || e) };
+    console.error("social-find API Direct:", path, e);
+    return { ok: false, why: e?.name === "AbortError" ? `API Direct did not answer in ${Math.round(budget / 1000)}s` : "API Direct could not be reached" };
   } finally { clearTimeout(t); }
 };
 
@@ -234,6 +238,9 @@ export default async function handler(req, res) {
     }
     const idKey = process.env.API_DIRECT_KEY;
     if (!idKey) return res.status(200).json({ url, id: "", skipped: "API_DIRECT_KEY is not set" });
+    // A daily ceiling on the paid lookup (security review, 6 Oct 2026).
+    const counted = await gateFounder({ route: "social-find", env: process.env });
+    if (!counted.ok) return res.status(counted.status).json({ error: counted.error });
     const got = await askApiDirect(idKey, "/v1/facebook/page", { url });
     if (!got.ok) return res.status(200).json({ url, id: "", failed: got.why });
     const page = got.body?.page || got.body || {};
@@ -257,6 +264,9 @@ export default async function handler(req, res) {
     const asPage = String(req.query.kind || "") === "page";
     const feedKey = process.env.API_DIRECT_KEY;
     if (!feedKey) return res.status(200).json({ group, posts: [], skipped: "API_DIRECT_KEY is not set" });
+    // A daily ceiling on the paid lookup (security review, 6 Oct 2026).
+    const counted = await gateFounder({ route: "social-find", env: process.env });
+    if (!counted.ok) return res.status(counted.status).json({ error: counted.error });
     // One page. A village group does not post fifty times a week, and page two
     // is last month, which candidatesIn would drop anyway for being in the past.
     const got = asPage
@@ -282,6 +292,9 @@ export default async function handler(req, res) {
     }
     const probeKey = process.env.API_DIRECT_KEY;
     if (!probeKey) return res.status(200).json({ checked: { from, to }, inWindow: null, skipped: "API_DIRECT_KEY is not set" });
+    // A daily ceiling on the paid lookup (security review, 6 Oct 2026).
+    const counted = await gateFounder({ route: "social-find", env: process.env });
+    if (!counted.ok) return res.status(counted.status).json({ error: counted.error });
 
     // The shape of the list is read defensively on purpose. `count` is
     // documented and the array's name is not, so this counts whichever of the
@@ -367,6 +380,9 @@ export default async function handler(req, res) {
     tried.push({ tier: "api-direct", skipped: "API_DIRECT_KEY is not set" });
     return res.status(200).json({ record: null, tried });
   }
+  // A daily ceiling on the paid lookup (security review, 6 Oct 2026).
+  const counted = await gateFounder({ route: "social-find", env: process.env });
+  if (!counted.ok) return res.status(counted.status).json({ error: counted.error });
 
   // The town is in the query because two Danish venues share a name more often
   // than a search engine expects, and it is left OUT of the Instagram query
