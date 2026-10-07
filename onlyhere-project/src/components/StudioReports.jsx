@@ -16,6 +16,10 @@ import { useState } from "react";
 import { C } from "../utils/theme";
 import { splitReport, topicLabel, reportAge, isHandled, unhandledCount } from "../utils/supportInbox";
 
+// Only a plain address becomes a reply link (security review, 7 Oct 2026): a
+// visitor writes the email, and "a@b.c?cc=..." would pre-fill his reply.
+const PLAIN_ADDRESS = /^[^\s@?&#]+@[^\s@?&#]+\.[^\s@?&#]+$/;
+
 const FILTER_LABEL = { open: "Open", all: "All", feedback: "Guide feedback", problem: "Feedback" };
 
 export const StudioReports = ({ rows, loading, error, filter, onFilter, onReload, onHandled, setupSql }) => {
@@ -117,7 +121,7 @@ export const StudioReports = ({ rows, loading, error, filter, onFilter, onReload
                   // A mailto, because the commonest next action on a report is
                   // answering the person who sent it, and copying an address
                   // out of a table is the step where that stops happening.
-                  <a href={`mailto:${row.email}?subject=${encodeURIComponent(`Gemlyx · ${row.reference || "your report"}`)}`}
+                  <a href={PLAIN_ADDRESS.test(String(row.email)) ? `mailto:${row.email}?subject=${encodeURIComponent(`Gemlyx · ${row.reference || "your report"}`)}` : undefined}
                     style={{ fontSize: 10.5, color: C.gold, textDecoration: "underline" }}>{row.email}</a>
                 )}
               </div>

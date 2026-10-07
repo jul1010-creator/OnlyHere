@@ -211,10 +211,11 @@ const StudioPickReport = ({ aiMessages, C }) => {
         onScreen,
         url: typeof window !== "undefined" ? window.location.href : "",
       });
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_suggestions`, {
+      // Through the counted form route (security review, 7 Oct 2026).
+      const res = await fetch("/api/send-form", {
         method: "POST",
-        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", Prefer: "return=minimal" },
-        body: JSON.stringify(row),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ form: "gemlyx_suggestions", row }),
       });
       // ── AND IT GOES IN THE CLIPBOARD TOO ──────────────────────
       //

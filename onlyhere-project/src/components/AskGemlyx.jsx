@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { C } from "../utils/theme";
-import { stripDashes, stripMarkdown } from "../utils/helpers";
+import { stripDashes, stripMarkdown, externalHref } from "../utils/helpers";
 import { aiDisclosureFor } from "../utils/aiDisclosure";
 import { currentUiLanguage } from "../utils/uiLanguage";
 import { readerLanguage } from "../utils/readerLanguage";
@@ -249,9 +249,9 @@ export const AskGemlyx = ({ session, item, kind, onSignIn, founder = false, near
             <div style={bubble(l.role)}>{l.text}</div>
             {l.sources?.length > 0 && (
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                {l.sources.map((u, j) => {
+                {l.sources.filter(u => externalHref(u)).map((u, j) => {
                   let host = u; try { host = new URL(u).hostname.replace(/^www\./, ""); } catch { /* show the raw string */ }
-                  return <a key={j} href={u} target="_blank" rel="noreferrer" style={{ fontSize: 10.5, color: C.gold, textDecoration: "none", border: `1px solid ${C.border}`, borderRadius: 100, padding: "3px 9px" }}>{host} ↗</a>;
+                  return <a key={j} href={externalHref(u)} target="_blank" rel="noreferrer" style={{ fontSize: 10.5, color: C.gold, textDecoration: "none", border: `1px solid ${C.border}`, borderRadius: 100, padding: "3px 9px" }}>{host} ↗</a>;
                 })}
               </div>
             )}

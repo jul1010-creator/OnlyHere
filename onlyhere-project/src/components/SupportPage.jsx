@@ -196,15 +196,13 @@ export const SupportPage = () => {
     // it, once more without that field. The name is not lost either way, since
     // the mailto fallback carries it, and a second attempt only ever happens on
     // a failure that already cost the person nothing.
-    const post = (row) => fetch(`${SUPABASE_URL}/rest/v1/${SUPPORT_TABLE}`, {
+    // Through the counted form route, not straight into the table (security
+    // review, 7 Oct 2026). A 400 still comes back for a missing column, so the
+    // retry without the name below works as before. See api/send-form.js.
+    const post = (row) => fetch("/api/send-form", {
       method: "POST",
-      headers: {
-        apikey: SUPABASE_KEY,
-        Authorization: `Bearer ${SUPABASE_KEY}`,
-        "Content-Type": "application/json",
-        Prefer: "return=minimal",
-      },
-      body: JSON.stringify(row),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ form: SUPPORT_TABLE, row }),
     });
     try {
       const row = supportPayload(sent, { reference });

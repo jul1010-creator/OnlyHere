@@ -44,10 +44,12 @@ export const ArticleFeedback = ({ itemType, itemName, signedIn, onNeedAccount })
     setProblem("");
     setStatus("sending");
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_suggestions`, {
+      // Through the counted form route, not straight into the table
+      // (security review, 7 Oct 2026). See api/send-form.js.
+      const res = await fetch("/api/send-form", {
         method: "POST",
-        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", Prefer: "return=minimal" },
-        body: JSON.stringify(feedbackRow(open, { itemType, itemName, text, rating, url: typeof window !== "undefined" ? window.location.href : "" })),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ form: "gemlyx_suggestions", row: feedbackRow(open, { itemType, itemName, text, rating, url: typeof window !== "undefined" ? window.location.href : "" }) }),
       });
       setStatus(res.ok ? "sent" : "error");
       if (res.ok) { setText(""); setRating(0); }
