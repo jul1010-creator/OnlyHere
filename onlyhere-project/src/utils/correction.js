@@ -115,7 +115,7 @@ import { journeyFigure } from "./journey";
 // three already exist and are already tested; what was missing was anything
 // asking them about a link HE pastes. See citationRefusal below.
 import { factAge } from "./pageScan";
-import { isNeverASource, isOfficialBoard, sameSite } from "./sourcePolicy";
+import { isNeverASource, isOfficialBoard, officialLabel, sameSite } from "./sourcePolicy";
 import { wrongEdition } from "./ticketLink";
 export const PROSE_FIELDS = [...NARRATIVE_FIELDS, "blogBody", "intro", "body"];
 
@@ -655,7 +655,9 @@ export const urlsIn = (text) =>
 // false one costs a page fetch and an answer about a page that does not exist.
 // .dk and .com are his two, and the rest are what a Danish source realistically
 // ends in.
-const LINK_TLDS = ["dk", "com", "net", "org", "eu", "io", "info", "travel", "de", "se", "no", "nu", "uk", "app", "shop", "dev"];
+// .lt since the Klaipėda demo: "biblioteka.lt" typed into the Studio was not
+// read as a link at all.
+const LINK_TLDS = ["dk", "com", "net", "org", "eu", "io", "info", "travel", "de", "se", "no", "nu", "uk", "app", "shop", "dev", "lt"];
 // The leading class is what keeps an email address out: in "oliver@gemlyx.dk"
 // the character before the host is "@", which is neither the start of the text
 // nor one of these, so nothing matches. The trailing guard keeps "gemlyx.dkx"
@@ -801,8 +803,8 @@ export const settleCitation = ({ parsed, url = "", isOwnSite = false, isBoard = 
       evidence: isOwnSite
         ? `${who}, the operator's own site and the page the fact-check cited, states this.${quote ? ` It reads: "${quote}"` : ""}`
         : board
-          ? `${who}, the official tourism board and the page the fact-check cited, states this.${quote ? ` It reads: "${quote}"` : ""}`
-          : `${who}, the page the fact-check cited, does say this${quote ? `: "${quote}"` : ""}. It is not the operator's own site or an official tourism board, so it is supporting evidence rather than the deciding source, and the check below still ran.`,
+          ? `${who}, ${officialLabel(url)} and the page the fact-check cited, states this.${quote ? ` It reads: "${quote}"` : ""}`
+          : `${who}, the page the fact-check cited, does say this${quote ? `: "${quote}"` : ""}. It is not the operator's own site, an official tourism board or the city library, so it is supporting evidence rather than the deciding source, and the check below still ran.`,
     };
   }
   if (said === "silent") {
@@ -823,6 +825,8 @@ export const settleCitation = ({ parsed, url = "", isOwnSite = false, isBoard = 
 // The place's own site wins when it answered either way; when it was asked and
 // is silent, the board's verdict stands and the evidence says it was asked.
 export const outrankBoard = (board, own) => {
+  const label = officialLabel(board?.sourceUrl);
+  const Label = label.charAt(0).toUpperCase() + label.slice(1);
   if (own && (own.verdict === "confirmed" || own.verdict === "rejected")) {
     const agree = own.verdict === board.verdict;
     return {
@@ -832,14 +836,14 @@ export const outrankBoard = (board, own) => {
       sourceUrl: own.sourceUrl,
       askedOwnSite: true,
       evidence: agree
-        ? `${own.evidence} The official tourism board says the same.`.trim()
-        : `${own.evidence} The official tourism board said otherwise, and the place's own site outranks it. ${board.evidence || ""}`.trim(),
+        ? `${own.evidence} ${Label} says the same.`.trim()
+        : `${own.evidence} ${Label} said otherwise, and the place's own site outranks it. ${board.evidence || ""}`.trim(),
     };
   }
   return {
     ...board,
     askedOwnSite: !!own,
-    evidence: own ? `${board.evidence || ""} The place's own site was asked as well and does not address it, so the board's page decides.`.trim() : (board.evidence || ""),
+    evidence: own ? `${board.evidence || ""} The place's own site was asked as well and does not address it, so ${label === "the city library" ? "the library's" : "the board's"} page decides.`.trim() : (board.evidence || ""),
   };
 };
 
@@ -866,7 +870,7 @@ The claim: ${claim.says}${claim.proposed ? `\nThe correction proposed: ${claim.p
 
 Rules for your answer, and they are strict:
 - A PRIMARY SOURCE settles this. For an official site, opening hours, prices, programmes or dates that is the place's own website. For a ferry it is the operator's own timetable.
-- AN OFFICIAL TOURISM BOARD IS ALSO A PROPER SOURCE and settles this on its own: the city's or region's own tourist office, such as klaipedatravel.lt, lithuania.travel, visitdenmark.com or a regional visit... or destination... site. Any page on that site counts. It ranks BELOW the place's own site: if the place's own site, or a Google listing marking the place permanently closed, says otherwise, that wins, and you say both.
+- AN OFFICIAL TOURISM BOARD IS ALSO A PROPER SOURCE and settles this on its own: the city's or region's own tourist office, such as klaipedatravel.lt, lithuania.travel, visitdenmark.com or a regional visit... or destination... site. Klaipėda's city library, biblioteka.lt, counts the same way. Any page on those sites counts. It ranks BELOW the place's own site: if the place's own site, or a Google listing marking the place permanently closed, says otherwise, that wins, and you say both.
 - Wikipedia, blogs, review sites, listings and aggregators, and answers written by another AI are supporting evidence, never the deciding one.
 - If sources disagree, say so and name both, rather than silently picking one. An operator's own timetable page outranks its own marketing front page.
 - If you cannot find a primary source, say so plainly. "Could not confirm" is a correct and useful answer here. Do not reason your way to a conclusion.

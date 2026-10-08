@@ -315,11 +315,21 @@ export const OFFICIAL_BOARD_HOSTS = [
   "klaipedatravel.lt", "lithuania.travel", "govilnius.lt", "visit.kaunas.lt",
   "visitdenmark.com", "visitdenmark.dk", "dansk-kyst-og-naturturisme.dk",
 ];
+// ── AND THE CITY LIBRARY, ON THE SAME RUNG ──────────────────────────
+// Oliver, 8 Oct 2026: "biblioteka.lt should be allowed to critisize Gemlyx AI
+// as well." biblioteka.lt is the Klaipėda City Municipality Immanuel Kant
+// Public Library, a municipal institution and the town's keeper of local
+// history. Same tier as a board: it settles a claim on its own, and the
+// place's own site still outranks it.
+export const OFFICIAL_LIBRARY_HOSTS = ["biblioteka.lt"];
+const onHosts = (h, list) => list.some(d => h === d || h.endsWith(`.${d}`));
+// What the report calls the source, so a library is not called a tourism board.
+export const officialLabel = (url) => onHosts(hostOfUrl(url).toLowerCase(), OFFICIAL_LIBRARY_HOSTS) ? "the city library" : "the official tourism board";
 const BOARD_PREFIX = /^(?:visit|destination)[a-z0-9-]*\.(?:dk|com|lt|eu)$/i;
 export const isOfficialBoard = (url) => {
   const h = hostOfUrl(url).toLowerCase();
   if (!h || NEVER_A_SOURCE.test(h)) return false;
-  if (OFFICIAL_BOARD_HOSTS.some(d => h === d || h.endsWith(`.${d}`))) return true;
+  if (onHosts(h, OFFICIAL_BOARD_HOSTS) || onHosts(h, OFFICIAL_LIBRARY_HOSTS)) return true;
   // en.visitaarhus.com is still VisitAarhus. Each shorter tail is tried, so a
   // language subdomain does not hide the board behind it.
   const labels = h.split(".");
