@@ -259,7 +259,7 @@ writeFileSync(entry, `
   export { swipeAxis, dragOffset, swipeCommits, swipeTarget, SLOP_PX, AXIS_BIAS, COMMIT_FRACTION, FLICK_SPEED, EDGE_DRAG } from ${JSON.stringify(join(root, "src/utils/swipe.js"))};
   export { verdictInProse, keepProse } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
   export { stayTier, stayTiers, namedProperty, stayProblems, stayTierMismatch } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
-  export { SRC_FOR_TYPE, PLACE_SOURCES, srcForType, ESSENTIAL_CATEGORIES, ESSENTIAL_CATEGORY_NAMES, QUERY_WORDS, DISCOVER_WORDS, sourceIsAboutPlace, nameIsDistinctive, nameCore, isNeverOwnSite, isNeverASource, isOfficialBoard, sameSite, OFFICIAL_BOARD_HOSTS, SOURCE_RULES_NEST } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
+  export { SRC_FOR_TYPE, PLACE_SOURCES, srcForType, ESSENTIAL_CATEGORIES, ESSENTIAL_CATEGORY_NAMES, QUERY_WORDS, DISCOVER_WORDS, sourceIsAboutPlace, nameIsDistinctive, nameCore, isNeverOwnSite, isNeverASource, isOfficialBoard, sameSite, OFFICIAL_BOARD_HOSTS, officialLabel, SOURCE_RULES_NEST } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { ARRIVAL_TYPES, hasArrivalField } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { checkModeOf, splitForCheck, admissible, fieldIn, hasCheckableClaim, CHECK_SCOPE_BLOCK, CHARACTERISATION_FIELDS, REPORT_FIELDS } from ${JSON.stringify(join(root, "src/utils/checkScope.js"))};
   export { accountIn, accountsOnPage, accountFits, socialRecord, asUrl, OWN_PAGE, LINKED, NAMED } from ${JSON.stringify(join(root, "src/utils/socialAccounts.js"))};
@@ -82571,7 +82571,7 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   const b = settleCitation({ parsed: { says: "supports", quote: "Theatre Square is the heart of the Old Town." }, url: "https://klaipedatravel.lt/en/place/theatre-square/", isBoard: true });
   ok("a board page backing the claim confirms it", b.verdict === "confirmed" && b.byBoard === true && /official tourism board/.test(b.evidence));
   const agg = settleCitation({ parsed: { says: "supports", quote: "x" }, url: "https://www.mapquest.com/x", isBoard: false });
-  ok("an aggregator backing it still does not", agg.verdict === "" && /not the operator's own site or an official tourism board/.test(agg.evidence));
+  ok("an aggregator backing it still does not", agg.verdict === "" && /not the operator's own site, an official tourism board or the city library/.test(agg.evidence));
   const ownWins = settleCitation({ parsed: { says: "supports", quote: "x" }, url: "https://davincibar.dk/", isOwnSite: true, isBoard: true });
   ok("the own site is never labelled a board", ownWins.byBoard === false && /operator's own site/.test(ownWins.evidence));
   const old = settleCitation({ parsed: { says: "supports", quote: "x" }, url: "https://klaipedatravel.lt/x", isBoard: true, stale: "the newest year on it is 2018" });
@@ -82636,6 +82636,32 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   const B = readFileSync(join(root, "src/pages/KlaipedaBusiness.jsx"), "utf8");
   ok("the business page no longer shows the season's totals", !/business-season/.test(B) && !/ship calls in/.test(B) && !/seasonOf/.test(B));
   ok("and still shows the next ship and the ships coming in", /<CruiseDays lang=\{lang\} count=\{6\} compact \/>/.test(B) && /T\.nextDay/.test(B));
+}
+
+// ── Batch 230: Klaipėda's city library may correct Gemlyx ──
+// Oliver, 8 Oct 2026: "biblioteka.lt should be allowed to critisize Gemlyx AI
+// as well.."
+{
+  const { isOfficialBoard, officialLabel, settleCitation, outrankBoard, sourceLinksIn, VERIFY_PROMPT, correctEntry } = M;
+  ok("biblioteka.lt is an official source, on any page", isOfficialBoard("https://biblioteka.lt/en/about-the-library/171") && isOfficialBoard("https://www.biblioteka.lt/x") && !isOfficialBoard("https://notbiblioteka.lt/"));
+  ok("and is called the city library, not a tourism board", officialLabel("https://biblioteka.lt/x") === "the city library" && officialLabel("https://klaipedatravel.lt/x") === "the official tourism board");
+  const lib = settleCitation({ parsed: { says: "supports", quote: "The sculpture was unveiled in 1989." }, url: "https://biblioteka.lt/x", isBoard: true });
+  ok("a library page backing the claim confirms it, named as the library", lib.verdict === "confirmed" && /the city library and the page/.test(lib.evidence) && !/tourism board/.test(lib.evidence));
+  const over = outrankBoard({ verdict: "confirmed", evidence: "x", sourceUrl: "https://biblioteka.lt/x" }, { verdict: "rejected", evidence: "Own site says no.", sourceUrl: "https://own.lt/x" });
+  ok("the place's own site still outranks the library", over.verdict === "rejected" && /The city library said otherwise/.test(over.evidence));
+  ok("biblioteka.lt typed bare in the Studio is read as a link", sourceLinksIn("see biblioteka.lt/en/x for the date").includes("https://biblioteka.lt/en/x") && sourceLinksIn("klaipedatravel.lt").includes("https://klaipedatravel.lt"));
+  ok("and the search is told the library counts", /biblioteka\.lt, counts the same way/.test(VERIFY_PROMPT("x", { says: "x" }, "")));
+  const r = await correctEntry({
+    entry: { name: "Ännchen von Tharau", year: "1912", country: "LT" },
+    criticism: "biblioteka.lt/en/x says it was first unveiled in 1912 and restored in 1989",
+    deps: {
+      askClaude: async () => ({ text: JSON.stringify({ claims: [{ field: "year", says: "restored in 1989", proposed: "1912, restored 1989", checkable: "yes" }] }) }),
+      askPerplexity: async (p) => ({ text: /Your only job is to answer whether that page says/.test(p) ? JSON.stringify({ says: "supports", quote: "restored in 1989", correctValue: "1912, restored 1989" }) : JSON.stringify({ verdict: "unresolved", entryIsAlreadyCorrect: null, correctValue: "", evidence: "", sourceUrl: "" }) }),
+      parseJSON: async (t) => JSON.parse(t), directions: async () => ({}),
+      readPage: async () => ({ text: "The monument was restored in 1989." }),
+    },
+  });
+  ok("a correction he types with biblioteka.lt is read and settled by it", r.claims[0].verdict === "confirmed" && r.claims[0].citedSource === "https://biblioteka.lt/en/x");
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
