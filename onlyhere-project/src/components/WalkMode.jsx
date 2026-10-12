@@ -73,7 +73,7 @@ export const askForCompass = async () => {
 
 // `loop` false for a trail that ends at its last stop: no way back, and the
 // last stop's button finishes the walk.
-export const WalkMode = ({ walk, madeAt, lang = "en", country = "LT", onClose, cardFor = null, loop = true }) => {
+export const WalkMode = ({ walk, madeAt, lang = "en", country = "LT", onClose, cardFor = null, loop = true, onReach = null }) => {
   const stops = Array.isArray(walk?.stops) ? walk.stops : [];
   // 0..stops.length-1 are the stops; stops.length is the way back.
   const [idx, setIdx] = useState(0);
@@ -172,8 +172,20 @@ export const WalkMode = ({ walk, madeAt, lang = "en", country = "LT", onClose, c
   const g = useMemo(() => guideTo(pos, target ? { lat: Number(target.lat), lon: Number(target.lon) } : null), [pos, target]);
   // Arriving brings the stop up again, sparkle and all, once per stop.
   const arrived = useRef(-1);
+  // ── AND A PARTNER SEES THAT SOMEBODY CAME ───────────────────────
+  // Oliver, 12 Oct 2026 (utils/partnerStats.js). Counted once per place per
+  // walk: when the phone says the walker is there, or, with no GPS, when they
+  // move on from it. Moving on with GPS working but never arriving is a skip
+  // and is not counted.
+  const reached = useRef(new Set());
+  const reach = (s) => {
+    if (!onReach || !s?.id || reached.current.has(s.id)) return;
+    reached.current.add(s.id);
+    try { onReach(s); } catch { /* counting never breaks the walk */ }
+  };
+  const moveOn = () => { if (!back && (gpsOff || !pos)) reach(target); setIdx(i => i + 1); };
   useEffect(() => {
-    if (g?.here && !back && arrived.current !== idx && target) { arrived.current = idx; setFocus({ id: target.id, n: ++n.current }); }
+    if (g?.here && !back && arrived.current !== idx && target) { arrived.current = idx; setFocus({ id: target.id, n: ++n.current }); reach(target); }
   }, [g?.here, idx]);
   const arrow = g ? (heading === null ? g.bearing : g.bearing - heading) : 0;
   const streets = target ? `https://www.google.com/maps/dir/?api=1&travelmode=walking${pos ? `&origin=${pos.lat},${pos.lon}` : ""}&destination=${Number(target.lat)},${Number(target.lon)}` : "";
@@ -240,7 +252,7 @@ export const WalkMode = ({ walk, madeAt, lang = "en", country = "LT", onClose, c
               {g && <span style={{ color: C.gold }}> · {g.here ? uiT("walk.here", lang) : g.metres > FAR_M ? fill(uiT("walk.far", lang), { dist: distanceWords(g.metres) }) : `${distanceWords(g.metres)} · ${fill(uiT("walk.minutes", lang), { n: g.minutes })}`}</span>}
             </span>
             {g?.here && !back && !(!loop && idx + 1 >= stops.length) && (
-              <button onClick={() => setIdx(i => i + 1)} data-testid="walk-full-next" style={{ ...btn(true), flex: "0 0 auto", borderRadius: 100, padding: "7px 12px", fontSize: 12 }}>
+              <button onClick={moveOn} data-testid="walk-full-next" style={{ ...btn(true), flex: "0 0 auto", borderRadius: 100, padding: "7px 12px", fontSize: 12 }}>
                 {uiT(idx + 1 >= stops.length ? "walk.headBack" : "walk.nextStop", lang)}
               </button>
             )}
@@ -287,7 +299,7 @@ export const WalkMode = ({ walk, madeAt, lang = "en", country = "LT", onClose, c
             {!back && (!loop && idx + 1 >= stops.length ? (
               <button onClick={onClose} style={{ ...btn(!!g?.here), flex: 1 }} data-testid="walk-finish">{uiT("walk.finished", lang)}</button>
             ) : (
-              <button onClick={() => setIdx(i => i + 1)} style={{ ...btn(!!g?.here), flex: 1 }} data-testid="walk-next">
+              <button onClick={moveOn} style={{ ...btn(!!g?.here), flex: 1 }} data-testid="walk-next">
                 {uiT(idx + 1 >= stops.length ? "walk.headBack" : "walk.nextStop", lang)}
               </button>
             ))}

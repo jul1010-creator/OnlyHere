@@ -17,6 +17,7 @@ import { entryWord } from "../utils/entryWords";
 import { ferryOf } from "../utils/walkable";
 import { WalkMode, askForCompass } from "./WalkMode";
 import { inPortNow, hoursBeforeSailing } from "../utils/cruiseDays";
+import { walkSeen, placeReached } from "../utils/partnerStats";
 
 const fill = (s, vars) => Object.entries(vars).reduce((out, [k, v]) => out.split(`{${k}}`).join(String(v)), s);
 const clock = (m, lang) => {
@@ -47,7 +48,7 @@ const readerLang = () => {
 // The walk itself, drawn from what the route answers with. Also used by the
 // examples page (pages/KlaipedaExamples.jsx), which runs the same rules on
 // made-up partners, and passes `tag` to mark them as made up.
-export const WalkView = ({ walk, madeAt, lang, country = "LT", tag = null, onOpen = null, edit = null, onShow = null, cardFor = null }) => {
+export const WalkView = ({ walk, madeAt, lang, country = "LT", tag = null, onOpen = null, edit = null, onShow = null, cardFor = null, onReach = null }) => {
   const app = rideApp(country);
   // Walking it inside Gemlyx (WalkMode.jsx), from the Start walking button.
   const [walking, setWalking] = useState(false);
@@ -127,7 +128,7 @@ export const WalkView = ({ walk, madeAt, lang, country = "LT", tag = null, onOpe
             style={{ display: "block", textAlign: "center", marginTop: 8, border: `1px solid ${C.border}`, borderRadius: 12, padding: "11px", fontSize: 13, fontWeight: 700, color: C.light, textDecoration: "none" }}>
             {uiT("now.route", lang)} ↗
           </a>
-          {walking && <WalkMode walk={walk} madeAt={madeAt} lang={lang} country={country} cardFor={cardFor} onClose={() => setWalking(false)} />}
+          {walking && <WalkMode walk={walk} madeAt={madeAt} lang={lang} country={country} cardFor={cardFor} onReach={onReach} onClose={() => setWalking(false)} />}
         </>
       )}
       {/* Outside the walk, so taking out every stop still leaves the way to
@@ -153,7 +154,7 @@ export const WalkView = ({ walk, madeAt, lang, country = "LT", tag = null, onOpe
 // by the same rules from the places the server sent with it (walk.places), so
 // every time and every open door stays checked. Longer is offered only while
 // it pushes nothing else out.
-export const EditableWalk = ({ walk, madeAt, lang, country = "LT", tag = null, onOpen = null, onShow = null, cardFor = null, onWalk = null }) => {
+export const EditableWalk = ({ walk, madeAt, lang, country = "LT", tag = null, onOpen = null, onShow = null, cardFor = null, onWalk = null, onReach = null }) => {
   const [edits, setEdits] = useState({ stays: {}, removed: [] });
   useEffect(() => { setEdits({ stays: {}, removed: [] }); }, [walk]);
   const ctx = useMemo(() => ({ country, start: walk.start, startClock: walk.clock, budget: walk.budget, margin: walk.margin || 0, weather: walk.weather || null, style: walk.style || "" }), [walk, country]);
@@ -162,7 +163,7 @@ export const EditableWalk = ({ walk, madeAt, lang, country = "LT", tag = null, o
   const shown = useMemo(() => (usable && changed ? { ...walk, ...replanWalk(walk, edits, ctx) } : walk), [walk, edits, ctx, usable, changed]);
   // The map beside the list shows the walk as the reader has changed it.
   useEffect(() => { if (onWalk) onWalk(shown); }, [shown]);
-  if (!usable) return <WalkView walk={walk} madeAt={madeAt} lang={lang} country={country} tag={tag} onOpen={onOpen} onShow={onShow} cardFor={cardFor} />;
+  if (!usable) return <WalkView walk={walk} madeAt={madeAt} lang={lang} country={country} tag={tag} onOpen={onOpen} onShow={onShow} cardFor={cardFor} onReach={onReach} />;
   const stayOf = (id) => shown.stops.find(x => x.id === id)?.stay;
   const edit = {
     longer: (id) => { if (canStayLonger(walk, edits, id, ctx)) setEdits(e => ({ ...e, stays: { ...e.stays, [id]: stayOf(id) + STAY_STEP } })); },
@@ -172,7 +173,7 @@ export const EditableWalk = ({ walk, madeAt, lang, country = "LT", tag = null, o
     putBack: (id) => setEdits(e => ({ ...e, removed: e.removed.filter(x => x !== id) })),
     removed: edits.removed.map(id => ({ id, name: walk.stops.find(x => x.id === id)?.name || id })),
   };
-  return <WalkView walk={shown} madeAt={madeAt} lang={lang} country={country} tag={tag} onOpen={onOpen} edit={edit} onShow={onShow} cardFor={cardFor} />;
+  return <WalkView walk={shown} madeAt={madeAt} lang={lang} country={country} tag={tag} onOpen={onOpen} edit={edit} onShow={onShow} cardFor={cardFor} onReach={onReach} />;
 };
 
 // Which way round this phone walks, kept so a reload does not flip it. See
@@ -277,6 +278,10 @@ export const NowPlanner = ({ country = "LT", lang: langProp = "", defaultFrom = 
       if (asked.current !== mine) return;
       const nowMin = placeClock(new Date(), zone).minutes;
       setState({ busy: false, walk, error: "", madeAt: Math.ceil(nowMin / 5) * 5 });
+      // Counted for the places in it, so a partner sees real numbers
+      // (utils/partnerStats.js). Only here, on the QR walk: never in Studio's
+      // tests or the examples page.
+      walkSeen(walk, country);
     } catch {
       if (asked.current !== mine) return;
       setState({ busy: false, walk: null, error: uiT("now.error", lang), madeAt: 0 });
@@ -343,7 +348,7 @@ export const NowPlanner = ({ country = "LT", lang: langProp = "", defaultFrom = 
 
       {state.error && <div style={{ fontSize: 12.5, color: "#FFB347", marginTop: 12 }}>{state.error}</div>}
 
-      {walk && <EditableWalk walk={walk} madeAt={madeAt} lang={lang} country={country} cardFor={(s) => placeLook(walk, s)}
+      {walk && <EditableWalk walk={walk} madeAt={madeAt} lang={lang} country={country} cardFor={(s) => placeLook(walk, s)} onReach={(s) => placeReached(s, country)}
         tag={(s) => (isExamplePartner(s.id) ? uiT("deals.example", lang) : null)} />}
       {/* While few Klaipėda places are published, the walk also reads the
           examples (data/klaipedaExampleRows.js), and says so when one of the
