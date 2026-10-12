@@ -84,6 +84,8 @@ import { KlaipedaDemo } from "./pages/KlaipedaDemo";
 import { KlaipedaExamples } from "./pages/KlaipedaExamples";
 import { KlaipedaSculptures, KlaipedaSculpturesCentre } from "./pages/KlaipedaSculptures";
 import { KlaipedaBusiness } from "./pages/KlaipedaBusiness";
+import { KlaipedaPartner } from "./pages/KlaipedaPartner";
+import { KLAIPEDA_PARTNER_PATH } from "./utils/partnerStats";
 import { COUNTRY_PROFILES, DEFAULT_COUNTRY, countryProfile, setWorkingCountry, countryParam, rowCountry, activeCountry, homePath, plainTownName } from "./utils/countries";
 import { KLAIPEDA_DEMO_PATH } from "./data/klaipedaDemo";
 import { KLAIPEDA_EXAMPLES_PATH, KLAIPEDA_BUSINESS_PATH, examplePromotionPools } from "./data/klaipedaExamples";
@@ -4162,6 +4164,25 @@ Say which answer came from which source, so a fact from a vouched page and a fac
   const [studioOfferFrom, setStudioOfferFrom] = useState("");
   const [studioOfferTo, setStudioOfferTo] = useState("");
   const studioOfferFields = { text: studioOfferText, until: studioOfferUntil, days: studioOfferDays, from: studioOfferFrom, to: studioOfferTo };
+  // ── A PARTNER'S PRIVATE LINK ──────────────────────────────────────
+  // Oliver, 12 Oct 2026: real numbers for a business, no account. One click
+  // here signs a link to /lithuania/partner for the place that is open; he
+  // sends it to the owner. See utils/partnerLink.js.
+  const [partnerLink, setPartnerLink] = useState({ forId: null, url: "", note: "" });
+  const makePartnerLink = async () => {
+    const forId = editingId;
+    setPartnerLink({ forId, url: "", note: "Making the link." });
+    try {
+      const r = await studioFetch("/api/partner-stats", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ make: { id: `${studioType}:${forId}`, name: studioDraft?.name || "" } }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.path) { setPartnerLink({ forId, url: "", note: j.error || `The link could not be made (${r.status}).` }); return; }
+      setPartnerLink({ forId, url: `${window.location.origin}${j.path}`, note: "" });
+    } catch { setPartnerLink({ forId, url: "", note: "The link could not be made just now." }); }
+  };
   // Where to book a table (a link or a phone number), beside the offer. See
   // utils/dealExtras.js. The busyness forecast rides in the draft JSON itself.
   const [studioBooking, setStudioBooking] = useState("");
@@ -29349,6 +29370,31 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           </div>
                         )}
 
+                        {/* ── PARTNER LINK ───────────────────────────────────
+                            Only for a published place: the link names the row. */}
+                        {editingId !== null && (
+                          <div data-testid="studio-partner-link" style={{ marginTop: 10 }}>
+                            <button type="button" onClick={makePartnerLink}
+                              style={{ background: "none", color: C.gold, border: `1px solid ${C.gold}`, borderRadius: 100, padding: "5px 12px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                              Partner link
+                            </button>
+                            {partnerLink.forId === editingId && partnerLink.url && (
+                              <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                                <input readOnly value={partnerLink.url} onFocus={e => e.target.select()}
+                                  style={{ flex: 1, minWidth: 0, border: `1px solid ${C.border}`, borderRadius: 8, padding: "7px 10px", fontSize: 11, background: C.bg, color: C.text, fontFamily: "monospace" }} />
+                                <button type="button" onClick={() => { try { navigator.clipboard?.writeText(partnerLink.url); } catch { /* select it by hand */ } }}
+                                  style={{ background: C.gold, color: C.onGold, border: "none", borderRadius: 8, padding: "0 12px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>Copy</button>
+                              </div>
+                            )}
+                            {partnerLink.forId === editingId && partnerLink.note && (
+                              <div style={{ fontSize: 10.5, color: C.muted, marginTop: 5 }}>{partnerLink.note}</div>
+                            )}
+                            <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 5 }}>
+                              Send it to the owner. It shows this place's walks, offers shown and visitors who came, for the last 30 days. No account.
+                            </div>
+                          </div>
+                        )}
+
                         {/* ── BOOK A TABLE, AND HOW BUSY ─────────────────────
                             Oliver, 1 Oct 2026, for the Klaipėda pilot: cruise
                             passengers with a few hours, so convenience first.
@@ -35720,6 +35766,7 @@ export default function Gemlyx() {
           need a seperation"): the ships and their guests, how offers work,
           and what the tourism centre would see of the sculptures. */}
       <Route path={KLAIPEDA_BUSINESS_PATH} element={<KlaipedaBusiness />} />
+      <Route path={KLAIPEDA_PARTNER_PATH} element={<KlaipedaPartner />} />
       <Route path={KLAIPEDA_CENTRE_PATH} element={<KlaipedaSculpturesCentre />} />
       {/* ── TRIPS OTHER PEOPLE KEPT ────────────────────────────
           One component for both, because the list and a trip from it are the
