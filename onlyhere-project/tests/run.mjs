@@ -307,6 +307,9 @@ writeFileSync(entry, `
   export * as RWT from ${JSON.stringify(join(root, "src/components/RandomWalkTest.jsx"))};
   export * as SFORM from ${JSON.stringify(join(root, "api/send-form.js"))};
   export * as SGUIDE from ${JSON.stringify(join(root, "api/save-guide.js"))};
+  export * as PSTATS from ${JSON.stringify(join(root, "src/utils/partnerStats.js"))};
+  export * as PLINK from ${JSON.stringify(join(root, "src/utils/partnerLink.js"))};
+  export * as PROUTE from ${JSON.stringify(join(root, "api/partner-stats.js"))};
   export * as FG from ${JSON.stringify(join(root, "src/utils/founderGate.js"))};
   export * as KXR from ${JSON.stringify(join(root, "src/data/klaipedaExampleRows.js"))};
   export * as KEX from ${JSON.stringify(join(root, "src/data/klaipedaExamples.js"))};
@@ -82662,6 +82665,95 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
     },
   });
   ok("a correction he types with biblioteka.lt is read and settled by it", r.claims[0].verdict === "confirmed" && r.claims[0].citedSource === "https://biblioteka.lt/en/x");
+}
+
+// ── Batch 231: real numbers for partners, from a private link ──
+// Oliver, 12 Oct 2026: "How do we track their offers and deals?? Do they have
+// to create an account?" Then "Sure." to counts with no account and a link.
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const S = M.PSTATS, L = M.PLINK, R = M.PROUTE;
+  ok("a place id must be a walk id, nothing else", S.cleanStatId("food:12") === "food:12" && S.cleanStatId("x-cafe:abc_1") === "" && S.cleanStatId("food:12,st:w") === "" && S.cleanStatId("") === "" && S.cleanStatId("free:castle") === "free:castle");
+  is("a walk counts each place once and the offers only for places in it",
+     S.eventKeys({ e: "walk", ids: ["food:1", "food:1", "free:2", "bad id"], deals: ["food:1", "food:9"] }, 10),
+     ["st:w:food:1", "st:w:free:2", "st:d:food:1"]);
+  is("a reach counts the place and its hour", S.eventKeys({ e: "reach", id: "food:1" }, 9), ["st:r:food:1", "st:rh:food:1:09"]);
+  ok("and nothing else is counted", S.eventKeys({ e: "reach", id: "food:1" }, 24).length === 0 && S.eventKeys({ e: "other", id: "food:1" }, 3).length === 0 && S.eventKeys({ e: "walk", ids: [] }, 3).length === 0);
+  ok("a walk carries at most twelve places", S.eventKeys({ e: "walk", ids: Array.from({ length: 30 }, (_, i) => `food:${i}`) }, 1).length === 12);
+  ok("the page reads three totals and 24 hours", S.readKeysFor("food:1").length === 27 && S.readKeysFor("food:1").includes("st:rh:food:1:23"));
+  const st = S.statsFrom([
+    { day: "2026-10-10", key: "st:w:food:1", n: 4 }, { day: "2026-10-11", key: "st:w:food:1", n: 2 },
+    { day: "2026-10-11", key: "st:d:food:1", n: 1 }, { day: "2026-10-11", key: "st:r:food:1", n: 3 },
+    { day: "2026-10-11", key: "st:rh:food:1:12", n: 2 }, { day: "2026-10-10", key: "st:rh:food:1:15", n: 1 },
+    { day: "2026-10-11", key: "st:w:food:12", n: 50 },
+  ], "food:1");
+  ok("the totals add up, for this place only", st.totals.walks === 6 && st.totals.deals === 1 && st.totals.reached === 3);
+  ok("the busiest hour is the one most visitors came", st.busiest.hour === 12 && st.busiest.n === 2);
+  ok("and the days are in order", st.byDay.map(d => d.day).join() === "2026-10-10,2026-10-11" && st.byDay[1].reached === 3);
+  ok("no visits means no busiest hour", S.statsFrom([], "food:1").busiest === null);
+  is("a walk shown is sent with its places and its offers", S.walkSeenBody({ stops: [{ id: "food:1", deal: { text: "x" } }, { id: "free:2" }] }, "LT"), { e: "walk", c: "LT", ids: ["food:1", "free:2"], deals: ["food:1"] });
+
+  const secret = L.partnerSecret({ SUPABASE_SERVICE_ROLE_KEY: "svc-key-for-tests" });
+  ok("the link secret comes from the service key unless one is set", secret.length === 64 && L.partnerSecret({ PARTNER_LINK_SECRET: "x".repeat(20) }) === "x".repeat(20) && L.partnerSecret({}) === "");
+  const tok = L.makePartnerToken({ id: "food:7", name: "Devi Indian" }, secret);
+  is("a link reads back to its own place", L.readPartnerToken(tok, secret), { id: "food:7", name: "Devi Indian" });
+  const [pay, sig] = tok.split(".");
+  const other = Buffer.from(JSON.stringify({ i: "food:8", n: "x" })).toString("base64url");
+  ok("and cannot be changed to read another place", L.readPartnerToken(`${other}.${sig}`, secret) === null && L.readPartnerToken(`${pay}.${sig.slice(0, -1)}A`, secret) === null && L.readPartnerToken(tok, "another-secret") === null && L.readPartnerToken("", secret) === null);
+  ok("a place that is not a walk id gets no link", L.makePartnerToken({ id: "nope", name: "x" }, secret) === "");
+  ok("the partner path carries the link", S.partnerPath("a.b") === "/lithuania/partner?k=a.b");
+
+  // The route, with the database stubbed.
+  const saved = { ...process.env }, realFetch = globalThis.fetch;
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "svc-key-for-tests";
+  delete process.env.PARTNER_LINK_SECRET;
+  const sent = [];
+  globalThis.fetch = async (url, init = {}) => {
+    sent.push({ url: String(url), body: init.body ? JSON.parse(init.body) : null });
+    if (String(url).includes("/rpc/gemlyx_take_guide")) return { ok: true, json: async () => "ok" };
+    if (String(url).includes("/auth/v1/user")) return { ok: true, json: async () => ({ id: "467fb712-e3e9-4d43-b1b8-e4e1bb32b76d", email_confirmed_at: "x" }) };
+    return { ok: true, json: async () => [{ day: "2026-10-11", key: "st:w:food:7", n: 5 }, { day: "2026-10-11", key: "st:r:food:7", n: 2 }, { day: "2026-10-11", key: "st:rh:food:7:13", n: 2 }] };
+  };
+  const site = { origin: "https://www.gemlyxtravel.com" };
+  const run = async (req) => { let code = 0, out = null; const res = { setHeader() {}, status(c) { code = c; return this; }, json(b) { out = b; return this; } }; await R.default(req, res); return { code, out }; };
+  try {
+    const w = await run({ method: "POST", headers: site, body: { e: "walk", c: "LT", ids: ["food:7", "free:2"], deals: ["food:7"] } });
+    const rpc = sent.find(x => x.url.includes("/rpc/gemlyx_take_guide"));
+    ok("a walk is counted in one call, with a per-network limit", w.code === 200 && w.out.ok === true && rpc && rpc.body.p_keys.includes("st:w:food:7") && rpc.body.p_keys.includes("st:d:food:7") && rpc.body.p_keys[0].startsWith("pst:v:") && rpc.body.p_limits[0] === R.PER_NETWORK);
+    is("another site, a bad country or nothing to count is refused",
+       [(await run({ method: "POST", headers: { origin: "https://evil.example" }, body: { e: "walk", c: "LT", ids: ["food:7"] } })).code,
+        (await run({ method: "POST", headers: site, body: { e: "walk", c: "XX", ids: ["food:7"] } })).code,
+        (await run({ method: "POST", headers: site, body: { e: "walk", c: "LT", ids: [] } })).code], [403, 400, 400]);
+    const link = L.makePartnerToken({ id: "food:7", name: "Devi Indian" }, L.partnerSecret(process.env));
+    const g = await run({ method: "GET", headers: { referer: "https://www.gemlyxtravel.com/lithuania/partner" }, query: { k: link } });
+    ok("the partner page gets its own numbers", g.code === 200 && g.out.name === "Devi Indian" && g.out.totals.walks === 5 && g.out.totals.reached === 2 && g.out.busiest.hour === 13);
+    const q = sent[sent.length - 1].url;
+    ok("read only for its own keys and the last 30 days", /gemlyx_guide_allowance\?select=day,key,n&day=gte\.\d{4}-\d{2}-\d{2}&key=in\./.test(q) && decodeURIComponent(q).includes('"st:w:food:7"') && !decodeURIComponent(q).includes("food:8"));
+    is("a bad link reads nothing", (await run({ method: "GET", headers: site, query: { k: "nope.nope" } })).code, 404);
+    process.env.GEMLYX_FOUNDER_IDS = "";
+    const mk = await run({ method: "POST", headers: { ...site, authorization: "Bearer t" }, body: { make: { id: "food:7", name: "Devi Indian" } } });
+    ok("Studio makes a link that reads back", mk.code === 200 && /^\/lithuania\/partner\?k=/.test(mk.out.path) && L.readPartnerToken(decodeURIComponent(mk.out.path.split("k=")[1]), L.partnerSecret(process.env))?.id === "food:7");
+    is("and nobody else can", (await run({ method: "POST", headers: site, body: { make: { id: "food:7", name: "x" } } })).code, 401);
+    ok("the days-back helper counts back across a month", R.daysBack("2026-10-12", 29) === "2026-09-13");
+  } finally {
+    globalThis.fetch = realFetch;
+    for (const k of Object.keys(process.env)) if (!(k in saved)) delete process.env[k];
+    Object.assign(process.env, saved);
+  }
+
+  // Wiring.
+  const np = read("src/components/NowPlanner.jsx"), wm = read("src/components/WalkMode.jsx"), app = read("src/App.jsx");
+  ok("the QR walk counts the walk it shows and the places reached", /walkSeen\(walk, country\);/.test(np) && /onReach=\{\(s\) => placeReached\(s, country\)\}/.test(np) && /onReach=\{onReach\}/.test(np));
+  ok("Studio's tests and the examples page count nothing", !/walkSeen|placeReached|onReach/.test(read("src/components/RandomWalkTest.jsx") + read("src/pages/KlaipedaExamples.jsx")));
+  ok("a place is reached on arrival, or on moving on without GPS", /reach\(target\); \}\s*\}, \[g\?\.here, idx\]\);/.test(wm) && /const moveOn = \(\) => \{ if \(!back && \(gpsOff \|\| !pos\)\) reach\(target\); setIdx\(i => i \+ 1\); \};/.test(wm) && (wm.match(/onClick=\{moveOn\}/g) || []).length === 2);
+  ok("the partner page has its route, kept out of search", /<Route path=\{KLAIPEDA_PARTNER_PATH\} element=\{<KlaipedaPartner \/>\} \/>/.test(app) && /keepOutOfSearch\(T\.title\)/.test(read("src/pages/KlaipedaPartner.jsx")));
+  ok("Studio's offer editor makes the link for the open place", /data-testid="studio-partner-link"/.test(app) && /make: \{ id: `\$\{studioType\}:\$\{forId\}`/.test(app));
+  ok("the link code stays on the server", !/partnerLink\.js|node:crypto/.test(read("src/pages/KlaipedaPartner.jsx") + np + wm) && !/from "\.\/utils\/partnerLink"/.test(app));
+  const biz = read("src/pages/KlaipedaBusiness.jsx");
+  ok("the business page promises what is counted, in both languages", /visitors walked to you/.test(biz) && /lankytojų atėjo pas jus/.test(biz) && !/was opened|buvo atidaryta/.test(biz));
+  ok("the privacy policy says what a place count holds", /<strong>Place counts\.<\/strong>/.test(read("public/privacy.html")));
+  const pt = read("src/pages/KlaipedaPartner.jsx");
+  ok("the partner page has no dashes in its words", !/[–—]/.test(pt));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
