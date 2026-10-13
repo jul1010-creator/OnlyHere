@@ -71,7 +71,30 @@ export const walkToDeal = (start, x) => ({
   back: { at: x.minutes * 2 + STAY_AT_DEAL },
 });
 
-export const DealsNearYou = ({ deals = [], examples = false, lang = "en", defaultFrom = "", country = "LT" }) => {
+// ── THE THREE FILTERS ───────────────────────────────────────────────
+// Oliver, 13 Oct 2026: "make filters called 'Discounts' 'Entertainment'
+// 'Activities'", over the partners' deals only. A deal is in one of them:
+// set by hand in the Studio offer editor (`__dealKind`), or else read off
+// what kind of place it is. A bar's offer is Entertainment even though bars
+// are filed with food, which is why the hand setting wins.
+export const DEAL_KINDS = ["discounts", "entertainment", "activities"];
+const KIND_OF_TYPE = {
+  food: "discounts", foodStreet: "discounts", shop: "discounts", shopPlace: "discounts",
+  night: "entertainment", nightlife: "entertainment", nightStreet: "entertainment", event: "entertainment", festival: "entertainment",
+  booking: "activities", craft: "activities", free: "activities", town: "activities",
+};
+export const dealKind = (d) => {
+  const set = String(d?.__dealKind || "");
+  if (DEAL_KINDS.includes(set)) return set;
+  const type = String(d?._exampleId || "").split(":")[0] || d?._src || "";
+  return KIND_OF_TYPE[type] || "discounts";
+};
+// The tourism centre's own site, where everything that is not a deal lives.
+// "Less competitive to the page": Gemlyx shows the deals and sends people
+// there for the rest.
+export const centreSite = (lang) => (lang === "lt" ? "https://klaipedatravel.lt/" : "https://klaipedatravel.lt/en/");
+
+export const DealsNearYou = ({ deals = [], examples = false, lang = "en", defaultFrom = "", country = "LT", sticky = true }) => {
   const starts = NOW_STARTS[country] || {};
   const [from, setFrom] = useState(starts[defaultFrom] ? defaultFrom : Object.keys(starts)[0]);
   const [here, setHere] = useState(null);
@@ -90,7 +113,10 @@ export const DealsNearYou = ({ deals = [], examples = false, lang = "en", defaul
     } catch { setNote(uiT("now.noLocation", lang)); }
   };
 
-  const list = useMemo(() => nearbyDeals(deals, start, { now: new Date(), lang }), [deals, start?.lat, start?.lon, lang]);
+  const all = useMemo(() => nearbyDeals(deals, start, { now: new Date(), lang, limit: Infinity }), [deals, start?.lat, start?.lon, lang]);
+  const [kind, setKind] = useState(null);
+  const counts = useMemo(() => Object.fromEntries(DEAL_KINDS.map(k => [k, all.filter(x => dealKind(x.d) === k).length])), [all]);
+  const list = useMemo(() => (kind ? all.filter(x => dealKind(x.d) === kind) : all).slice(0, MAX_DEALS), [all, kind]);
 
   // Counted once per visit, for the places listed: what a partner sees as
   // "times your offer was shown".
@@ -102,20 +128,35 @@ export const DealsNearYou = ({ deals = [], examples = false, lang = "en", defaul
   }, [list.length]);
 
   const pill = (on) => ({
-    background: on ? C.gold : "transparent", color: on ? C.onGold : C.light,
-    border: `1px solid ${on ? C.gold : C.border}`, borderRadius: 100, padding: "6px 12px",
-    fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif",
+    flex: "0 0 auto", background: on ? `${C.gold}22` : "transparent", color: on ? C.gold : C.muted,
+    border: `1px solid ${on ? `${C.gold}88` : C.border}`, borderRadius: 100, padding: "5px 11px",
+    fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap",
+  });
+  // The filters, as an app has them: one row, the chosen one filled. Tapping
+  // the chosen one again shows everything.
+  const tab = (on) => ({
+    flex: 1, minWidth: 0, background: on ? C.gold : C.surface, color: on ? C.onGold : C.light,
+    border: `1px solid ${on ? C.gold : C.border}`, borderRadius: 12, padding: "9px 6px",
+    fontSize: 12.5, fontWeight: 800, cursor: "pointer", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
   });
 
   return (
     <section data-testid="deals-near" style={{ marginBottom: 30 }}>
       <style>{CORNER_MAP_CSS}</style>
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", margin: "0 0 10px" }}>
-        <h2 style={{ fontSize: 24, fontWeight: 500, fontFamily: "'Fraunces', serif", lineHeight: 1.2, margin: 0 }}>{uiT("trips.dealsH", lang)}</h2>
+        <h2 style={{ fontSize: 22, fontWeight: 500, fontFamily: "'Fraunces', serif", lineHeight: 1.2, margin: 0 }}>{uiT("trips.dealsH", lang)}</h2>
         {examples && <span data-testid="deals-near-examples" style={{ fontSize: 10, fontWeight: 700, color: C.text, border: `1px solid ${C.border}`, borderRadius: 100, padding: "2px 8px", letterSpacing: 0.4 }}>{uiT("deals.example", lang)}</span>}
       </div>
 
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+      <div data-testid="deals-filters" role="tablist" style={{ display: "flex", gap: 6, padding: "8px 0", marginBottom: 6, background: C.bg, ...(sticky ? { position: "sticky", top: 0, zIndex: 20 } : {}) }}>
+        {DEAL_KINDS.map(k => (
+          <button key={k} role="tab" aria-selected={kind === k} onClick={() => setKind(cur => (cur === k ? null : k))} style={tab(kind === k)} data-testid={`deals-filter-${k}`}>
+            {uiT(`explore.${k}`, lang)}{counts[k] ? ` ${counts[k]}` : ""}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ display: "flex", gap: 6, overflowX: "auto", scrollbarWidth: "none", marginBottom: 12, paddingBottom: 2 }}>
         {Object.keys(starts).map(k => (
           <button key={k} onClick={() => setFrom(k)} aria-pressed={k === from} style={pill(k === from)}>
             {uiT(k === "terminal" ? "now.fromShip" : "now.fromCentre", lang)}
@@ -131,7 +172,7 @@ export const DealsNearYou = ({ deals = [], examples = false, lang = "en", defaul
 
       {list.length === 0 ? (
         <div data-testid="deals-near-none" style={{ fontSize: 13.5, color: C.light, lineHeight: 1.6, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "13px 15px" }}>
-          {uiT("trips.noDeals", lang)}
+          {uiT(kind && all.length ? "explore.noneHere" : "trips.noDeals", lang)}
         </div>
       ) : (
         <div style={{ display: "grid", gap: 10 }}>
@@ -177,7 +218,12 @@ export const DealsNearYou = ({ deals = [], examples = false, lang = "en", defaul
           })}
         </div>
       )}
-      <a href="/lithuania#promotions" style={{ display: "inline-block", marginTop: 10, fontSize: 12.5, fontWeight: 700, color: C.gold, textDecoration: "none" }}>{uiT("trips.allDeals", lang)} →</a>
+      {country === "LT" && (
+        <a href={centreSite(lang)} target="_blank" rel="noopener noreferrer" data-testid="deals-centre-link"
+          style={{ display: "block", marginTop: 14, fontSize: 12.5, fontWeight: 700, color: C.muted, textDecoration: "none", textAlign: "center" }}>
+          {uiT("explore.more", lang)} ↗
+        </a>
+      )}
 
       {going && start && (
         <WalkMode walk={walkToDeal(start, going)} madeAt={null} lang={lang} country={country} loop={false}
