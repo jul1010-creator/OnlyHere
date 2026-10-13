@@ -40,7 +40,7 @@ export const staticMapUrl = ({ lat, lon, size }) =>
 // Set on the first refusal, for this visit.
 let staticRefused = false;
 
-export const DealCornerMap = ({ lat, lon, name = "", size = 104, onTap = null, sign = "📍", photo = "" }) => {
+export const DealCornerMap = ({ lat, lon, name = "", size = 104, onTap = null, sign = "📍", photo = "", pin = "" }) => {
   const holder = useRef(null);
   const made = useRef(false);
   const [live, setLive] = useState(staticRefused);
@@ -83,7 +83,7 @@ export const DealCornerMap = ({ lat, lon, name = "", size = 104, onTap = null, s
   return (
     <div data-testid="deal-corner-map" role={onTap ? "button" : undefined} aria-label={name}
       onClick={onTap || undefined}
-      style={{ position: "relative", width: size, height: size, flex: "0 0 auto", borderRadius: 12, overflow: "hidden", border: `1px solid ${C.gold}55`, background: "#0A0F1E", cursor: onTap ? "pointer" : "default" }}>
+      style={{ position: "relative", width: size, height: size, flex: "0 0 auto", borderRadius: 14, overflow: "hidden", border: `1px solid ${C.border}`, background: C.bg, cursor: onTap ? "pointer" : "default" }}>
       <div ref={holder} style={{ position: "absolute", inset: 0 }}>
         {near && !live && (
           <img src={staticMapUrl({ lat, lon, size })} alt="" width={size} height={size} data-testid="deal-corner-static"
@@ -95,7 +95,7 @@ export const DealCornerMap = ({ lat, lon, name = "", size = 104, onTap = null, s
           window, its tip on the place at the middle of the map. */}
       <div aria-hidden="true" data-testid="deal-corner-pin"
         style={{ position: "absolute", left: "50%", top: "50%", width: PLACE_PIN.w, height: PLACE_PIN.h, marginLeft: -PLACE_PIN.w / 2, marginTop: -PLACE_PIN.h, transform: `scale(${PIN_SCALE})`, transformOrigin: "50% 100%", filter: "drop-shadow(0 3px 5px rgba(0,0,0,.45))", pointerEvents: "none" }}
-        dangerouslySetInnerHTML={{ __html: placePinHtml({ sign, photo }) }} />
+        dangerouslySetInnerHTML={{ __html: placePinHtml({ sign, photo, color: pin }) }} />
     </div>
   );
 };

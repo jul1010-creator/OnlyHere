@@ -32,6 +32,7 @@ import { DealCornerMap } from "./DealCornerMap";
 import { DealPlaceView } from "./DealPlaceView";
 import { placeClock, cleanClock, windowOf } from "../utils/offerClock";
 import { RedeemSheet } from "./RedeemSheet";
+import { DealCard, eyebrow, primaryBtn, quietBtn } from "./DealCard";
 import { dayKey, dayPlus } from "../utils/calendarDay";
 
 const fill = (t, v) => String(t).replace(/\{(\w+)\}/g, (_, k) => (v[k] ?? ""));
@@ -259,6 +260,8 @@ export const upcomingDeals = (deals, start, { now = new Date(), lang = "en", lim
     .filter(Boolean)
     .sort((a, b) => a.next.at - b.next.at || nameOrder(a, b))
     .slice(0, limit);
+// The small line over the name: which of the three filters the deal is under.
+export const tagFor = (d, lang = "en") => { const k = dealKind(d); return k && k !== "other" ? uiT(`explore.${k}`, lang) : ""; };
 // The sign in the map pointer's window: the place's own, or its filter's.
 export const KIND_SIGN = { discounts: "🏷️", entertainment: "🎵", activities: "🎯", other: "📍" };
 export const signFor = (d) => (d?.emoji ? String(d.emoji) : KIND_SIGN[dealKind(d)] || "📍");
@@ -349,10 +352,11 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
 
   return (
     <section data-testid="deals-near" style={{ marginBottom: 30 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, margin: "0 0 8px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-          <h2 style={{ fontSize: 22, fontWeight: 500, fontFamily: "'Fraunces', serif", lineHeight: 1.2, margin: 0 }}>{uiT("trips.dealsH", lang)}</h2>
-          {examples && <span data-testid="deals-near-examples" style={{ fontSize: 10, fontWeight: 700, color: C.text, border: `1px solid ${C.border}`, borderRadius: 100, padding: "2px 8px", letterSpacing: 0.4 }}>{uiT("deals.example", lang)}</span>}
+      <div style={{ margin: "4px 0 14px" }}>
+        <div style={{ ...eyebrow(), marginBottom: 8 }}>{country === "LT" ? "Klaipėda" : ""}</div>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 10, minWidth: 0, flexWrap: "wrap" }}>
+          <h2 style={{ fontSize: 30, fontWeight: 500, fontFamily: "'Fraunces', serif", lineHeight: 1.1, letterSpacing: -0.3, margin: 0, color: C.text }}>{uiT("trips.dealsH", lang)}</h2>
+          {examples && <span data-testid="deals-near-examples" style={{ fontSize: 10, fontWeight: 700, color: C.muted, border: `1px solid ${C.border}`, borderRadius: 100, padding: "3px 9px", letterSpacing: 0.6, textTransform: "uppercase" }}>{uiT("deals.example", lang)}</span>}
         </div>
       </div>
 
@@ -380,77 +384,51 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
           {uiT(soon.length ? "explore.noneNowSoon" : kind && all.length ? "explore.noneHere" : "trips.noDeals", lang)}
         </div>
       ) : (
-        <div style={{ display: "grid", gap: 10 }}>
+        <div style={{ display: "grid", gap: 12 }}>
           {list.map(x => {
             const busy = busyAt(x.d.__busy, new Date(), "Europe/Vilnius");
             const book = cleanBooking(x.d.__booking);
             const on = x.card.timing !== "later";
             const offer = String(x.d.__offer?.text || "").trim();
             const when = offerWhen(x.d.__offer, x.card.timing, { now: new Date(), lang });
+            const key = x.id || x.d.name;
             return (
-              <div key={x.id || x.d.name} data-testid="deal-near" style={{ background: on ? `${C.gold}12` : C.surface, border: `1px solid ${on ? `${C.gold}66` : C.border}`, borderRadius: 14, padding: "13px 15px" }}>
-                {/* A fixed close map of where the place is, in the corner (13 Oct 2026). */}
-                <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 16, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, overflowWrap: "anywhere" }}>{x.d.name}</div>
-                    {x.minutes != null && <div data-testid="deal-near-minutes" style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginTop: 1 }}>{fill(uiT("trips.walkMin", lang), { n: x.minutes })}</div>}
-                    {offer && <div data-testid="deal-near-offer" style={{ fontSize: 14, fontWeight: 700, color: C.gold, lineHeight: 1.45, marginTop: 4 }}>{offer}</div>}
-                    <div style={{ fontSize: 12, color: C.light, marginTop: 4 }}>
-                      {when?.kind === "ends" && <span data-testid="deal-near-ends" style={{ fontWeight: 800, color: when.left <= 30 ? "#FFB347" : C.gold }}>● {when.text}</span>}
-                      {when && when.kind !== "ends" && <span data-testid="deal-near-when" style={{ fontWeight: on ? 700 : 400 }}>{when.text}</span>}
-                      {busy ? `${when ? " · " : ""}${uiT(`busy.${busy.level}`, lang)}` : ""}
-                    </div>
-                    {when?.kind !== "ongoing" && hoursOf(x.d.__offer, lang) && <div data-testid="deal-near-hours" style={{ fontSize: 11.5, color: C.muted, marginTop: 2 }}>{hoursOf(x.d.__offer, lang)}</div>}
-                  </div>
-                  {x.at && (
-                    <DealCornerMap lat={x.at.lat} lon={x.at.lon} name={x.d.name} sign={signFor(x.d)} photo={x.d.photo || ""}
-                      onTap={() => setOpened(cur => (cur === (x.id || x.d.name) ? null : (x.id || x.d.name)))} />
-                  )}
-                </div>
-                {opened === (x.id || x.d.name) && x.at && (
-                  <DealPlaceView lat={x.at.lat} lon={x.at.lon} name={x.d.name} sign={signFor(x.d)} photo={x.d.photo || ""} lang={lang}
+              <DealCard key={key} name={x.d.name} offer={offer} tag={tagFor(x.d, lang)}
+                distance={x.minutes != null ? fill(uiT("trips.walkMin", lang), { n: x.minutes }) : ""}
+                when={when} hours={when?.kind !== "ongoing" ? hoursOf(x.d.__offer, lang) : ""}
+                note={busy ? uiT(`busy.${busy.level}`, lang) : ""}
+                at={x.at} sign={signFor(x.d)} photo={x.d.photo || ""} pin={x.d.__pin || ""}
+                onMap={() => setOpened(cur => (cur === key ? null : key))}
+                actions={opened !== key && (offer || book) ? (
+                  <>
+                    {offer && on && (
+                      <button onClick={() => openRedeem(x, when)} data-testid="deal-near-redeem" style={primaryBtn()}>{uiT("offer.redeem", lang)}</button>
+                    )}
+                    {book && (
+                      <a href={book.href} target={book.kind === "web" ? "_blank" : undefined} rel="noopener noreferrer" style={quietBtn()}>{uiT("deal.book", lang)}</a>
+                    )}
+                  </>
+                ) : null}>
+                {opened === key && x.at && (
+                  <DealPlaceView lat={x.at.lat} lon={x.at.lon} name={x.d.name} sign={signFor(x.d)} photo={x.d.photo || ""} pin={x.d.__pin || ""} lang={lang}
                     onDirections={() => go(x)} onClose={() => setOpened(null)} />
                 )}
-                {opened !== (x.id || x.d.name) && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
-                  {offer && on && (
-                    <button onClick={() => openRedeem(x, when)} data-testid="deal-near-redeem"
-                      style={{ background: C.gold, color: C.onGold, border: "none", borderRadius: 100, padding: "7px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                      {uiT("offer.redeem", lang)}
-                    </button>
-                  )}
-                  {book && (
-                    <a href={book.href} target={book.kind === "web" ? "_blank" : undefined} rel="noopener noreferrer"
-                      style={{ border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "6px 13px", fontSize: 12.5, fontWeight: 700, textDecoration: "none" }}>
-                      {uiT("deal.book", lang)}
-                    </a>
-                  )}
-                </div>}
-              </div>
+              </DealCard>
             );
           })}
         </div>
       )}
       {soon.length > 0 && (
-        <div data-testid="deals-upcoming" style={{ marginTop: 22 }}>
-          <h3 style={{ fontSize: 13, fontWeight: 800, letterSpacing: 1.2, textTransform: "uppercase", color: C.muted, margin: "0 0 10px" }}>{uiT("explore.upcoming", lang)}</h3>
-          <div style={{ display: "grid", gap: 10 }}>
-            {soon.map(x => {
-              const offer = String(x.d.__offer?.text || "").trim();
-              return (
-                <div key={x.id || x.d.name} data-testid="deal-upcoming" style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "13px 15px", opacity: 0.72 }}>
-                  <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 16, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, overflowWrap: "anywhere" }}>{x.d.name}</div>
-                      {x.minutes != null && <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginTop: 1 }}>{fill(uiT("trips.walkMin", lang), { n: x.minutes })}</div>}
-                      {offer && <div style={{ fontSize: 14, fontWeight: 700, color: C.light, lineHeight: 1.45, marginTop: 4 }}>{offer}</div>}
-                      <div data-testid="deal-upcoming-starts" style={{ fontSize: 12, fontWeight: 700, color: C.gold, marginTop: 4 }}>{startsWords(x.next, lang)}</div>
-                      {hoursOf(x.d.__offer, lang) && <div data-testid="deal-upcoming-hours" style={{ fontSize: 11.5, color: C.light, marginTop: 2 }}>{hoursOf(x.d.__offer, lang)}</div>}
-                    </div>
-                    {x.at && <DealCornerMap lat={x.at.lat} lon={x.at.lon} name={x.d.name} sign={signFor(x.d)} photo={x.d.photo || ""} size={84} />}
-                  </div>
-                </div>
-              );
-            })}
+        <div data-testid="deals-upcoming" style={{ marginTop: 30 }}>
+          <h3 style={{ ...eyebrow(), margin: "0 0 12px" }}>{uiT("explore.upcoming", lang)}</h3>
+          <div style={{ display: "grid", gap: 12 }}>
+            {soon.map(x => (
+              <DealCard key={x.id || x.d.name} testid="deal-upcoming" upcoming name={x.d.name}
+                offer={String(x.d.__offer?.text || "").trim()} tag={tagFor(x.d, lang)}
+                distance={x.minutes != null ? fill(uiT("trips.walkMin", lang), { n: x.minutes }) : ""}
+                when={{ kind: "starts", text: startsWords(x.next, lang) }} hours={hoursOf(x.d.__offer, lang)}
+                at={x.at} sign={signFor(x.d)} photo={x.d.photo || ""} pin={x.d.__pin || ""} />
+            ))}
           </div>
         </div>
       )}

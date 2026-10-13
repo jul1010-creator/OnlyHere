@@ -45,16 +45,16 @@ export const RedeemSheet = ({ name = "", offer = "", when = "", lang = "en", zon
     <div role="dialog" aria-label={uiT("offer.redeem", lang)} data-testid="redeem-sheet"
       style={{ position: "fixed", inset: 0, zIndex: 10000, background: C.bg, display: "flex", flexDirection: "column", fontFamily: "'Inter', sans-serif" }}>
       <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "calc(24px + env(safe-area-inset-top, 0px)) 20px 20px", textAlign: "center" }}>
-        <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1.4, textTransform: "uppercase", color: C.muted, marginBottom: 18 }}>{uiT("redeem.show", lang)}</div>
-        <div style={{ width: "100%", maxWidth: 380, border: `2px solid ${C.gold}`, borderRadius: 22, background: `linear-gradient(160deg, ${C.gold}22 0%, ${C.surface} 60%)`, padding: "26px 22px 22px", boxSizing: "border-box" }}>
+        <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 1.8, textTransform: "uppercase", color: C.bronze || C.muted, marginBottom: 18 }}>{uiT("redeem.show", lang)}</div>
+        <div style={{ width: "100%", maxWidth: 380, border: `1px solid ${C.gold}66`, borderRadius: 24, background: `linear-gradient(180deg, ${C.gold}14 0%, ${C.surface} 45%)`, padding: "28px 22px 24px", boxSizing: "border-box", boxShadow: "0 24px 60px rgba(0,0,0,0.45)" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, marginBottom: 18 }}>
             <GemlyxMark size={34} />
             <GemlyxWordmark height={12} />
           </div>
-          <div style={{ fontSize: 26, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.15, overflowWrap: "anywhere" }}>{name}</div>
-          <div data-testid="redeem-offer" style={{ fontSize: 19, fontWeight: 800, color: C.gold, lineHeight: 1.4, margin: "14px 0 0" }}>{offer}</div>
-          {when && <div style={{ fontSize: 13.5, fontWeight: 700, color: C.light, marginTop: 12 }}>{when}</div>}
-          <div aria-hidden="true" data-testid="redeem-clock" style={{ marginTop: 18, fontSize: 30, fontWeight: 800, letterSpacing: 2, color: C.text, fontVariantNumeric: "tabular-nums" }}>{now}</div>
+          <div style={{ fontSize: 28, fontWeight: 500, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.15, letterSpacing: -0.2, overflowWrap: "anywhere" }}>{name}</div>
+          <div data-testid="redeem-offer" style={{ fontSize: 19, fontWeight: 600, color: C.text, lineHeight: 1.4, margin: "14px 0 0" }}>{offer}</div>
+          {when && <div style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 13, fontWeight: 600, color: C.gold, marginTop: 14 }}><span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: "50%", background: C.gold }} />{when}</div>}
+          <div aria-hidden="true" data-testid="redeem-clock" style={{ marginTop: 20, fontSize: 34, fontWeight: 600, letterSpacing: 3, color: C.text, fontVariantNumeric: "tabular-nums" }}>{now}</div>
           <div style={{ fontSize: 11.5, color: C.muted, marginTop: 4 }}>{uiT("redeem.via", lang)}</div>
         </div>
       </div>

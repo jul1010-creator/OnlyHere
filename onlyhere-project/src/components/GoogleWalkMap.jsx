@@ -26,6 +26,7 @@
 //
 // The same map runs the walk itself (WalkMode.jsx): the walker's position is
 // a blue dot, and the camera can follow it.
+import { pinColour } from "../utils/pinColours";
 import { useEffect, useRef, useState } from "react";
 import { C } from "../utils/theme";
 import { GOOGLE_MAP_ID, googleMapsReady, loadGoogleMaps } from "../utils/googleMapsLoader";
@@ -187,8 +188,10 @@ const PAD = { top: 52, right: 28, bottom: 28, left: 28 };
 const NAVY = "#0F1A2E";
 const escapeHtml = (v) => String(v ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
 export const PLACE_PIN = { w: 44, h: 56, window: 32 };
-export const placePinHtml = ({ n = null, photo = "", sign = "📍", home = false } = {}) => {
-  const body = home ? NAVY : C.gold, rim = home ? C.gold : NAVY;
+// `color` is a deal's own pin colour, chosen in the deal editor (13 Oct 2026),
+// one of PIN_COLOURS (utils/pinColours.js); anything else is the gold.
+export const placePinHtml = ({ n = null, photo = "", sign = "📍", home = false, color = "" } = {}) => {
+  const body = home ? NAVY : (pinColour(color) || C.gold), rim = home ? C.gold : NAVY;
   const safePhoto = /^https:\/\//i.test(String(photo || "")) ? String(photo) : "";
   // The sign always sits in the window, and the photo over it, so a photo
   // that fails to load leaves the sign, not a broken picture.

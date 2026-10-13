@@ -13,9 +13,10 @@ import { createPortal } from "react-dom";
 import { C } from "../utils/theme";
 import { SUPABASE_URL } from "../config";
 import { DEAL_PLACE_TYPES, DEAL_FILTERS, DAY_SHORT, WEEK_ORDER, isDealRow, emptyDeal, dealFromRow, dealProblems, payloadFromDeal, dealWhenShort, offerOf } from "../utils/dealStudio";
-import { offerWhen, signFor, nextStart, startsWords } from "./DealsNearYou";
+import { offerWhen, signFor, nextStart, startsWords, hoursOf } from "./DealsNearYou";
+import { DealCard, eyebrow, primaryBtn } from "./DealCard";
+import { PIN_COLOURS, PIN_NAMES } from "../utils/pinColours";
 import { promoCard } from "../utils/promotions";
-import { DealCornerMap } from "./DealCornerMap";
 import { GOOGLE_MAP_ID, googleMapsReady, loadGoogleMaps } from "../utils/googleMapsLoader";
 import { NOW_AREAS } from "../utils/nowPlanner";
 
@@ -23,10 +24,31 @@ const FILTER_LABEL = { "": "Automatic", discounts: "Discounts", entertainment: "
 const TYPE_LABEL = Object.fromEntries(DEAL_PLACE_TYPES.map(t => [t.type, t.label]));
 const LIST_URL = `${SUPABASE_URL}/rest/v1/gemlyx_content?select=id,type,payload,published&payload->>country=eq.LT&type=in.(${DEAL_PLACE_TYPES.map(t => t.type).join(",")})&order=id.desc`;
 
-const field = { width: "100%", border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", fontSize: 13.5, outline: "none", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif", boxSizing: "border-box" };
-const label = { display: "block", fontSize: 11, fontWeight: 800, letterSpacing: 0.6, textTransform: "uppercase", color: C.muted, margin: "14px 0 6px" };
-const chip = (on) => ({ background: on ? C.gold : "transparent", color: on ? C.onGold : C.light, border: `1px solid ${on ? C.gold : C.border}`, borderRadius: 100, padding: "6px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" });
-const small = (primary) => ({ background: primary ? C.gold : "transparent", color: primary ? C.onGold : C.light, border: `1px solid ${primary ? C.gold : C.border}`, borderRadius: 100, padding: "6px 12px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap" });
+// ── THE LOOK, 13 OCT 2026 ───────────────────────────────────────────
+// A design review he sent: "too many outlined boxes", "the gold is used too
+// aggressively", "a long old-fashioned form", "the preview doesn't feel like a
+// real offer". So: the form in four sections on quiet panels, one border only
+// on the boxes you type into (the 3:1 border his father needed to see which
+// boxes take typing, theme.js FIELDS), chips without outlines, gold only for
+// the chosen option and Save, and the preview is Explore's own card.
+// Functions, because C changes with the theme.
+const field = () => ({ width: "100%", border: `1px solid ${C.fieldBorder || C.border}`, borderRadius: 12, padding: "11px 13px", fontSize: 14, outline: "none", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif", boxSizing: "border-box" });
+const label = () => ({ display: "block", fontSize: 12, fontWeight: 600, color: C.light, margin: "16px 0 7px", fontFamily: "'Inter', sans-serif" });
+const chip = (on) => ({ background: on ? C.gold : `${C.border}`, color: on ? C.onGold : C.light, border: "none", borderRadius: 100, padding: "8px 14px", fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" });
+const small = (primary) => ({ background: primary ? C.gold : "transparent", color: primary ? C.onGold : C.light, border: primary ? "none" : `1px solid ${C.border}`, borderRadius: 100, padding: "7px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap" });
+const panel = () => ({ background: C.surface, borderRadius: 20, padding: "6px 18px 20px", marginTop: 14 });
+const sectionTitle = () => ({ ...eyebrow(), margin: "14px 0 0" });
+// One control with two or three answers, the way a phone's settings show it.
+const Segmented = ({ options, value, onChange, testids = {} }) => (
+  <div role="radiogroup" style={{ display: "inline-flex", background: C.bg, borderRadius: 100, padding: 3, gap: 2 }}>
+    {options.map(([v, text]) => (
+      <button key={String(v)} type="button" role="radio" aria-checked={value === v} onClick={() => onChange(v)} data-testid={testids[String(v)]}
+        style={{ background: value === v ? C.surface : "transparent", color: value === v ? C.text : C.muted, border: "none", borderRadius: 100, padding: "8px 16px", fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", boxShadow: value === v ? "0 1px 3px rgba(0,0,0,0.35)" : "none" }}>
+        {text}
+      </button>
+    ))}
+  </div>
+);
 
 // ── WHERE THE DOOR IS: TAP THE MAP ──────────────────────────────────
 // Google's own map in the guide's style. A tap moves the pin; nothing else on
@@ -69,29 +91,28 @@ const SpotMap = ({ lat, lon, onPick }) => {
     map.current.panTo(at);
   }, [lat, lon]);
   if (!googleMapsReady()) return null;
-  return <div ref={box} data-testid="deal-studio-map" style={{ width: "100%", height: 220, borderRadius: 12, overflow: "hidden", border: `1px solid ${C.border}`, background: "#0A0F1E" }} />;
+  return <div ref={box} data-testid="deal-studio-map" style={{ width: "100%", height: 220, borderRadius: 16, overflow: "hidden", background: C.bg }} />;
 };
 
 // ── THE CARD AS EXPLORE WILL SHOW IT ────────────────────────────────
+// Explore's own card (DealCard.jsx) with this deal in it, so what he sees here
+// is what a visitor will see, Upcoming included.
 const Preview = ({ f }) => {
   const offer = offerOf(f);
-  const at = { lat: Number(f.lat), lon: Number(f.lon) };
-  const d = { name: f.name, emoji: f.sign, category: TYPE_LABEL[f.type], __offer: offer, __dealKind: f.dealKind };
-  const card = offer ? promoCard({ ...d, country: "LT" }, { today: new Date(), lang: "en" }) : null;
-  // An offer that is not on yet shows as Explore's Upcoming does: greyed,
-  // when it starts, no Redeem.
+  const has = f.lat !== "" && Number.isFinite(Number(f.lat)) && Number.isFinite(Number(f.lon));
+  const d = { name: f.name, emoji: f.sign, category: TYPE_LABEL[f.type], __offer: offer, __dealKind: f.dealKind, country: "LT" };
+  const card = offer ? promoCard(d, { today: new Date(), lang: "en" }) : null;
   const waiting = card?.timing === "later" || card?.timing === "off";
-  const when = offer ? (waiting ? { text: startsWords(nextStart(offer, new Date()), "en") } : offerWhen(offer, card?.timing, { now: new Date(), lang: "en" })) : null;
+  const when = !offer ? null : waiting ? { kind: "starts", text: startsWords(nextStart(offer, new Date()), "en") }
+    : card?.timing === "ended" ? { kind: "ended", text: "Ended" } : offerWhen(offer, card?.timing, { now: new Date(), lang: "en" });
   return (
-    <div data-testid="deal-studio-preview" style={{ background: waiting ? C.surface : `${C.gold}12`, border: `1px solid ${waiting ? C.border : `${C.gold}66`}`, borderRadius: 14, padding: "13px 15px", display: "flex", gap: 12, opacity: waiting ? 0.72 : 1 }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 16, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, overflowWrap: "anywhere" }}>{f.name || "The place's name"}</div>
-        <div style={{ fontSize: 14, fontWeight: 700, color: C.gold, lineHeight: 1.45, marginTop: 4 }}>{offer?.text || "What a visitor gets"}</div>
-        {waiting && <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: 1, color: C.muted, marginTop: 6 }}>UPCOMING</div>}
-        <div style={{ fontSize: 12, color: waiting ? C.gold : C.light, fontWeight: waiting ? 700 : 400, marginTop: 4 }}>{when?.text || (card?.timing === "ended" ? "Ended" : "")}</div>
-        {!waiting && <span style={{ ...small(true), display: "inline-block", marginTop: 10, cursor: "default" }}>Redeem offer</span>}
-      </div>
-      {Number.isFinite(at.lat) && Number.isFinite(at.lon) && f.lat !== "" && <DealCornerMap lat={at.lat} lon={at.lon} name={f.name} sign={signFor(d)} />}
+    <div data-testid="deal-studio-preview">
+      {waiting && <div style={{ ...eyebrow(), marginBottom: 8 }}>Upcoming</div>}
+      <DealCard testid="deal-studio-card" upcoming={waiting} name={f.name || "The place's name"} offer={offer?.text || "What a visitor gets"}
+        tag={f.dealKind ? FILTER_LABEL[f.dealKind] : ""} when={when}
+        hours={when?.kind !== "ongoing" && offer ? hoursOf(offer, "en") : ""}
+        at={has ? { lat: Number(f.lat), lon: Number(f.lon) } : null} sign={signFor(d)} pin={f.pin}
+        actions={!waiting ? <span style={{ ...primaryBtn(), cursor: "default" }}>Redeem offer</span> : null} />
     </div>
   );
 };
@@ -125,105 +146,136 @@ const Editor = ({ start, onSave, onClose, busy, error }) => {
     return () => window.removeEventListener("keydown", esc);
   }, [onClose]);
 
+  const row2 = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "0 12px" };
   return createPortal(
     <div role="dialog" aria-label="Edit deal" data-testid="deal-studio-editor"
       style={{ position: "fixed", inset: 0, zIndex: 10000, background: C.bg, display: "flex", flexDirection: "column", fontFamily: "'Inter', sans-serif" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "calc(12px + env(safe-area-inset-top, 0px)) 16px 12px", borderBottom: `1px solid ${C.border}`, background: C.surface }}>
-        <div style={{ fontSize: 16, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.gold }}>{start.id ? "Edit deal" : "New deal"}</div>
-        <button onClick={onClose} style={small(false)}>Close</button>
-      </div>
-      <div style={{ flex: 1, overflowY: "auto", padding: "4px 16px 24px" }}>
-        <div style={{ maxWidth: 560, margin: "0 auto" }}>
-          <label style={label}>Name</label>
-          <input value={f.name} onChange={e => set("name", e.target.value)} placeholder="Kepyklėlė Rūta" style={field} data-testid="deal-studio-name" />
-
-          <label style={label}>Kind of place</label>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {DEAL_PLACE_TYPES.map(t => (
-              <button key={t.type} type="button" disabled={!!start.id && start.type !== t.type} onClick={() => set("type", t.type)} style={{ ...chip(f.type === t.type), opacity: start.id && start.type !== t.type ? 0.35 : 1 }}>{t.label}</button>
-            ))}
+      <div style={{ flex: 1, overflowY: "auto", padding: "calc(18px + env(safe-area-inset-top, 0px)) 16px 28px" }}>
+        <div style={{ maxWidth: 620, margin: "0 auto" }}>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+            <div>
+              <div style={eyebrow()}>Partner studio · Klaipėda</div>
+              <h2 style={{ fontSize: 30, fontWeight: 500, fontFamily: "'Fraunces', serif", color: C.text, letterSpacing: -0.3, margin: "8px 0 0" }}>{start.id ? "Edit deal" : "New deal"}</h2>
+            </div>
+            <button onClick={onClose} aria-label="Close" style={{ ...small(false), padding: "7px 12px" }}>✕</button>
           </div>
 
-          <label style={label}>Street</label>
-          <input value={f.street} onChange={e => set("street", e.target.value)} placeholder="Turgaus g. 7" style={field} />
-
-          <label style={label}>Where it is</label>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 8 }}>
-            <button type="button" onClick={find} disabled={finding.busy} style={small(true)} data-testid="deal-studio-find">{finding.busy ? "Looking" : "Find on Google"}</button>
-            <span style={{ fontSize: 11.5, color: C.muted }}>or tap the map where the door is</span>
-          </div>
-          {finding.list.length > 0 && (
-            <div style={{ display: "grid", gap: 6, marginBottom: 8 }}>
-              {finding.list.map((c, i) => (
-                <button key={i} type="button" onClick={() => take(c)} style={{ ...field, textAlign: "left", cursor: "pointer" }}>
-                  <b>{c.name}</b>{c.address ? <span style={{ color: C.muted }}> · {c.address}</span> : null}
-                </button>
+          <section style={panel()}>
+            <h3 style={sectionTitle()}>The place</h3>
+            <div style={row2}>
+              <div>
+                <label style={label()}>Name</label>
+                <input value={f.name} onChange={e => set("name", e.target.value)} placeholder="Kepyklėlė Rūta" style={field()} data-testid="deal-studio-name" />
+              </div>
+              <div>
+                <label style={label()}>Street</label>
+                <input value={f.street} onChange={e => set("street", e.target.value)} placeholder="Turgaus g. 7" style={field()} />
+              </div>
+            </div>
+            <label style={label()}>Kind of place</label>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {DEAL_PLACE_TYPES.map(t => (
+                <button key={t.type} type="button" disabled={!!start.id && start.type !== t.type} onClick={() => set("type", t.type)} style={{ ...chip(f.type === t.type), opacity: start.id && start.type !== t.type ? 0.35 : 1 }}>{t.label}</button>
               ))}
             </div>
-          )}
-          {finding.note && <div style={{ fontSize: 12, color: C.light, marginBottom: 8 }}>{finding.note}</div>}
-          <SpotMap lat={f.lat} lon={f.lon} onPick={(p) => setF(x => ({ ...x, lat: Number(p.lat.toFixed(6)), lon: Number(p.lon.toFixed(6)) }))} />
-          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-            <input value={f.lat} onChange={e => set("lat", e.target.value)} placeholder="Latitude" inputMode="decimal" style={field} />
-            <input value={f.lon} onChange={e => set("lon", e.target.value)} placeholder="Longitude" inputMode="decimal" style={field} />
-          </div>
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
+              <label style={label()}>Where it is</label>
+              <button type="button" onClick={find} disabled={finding.busy} style={small(true)} data-testid="deal-studio-find">{finding.busy ? "Looking" : "Find on Google"}</button>
+            </div>
+            {finding.list.length > 0 && (
+              <div style={{ display: "grid", gap: 6, marginBottom: 8 }}>
+                {finding.list.map((c, i) => (
+                  <button key={i} type="button" onClick={() => take(c)} style={{ ...field(), textAlign: "left", cursor: "pointer" }}>
+                    <b style={{ fontWeight: 600 }}>{c.name}</b>{c.address ? <span style={{ color: C.muted }}> · {c.address}</span> : null}
+                  </button>
+                ))}
+              </div>
+            )}
+            {finding.note && <div style={{ fontSize: 12, color: C.light, marginBottom: 8 }}>{finding.note}</div>}
+            <SpotMap lat={f.lat} lon={f.lon} onPick={(p) => setF(x => ({ ...x, lat: Number(p.lat.toFixed(6)), lon: Number(p.lon.toFixed(6)) }))} />
+            <div style={{ ...row2, marginTop: 8 }}>
+              <input value={f.lat} onChange={e => set("lat", e.target.value)} placeholder="Latitude" inputMode="decimal" aria-label="Latitude" style={{ ...field(), fontSize: 12.5, color: C.light }} />
+              <input value={f.lon} onChange={e => set("lon", e.target.value)} placeholder="Longitude" inputMode="decimal" aria-label="Longitude" style={{ ...field(), fontSize: 12.5, color: C.light }} />
+            </div>
+          </section>
 
-          <label style={label}>The offer</label>
-          <textarea value={f.text} onChange={e => set("text", e.target.value)} rows={2} placeholder="Free refill of filter coffee with any pastry" style={{ ...field, resize: "vertical" }} data-testid="deal-studio-text" />
+          <section style={panel()}>
+            <h3 style={sectionTitle()}>The offer</h3>
+            <label style={label()}>What a visitor gets</label>
+            <textarea value={f.text} onChange={e => set("text", e.target.value)} rows={2} placeholder="Free refill of filter coffee with any pastry" style={{ ...field(), resize: "vertical", lineHeight: 1.5 }} data-testid="deal-studio-text" />
+            <label style={label()}>Days</label>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              <button type="button" onClick={() => set("days", [])} style={chip(f.days.length === 0)}>Every day</button>
+              {WEEK_ORDER.map(d => <button key={d} type="button" onClick={() => toggleDay(d)} style={chip(f.days.includes(d))}>{DAY_SHORT[d]}</button>)}
+            </div>
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+              <label style={label()}>Hours</label>
+              {!f.from && !f.to && <span style={{ fontSize: 11.5, color: C.muted }}>All day</span>}
+            </div>
+            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+              <input type="time" value={f.from} onChange={e => set("from", e.target.value)} style={field()} aria-label="From" />
+              <span style={{ color: C.muted, fontSize: 12 }}>to</span>
+              <input type="time" value={f.to} onChange={e => set("to", e.target.value)} style={field()} aria-label="To" />
+            </div>
+            <label style={label()}>Runs</label>
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <Segmented value={!!f.ongoing} onChange={(v) => set("ongoing", v)} options={[[true, "No last day"], [false, "Until a date"]]} testids={{ true: "deal-studio-ongoing", false: "deal-studio-dated" }} />
+              {!f.ongoing && <input type="date" value={f.until} onChange={e => set("until", e.target.value)} style={{ ...field(), width: "auto", flex: "1 1 160px" }} data-testid="deal-studio-until" />}
+            </div>
+            <label style={label()}>Book a table</label>
+            <input value={f.booking} onChange={e => set("booking", e.target.value)} placeholder="+370 600 00000" style={field()} />
+          </section>
 
-          <label style={label}>Days</label>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {WEEK_ORDER.map(d => <button key={d} type="button" onClick={() => toggleDay(d)} style={chip(f.days.includes(d))}>{DAY_SHORT[d]}</button>)}
-          </div>
-          <div style={{ fontSize: 11.5, color: C.muted, marginTop: 6 }}>None picked means every day.</div>
+          <section style={panel()}>
+            <h3 style={sectionTitle()}>On the map</h3>
+            <label style={label()}>Pin colour</label>
+            <div role="radiogroup" style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              {PIN_COLOURS.map((c, i) => {
+                const v = i === 0 ? "" : c;
+                const on = (f.pin || "") === v;
+                return (
+                  <button key={c} type="button" role="radio" aria-checked={on} aria-label={PIN_NAMES[c]} title={PIN_NAMES[c]} onClick={() => set("pin", v)} data-testid={`deal-studio-pin-${PIN_NAMES[c].toLowerCase()}`}
+                    style={{ width: 34, height: 34, borderRadius: "50%", background: c, border: "none", cursor: "pointer", boxShadow: on ? `0 0 0 2px ${C.surface}, 0 0 0 4px ${C.text}` : "none" }} />
+                );
+              })}
+            </div>
+            <div style={row2}>
+              <div>
+                <label style={label()}>Sign in the pin</label>
+                <input value={f.sign} onChange={e => set("sign", e.target.value)} placeholder="☕" maxLength={4} style={{ ...field(), width: 90 }} />
+              </div>
+              <div>
+                <label style={label()}>Filter on Explore</label>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {DEAL_FILTERS.map(k => <button key={k || "auto"} type="button" onClick={() => set("dealKind", k)} style={chip(f.dealKind === k)}>{FILTER_LABEL[k]}</button>)}
+                </div>
+              </div>
+            </div>
+          </section>
 
-          <label style={label}>Hours</label>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <input type="time" value={f.from} onChange={e => set("from", e.target.value)} style={field} aria-label="From" />
-            <span style={{ color: C.muted, fontSize: 12 }}>to</span>
-            <input type="time" value={f.to} onChange={e => set("to", e.target.value)} style={field} aria-label="To" />
-          </div>
-          <div style={{ fontSize: 11.5, color: C.muted, marginTop: 6 }}>Both empty means all day.</div>
+          <section style={panel()}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginTop: 14 }}>
+              <h3 style={{ ...sectionTitle(), margin: 0 }}>On Explore</h3>
+              <Segmented value={!!f.published} onChange={(v) => set("published", v)} options={[[true, "Show"], [false, "Hidden"]]} testids={{ true: "deal-studio-show", false: "deal-studio-hide" }} />
+            </div>
+          </section>
 
-          <label style={label}>Runs</label>
-          <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
-            <button type="button" onClick={() => set("ongoing", true)} style={chip(f.ongoing)} data-testid="deal-studio-ongoing">No last day</button>
-            <button type="button" onClick={() => set("ongoing", false)} style={chip(!f.ongoing)} data-testid="deal-studio-dated">Until a date</button>
-          </div>
-          {!f.ongoing && <input type="date" value={f.until} onChange={e => set("until", e.target.value)} style={field} data-testid="deal-studio-until" />}
-
-          <label style={label}>Filter on Explore</label>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {DEAL_FILTERS.map(k => <button key={k || "auto"} type="button" onClick={() => set("dealKind", k)} style={chip(f.dealKind === k)}>{FILTER_LABEL[k]}</button>)}
-          </div>
-
-          <label style={label}>Book a table</label>
-          <input value={f.booking} onChange={e => set("booking", e.target.value)} placeholder="A booking page or +370 600 00000" style={field} />
-
-          <label style={label}>Sign in the map pin</label>
-          <input value={f.sign} onChange={e => set("sign", e.target.value)} placeholder="☕" maxLength={4} style={{ ...field, width: 90 }} />
-
-          <label style={label}>On Explore</label>
-          <div style={{ display: "flex", gap: 6 }}>
-            <button type="button" onClick={() => set("published", true)} style={chip(f.published)} data-testid="deal-studio-show">Show</button>
-            <button type="button" onClick={() => set("published", false)} style={chip(!f.published)} data-testid="deal-studio-hide">Hidden</button>
-          </div>
-          <div style={{ fontSize: 11.5, color: C.muted, marginTop: 6, lineHeight: 1.5 }}>The made-up example partners show until the first real deal is set to Show, then they all go.</div>
-
-          <label style={label}>Preview</label>
+          <h3 style={{ ...sectionTitle(), margin: "26px 0 10px" }}>Preview</h3>
           <Preview f={f} />
 
           {(tried && problems.length > 0) && (
-            <div data-testid="deal-studio-problems" style={{ marginTop: 14, fontSize: 12.5, color: "#FFB347", lineHeight: 1.6, border: "1px solid #FFB34755", borderRadius: 10, padding: "10px 12px" }}>
+            <div data-testid="deal-studio-problems" style={{ marginTop: 16, fontSize: 13, color: "#E8A35C", lineHeight: 1.65, background: "#E8A35C14", borderRadius: 14, padding: "12px 14px" }}>
               {problems.map((p, i) => <div key={i}>{p}</div>)}
             </div>
           )}
-          {error && <div style={{ marginTop: 12, fontSize: 12.5, color: "#FF8A80" }}>{error}</div>}
+          {error && <div style={{ marginTop: 12, fontSize: 13, color: "#FF8A80" }}>{error}</div>}
         </div>
       </div>
-      <div style={{ display: "flex", gap: 10, padding: "12px 16px calc(14px + env(safe-area-inset-bottom, 0px))", borderTop: `1px solid ${C.border}`, background: C.surface }}>
-        <button onClick={save} disabled={busy} data-testid="deal-studio-save" style={{ flex: 1, ...small(true), padding: "12px", fontSize: 14, borderRadius: 14 }}>{busy ? "Saving" : "Save"}</button>
-        <button onClick={onClose} style={{ ...small(false), padding: "12px 18px", fontSize: 14, borderRadius: 14 }}>Cancel</button>
+      <div style={{ borderTop: `1px solid ${C.border}`, background: C.bg, padding: "12px 16px calc(14px + env(safe-area-inset-bottom, 0px))" }}>
+        <div style={{ maxWidth: 620, margin: "0 auto", display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <button onClick={onClose} style={{ ...small(false), padding: "12px 20px", fontSize: 14 }}>Cancel</button>
+          <button onClick={save} disabled={busy} data-testid="deal-studio-save" style={{ ...small(true), padding: "12px 28px", fontSize: 14, flex: "0 1 220px" }}>{busy ? "Saving" : start.id ? "Save changes" : "Save deal"}</button>
+        </div>
       </div>
     </div>,
     document.body,
@@ -319,11 +371,12 @@ export const DealStudio = ({ supaFetch, studioFetch, onChanged }) => {
 
   const shown = (rows || []).filter(r => r.published).length;
   return (
-    <section data-testid="deal-studio" style={{ background: C.surface, border: `1px dashed ${C.gold}66`, borderRadius: 14, padding: "14px 15px", marginBottom: 18 }}>
+    <section data-testid="deal-studio" style={{ background: C.surface, borderRadius: 20, padding: "16px 16px 14px", marginBottom: 22, fontFamily: "'Inter', sans-serif" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
         <div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: C.gold, fontFamily: "'Fraunces', serif" }}>Studio: Explore deals</div>
-          <div style={{ fontSize: 11.5, color: C.muted, marginTop: 2 }}>{rows === null ? "Loading" : `${rows.length} in the database, ${shown} showing`}</div>
+          <div style={eyebrow()}>Partner studio</div>
+          <div style={{ fontSize: 19, fontWeight: 500, color: C.text, fontFamily: "'Fraunces', serif", marginTop: 4 }}>Explore deals</div>
+          <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{rows === null ? "Loading" : `${rows.length} in the database, ${shown} showing`}</div>
         </div>
         <button onClick={() => { setError(""); setEditing(emptyDeal()); }} style={small(true)} data-testid="deal-studio-new">+ New deal</button>
       </div>
@@ -333,12 +386,12 @@ export const DealStudio = ({ supaFetch, studioFetch, onChanged }) => {
           {rows.map(row => {
             const f = dealFromRow(row);
             return (
-              <div key={row.id} data-testid="deal-studio-row" style={{ border: `1px solid ${C.border}`, borderRadius: 12, padding: "10px 12px", background: C.bg }}>
+              <div key={row.id} data-testid="deal-studio-row" style={{ borderRadius: 14, padding: "12px 14px", background: C.bg }}>
                 <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: C.text, overflowWrap: "anywhere" }}>{f.name}</div>
-                  <span style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: 0.5, color: row.published ? C.gold : C.muted, border: `1px solid ${row.published ? C.gold : C.border}`, borderRadius: 100, padding: "2px 8px", whiteSpace: "nowrap" }}>{row.published ? "SHOWING" : "HIDDEN"}</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}><span aria-hidden="true" style={{ width: 9, height: 9, borderRadius: "50%", background: f.pin || C.gold, flex: "0 0 auto" }} /><span style={{ fontSize: 15, fontWeight: 600, color: C.text, overflowWrap: "anywhere" }}>{f.name}</span></div>
+                  <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, color: row.published ? C.onGold : C.muted, background: row.published ? C.gold : C.border, borderRadius: 100, padding: "3px 9px", whiteSpace: "nowrap" }}>{row.published ? "SHOWING" : "HIDDEN"}</span>
                 </div>
-                <div style={{ fontSize: 12.5, color: C.gold, marginTop: 3 }}>{f.text}</div>
+                <div style={{ fontSize: 13, color: C.light, marginTop: 5 }}>{f.text}</div>
                 <div style={{ fontSize: 11.5, color: C.muted, marginTop: 2 }}>{dealWhenShort(f)}{f.ongoing ? ", no last day" : `, until ${f.until}`}</div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
                   <button onClick={() => { setError(""); setEditing(f); }} style={small(false)}>Edit</button>
