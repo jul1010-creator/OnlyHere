@@ -427,6 +427,7 @@ writeFileSync(entry, `
   export { guideTo, compassOf, distanceWords as walkDistanceWords, ARRIVE_M, COMPASS, FAR_M } from ${JSON.stringify(join(root, "src/components/WalkMode.jsx"))};
   export * as DNY from ${JSON.stringify(join(root, "src/components/DealsNearYou.jsx"))};
   export * as DST from ${JSON.stringify(join(root, "src/utils/dealStudio.js"))};
+  export { pinColour as pinColourOf } from ${JSON.stringify(join(root, "src/utils/pinColours.js"))};
   export * as SF from ${JSON.stringify(join(root, "src/utils/safeFetch.js"))};
   export * as LP from ${JSON.stringify(join(root, "src/utils/livePhoto.js"))};
   export * as CR from ${JSON.stringify(join(root, "src/utils/cruiseDays.js"))};
@@ -80364,7 +80365,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const card = app.slice(app.indexOf("THE VERDICT AND THE MAP, AS ON A TOWN"), app.indexOf("THE VERDICT AND THE MAP, AS ON A TOWN") + 6000);
   ok("the attraction card carries the tier badge on the picture", /tierBadge\(item\)/.test(card) && /b\.label/.test(card));
   ok("and the map of Denmark in the top right corner, from its own point when it has one", /<DKLocator town=\{key \|\| item\.name\} point=\{pt \? \[pt\.lat, pt\.lon\] : null\}/.test(card) && /top: 8, right: 8, width: 68, height: 68/.test(card));
-  ok("the heart moved to the bottom corner to make room", /bottom: 8, right: 8, background: "rgba\(10,15,30,0\.75\)"/.test(card));
+  ok("the heart moved to the bottom corner to make room", /bottom: 8, right: 8, background: "rgba\(14,14,17,0\.75\)"/.test(card));
   ok("the line under the name is kind, town, and distance from the reader", /dotJoin\(entryKindLabel\(item\._kind, item\.type\), attractionWhere\(town, key, placeCoords\(item\)\), distanceLine\(userCoords, key\), item\.priceNote\)/.test(card));
   ok("and nothing on it measures from Copenhagen", !/from CPH|travelLabel\(/.test(card.slice(0, card.indexOf("Good for families"))));
 }
@@ -80486,7 +80487,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("the chat stays off a Lithuanian page, the planner and Tips do not", /const NOT_YET_ABROAD = \[\];/.test(app) && /if \(PAGE_ABROAD\) return null;\s*\n\s*return <AskGemlyx/.test(app) && /\{NAV_ITEMS\.some\(item => item\.id === featuredTab\) && <button className="gx-topnav-ai"/.test(app) && /\{!PAGE_ABROAD && \(<>/.test(app));
   // Batch 162: and Studio, which lives on the planner's page, stays reachable at /lithuania#studio.
   ok("an empty page leaves a Lithuanian menu by itself, and Studio keeps its page", /const hideAbroad = \(t\) => PAGE_ABROAD && \(\(NOT_YET_ABROAD\.includes\(t\) && !\(t === "ai" && isStudio\)\) \|\| \(liveLoaded && !libraryFailed && !isStudio && emptyHere\[t\]\)\);/.test(app));
-  ok("the Danish video and photo stay on Danish pages", /\{!videoError && !PAGE_ABROAD && \(/.test(app) && /background: PAGE_ABROAD \? "linear-gradient/.test(app));
+  ok("the Danish video and photo stay on Danish pages", /\{!videoError && !PAGE_ABROAD && \(/.test(app) && /background: PAGE_ABROAD \? `linear-gradient/.test(app));
   ok("the Klaipėda demo moved off the town's own address", M.KLAIPEDA_DEMO_PATH === "/lithuania/trips");
   const dp = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
   // Batch 167: the planner is built abroad, so saving is too.
@@ -82325,7 +82326,7 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   const dny = read("src/components/DealsNearYou.jsx");
   const kd = read("src/utils/useKlaipedaDeals.js");
   ok("the QR page shows the example deals until a real one is live, marked Example", /const examples = real\.length === 0;/.test(kd) && /livePromotions\(examplePromotionPools\(\)\)/.test(kd) && /examples=\{live\.examples\}/.test(demo) && /data-testid="deals-near-examples"/.test(dny));
-  ok("only today's, on now first, with what the visitor gets", /\.filter\(x => x\.card\.timing in RANK\)/.test(dny) && /MAX_DEALS = 12/.test(dny) && /data-testid="deal-near-offer"/.test(dny));
+  ok("only today's, on now first, with what the visitor gets", /\.filter\(x => x\.card\.timing in RANK\)/.test(dny) && /MAX_DEALS = 12/.test(dny) && /deal-near-offer/.test(read("src/components/DealCard.jsx")));
   const pools = M.KEX.examplePromotionPools();
   ok("the example deals are read on Klaipėda's clock", Object.values(pools).flat().length > 0 && Object.values(pools).flat().every(p => p.country === "LT"));
 
@@ -82809,7 +82810,7 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("a Static Maps picture first, in the guide's style, never saved into the site", /maps\/api\/staticmap\?center=/.test(cm) && /&map_id=\$\{encodeURIComponent\(GOOGLE_MAP_ID\)\}/.test(cm) && /&scale=2/.test(cm) && /\{near && !live && \(/.test(cm));
   ok("and the live map only when Google refuses, asked once a visit", /onError=\{\(\) => \{ staticRefused = true; setLive\(true\); \}\}/.test(cm) && /useState\(staticRefused\)/.test(cm) && /if \(!ok \|\| !near \|\| !live \|\| made\.current/.test(cm));
   ok("no key, no map, rather than a worse one", /googleMapsReady\(\)/.test(cm) && /if \(!ok\) return null;/.test(cm));
-  ok("every deal with a place gets one, and tapping it walks there", /<DealCornerMap lat=\{x\.at\.lat\} lon=\{x\.at\.lon\} name=\{x\.d\.name\}/.test(dny) && /onTap=\{\(\) => setOpened\(/.test(dny));
+  ok("every deal with a place gets one, and tapping it walks there", /<DealCornerMap lat=\{at\.lat\} lon=\{at\.lon\} name=\{name\}/.test(read("src/components/DealCard.jsx")) && /onMap=\{\(\) => setOpened\(/.test(dny));
 }
 
 // ── Batch 235: Explore is the deals on the Lithuanian site, and the Danish
@@ -82879,7 +82880,7 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   const read = (f) => readFileSync(join(root, f), "utf8");
   const cm = read("src/components/DealCornerMap.jsx"), dny = read("src/components/DealsNearYou.jsx"), app = read("src/App.jsx");
   ok("a step further out", /export const CLOSE_ZOOM = 15;/.test(cm) && /zoom=\$\{CLOSE_ZOOM\}/.test(cm));
-  ok("the walk map's own pointer, tip on the place", /import \{ PLACE_PIN, placePinHtml \} from "\.\/GoogleWalkMap";/.test(cm) && /marginTop: -PLACE_PIN\.h/.test(cm) && /transformOrigin: "50% 100%"/.test(cm) && /placePinHtml\(\{ sign, photo \}\)/.test(cm));
+  ok("the walk map's own pointer, tip on the place", /import \{ PLACE_PIN, placePinHtml \} from "\.\/GoogleWalkMap";/.test(cm) && /marginTop: -PLACE_PIN\.h/.test(cm) && /transformOrigin: "50% 100%"/.test(cm) && /placePinHtml\(\{ sign, photo, color: pin \}\)/.test(cm));
   ok("with the place's sign or its filter's in the window", M.DNY.signFor({ emoji: "🐟" }) === "🐟" && M.DNY.signFor({ _src: "nightlife" }) === "🎵" && M.DNY.signFor({ __dealKind: "other" }) === "📍" && /sign=\{signFor\(x\.d\)\} photo=\{x\.d\.photo \|\| ""\}/.test(dny));
   ok("abroad, arriving at the planner by its address opens Explore", /if \(PAGE_ABROAD && asked === "ai"\) return "home";/.test(app) && /return asked \|\| "home";/.test(app));
 }
@@ -82894,8 +82895,8 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   const pv = read("src/components/DealPlaceView.jsx"), dny = read("src/components/DealsNearYou.jsx");
   ok("satellite, glided down and tilted over the building, like the walk map's arrival", /mapTypeId: "satellite"/.test(pv) && /RenderingType\?\.VECTOR/.test(pv) && /put\(glideAt\(start, end, t\)\)/.test(pv) && /to: \{ zoom: 18\.5, tilt: 55, heading: 35 \}/.test(pv));
   ok("then turns slowly round it until touched, and not at all for less motion", /heading: \(end\.heading \+ \(ms \/ 1000\) \* TURN_DEG_PER_S\) % 360/.test(pv) && /\["pointerdown", "wheel", "touchstart"\]\.forEach\(e => el\.addEventListener\(e, stop/.test(pv) && /if \(reducedMotion\(\)\) \{ put\(end\); return; \}/.test(pv));
-  ok("the walk map's own pointer on the building", /pin\.innerHTML = placePinHtml\(\{ sign, photo \}\);/.test(pv) && /new AdvancedMarkerElement\(/.test(pv));
-  ok("made only when the corner map is tapped, one at a time", /\{opened === \(x\.id \|\| x\.d\.name\) && x\.at && \(/.test(dny) && /setOpened\(cur => \(cur === \(x\.id \|\| x\.d\.name\) \? null : \(x\.id \|\| x\.d\.name\)\)\)/.test(dny));
+  ok("the walk map's own pointer on the building", /pin\.innerHTML = placePinHtml\(\{ sign, photo, color: pinColor \}\);/.test(pv) && /new AdvancedMarkerElement\(/.test(pv));
+  ok("made only when the corner map is tapped, one at a time", /const key = x\.id \|\| x\.d\.name;/.test(dny) && /\{opened === key && x\.at && \(/.test(dny) && /setOpened\(cur => \(cur === key \? null : key\)\)/.test(dny));
   ok("Show directions under it walks there from where the phone is", /onDirections=\{\(\) => go\(x\)\}/.test(dny) && /data-testid="place-view-directions"/.test(pv) && /locate\(\(at\) => setGoing\(/.test(dny));
   ok("the words read in all four languages", ["explore.directions", "explore.closeMap", "explore.mapFailed"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
 }
@@ -82914,7 +82915,7 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   is("an offer running past midnight counts on into the night", D.minutesLeft({ from: "22:00", to: "01:00" }, new Date("2026-10-16T20:30:00Z")), 90);
   ok("an offer with no end time has no countdown", D.minutesLeft({}, fri1740) === null && D.minutesLeft({ to: "nonsense" }, fri1740) === null);
   const dny = read("src/components/DealsNearYou.jsx");
-  ok("shown on an offer that is on, within three hours, and ticking", /ENDS_SOON_MIN = 180;/.test(dny) && /const when = offerWhen\(x\.d\.__offer, x\.card\.timing, \{ now: new Date\(\), lang \}\);/.test(dny) && /setInterval\(\(\) => setTick\(n => n \+ 1\), 30000\)/.test(dny) && /data-testid="deal-near-ends"/.test(dny));
+  ok("shown on an offer that is on, within three hours, and ticking", /ENDS_SOON_MIN = 180;/.test(dny) && /const when = offerWhen\(x\.d\.__offer, x\.card\.timing, \{ now: new Date\(\), lang \}\);/.test(dny) && /setInterval\(\(\) => setTick\(n => n \+ 1\), 30000\)/.test(dny) && /deal-near-ends/.test(read("src/components/DealCard.jsx")));
 }
 
 // ── Batch 241: no "On now", and Redeem offer in place of Walk there ──
@@ -83013,11 +83014,34 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   const dny = read("src/components/DealsNearYou.jsx");
   ok("the list is only what is on, what starts later waits in Upcoming", /\.filter\(x => x\.card\.timing !== "later"\), \[deals, start\?\.lat, start\?\.lon, lang, sort, tick\]\)/.test(dny) && /data-testid="deals-upcoming"/.test(dny) && /explore\.upcoming/.test(dny));
   const upBlock = dny.slice(dny.indexOf('data-testid="deals-upcoming"'), dny.indexOf('{country === "LT" && ('));
-  ok("an upcoming card has no Redeem", !/openRedeem|deal-near-redeem/.test(upBlock) && /deal-upcoming-hours/.test(upBlock));
+  ok("an upcoming card has no Redeem", !/openRedeem|deal-near-redeem|actions=/.test(upBlock) && /testid="deal-upcoming" upcoming/.test(upBlock) && /deal-upcoming-hours/.test(read("src/components/DealCard.jsx")));
   ok("no 'No deals' flash while loading", /\{!ready \? \(/.test(dny) && /ready=\{live\.ready\}/.test(read("src/components/KlaipedaExplore.jsx")) && /ready=\{live\.ready\}/.test(read("src/pages/KlaipedaDemo.jsx")));
-  ok("the Studio can set No last day", S.dealProblems({ ...S.emptyDeal(), name: "Lidl", lat: 55.7087, lon: 21.1339, text: "Friday candy", ongoing: true, days: [5], from: "15:00", to: "18:00" }).length === 0 && S.payloadFromDeal({ ...S.emptyDeal(), name: "Lidl", lat: 55.7, lon: 21.13, text: "x", ongoing: true }).__offer.ongoing === true && /data-testid="deal-studio-ongoing"/.test(read("src/components/DealStudio.jsx")) && /data-testid="studio-offer-ongoing"/.test(read("src/App.jsx")));
+  ok("the Studio can set No last day", S.dealProblems({ ...S.emptyDeal(), name: "Lidl", lat: 55.7087, lon: 21.1339, text: "Friday candy", ongoing: true, days: [5], from: "15:00", to: "18:00" }).length === 0 && S.payloadFromDeal({ ...S.emptyDeal(), name: "Lidl", lat: 55.7, lon: 21.13, text: "x", ongoing: true }).__offer.ongoing === true && /"deal-studio-ongoing"/.test(read("src/components/DealStudio.jsx")) && /data-testid="studio-offer-ongoing"/.test(read("src/App.jsx")));
   ok("and the walks read it too", /if \(raw\.ongoing !== true\) \{/.test(read("src/utils/nowPlanner.js")));
   ok("the new words read in all four languages", ["offer.startsTomorrowAt", "offer.startsTomorrow", "offer.startsOnAt", "offer.startsOn", "explore.upcoming", "explore.noneNowSoon"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
+}
+
+// ── Batch 244: the 2026 dark ──
+// Oliver, 13 Oct 2026, with a design review of the deal editor: "Make the dark
+// theme. We need to move away from the 2012-16 look." And a pin colour per deal.
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const T = M.THEMES.dark;
+  is("the dark theme is charcoal and champagne", [T.bg, T.surface, T.gold, T.text], ["#0E0E11", "#17171B", "#C9A46A", "#F3EFE7"]);
+  ok("every theme has a bronze for the details", ["warm", "dark", "light"].every(k => /^#[0-9A-F]{6}$/i.test(M.THEMES[k].bronze || "")));
+  ok("and it is still the default", M.DEFAULT_THEME === "dark");
+  const card = read("src/components/DealCard.jsx"), dny = read("src/components/DealsNearYou.jsx"), ds = read("src/components/DealStudio.jsx");
+  ok("one card for Explore, Upcoming and the Studio's preview", /<DealCard key=\{key\}/.test(dny) && /<DealCard key=\{x\.id \|\| x\.d\.name\} testid="deal-upcoming" upcoming/.test(dny) && /<DealCard testid="deal-studio-card"/.test(ds));
+  ok("no gold box around a card, one hairline", /border: `1px solid \$\{C\.border\}`, borderRadius: 18/.test(card) && !/\$\{C\.gold\}66/.test(card));
+  ok("styles read the theme when drawn, not when imported", /export const eyebrow = \(\) => \(/.test(card) && /const field = \(\) => \(/.test(ds) && !/^const field = \{/m.test(ds));
+  ok("the editor is in sections", ["The place", "The offer", "On the map", "On Explore", "Preview"].every(t => ds.includes(`>${t}</h3>`)));
+  ok("the boxes you type into keep their 3:1 border", /border: `1px solid \$\{C\.fieldBorder \|\| C\.border\}`/.test(ds));
+  is("a pin colour is one of the six or none", [M.pinColourOf("#e07a5f"), M.pinColourOf("#123456"), M.pinColourOf("")], ["#E07A5F", "", ""]);
+  ok("and the deal carries it to its pins", M.DST.payloadFromDeal({ ...M.DST.emptyDeal(), name: "x", lat: 55.7, lon: 21.13, text: "x", ongoing: true, pin: "#2A9D8F" }).__pin === "#2A9D8F"
+    && !("__pin" in M.DST.payloadFromDeal({ ...M.DST.emptyDeal(), name: "x", lat: 55.7, lon: 21.13, text: "x", ongoing: true, pin: "#000000" }))
+    && /pin=\{x\.d\.__pin \|\| ""\}/.test(dny) && M.placePinHtml({ color: "#2A9D8F" }).includes('fill="#2A9D8F"'));
+  ok("the first paint is the new dark", /<meta name="theme-color" content="#0E0E11" \/>/.test(read("index.html")));
+  ok("no navy left on the Lithuanian side's own components", ["DealCard", "DealsNearYou", "DealStudio", "DealCornerMap", "DealPlaceView", "RedeemSheet"].every(n => !/#0A0F1E/i.test(read(`src/components/${n}.jsx`))));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
