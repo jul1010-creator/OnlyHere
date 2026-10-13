@@ -81,7 +81,7 @@ export const DealPicture = ({ photo = "", at = null, name = "", sign = "📍", p
 };
 export const DealTile = ({ name = "", offer = "", badge = "", distance = "", photo = "", at = null, sign = "📍", pin = "", upcoming = false, onOpen = null, testid = "deal-tile" }) => (
   <button type="button" onClick={onOpen || undefined} data-testid={testid}
-    style={{ display: "flex", flexDirection: "column", justifyContent: "flex-start", alignItems: "stretch", width: "100%", height: "100%", padding: 0, textAlign: "left", background: C.surface, border: "none", borderRadius: 16, overflow: "hidden", cursor: onOpen ? "pointer" : "default", fontFamily: "'Inter', sans-serif", color: C.text, opacity: upcoming ? 0.62 : 1, filter: upcoming ? "saturate(0.6)" : "none" }}>
+    style={{ display: "flex", flexDirection: "column", justifyContent: "flex-start", alignItems: "stretch", width: "100%", height: "100%", padding: 0, textAlign: "left", background: C.surface, border: "none", borderRadius: 16, overflow: "hidden", cursor: onOpen ? "pointer" : "default", fontFamily: "'Inter', sans-serif", color: C.text, filter: upcoming ? "brightness(0.62) saturate(0.6)" : "none" }}>
     <div style={{ position: "relative", pointerEvents: "none" }}>
       <DealPicture photo={photo} at={at} name={name} sign={sign} pin={pin} />
       {badge && (

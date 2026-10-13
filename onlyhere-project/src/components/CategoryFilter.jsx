@@ -1,11 +1,7 @@
 // ── THE ROUND FILTERS, THE WAY LIDL SHOWS ITS DEPARTMENTS ───────────
 //
 // Oliver, 14 Oct 2026, with lidl.dk's row of coloured circles: "Make it like
-// this. With nightlife, attractions, renting, and restaurants." And "we need
-// 'ticking off' filters": each circle is ticked on or off, more than one at a
-// time, and none ticked shows everything. A ticked circle gets a ring and a
-// tick; the others fade while something is ticked, so it is plain what is
-// being shown.
+// this. With nightlife, attractions, renting, and restaurants."
 //
 // The drawings are simple line icons in white on the category's colour, drawn
 // here rather than emoji so they look the same on every phone. Functions, so
@@ -42,34 +38,28 @@ export const CATEGORY_ICON = {
   ),
 };
 
-export const CategoryFilter = ({ picked, onToggle, onClear = null, label = (k) => k, clearLabel = "Clear" }) => {
-  const any = picked.size > 0;
-  return (
-    <div data-testid="deals-categories">
-      <div role="group" aria-label="Kinds of place" style={{ display: "grid", gridTemplateColumns: `repeat(${DEAL_CATEGORIES.length}, minmax(0, 1fr))`, gap: 8 }}>
-        {DEAL_CATEGORIES.map(k => {
-          const on = picked.has(k);
-          return (
-            <button key={k} type="button" role="checkbox" aria-checked={on} onClick={() => onToggle(k)} data-testid={`deals-cat-${k}`}
-              style={{ background: "none", border: "none", padding: "4px 0", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, fontFamily: "'Inter', sans-serif", opacity: any && !on ? 0.42 : 1, transition: "opacity .15s" }}>
-              <span style={{ position: "relative", width: 64, height: 64, borderRadius: "50%", background: CATEGORY_COLOUR[k], display: "flex", alignItems: "center", justifyContent: "center", boxShadow: on ? `0 0 0 3px ${C.bg}, 0 0 0 5px ${C.text}` : "none", transition: "box-shadow .15s" }}>
-                <svg width="30" height="30" viewBox="0 0 24 24" aria-hidden="true">{CATEGORY_ICON[k]()}</svg>
-                {on && (
-                  <span aria-hidden="true" data-testid={`deals-cat-${k}-tick`} style={{ position: "absolute", right: -3, bottom: -3, width: 22, height: 22, borderRadius: "50%", background: C.gold, color: C.onGold, border: `2px solid ${C.bg}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800, lineHeight: 1 }}>✓</span>
-                )}
-              </span>
-              <span style={{ fontSize: 12.5, fontWeight: on ? 700 : 500, color: on ? C.text : C.light, textAlign: "center", lineHeight: 1.25 }}>{label(k)}</span>
-            </button>
-          );
-        })}
-      </div>
-      {any && onClear && (
-        <div style={{ textAlign: "center", marginTop: 6 }}>
-          <button type="button" onClick={onClear} data-testid="deals-cat-clear" style={{ background: "none", border: "none", color: C.muted, fontSize: 12, fontWeight: 600, cursor: "pointer", textDecoration: "underline", fontFamily: "'Inter', sans-serif" }}>{clearLabel}</button>
-        </div>
-      )}
-    </div>
-  );
-};
+// ── EACH ONE ITS OWN PAGE ───────────────────────────────────────────
+// Oliver, 14 Oct 2026, a few minutes after the tick-off version: "Don't have
+// those tick-offs. Let it be seperate navigations. And let change be fades."
+// So a circle is a way in, the way Lidl's departments are: tapping it opens
+// that kind of place on its own (DealsNearYou.jsx), and Back comes out again.
+export const CategoryNav = ({ onPick, label = (k) => k }) => (
+  <nav aria-label="Kinds of place" data-testid="deals-categories"
+    style={{ display: "grid", gridTemplateColumns: `repeat(${DEAL_CATEGORIES.length}, minmax(0, 1fr))`, gap: 8 }}>
+    {DEAL_CATEGORIES.map(k => (
+      <button key={k} type="button" onClick={() => onPick(k)} data-testid={`deals-cat-${k}`}
+        style={{ background: "none", border: "none", padding: "4px 0", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, fontFamily: "'Inter', sans-serif" }}>
+        <CategoryCircle k={k} size={64} />
+        <span style={{ fontSize: 12.5, fontWeight: 600, color: C.text, textAlign: "center", lineHeight: 1.25 }}>{label(k)}</span>
+      </button>
+    ))}
+  </nav>
+);
 
-export default CategoryFilter;
+export const CategoryCircle = ({ k, size = 64 }) => (
+  <span aria-hidden="true" style={{ width: size, height: size, flex: "0 0 auto", borderRadius: "50%", background: CATEGORY_COLOUR[k], display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+    <svg width={Math.round(size * 0.47)} height={Math.round(size * 0.47)} viewBox="0 0 24 24">{CATEGORY_ICON[k]()}</svg>
+  </span>
+);
+
+export default CategoryNav;

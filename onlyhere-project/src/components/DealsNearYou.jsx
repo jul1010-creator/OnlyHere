@@ -34,7 +34,7 @@ import { placeClock, cleanClock, windowOf } from "../utils/offerClock";
 import { RedeemSheet } from "./RedeemSheet";
 import { DealTile, eyebrow } from "./DealCard";
 import { DealDetail } from "./DealDetail";
-import { CategoryFilter } from "./CategoryFilter";
+import { CategoryNav, CategoryCircle } from "./CategoryFilter";
 import { dealCategory, byCategories, CATEGORY_SIGN } from "../utils/dealCategories";
 import { dayKey, dayPlus } from "../utils/calendarDay";
 
@@ -313,10 +313,40 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
   // The countdown moves on by itself while the page is open.
   const [tick, setTick] = useState(0);
   useEffect(() => { const t = setInterval(() => setTick(n => n + 1), 30000); return () => clearInterval(t); }, []);
-  // The kinds of place ticked in the round filters (CategoryFilter.jsx, 14 Oct
+  // ── ONE KIND OF PLACE AT A TIME, EACH ITS OWN PAGE, FADING ──────────
+  // Oliver, 14 Oct 2026: "Don't have those tick-offs. Let it be seperate
+  // navigations. And let change be fades." `cat` is the kind of place being
+  // shown, null for all of them. Going in or out fades the page out, swaps it,
+  // and fades it back in. Going in is a step in the phone's history, so the
+  // phone's own Back comes out again rather than leaving Explore.
   // 2026). None ticked shows them all.
-  const [picked, setPicked] = useState(() => new Set());
-  const toggleCat = (k) => setPicked(cur => { const n = new Set(cur); if (n.has(k)) n.delete(k); else n.add(k); return n; });
+  const [cat, setCat] = useState(null);
+  const [fade, setFade] = useState(false);
+  const FADE_MS = 200;
+  const showCat = (k) => {
+    setFade(true);
+    setTimeout(() => {
+      setCat(k);
+      setOpened(null);
+      setFade(false);
+      try { if (sectionRef.current && sectionRef.current.getBoundingClientRect().top < 0) sectionRef.current.scrollIntoView({ block: "start" }); } catch { /* old browser */ }
+    }, FADE_MS);
+  };
+  const sectionRef = useRef(null);
+  const enterCat = (k) => {
+    try { window.history.pushState({ ...(window.history.state || {}), gxCat: k }, ""); } catch { /* no history */ }
+    showCat(k);
+  };
+  const leaveCat = () => {
+    try { if (window.history.state?.gxCat) { window.history.back(); return; } } catch { /* fall through */ }
+    showCat(null);
+  };
+  useEffect(() => {
+    const onPop = () => { let k = null; try { k = window.history.state?.gxCat || null; } catch { /* none */ } showCat(k); };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+  const only = useMemo(() => new Set(cat ? [cat] : []), [cat]);
   const [sort, setSort] = useState("az");
   const canLocate = typeof navigator !== "undefined" && !!navigator.geolocation && !!NOW_AREAS[country];
   // Distance only ever from the visitor (13 Oct 2026). No ship, no centre.
@@ -351,8 +381,8 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
   // Only what can be used now; what starts later waits in Upcoming (13 Oct
   // 2026). The tick moves an offer from one to the other as its hour comes.
   const all = useMemo(() => nearbyDeals(deals, start, { now: new Date(), lang, limit: Infinity, order: sort === "closest" && start ? "closest" : "az" }).filter(x => x.card.timing !== "later"), [deals, start?.lat, start?.lon, lang, sort, tick]);
-  const list = useMemo(() => byCategories(all, picked, x => x.d).slice(0, MAX_DEALS), [all, picked]);
-  const soon = useMemo(() => byCategories(upcomingDeals(deals, start, { now: new Date(), lang, limit: Infinity }), picked, x => x.d).slice(0, MAX_DEALS), [deals, start?.lat, start?.lon, lang, picked, tick]);
+  const list = useMemo(() => byCategories(all, only, x => x.d).slice(0, MAX_DEALS), [all, only]);
+  const soon = useMemo(() => byCategories(upcomingDeals(deals, start, { now: new Date(), lang, limit: Infinity }), only, x => x.d).slice(0, MAX_DEALS), [deals, start?.lat, start?.lon, lang, only, tick]);
   const go = (x) => {
     askForCompass();
     if (start) { setGoing(x); return; }
@@ -385,20 +415,33 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
   });
 
   return (
-    <section data-testid="deals-near" style={{ marginBottom: 30 }}>
+    <section ref={sectionRef} data-testid="deals-near" style={{ marginBottom: 30 }}>
+      <div data-testid="deals-view" data-cat={cat || "all"} style={{ opacity: fade ? 0 : 1, transition: `opacity ${FADE_MS}ms ease` }}>
+      {cat ? (
+        <div data-testid="deals-cat-page" style={{ margin: "0 0 14px" }}>
+          <button type="button" onClick={leaveCat} data-testid="deals-cat-back"
+            style={{ background: "none", border: "none", padding: "4px 0", color: C.light, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+            ‹ {uiT("trips.dealsH", lang)}
+          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 10 }}>
+            <CategoryCircle k={cat} size={52} />
+            <h2 style={{ fontSize: 30, fontWeight: 500, fontFamily: "'Fraunces', serif", lineHeight: 1.1, letterSpacing: -0.3, margin: 0, color: C.text }}>{uiT(`explore.cat.${cat}`, lang)}</h2>
+          </div>
+        </div>
+      ) : (
       <div style={{ margin: "4px 0 14px" }}>
         <div style={{ ...eyebrow(), marginBottom: 8 }}>{country === "LT" ? "Klaipėda" : ""}</div>
         <div style={{ display: "flex", alignItems: "baseline", gap: 10, minWidth: 0, flexWrap: "wrap" }}>
           <h2 style={{ fontSize: 30, fontWeight: 500, fontFamily: "'Fraunces', serif", lineHeight: 1.1, letterSpacing: -0.3, margin: 0, color: C.text }}>{uiT("trips.dealsH", lang)}</h2>
           {examples && <span data-testid="deals-near-examples" style={{ fontSize: 10, fontWeight: 700, color: C.muted, border: `1px solid ${C.border}`, borderRadius: 100, padding: "3px 9px", letterSpacing: 0.6, textTransform: "uppercase" }}>{uiT("deals.example", lang)}</span>}
         </div>
-      </div>
-
-      <div style={{ background: C.bg, padding: "6px 0 8px", marginBottom: 8, ...(sticky ? { position: "sticky", top: 0, zIndex: 20 } : {}) }}>
-        <div style={{ marginBottom: 14 }}>
-          <CategoryFilter picked={picked} onToggle={toggleCat} onClear={() => setPicked(new Set())}
-            label={(k) => uiT(`explore.cat.${k}`, lang)} clearLabel={uiT("explore.clear", lang)} />
+        <div style={{ marginTop: 18 }}>
+          <CategoryNav onPick={enterCat} label={(k) => uiT(`explore.cat.${k}`, lang)} />
         </div>
+      </div>
+      )}
+
+      <div style={{ padding: "6px 0 8px", marginBottom: 8, ...(sticky ? { position: "sticky", top: 0, zIndex: 20, background: C.bg } : {}) }}>
         <div role="group" aria-label="Sort" data-testid="deals-sort" style={{ display: "inline-flex", gap: 2, background: `${C.border}55`, borderRadius: 100, padding: 2 }}>
           {SORTS.map(k => (
             <button key={k} onClick={() => pickSort(k)} aria-pressed={sort === k} style={seg(sort === k)} data-testid={`deals-sort-${k}`}>
@@ -412,7 +455,7 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
         <div data-testid="deals-near-loading" style={{ height: 120 }} />
       ) : list.length === 0 ? (
         <div data-testid="deals-near-none" style={{ fontSize: 13.5, color: C.light, lineHeight: 1.6, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "13px 15px" }}>
-          {uiT(soon.length ? "explore.noneNowSoon" : picked.size && all.length ? "explore.noneHere" : "trips.noDeals", lang)}
+          {uiT(soon.length ? "explore.noneNowSoon" : cat ? "explore.noneCat" : "trips.noDeals", lang)}
         </div>
       ) : (
         <div data-testid="deals-grid" style={GRID}>
@@ -443,6 +486,7 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
           </div>
         </div>
       )}
+      </div>
       {(() => {
         // The deal a tile opened, live or upcoming, read fresh from the lists.
         if (!opened) return null;

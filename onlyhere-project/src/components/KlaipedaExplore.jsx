@@ -11,16 +11,22 @@
 // and the page sends people there for it (DealsNearYou's last line).
 import { DealsNearYou } from "./DealsNearYou";
 import { useKlaipedaDeals } from "../utils/useKlaipedaDeals";
+import { SpinningMark } from "./SpinningMark";
 
 // `studio` is the founder's deal editor (DealStudio.jsx), drawn above the deals
 // on /lithuania#studio once he is logged in, and null for everybody else.
 export const KlaipedaExplore = ({ lang = "en", version = 0, studio = null }) => {
   const live = useKlaipedaDeals(null, version);
+  // The page sits over a slowly turning Gemlyx mark (SpinningMark.jsx, 14 Oct
+  // 2026: "make the background a spinning Gemlyx Logo").
   return (
-    <>
-      {studio}
-      <DealsNearYou deals={live.deals} examples={live.examples} ready={live.ready} lang={lang} country="LT" sticky={false} />
-    </>
+    <div style={{ position: "relative" }}>
+      <SpinningMark />
+      <div style={{ position: "relative", zIndex: 1 }}>
+        {studio}
+        <DealsNearYou deals={live.deals} examples={live.examples} ready={live.ready} lang={lang} country="LT" sticky={false} />
+      </div>
+    </div>
   );
 };
 
