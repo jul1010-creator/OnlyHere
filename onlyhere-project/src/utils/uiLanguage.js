@@ -737,6 +737,7 @@ export const UI_STRINGS = {
   "explore.entertainment": { en: "Entertainment", da: "Underholdning", de: "Unterhaltung", lt: "Pramogos" },
   "explore.activities":    { en: "Activities", da: "Aktiviteter", de: "Aktivitäten", lt: "Veiklos" },
   "explore.all":           { en: "All", da: "Alle", de: "Alle", lt: "Visi" },
+  "explore.endsIn":        { en: "Ends in {t}", da: "Slutter om {t}", de: "Endet in {t}", lt: "Baigiasi po {t}" },
   "explore.directions":    { en: "Show directions", da: "Vis vejen", de: "Route anzeigen", lt: "Rodyti kelią" },
   "explore.closeMap":      { en: "Close", da: "Luk", de: "Schließen", lt: "Uždaryti" },
   "explore.mapFailed":     { en: "The map could not load just now.", da: "Kortet kunne ikke indlæses lige nu.", de: "Die Karte konnte gerade nicht geladen werden.", lt: "Šiuo metu žemėlapio įkelti nepavyko." },
