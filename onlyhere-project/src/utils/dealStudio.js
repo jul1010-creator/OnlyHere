@@ -22,6 +22,8 @@ import { cleanClock, OFFER_WEEK } from "./offerClock";
 import { bookingProblem, cleanBooking } from "./dealExtras";
 import { inNowArea } from "./nowPlanner";
 import { pinColour } from "./pinColours";
+import { DEAL_CATEGORIES, TYPE_OF_CATEGORY, dealCategory } from "./dealCategories";
+export { DEAL_CATEGORIES };
 
 // The kinds of place a deal can be, as the database types them. What each one
 // is called here is what a shop owner would call it, not the table's word.
@@ -33,6 +35,8 @@ export const DEAL_PLACE_TYPES = [
 ];
 const TYPES = DEAL_PLACE_TYPES.map(t => t.type);
 export const DEAL_FILTERS = ["", "discounts", "entertainment", "activities"];
+// A new deal is filed under the type that fits its kind of place.
+export const typeForCategory = (c) => TYPE_OF_CATEGORY[c] || "free";
 export const DAY_SHORT = { 1: "Mon", 2: "Tue", 3: "Wed", 4: "Thu", 5: "Fri", 6: "Sat", 0: "Sun" };
 export const WEEK_ORDER = OFFER_WEEK;
 
@@ -44,7 +48,7 @@ export const emptyDeal = () => ({
   id: null, type: "food", published: false,
   name: "", street: "", lat: "", lon: "", sign: "",
   text: "", days: [], from: "", to: "", until: "", ongoing: false,
-  dealKind: "", booking: "", pin: "", photo: "",
+  dealKind: "", booking: "", pin: "", photo: "", category: "restaurants",
 });
 
 // The form, from a row of gemlyx_content.
@@ -56,7 +60,7 @@ export const dealFromRow = (row) => {
     name: String(p.name || ""), street: String(p.location || ""),
     lat: p.__lat ?? p.lat ?? "", lon: p.__lon ?? p.lon ?? "", sign: String(p.emoji || ""),
     text: String(o.text || ""), days: Array.isArray(o.days) ? o.days : [], from: String(o.from || ""), to: String(o.to || ""), until: String(o.until || ""), ongoing: o.ongoing === true,
-    dealKind: DEAL_FILTERS.includes(p.__dealKind) ? p.__dealKind : "", booking: String(p.__booking || ""), pin: pinColour(p.__pin), photo: String(p.photo || ""),
+    dealKind: DEAL_FILTERS.includes(p.__dealKind) ? p.__dealKind : "", booking: String(p.__booking || ""), pin: pinColour(p.__pin), photo: String(p.photo || ""), category: dealCategory({ ...p, type: row?.type }),
   };
 };
 
@@ -101,6 +105,8 @@ export const payloadFromDeal = (f, base = {}) => {
   if (DEAL_FILTERS.includes(f.dealKind) && f.dealKind) p.__dealKind = f.dealKind; else delete p.__dealKind;
   if (cleanBooking(f.booking)) p.__booking = String(f.booking).trim(); else delete p.__booking;
   if (pinColour(f.pin)) p.__pin = pinColour(f.pin); else delete p.__pin;
+  // The kind of place on Explore (14 Oct 2026), always set by hand here.
+  if (DEAL_CATEGORIES.includes(f.category)) p.__category = f.category; else delete p.__category;
   // The tile's picture (13 Oct 2026). Empty means the map stands in for it.
   const photo = String(f.photo || "").trim();
   if (photo) p.photo = photo; else delete p.photo;
