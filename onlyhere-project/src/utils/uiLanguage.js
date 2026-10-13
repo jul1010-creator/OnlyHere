@@ -757,6 +757,7 @@ export const UI_STRINGS = {
   "explore.cat.nightlife":   { en: "Nightlife", da: "Natteliv", de: "Nachtleben", lt: "Naktinis gyvenimas" },
   "explore.cat.attractions": { en: "Attractions", da: "Seværdigheder", de: "Sehenswertes", lt: "Lankytinos vietos" },
   "explore.cat.rentals":     { en: "Rentals", da: "Udlejning", de: "Verleih", lt: "Nuoma" },
+  "explore.noneCat":       { en: "Nothing here right now. Go back to see every deal.", da: "Intet her lige nu. Gå tilbage for at se alle tilbud.", de: "Gerade nichts hier. Geh zurück, um alle Angebote zu sehen.", lt: "Šiuo metu čia nieko nėra. Grįžkite atgal, kad pamatytumėte visus pasiūlymus." },
   "explore.clear":           { en: "Show all", da: "Vis alle", de: "Alle zeigen", lt: "Rodyti viską" },
   "explore.upcoming":      { en: "Upcoming", da: "Kommende", de: "Demnächst", lt: "Netrukus" },
   "offer.validUntil":      { en: "Offer valid until {date}", da: "Tilbuddet gælder til {date}", de: "Angebot gültig bis {date}", lt: "Pasiūlymas galioja iki {date}" },
