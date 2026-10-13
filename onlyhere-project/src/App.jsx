@@ -2962,6 +2962,7 @@ function GemlyxApp() {
     setStudioPhotoName(payload.photo ? String(payload.photo).split("/").pop() : `${slugify(payload.name)}.jpg`);
     setStudioOfferText(payload.__offer?.text || "");
     setStudioOfferUntil(payload.__offer?.until || "");
+    setStudioOfferOngoing(payload.__offer?.ongoing === true);
     setStudioOfferDays(Array.isArray(payload.__offer?.days) ? payload.__offer.days : []);
     setStudioOfferFrom(payload.__offer?.from || "");
     setStudioOfferTo(payload.__offer?.to || "");
@@ -2992,6 +2993,7 @@ function GemlyxApp() {
     // carries rather than an empty box that would clear it on save.
     setStudioOfferText(row.payload?.__offer?.text || "");
     setStudioOfferUntil(row.payload?.__offer?.until || "");
+    setStudioOfferOngoing(row.payload?.__offer?.ongoing === true);
     setStudioOfferDays(Array.isArray(row.payload?.__offer?.days) ? row.payload.__offer.days : []);
     setStudioOfferFrom(row.payload?.__offer?.from || "");
     setStudioOfferTo(row.payload?.__offer?.to || "");
@@ -4174,11 +4176,13 @@ Say which answer came from which source, so a fact from a vouched page and a fac
   // why the date is required rather than optional.
   const [studioOfferText, setStudioOfferText] = useState("");
   const [studioOfferUntil, setStudioOfferUntil] = useState("");
+  // No last day, every week (13 Oct 2026, "friday candy EVERY friday").
+  const [studioOfferOngoing, setStudioOfferOngoing] = useState(false);
   // Offer hours (utils/offer.js, OFFER HOURS): weekdays and a clock window.
   const [studioOfferDays, setStudioOfferDays] = useState([]);
   const [studioOfferFrom, setStudioOfferFrom] = useState("");
   const [studioOfferTo, setStudioOfferTo] = useState("");
-  const studioOfferFields = { text: studioOfferText, until: studioOfferUntil, days: studioOfferDays, from: studioOfferFrom, to: studioOfferTo };
+  const studioOfferFields = { text: studioOfferText, until: studioOfferUntil, days: studioOfferDays, from: studioOfferFrom, to: studioOfferTo, ongoing: studioOfferOngoing };
   // ── A PARTNER'S PRIVATE LINK ──────────────────────────────────────
   // Oliver, 12 Oct 2026: real numbers for a business, no account. One click
   // here signs a link to /lithuania/partner for the place that is open; he
@@ -11390,6 +11394,7 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
     if (saved.booking) setStudioBooking(saved.booking);
     if (DEAL_KINDS.includes(saved.dealKind)) setStudioDealKind(saved.dealKind);
     if (saved.offerUntil) setStudioOfferUntil(saved.offerUntil);
+    if (saved.offerOngoing === true) setStudioOfferOngoing(true);
     if (Array.isArray(saved.offerDays) && saved.offerDays.length) setStudioOfferDays(saved.offerDays);
     if (saved.offerFrom) setStudioOfferFrom(saved.offerFrom);
     if (saved.offerTo) setStudioOfferTo(saved.offerTo);
@@ -11423,6 +11428,7 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
         photoName: studioPhotoName,
         offerText: studioOfferText,
         offerUntil: studioOfferUntil,
+        offerOngoing: studioOfferOngoing,
         offerDays: studioOfferDays,
         offerFrom: studioOfferFrom,
         offerTo: studioOfferTo,
@@ -11440,7 +11446,7 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
     return () => clearTimeout(t);
   }, [studioSession, draftQueue, queueResults, editingId, studioDraft, studioDraftText,
       studioType, studioTown, studioResult, studioFrozenGeo, studioIdentityWarning,
-      studioInventedWarning, studioPhotoName, studioOfferText, studioOfferUntil, studioOfferDays, studioOfferFrom, studioOfferTo, studioBooking, studioDealKind]);
+      studioInventedWarning, studioPhotoName, studioOfferText, studioOfferUntil, studioOfferOngoing, studioOfferDays, studioOfferFrom, studioOfferTo, studioBooking, studioDealKind]);
 
   // Dropping the finished list is a deliberate act, so it needs a button. It is
   // also the only advice problemNote can give when storage is full.
@@ -29359,10 +29365,14 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         <input value={studioOfferText} onChange={e => setStudioOfferText(e.target.value)}
                           maxLength={OFFER_TEXT_MAX} placeholder="Free bag of bolcher for the first 10 Gemlyx members"
                           style={{ width: "100%", border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 12px", fontSize: 12, outline: "none", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif", marginBottom: 8 }} />
-                        <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, marginBottom: 5 }}>VALID UNTIL (YYYY-MM-DD)</div>
-                        <input value={studioOfferUntil} onChange={e => setStudioOfferUntil(e.target.value)}
+                        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: C.light, marginBottom: 6, cursor: "pointer" }}>
+                          <input type="checkbox" checked={studioOfferOngoing} onChange={e => setStudioOfferOngoing(e.target.checked)} data-testid="studio-offer-ongoing" />
+                          No last day, it runs every week
+                        </label>
+                        {!studioOfferOngoing && <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, marginBottom: 5 }}>VALID UNTIL (YYYY-MM-DD)</div>}
+                        {!studioOfferOngoing && <input value={studioOfferUntil} onChange={e => setStudioOfferUntil(e.target.value)}
                           placeholder="2026-12-31"
-                          style={{ width: "100%", border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 12px", fontSize: 12, outline: "none", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif" }} />
+                          style={{ width: "100%", border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 12px", fontSize: 12, outline: "none", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif" }} />}
                         {/* Offer hours, Oliver 2 Oct 2026: "from 13.00-16.00 we
                             offer a full meal + free soda". No day picked and no
                             times means all day, every day, as before. The clock
