@@ -1253,7 +1253,16 @@ function GemlyxApp() {
   // right page. An effect would paint Explore and then jump.
   const [active, setActive] = useState(() => {
     if (typeof window === "undefined") return "home";
-    return tabForHash(window.location.hash) || "home";
+    const asked = tabForHash(window.location.hash);
+    // ── ANOTHER COUNTRY'S PAGE OPENS ON EXPLORE ─────────────────────
+    // Oliver, 13 Oct 2026: "The default page of the phone is the 'plan my
+    // trip' page. It is not the explore page." A phone reopens the address it
+    // was last on, and the address carries the page (#detour), so a phone that
+    // once planned a trip came back to the planner every time. Abroad the
+    // deals are the front page, so arriving at the planner by its address
+    // opens Explore instead; every other page's address still opens that page.
+    if (PAGE_ABROAD && asked === "ai") return "home";
+    return asked || "home";
   });
   const [shopTab, setShopTab] = useState("shops");
   const [selectedCity, setSelectedCity] = useState(cities[0]);
