@@ -87,6 +87,7 @@ import { KlaipedaBusiness } from "./pages/KlaipedaBusiness";
 import { KlaipedaPartner } from "./pages/KlaipedaPartner";
 import { ReworkPage } from "./pages/ReworkPage";
 import { KlaipedaExplore } from "./components/KlaipedaExplore";
+import { DealStudio } from "./components/DealStudio";
 import { DEAL_KINDS } from "./components/DealsNearYou";
 import { KLAIPEDA_PARTNER_PATH } from "./utils/partnerStats";
 import { COUNTRY_PROFILES, DEFAULT_COUNTRY, countryProfile, setWorkingCountry, countryParam, rowCountry, activeCountry, homePath, plainTownName } from "./utils/countries";
@@ -4183,6 +4184,21 @@ Say which answer came from which source, so a fact from a vouched page and a fac
   // here signs a link to /lithuania/partner for the place that is open; he
   // sends it to the owner. See utils/partnerLink.js.
   const [partnerLink, setPartnerLink] = useState({ forId: null, url: "", note: "" });
+  // ── A DEAL SAVED IN THE EXPLORE STUDIO ────────────────────────────
+  // Oliver, 13 Oct 2026: "Bring in a studio so i can edit", the Explore deals
+  // (components/DealStudio.jsx). The row is written there; this puts the change
+  // on the page without a reload, by the same three operations the full Studio
+  // uses: a row that starts showing is fetched in, one that stops is taken
+  // out, and one that keeps showing is replaced where it stands.
+  const dealChanged = async ({ before, after }) => {
+    const was = !!before?.published, now = !!after?.published;
+    try {
+      if (now && !was) await refreshLiveContent();
+      else if (was && !now) removeLiveRow(after.id, after.type);
+      else if (was && now && !applyEditedRow(after.id, after.type, after.payload)) await refreshLiveContent();
+    } catch { /* the database has it; a reload shows it */ }
+    bumpLiveContent(v => v + 1);
+  };
   const makePartnerLink = async () => {
     const forId = editingId;
     setPartnerLink({ forId, url: "", note: "Making the link." });
@@ -29626,7 +29642,14 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               and the tourism centre's own site for everything else. */}
           {tab === "home" && PAGE_ABROAD && (
             <div className={pageAnim} data-testid="explore-abroad" style={{ maxWidth: 680, margin: "0 auto", padding: "18px 16px 48px" }}>
-              <KlaipedaExplore lang={uiLang} />
+              <KlaipedaExplore lang={uiLang} version={liveContentVersion}
+                studio={isStudio && studioSession ? <DealStudio supaFetch={supaFetch} studioFetch={studioFetch} onChanged={dealChanged} />
+                  : isStudio && studioDoorOpen ? (
+                    <div data-testid="deal-studio-login" style={{ background: C.surface, border: `1px dashed ${C.gold}66`, borderRadius: 14, padding: "12px 15px", marginBottom: 18, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                      <div style={{ fontSize: 13, color: C.light }}>Log in to Studio to edit the deals.</div>
+                      <button onClick={() => goTab("ai")} style={{ background: C.gold, color: C.onGold, border: "none", borderRadius: 100, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap" }}>Log in</button>
+                    </div>
+                  ) : null} />
             </div>
           )}
           {tab === "home" && !PAGE_ABROAD && (
