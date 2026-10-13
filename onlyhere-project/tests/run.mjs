@@ -82687,7 +82687,7 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   is("a reach counts the place and its hour", S.eventKeys({ e: "reach", id: "food:1" }, 9), ["st:r:food:1", "st:rh:food:1:09"]);
   ok("and nothing else is counted", S.eventKeys({ e: "reach", id: "food:1" }, 24).length === 0 && S.eventKeys({ e: "other", id: "food:1" }, 3).length === 0 && S.eventKeys({ e: "walk", ids: [] }, 3).length === 0);
   ok("a walk carries at most twelve places", S.eventKeys({ e: "walk", ids: Array.from({ length: 30 }, (_, i) => `food:${i}`) }, 1).length === 12);
-  ok("the page reads three totals and 24 hours", S.readKeysFor("food:1").length === 27 && S.readKeysFor("food:1").includes("st:rh:food:1:23"));
+  ok("the page reads four totals and 24 hours", S.readKeysFor("food:1").length === 28 && S.readKeysFor("food:1").includes("st:rh:food:1:23"));
   const st = S.statsFrom([
     { day: "2026-10-10", key: "st:w:food:1", n: 4 }, { day: "2026-10-11", key: "st:w:food:1", n: 2 },
     { day: "2026-10-11", key: "st:d:food:1", n: 1 }, { day: "2026-10-11", key: "st:r:food:1", n: 3 },
@@ -82907,13 +82907,45 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   const D = M.DNY;
   const fri1740 = new Date("2026-10-16T14:40:00Z"); // 17:40 in Klaipėda
   is("Friday 17:40, an offer to 18:00, is 20 minutes", D.minutesLeft({ from: "16:00", to: "18:00" }, fri1740), 20);
-  is("and reads that way in each language", ["en", "da", "de", "lt"].map(l => M.t("explore.endsIn", l).replace("{t}", D.leftWords(20, l))), ["Ends in 20 min", "Slutter om 20 min", "Endet in 20 Min.", "Baigiasi po 20 min."]);
+  is("and reads that way in each language", ["en", "da", "de", "lt"].map(l => M.t("explore.endsIn", l).replace("{t}", D.leftWords(20, l))), ["Offer ends in 20 min", "Tilbuddet slutter om 20 min", "Angebot endet in 20 Min.", "Pasiūlymas baigiasi po 20 min."]);
   is("hours and minutes past an hour", D.leftWords(80, "en"), "1 h 20 min");
   is("a whole hour says only the hour", D.leftWords(120, "en"), "2 h");
   is("an offer running past midnight counts on into the night", D.minutesLeft({ from: "22:00", to: "01:00" }, new Date("2026-10-16T20:30:00Z")), 90);
   ok("an offer with no end time has no countdown", D.minutesLeft({}, fri1740) === null && D.minutesLeft({ to: "nonsense" }, fri1740) === null);
   const dny = read("src/components/DealsNearYou.jsx");
-  ok("shown on an offer that is on, within three hours, and ticking", /ENDS_SOON_MIN = 180;/.test(dny) && /x\.card\.timing === "now" \? minutesLeft\(x\.d\.__offer, new Date\(\)\) : null/.test(dny) && /setInterval\(\(\) => setTick\(n => n \+ 1\), 30000\)/.test(dny) && /data-testid="deal-near-ends"/.test(dny));
+  ok("shown on an offer that is on, within three hours, and ticking", /ENDS_SOON_MIN = 180;/.test(dny) && /const when = offerWhen\(x\.d\.__offer, x\.card\.timing, \{ now: new Date\(\), lang \}\);/.test(dny) && /setInterval\(\(\) => setTick\(n => n \+ 1\), 30000\)/.test(dny) && /data-testid="deal-near-ends"/.test(dny));
+}
+
+// ── Batch 241: no "On now", and Redeem offer in place of Walk there ──
+// Oliver, 13 Oct 2026: "'On now' gotta go. It has to be 'offer expires at' or
+// offer starts at... the 'Walk There' gotta be changed out with 'redeem
+// offer'. Because i want these business to understand that if they want this
+// advertisement, then they gotta advetise for me."
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const D = M.DNY, S = M.PSTATS;
+  const fri1740 = new Date("2026-10-16T14:40:00Z"); // 17:40 in Klaipėda
+  const fri1200 = new Date("2026-10-16T09:00:00Z"); // 12:00 in Klaipėda
+  const o = { text: "Free refill", from: "16:00", to: "18:00", until: "2026-10-31" };
+  is("on, with 20 minutes to go: ends in", D.offerWhen(o, "now", { now: fri1740 })?.text, "Offer ends in 20 min");
+  is("on, with longer to go: expires at", D.offerWhen({ ...o, from: "09:00", to: "18:00" }, "now", { now: fri1200 })?.text, "Offer expires at 18:00");
+  is("later today: starts at", D.offerWhen(o, "later", { now: fri1200 })?.text, "Offer starts at 16:00");
+  is("no hours: valid until the last day", D.offerWhen({ text: "x", until: "2026-10-31" }, "always", { now: fri1200 })?.text, "Offer valid until 31 October");
+  is("in Lithuanian and Danish too", [D.offerWhen(o, "later", { now: fri1200, lang: "lt" })?.text, D.offerWhen({ ...o, from: "09:00" }, "now", { now: fri1200, lang: "da" })?.text], ["Pasiūlymas prasideda 16:00", "Tilbuddet udløber kl. 18:00"]);
+  ok("nothing true to say, nothing said", D.offerWhen({ text: "x" }, "always", { now: fri1200 }) === null);
+  const dny = read("src/components/DealsNearYou.jsx");
+  ok("'On now' is gone from the deals", !/trips\.onNow/.test(dny) && !/x\.card\.hours/.test(dny));
+  ok("Redeem offer in place of Walk there, on an offer that is on", !/deal-near-go/.test(dny) && !/trips\.go/.test(dny) && /\{offer && on && \(\s*<button onClick=\{\(\) => openRedeem\(x, when\)\} data-testid="deal-near-redeem"/.test(dny) && /uiT\("offer\.redeem", lang\)/.test(dny));
+  ok("it opens the counter screen, with the walk under it", /<RedeemSheet name=\{redeem\.x\.d\.name\}/.test(dny) && /setRedeem\(null\); go\(x\);/.test(dny));
+  const rs = read("src/components/RedeemSheet.jsx");
+  ok("the counter screen carries Gemlyx, the offer, when, and a running clock", /<GemlyxMark/.test(rs) && /<GemlyxWordmark/.test(rs) && /data-testid="redeem-offer"/.test(rs) && /data-testid="redeem-clock"/.test(rs) && /setInterval\(\(\) => setNow\(clockNow\(zone\)\), 1000\)/.test(rs));
+  ok("opening it is counted for the partner", /dealRedeemOpened\(x\.id, country\)/.test(dny) && S.eventKeys({ e: "redeem", id: "food:7" }, 12).join() === "st:x:food:7" && S.eventKeys({ e: "redeem", id: "bad id" }, 12).length === 0);
+  const st = S.statsFrom([{ key: "st:x:food:7", n: 3, day: "2026-10-13" }, { key: "st:x:food:8", n: 9, day: "2026-10-13" }], "food:7");
+  ok("and adds up on the partner's page, for this place only", st.totals.redeemed === 3 && st.byDay[0].redeemed === 3);
+  ok("the partner page shows it", /\[totals\.redeemed, T\.redeemed\]/.test(read("src/pages/KlaipedaPartner.jsx")));
+  ok("the new words read in all four languages", ["offer.expiresAt", "offer.startsAt", "offer.validUntil", "offer.redeem", "redeem.show", "redeem.via"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
+  ok("and the heading no longer says on now", M.t("trips.dealsH", "en") === "Deals near you");
+  ok("the business page says the visitor shows it at the counter", /The visitor shows it at your counter/.test(read("src/pages/KlaipedaBusiness.jsx")) && /Lankytojas jį parodo prie jūsų kasos/.test(read("src/pages/KlaipedaBusiness.jsx")));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
