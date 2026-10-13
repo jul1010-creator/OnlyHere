@@ -1104,7 +1104,7 @@ const HeroDateField = ({ label, value, min, onPick }) => {
       <div onClick={open}
         style={{
           position: "relative", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
-          background: "rgba(10,15,30,0.55)", backdropFilter: "blur(8px)",
+          background: "rgba(14,14,17,0.55)", backdropFilter: "blur(8px)",
           border: `1px solid ${lit ? C.gold : `${C.gold}55`}`, borderRadius: 10,
           padding: "10px 12px", cursor: "pointer", transition: "border-color 0.15s ease",
         }}>
@@ -23453,15 +23453,15 @@ ${languageBlock()}`;
             <img src={event.photo} alt={event.name} onError={e => { e.target.style.display = "none"; }}
               style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
           )}
-          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(10,15,30,0.5), transparent 45%)" }} />
+          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(14,14,17,0.5), transparent 45%)" }} />
           {d && (
-            <div style={{ position: "absolute", top: 12, left: 12, textAlign: "center", background: "rgba(10,15,30,0.82)", backdropFilter: "blur(6px)", border: `1px solid ${C.border}`, borderRadius: 10, padding: "6px 10px 8px", minWidth: 46 }}>
+            <div style={{ position: "absolute", top: 12, left: 12, textAlign: "center", background: "rgba(14,14,17,0.82)", backdropFilter: "blur(6px)", border: `1px solid ${C.border}`, borderRadius: 10, padding: "6px 10px 8px", minWidth: 46 }}>
               <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 1.2, color: C.accent, textTransform: "uppercase", lineHeight: 1 }}>{d.toLocaleString("en-GB", { month: "short" })}</div>
               <div style={{ fontSize: 21, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.2 }}>{d.getDate()}</div>
             </div>
           )}
           {away && (
-            <div style={{ position: "absolute", top: 12, right: 12, fontSize: 10.5, fontWeight: 700, color: away === "Happening now" ? "#6ECF97" : C.gold, background: "rgba(10,15,30,0.82)", backdropFilter: "blur(6px)", border: `1px solid ${away === "Happening now" ? "rgba(110,207,151,0.35)" : `${C.gold}44`}`, padding: "5px 11px", borderRadius: 100 }}>{away}</div>
+            <div style={{ position: "absolute", top: 12, right: 12, fontSize: 10.5, fontWeight: 700, color: away === "Happening now" ? "#6ECF97" : C.gold, background: "rgba(14,14,17,0.82)", backdropFilter: "blur(6px)", border: `1px solid ${away === "Happening now" ? "rgba(110,207,151,0.35)" : `${C.gold}44`}`, padding: "5px 11px", borderRadius: 100 }}>{away}</div>
           )}
         </div>
         <div style={{ padding: "14px 16px 15px" }}>
@@ -26038,7 +26038,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                     {kindError && <div style={{ fontSize: 11, color: "#E57373", marginTop: 8 }}>{kindError}</div>}
                                     <div style={{ display: "flex", gap: 8, marginTop: 11 }}>
                                       <button onClick={() => saveKindEdit(row)} disabled={kindSaving || !changed}
-                                        style={{ background: changed ? C.gold : C.surface, border: "none", color: changed ? "#0A0F1E" : C.muted, borderRadius: 100, padding: "8px 16px", fontSize: 12, fontWeight: 700, cursor: changed ? "pointer" : "default" }}>
+                                        style={{ background: changed ? C.gold : C.surface, border: "none", color: changed ? C.onGold : C.muted, borderRadius: 100, padding: "8px 16px", fontSize: 12, fontWeight: 700, cursor: changed ? "pointer" : "default" }}>
                                         {kindSaving ? "Saving…" : changed ? "Save" : "No change"}
                                       </button>
                                       <button onClick={() => setKindEditId(null)}
@@ -26168,7 +26168,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
 
                                     <div style={{ display: "flex", gap: 8, marginTop: 11 }}>
                                       <button onClick={() => savePlaceEdit(row)} disabled={placeSaving || !hasPlaceChange(pl, placeDraft)}
-                                        style={{ background: hasPlaceChange(pl, placeDraft) ? C.gold : C.surface, border: "none", color: hasPlaceChange(pl, placeDraft) ? "#0A0F1E" : C.muted, borderRadius: 100, padding: "8px 16px", fontSize: 12, fontWeight: 700, cursor: hasPlaceChange(pl, placeDraft) ? "pointer" : "default" }}>
+                                        style={{ background: hasPlaceChange(pl, placeDraft) ? C.gold : C.surface, border: "none", color: hasPlaceChange(pl, placeDraft) ? C.onGold : C.muted, borderRadius: 100, padding: "8px 16px", fontSize: 12, fontWeight: 700, cursor: hasPlaceChange(pl, placeDraft) ? "pointer" : "default" }}>
                                         {placeSaving ? "Saving…" : hasPlaceChange(pl, placeDraft) ? "Save" : "No change"}
                                       </button>
                                       <button onClick={() => setPlaceEditId(null)}
@@ -26975,13 +26975,13 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                               return (
                                 <button key={opt.id} onClick={() => { setDiscoverTarget(opt.id); setDiscoverTown(""); }}
                                   title={opt.hint}
-                                  style={{ background: on ? C.gold : "none", border: `1px solid ${on ? C.gold : C.border}`, color: on ? "#0A0F1E" : C.light, borderRadius: 100, padding: "5px 11px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                  style={{ background: on ? C.gold : "none", border: `1px solid ${on ? C.gold : C.border}`, color: on ? C.onGold : C.light, borderRadius: 100, padding: "5px 11px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                                   {opt.label}
                                   {/* null means this one cannot be counted honestly.
                                       An island is not a latitude band, and a count
                                       that is quietly false is worse than none. */}
                                   {typeof n === "number" && (
-                                    <span style={{ color: on ? "#0A0F1E99" : n === 0 ? "#FFB347" : C.muted, fontWeight: 700 }}> {n}</span>
+                                    <span style={{ color: on ? `${C.onGold}99` : n === 0 ? "#FFB347" : C.muted, fontWeight: 700 }}> {n}</span>
                                   )}
                                 </button>
                               );
@@ -27024,9 +27024,9 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                   return (
                                     <button key={st.id || st.name} onClick={() => setDiscoverStreet(on ? "" : st.name)}
                                       title={`${st.name}${st.town ? `, ${st.town}` : ""}: ${n} published on it`}
-                                      style={{ background: on ? C.gold : "none", border: `1px solid ${on ? C.gold : C.border}`, color: on ? "#0A0F1E" : C.light, borderRadius: 100, padding: "5px 11px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                      style={{ background: on ? C.gold : "none", border: `1px solid ${on ? C.gold : C.border}`, color: on ? C.onGold : C.light, borderRadius: 100, padding: "5px 11px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                                       {st.name}
-                                      <span style={{ color: on ? "#0A0F1E99" : n === 0 ? "#FFB347" : C.muted, fontWeight: 700 }}> {n}</span>
+                                      <span style={{ color: on ? `${C.onGold}99` : n === 0 ? "#FFB347" : C.muted, fontWeight: 700 }}> {n}</span>
                                     </button>
                                   );
                                 })}
@@ -27053,13 +27053,13 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                   return (
                                     <button key={opt.id} onClick={() => setDiscoverMonth(opt.id)}
                                       title={yr ? `${opt.label} ${yr}, the next one` : "No month filter"}
-                                      style={{ background: on ? C.gold : "none", border: `1px solid ${on ? C.gold : C.border}`, color: on ? "#0A0F1E" : C.light, borderRadius: 100, padding: "5px 11px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                      style={{ background: on ? C.gold : "none", border: `1px solid ${on ? C.gold : C.border}`, color: on ? C.onGold : C.light, borderRadius: 100, padding: "5px 11px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                                       {opt.label}
                                       {/* The year, because asking for December in
                                           August means this one and February means
                                           next, and getting that wrong sends the
                                           search after an edition already over. */}
-                                      {yr && <span style={{ color: on ? "#0A0F1E99" : C.muted, fontWeight: 700 }}> {String(yr).slice(2)}</span>}
+                                      {yr && <span style={{ color: on ? `${C.onGold}99` : C.muted, fontWeight: 700 }}> {String(yr).slice(2)}</span>}
                                     </button>
                                   );
                                 })}
@@ -29667,7 +29667,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
 
 
               {/* Hero */}
-              <div className="hero-h" style={{ position: "relative", overflow: "hidden", background: PAGE_ABROAD ? "linear-gradient(160deg, #1A2A48 0%, #0A0F1E 100%)" : `url('/picture3.png') center/cover no-repeat` }}>
+              <div className="hero-h" style={{ position: "relative", overflow: "hidden", background: PAGE_ABROAD ? `linear-gradient(160deg, ${C.surface} 0%, ${C.bg} 100%)` : `url('/picture3.png') center/cover no-repeat` }}>
                 {/* Danish footage, so another country's page keeps the dark
                     gradient under it rather than showing Denmark. */}
                 {!videoError && !PAGE_ABROAD && (
@@ -29676,7 +29676,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     onError={() => setVideoError(true)}
                     style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "25% center", opacity: videoReady ? 1 : 0, transition: "opacity 0.6s ease" }} />
                 )}
-                <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(10,15,30,0.3) 0%, rgba(10,15,30,0.7) 100%)" }} />
+                <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(14,14,17,0.3) 0%, rgba(14,14,17,0.7) 100%)" }} />
                 {/* This is DENMARK's page now — the brand moment moved to the front
                     door (the country-select entrance). Headline is Denmark-specific;
                     the scroll cue sits in-flow so it can never overlap the CTA again
@@ -30629,7 +30629,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   <div className="towns-grid">
                     {filtered.map(item => (
                       <div key={`${item._kind}-${item.id}`} onClick={() => item._kind === "free" ? setFreeDetail(item) : setCraftDetail(item)} style={{ cursor: "pointer" }}>
-                        <div style={{ position: "relative", height: 210, borderRadius: 6, overflow: "hidden", background: `linear-gradient(135deg, ${item.color}40 0%, #0A0F1E 100%)`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <div style={{ position: "relative", height: 210, borderRadius: 6, overflow: "hidden", background: `linear-gradient(135deg, ${item.color}40 0%, ${C.bg} 100%)`, display: "flex", alignItems: "center", justifyContent: "center" }}>
                           {/* PhotoPlate, not a bare <img>: craft_items rows have no
                               photo column at all, and a src-less <img> never fires
                               onError, so Chrome used to draw its own broken-image
@@ -30677,7 +30677,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
 
                           <button onClick={(e) => { e.stopPropagation(); toggleSavePlace(item._kind, item, item._kind === "craft" ? item.location : item.city); }}
                             aria-label={isPlaceSaved(item._kind, item.id) ? "Saved" : "Save"}
-                            style={{ position: "absolute", bottom: 8, right: 8, background: "rgba(10,15,30,0.75)", backdropFilter: "blur(4px)", border: "none", borderRadius: 100, width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 13, color: isPlaceSaved(item._kind, item.id) ? "#E91E63" : "#ffffffaa" }}>
+                            style={{ position: "absolute", bottom: 8, right: 8, background: "rgba(14,14,17,0.75)", backdropFilter: "blur(4px)", border: "none", borderRadius: 100, width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 13, color: isPlaceSaved(item._kind, item.id) ? "#E91E63" : "#ffffffaa" }}>
                             {isPlaceSaved(item._kind, item.id) ? "♥" : "♡"}
                           </button>
                         </div>
@@ -30974,8 +30974,8 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         <img src={spot.photo} alt={spot.name} onError={e => { e.target.style.display = "none"; }}
                           style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
                       )}
-                      <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(10,15,30,0.5), transparent 45%)" }} />
-                      <div style={{ position: "absolute", bottom: 10, right: 12, fontSize: 12, fontWeight: 700, color: "#fff", background: "rgba(10,15,30,0.78)", backdropFilter: "blur(6px)", padding: "4px 11px", borderRadius: 100, border: `1px solid ${C.border}` }}>{shortLabel(spot.price, 22)}</div>
+                      <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(14,14,17,0.5), transparent 45%)" }} />
+                      <div style={{ position: "absolute", bottom: 10, right: 12, fontSize: 12, fontWeight: 700, color: "#fff", background: "rgba(14,14,17,0.78)", backdropFilter: "blur(6px)", padding: "4px 11px", borderRadius: 100, border: `1px solid ${C.border}` }}>{shortLabel(spot.price, 22)}</div>
                     </div>
                     <div style={{ padding: "13px 15px 15px" }}>
                       <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 4 }}>{[shortLabel(spot.category), spot.location].filter(Boolean).join(" · ")}</div>
@@ -31445,12 +31445,12 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   <div className="towns-grid">
                     {towns.filter(t => t.isMajorCity && !isArea(t) && townMatches(t)).sort(byRecommended).map(town => (
                       <div key={town.id} onClick={() => setTownDetail(town)} style={{ cursor: "pointer" }}>
-                        <div style={{ position: "relative", height: 210, borderRadius: 6, overflow: "hidden", background: "linear-gradient(135deg, #16233F 0%, #0A0F1E 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <div style={{ position: "relative", height: 210, borderRadius: 6, overflow: "hidden", background: `linear-gradient(135deg, ${C.surface} 0%, ${C.bg} 100%)`, display: "flex", alignItems: "center", justifyContent: "center" }}>
                           <PhotoPlate photo={town.photo} name={town.name} color={C.gold} />
                           <div style={{ position: "absolute", top: 8, right: 8, width: 68, height: 68, borderRadius: 10, overflow: "hidden", border: "1px solid rgba(255,255,255,0.4)", pointerEvents: "none" }}>
                             <DKLocator town={town.name} color={C.gold} />
                           </div>
-                          <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(10,15,30,0.8)", color: C.muted, fontSize: 9, fontWeight: 700, padding: "3px 9px", borderRadius: 100 }}>🏙 Major City</div>
+                          <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(14,14,17,0.8)", color: C.muted, fontSize: 9, fontWeight: 700, padding: "3px 9px", borderRadius: 100 }}>🏙 Major City</div>
                         </div>
                         <div style={{ fontSize: 21, fontWeight: 600, color: C.text, fontFamily: "'Fraunces', serif", marginTop: 12, lineHeight: 1.1 }}><EntryLink type="town" name={town.name}>{town.name}</EntryLink></div>
                         <div style={{ fontSize: 9, color: C.muted, textTransform: "uppercase", letterSpacing: 1.2, marginTop: 4 }}>{town.region}</div>
@@ -31594,7 +31594,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               <div className="towns-grid">
                 {towns.filter(t => !t.isMajorCity && !isArea(t) && townMatches(t)).sort(byRecommended).map(town => (
                   <div key={town.id} onClick={() => setTownDetail(town)} style={{ cursor: "pointer" }}>
-                    <div style={{ position: "relative", height: 210, borderRadius: 6, overflow: "hidden", background: "linear-gradient(135deg, #16233F 0%, #0A0F1E 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <div style={{ position: "relative", height: 210, borderRadius: 6, overflow: "hidden", background: `linear-gradient(135deg, ${C.surface} 0%, ${C.bg} 100%)`, display: "flex", alignItems: "center", justifyContent: "center" }}>
                       <PhotoPlate photo={town.photo} name={town.name} color={C.gold} />
                       <div style={{ position: "absolute", top: 8, right: 8, width: 68, height: 68, borderRadius: 10, overflow: "hidden", border: "1px solid rgba(255,255,255,0.4)", pointerEvents: "none" }}>
                         <DKLocator town={town.name} color={C.gold} />
@@ -31704,14 +31704,14 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         <div className="towns-grid">
                           {areas.filter(t => key(t).toLowerCase() === parent.toLowerCase()).sort(byName).map(town => (
                             <div key={town.id} onClick={() => setTownDetail(town)} style={{ cursor: "pointer" }}>
-                              <div style={{ position: "relative", height: 210, borderRadius: 6, overflow: "hidden", background: "linear-gradient(135deg, #16233F 0%, #0A0F1E 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                              <div style={{ position: "relative", height: 210, borderRadius: 6, overflow: "hidden", background: `linear-gradient(135deg, ${C.surface} 0%, ${C.bg} 100%)`, display: "flex", alignItems: "center", justifyContent: "center" }}>
                                 <PhotoPlate photo={town.photo} name={town.name} color={C.gold} />
                                 {/* No DKLocator here. A national map with one pin
                                     on it is a useful thing to show for a town on
                                     Ærø and a useless one for a district of
                                     Copenhagen: at that scale it points at the
                                     same dot as its parent. */}
-                                {parent && <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(10,15,30,0.8)", color: C.muted, fontSize: 9, fontWeight: 700, padding: "3px 9px", borderRadius: 100 }}>◇ In {parent}</div>}
+                                {parent && <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(14,14,17,0.8)", color: C.muted, fontSize: 9, fontWeight: 700, padding: "3px 9px", borderRadius: 100 }}>◇ In {parent}</div>}
                               </div>
                               <div style={{ fontSize: 21, fontWeight: 600, color: C.text, fontFamily: "'Fraunces', serif", marginTop: 12, lineHeight: 1.1 }}><EntryLink type="town" name={town.name}>{town.name}</EntryLink></div>
                               {/* "no parent set" is Studio's phrase for a missing field and means
@@ -31868,7 +31868,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     <div className="towns-grid">
                       {shown.map(isle => (
                         <div key={isle.id} onClick={() => setIslandDetail(isle)} style={{ cursor: "pointer" }}>
-                          <div style={{ position: "relative", height: 210, borderRadius: 6, overflow: "hidden", background: "linear-gradient(135deg, #16233F 0%, #0A0F1E 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <div style={{ position: "relative", height: 210, borderRadius: 6, overflow: "hidden", background: `linear-gradient(135deg, ${C.surface} 0%, ${C.bg} 100%)`, display: "flex", alignItems: "center", justifyContent: "center" }}>
                             <PhotoPlate photo={isle.photo} name={isle.name} color={C.gold} />
                             {/* An island is not in TOWN_COORDS, so the locator is
                                 handed the island's own published coordinate
@@ -32268,7 +32268,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     const on = intakeScope === sc.key;
                     return (
                       <button key={sc.key} onClick={() => setIntakeScope(on ? "" : sc.key)}
-                        style={{ background: on ? C.gold : "none", border: `1px solid ${on ? C.gold : C.border}`, color: on ? "#0A0F1E" : C.light, borderRadius: 100, padding: "8px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                        style={{ background: on ? C.gold : "none", border: `1px solid ${on ? C.gold : C.border}`, color: on ? C.onGold : C.light, borderRadius: 100, padding: "8px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                         {sc.label}
                       </button>
                     );
@@ -32338,7 +32338,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     const mark = stayIsHouse(ch.key) ? SUMMERHOUSE_MARK[houseVerdict] : "";
                     return (
                       <button key={ch.key} onClick={() => { setIntakeStay(on ? "" : ch.key); if (on) setIntakeStayName(""); }}
-                        style={{ background: on ? C.gold : "none", border: `1px solid ${on ? C.gold : C.border}`, color: on ? "#0A0F1E" : C.light, borderRadius: 100, padding: "8px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                        style={{ background: on ? C.gold : "none", border: `1px solid ${on ? C.gold : C.border}`, color: on ? C.onGold : C.light, borderRadius: 100, padding: "8px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                         {ch.label}{mark ? <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, opacity: 0.85 }}>{houseVerdict === "strong" ? "★" : "✓"}</span> : null}
                       </button>
                     );
@@ -32376,7 +32376,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     return (
                       <button key={t.key} onClick={() => setIntakeFood(on ? "" : t.key)}
                         title={t.what}
-                        style={{ background: on ? C.gold : "none", border: `1px solid ${on ? C.gold : C.border}`, color: on ? "#0A0F1E" : C.light, borderRadius: 100, padding: "8px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                        style={{ background: on ? C.gold : "none", border: `1px solid ${on ? C.gold : C.border}`, color: on ? C.onGold : C.light, borderRadius: 100, padding: "8px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                         {t.label}
                       </button>
                     );
@@ -33230,9 +33230,9 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
         ::-webkit-scrollbar { width: 0; }
         @media (min-width: 900px) {
           ::-webkit-scrollbar { width: 10px; }
-          ::-webkit-scrollbar-track { background: #0A0F1E; }
-          ::-webkit-scrollbar-thumb { background: #2A3A52; border-radius: 100px; }
-          ::-webkit-scrollbar-thumb:hover { background: #64708C; }
+          ::-webkit-scrollbar-track { background: ${C.bg}; }
+          ::-webkit-scrollbar-thumb { background: ${C.border}; border-radius: 100px; }
+          ::-webkit-scrollbar-thumb:hover { background: ${C.muted}; }
         }
         .towns-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px 14px; }
         @media (min-width: 900px) { .towns-grid { grid-template-columns: repeat(3, 1fr); gap: 34px 22px; } }
@@ -33263,13 +33263,13 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
            Found the hard way, thirty seconds after writing this comment with
            backticks in it. */
         ${tileCss()}
-        .gemlyx-map-label { background: #0A0F1E; color: #D9A441; border: 1px solid #D9A44166; border-radius: 6px; padding: 2px 7px; font-size: 10px; font-weight: 700; font-family: 'Inter', sans-serif; box-shadow: 0 2px 6px rgba(0,0,0,0.5); }
+        .gemlyx-map-label { background: ${C.bg}; color: ${C.gold}; border: 1px solid ${C.gold}66; border-radius: 6px; padding: 2px 7px; font-size: 10px; font-weight: 700; font-family: 'Inter', sans-serif; box-shadow: 0 2px 6px rgba(0,0,0,0.5); }
         .gemlyx-map-label::before { border-top-color: #D9A44166 !important; }
         .leaflet-container { background: #0D1526 !important; font-family: 'Inter', sans-serif !important; }
         .leaflet-control-zoom { border: 1px solid #212C44 !important; border-radius: 10px !important; overflow: hidden; box-shadow: 0 4px 14px rgba(0,0,0,0.5) !important; }
-        .leaflet-control-zoom a { background: rgba(10,15,30,0.92) !important; color: #E8EDF7 !important; border-bottom: 1px solid #212C44 !important; width: 30px !important; height: 30px !important; line-height: 30px !important; font-size: 15px !important; }
+        .leaflet-control-zoom a { background: rgba(14,14,17,0.92) !important; color: #E8EDF7 !important; border-bottom: 1px solid #212C44 !important; width: 30px !important; height: 30px !important; line-height: 30px !important; font-size: 15px !important; }
         .leaflet-control-zoom a:hover { background: #16203A !important; color: #D9A441 !important; }
-        .leaflet-control-attribution { background: rgba(10,15,30,0.78) !important; color: #64708C !important; font-size: 9px !important; padding: 2px 6px !important; border-radius: 8px 0 0 0 !important; }
+        .leaflet-control-attribution { background: rgba(14,14,17,0.78) !important; color: #64708C !important; font-size: 9px !important; padding: 2px 6px !important; border-radius: 8px 0 0 0 !important; }
         .leaflet-control-attribution a { color: #8fa3c7 !important; }
         @supports (height: 100dvh) { .app-root { height: 100dvh; } .hero-h { height: calc(100dvh - 196px); } }
         @media (min-width: 900px) {
@@ -34418,7 +34418,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             you are on now sits in the same pill, which answers the question the
             dots were raising, and the active dot is a bar rather than a circle
             so position is readable at a glance. */}
-        <div style={{ position: "absolute", bottom: 12, left: "50%", transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: 9, zIndex: 60, background: "rgba(10,15,30,0.62)", padding: "6px 12px 6px 14px", borderRadius: 100, backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.08)", maxWidth: "calc(100vw - 32px)" }}>
+        <div style={{ position: "absolute", bottom: 12, left: "50%", transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: 9, zIndex: 60, background: "rgba(14,14,17,0.62)", padding: "6px 12px 6px 14px", borderRadius: 100, backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.08)", maxWidth: "calc(100vw - 32px)" }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: "#fff", whiteSpace: "nowrap", letterSpacing: 0.2 }}>
             {(NAV_ITEMS.find(n => n.id === active)?.label || "").replace("✦ ", "")}
           </span>
@@ -34854,7 +34854,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       <button onClick={() => setPickedExtras(prev => (prev || []).includes(place.name)
                         ? (prev || []).filter(n => n !== place.name)
                         : [...(prev || []), place.name])}
-                        style={{ flexShrink: 0, background: on ? C.gold : "none", border: `1px solid ${C.gold}${on ? "" : "55"}`, color: on ? "#0A0F1E" : C.gold, borderRadius: 100, padding: "6px 12px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                        style={{ flexShrink: 0, background: on ? C.gold : "none", border: `1px solid ${C.gold}${on ? "" : "55"}`, color: on ? C.onGold : C.gold, borderRadius: 100, padding: "6px 12px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                         {on ? "Added \u2713" : "Add"}
                       </button>
                     </div>
@@ -34997,7 +34997,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             <div style={{ fontSize: 11, opacity: 0.75 }}>Tap to open it</div>
           </div>
           <button onClick={e => { e.stopPropagation(); setGuideReady(false); }} aria-label="Dismiss"
-            style={{ background: "rgba(10,15,30,0.14)", border: "none", color: "#0A0F1E", width: 26, height: 26, borderRadius: "50%", fontSize: 12, cursor: "pointer", flexShrink: 0 }}>✕</button>
+            style={{ background: "rgba(14,14,17,0.14)", border: "none", color: "#0A0F1E", width: 26, height: 26, borderRadius: "50%", fontSize: 12, cursor: "pointer", flexShrink: 0 }}>✕</button>
         </div>
       )}
 
@@ -35463,12 +35463,12 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               <span style={{ fontSize: 72 }}>{craftDetail.emoji}</span>
             )}
             <button onClick={closeEntry}
-              style={{ position: "absolute", top: "calc(14px + env(safe-area-inset-top))", left: 14, background: "rgba(10,15,30,0.7)", border: "none", color: "#fff", borderRadius: 100, padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+              style={{ position: "absolute", top: "calc(14px + env(safe-area-inset-top))", left: 14, background: "rgba(14,14,17,0.7)", border: "none", color: "#fff", borderRadius: 100, padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
               ‹ Back
             </button>
             <div style={{ position: "absolute", top: "calc(14px + env(safe-area-inset-top))", right: 14, display: "flex", alignItems: "center", gap: 8 }}>
               <button onClick={() => toggleSavePlace("craft", craftDetail, craftDetail.location)}
-                style={{ background: "rgba(10,15,30,0.75)", backdropFilter: "blur(4px)", border: "none", borderRadius: 100, width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 15, color: isPlaceSaved("craft", craftDetail.id) ? "#E91E63" : "#ffffffaa" }}>
+                style={{ background: "rgba(14,14,17,0.75)", backdropFilter: "blur(4px)", border: "none", borderRadius: 100, width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 15, color: isPlaceSaved("craft", craftDetail.id) ? "#E91E63" : "#ffffffaa" }}>
                 {isPlaceSaved("craft", craftDetail.id) ? "♥" : "♡"}
               </button>
               <div style={{ background: craftDetail.color, color: "#fff", fontSize: 10, fontWeight: 700, padding: "5px 11px", borderRadius: 100, textTransform: "uppercase" }}>{craftDetail.type}</div>
