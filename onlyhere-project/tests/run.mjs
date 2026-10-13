@@ -427,6 +427,7 @@ writeFileSync(entry, `
   export { guideTo, compassOf, distanceWords as walkDistanceWords, ARRIVE_M, COMPASS, FAR_M } from ${JSON.stringify(join(root, "src/components/WalkMode.jsx"))};
   export * as DNY from ${JSON.stringify(join(root, "src/components/DealsNearYou.jsx"))};
   export * as DST from ${JSON.stringify(join(root, "src/utils/dealStudio.js"))};
+  export * as DCAT from ${JSON.stringify(join(root, "src/utils/dealCategories.js"))};
   export { pinColour as pinColourOf } from ${JSON.stringify(join(root, "src/utils/pinColours.js"))};
   export * as SF from ${JSON.stringify(join(root, "src/utils/safeFetch.js"))};
   export * as LP from ${JSON.stringify(join(root, "src/utils/livePhoto.js"))};
@@ -82832,10 +82833,10 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("the example partners fill all three filters", ["discounts", "entertainment", "activities"].every(k => kinds.has(k)) && Object.values(pools).flat().find(d => d._exampleId === "food:beer")?.__dealKind === "entertainment");
   ok("the filter words read in all four languages", ["explore.discounts", "explore.entertainment", "explore.activities", "explore.noneHere", "explore.more"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
   const dny = read("src/components/DealsNearYou.jsx"), app = read("src/App.jsx"), ex = read("src/components/KlaipedaExplore.jsx");
-  ok("filtering happens before the twelve are cut, with All first", /nearbyDeals\(deals, start, \{ now: new Date\(\), lang, limit: Infinity, order: /.test(dny) && /\(kind \? all\.filter\(x => dealKind\(x\.d\) === kind\) : all\)\.slice\(0, MAX_DEALS\)/.test(dny) && /const FILTERS = \[\[null, "explore\.all"\], \.\.\.DEAL_KINDS/.test(dny));
+  ok("filtering happens before the twelve are cut, with All first", /nearbyDeals\(deals, start, \{ now: new Date\(\), lang, limit: Infinity, order: /.test(dny) && /byCategories\(all, picked, x => x\.d\)\.slice\(0, MAX_DEALS\)/.test(dny) && /<CategoryFilter picked=\{picked\}/.test(dny));
   ok("and the tourism centre's own site is where the rest lives", /href=\{centreSite\(lang\)\}/.test(dny) && D.centreSite("lt") === "https://klaipedatravel.lt/" && D.centreSite("en") === "https://klaipedatravel.lt/en/");
   ok("Explore on /lithuania is the deals, not the Danish front page", /\{tab === "home" && PAGE_ABROAD && \(/.test(app) && /<KlaipedaExplore lang=\{uiLang\} version=\{liveContentVersion\}/.test(app) && /\{tab === "home" && !PAGE_ABROAD && \(/.test(app) && /useKlaipedaDeals\(null, version\)/.test(ex));
-  ok("Studio sets the filter by hand and saves it with the row", /data-testid="studio-deal-kind"/.test(app) && /if \(DEAL_KINDS\.includes\(studioDealKind\)\) shaped\.__dealKind = studioDealKind;/.test(app) && /setStudioDealKind\(DEAL_KINDS\.includes\(row\.payload\?\.__dealKind\)/.test(app));
+  ok("Studio sets the filter by hand and saves it with the row", /data-testid="studio-deal-kind"/.test(app) && /if \(DEAL_CATEGORIES\.includes\(studioDealKind\)\) shaped\.__category = studioDealKind;/.test(app) && /setStudioDealKind\(DEAL_CATEGORIES\.includes\(row\.payload\?\.__category\)/.test(app));
   // The rework switch.
   const cfg = read("src/config.js");
   ok("one switch closes the Danish side", /export const DENMARK_REWORK = true;/.test(cfg) && (app.match(/element=\{<DanishSide \/>\}/g) || []).length === 6 && !/element=\{<GemlyxApp \/>\}/.test(app));
@@ -82881,7 +82882,7 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   const cm = read("src/components/DealCornerMap.jsx"), dny = read("src/components/DealsNearYou.jsx"), app = read("src/App.jsx");
   ok("a step further out", /export const CLOSE_ZOOM = 15;/.test(cm) && /zoom=\$\{CLOSE_ZOOM\}/.test(cm));
   ok("the walk map's own pointer, tip on the place", /import \{ PLACE_PIN, placePinHtml \} from "\.\/GoogleWalkMap";/.test(cm) && /marginTop: -PLACE_PIN\.h/.test(cm) && /transformOrigin: "50% 100%"/.test(cm) && /placePinHtml\(\{ sign, photo, color: pin \}\)/.test(cm));
-  ok("with the place's sign or its filter's in the window", M.DNY.signFor({ emoji: "🐟" }) === "🐟" && M.DNY.signFor({ _src: "nightlife" }) === "🎵" && M.DNY.signFor({ __dealKind: "other" }) === "📍" && /photo=\{x\.d\.photo \|\| ""\} at=\{x\.at\} sign=\{signFor\(x\.d\)\}/.test(dny));
+  ok("with the place's sign or its filter's in the window", M.DNY.signFor({ emoji: "🐟" }) === "🐟" && M.DNY.signFor({ _src: "nightlife" }) === "🍸" && M.DNY.signFor({ __category: "rentals" }) === "🔑" && M.DNY.signFor({}) === "🏛️" && /photo=\{x\.d\.photo \|\| ""\} at=\{x\.at\} sign=\{signFor\(x\.d\)\}/.test(dny));
   ok("abroad, arriving at the planner by its address opens Explore", /if \(PAGE_ABROAD && asked === "ai"\) return "home";/.test(app) && /return asked \|\| "home";/.test(app));
 }
 
@@ -83064,6 +83065,36 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("a photo that is neither uploaded nor a web address is refused", M.DST.dealProblems({ ...M.DST.emptyDeal(), name: "x", lat: 55.7087, lon: 21.1339, text: "x", ongoing: true, photo: "C:\\pics\\a.jpg" }).some(p => /photo/.test(p)));
   ok("the map from above is still one tap away in the deal", /onTap=\{\(\) => setAbove\(true\)\}/.test(det));
   ok("the badge words read in all four languages", ["badge.endsIn", "badge.until", "badge.untilDate", "badge.from", "badge.tomorrowAt", "badge.tomorrow", "badge.fromDayAt", "badge.fromDay"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
+}
+
+// ── Batch 246: the round filters, ticked on and off ──
+// Oliver, 14 Oct 2026, with lidl.dk's coloured circles: "Make it like this.
+// With nightlife, attractions, renting, and restaurants." And "we need
+// 'ticking off' filters".
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const K = M.DCAT;
+  is("the four kinds of place", K.DEAL_CATEGORIES, ["restaurants", "nightlife", "attractions", "rentals"]);
+  is("read off the place when not set by hand", [
+    K.dealCategory({ name: "Kepyklėlė Rūta", category: "Bakery café" }),
+    K.dealCategory({ name: "Alaus baras Inkaras", category: "Beer bar" }),
+    K.dealCategory({ name: "Dviračių nuoma Vėjas" }),
+    K.dealCategory({ name: "Bagažinė", __offer: { text: "Leave a bag while you walk, €3 a bag for the day" }, category: "Luggage room" }),
+    K.dealCategory({ name: "Gintaro dirbtuvė Lašas", category: "Amber workshop" }),
+    K.dealCategory({ name: "Somewhere", _src: "food" }),
+  ], ["restaurants", "nightlife", "rentals", "rentals", "attractions", "restaurants"]);
+  ok("his own setting wins", K.dealCategory({ name: "Beer bar", __category: "attractions" }) === "attractions");
+  const items = [{ n: 1, __category: "restaurants" }, { n: 2, __category: "nightlife" }, { n: 3, __category: "rentals" }];
+  is("ticking more than one shows each of them", K.byCategories(items, new Set(["restaurants", "rentals"])).map(x => x.n), [1, 3]);
+  is("none ticked shows everything", K.byCategories(items, new Set()).length, 3);
+  const cf = read("src/components/CategoryFilter.jsx"), dny = read("src/components/DealsNearYou.jsx");
+  ok("round, coloured, with a tick on what is ticked", /borderRadius: "50%", background: CATEGORY_COLOUR\[k\]/.test(cf) && /role="checkbox" aria-checked=\{on\}/.test(cf) && /deals-cat-\$\{k\}-tick/.test(cf));
+  ok("ticking toggles, and Show all clears", /if \(n\.has\(k\)\) n\.delete\(k\); else n\.add\(k\);/.test(dny) && /onClear=\{\(\) => setPicked\(new Set\(\)\)\}/.test(dny));
+  ok("Upcoming follows the same ticks", /byCategories\(upcomingDeals\(/.test(dny));
+  ok("the examples carry their kind of place", M.KXR.EXAMPLE_PARTNERS.every(p => K.DEAL_CATEGORIES.includes(p.category)));
+  ok("the deal editor picks the kind of place, and a new deal's type follows it", /deal-studio-cat-\$\{c\}/.test(read("src/components/DealStudio.jsx")) && M.DST.typeForCategory("nightlife") === "night" && M.DST.typeForCategory("rentals") === "free"
+    && M.DST.payloadFromDeal({ ...M.DST.emptyDeal(), name: "x", lat: 55.7, lon: 21.13, text: "x", ongoing: true, category: "rentals" }).__category === "rentals");
+  ok("the words read in all four languages", ["explore.cat.restaurants", "explore.cat.nightlife", "explore.cat.attractions", "explore.cat.rentals", "explore.clear"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
