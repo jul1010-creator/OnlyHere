@@ -39,10 +39,18 @@ const fill = (t, v) => String(t).replace(/\{(\w+)\}/g, (_, k) => (v[k] ?? ""));
 // rows do not carry their database type, so it is read off the pool they came
 // from; the made-up partners carry their own id.
 export const SRC_TYPE = { free: "free", food: "food", nightlife: "night", shop: "shop", town: "town" };
+// The pages hold a published row under its database id plus 100000
+// (LIVE_ID_OFFSET in liveContent.js, which keeps them clear of the places
+// written in the code), while the walks and the partner link use the database
+// id itself. Taken off here, or a partner's "offer shown" and "opened to
+// redeem" land on a key their page never reads (found 13 Oct 2026).
+export const LIVE_OFFSET = 100000;
 export const dealPlaceId = (d) => {
   if (d?._exampleId) return String(d._exampleId);
   const type = SRC_TYPE[d?._src];
-  return type && d?.id != null && d.id !== "" ? `${type}:${d.id}` : "";
+  if (!type || d?.id == null || d.id === "") return "";
+  const n = Number(d.id);
+  return `${type}:${Number.isInteger(n) && n >= LIVE_OFFSET ? n - LIVE_OFFSET : d.id}`;
 };
 export const pointOf = (d) => {
   const lat = Number(d?.__lat), lon = Number(d?.__lon);

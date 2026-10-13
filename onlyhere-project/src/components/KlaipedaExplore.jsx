@@ -12,9 +12,16 @@
 import { DealsNearYou } from "./DealsNearYou";
 import { useKlaipedaDeals } from "../utils/useKlaipedaDeals";
 
-export const KlaipedaExplore = ({ lang = "en" }) => {
-  const live = useKlaipedaDeals(null);
-  return <DealsNearYou deals={live.deals} examples={live.examples} lang={lang} country="LT" sticky={false} />;
+// `studio` is the founder's deal editor (DealStudio.jsx), drawn above the deals
+// on /lithuania#studio once he is logged in, and null for everybody else.
+export const KlaipedaExplore = ({ lang = "en", version = 0, studio = null }) => {
+  const live = useKlaipedaDeals(null, version);
+  return (
+    <>
+      {studio}
+      <DealsNearYou deals={live.deals} examples={live.examples} lang={lang} country="LT" sticky={false} />
+    </>
+  );
 };
 
 export default KlaipedaExplore;
