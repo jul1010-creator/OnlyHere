@@ -10,10 +10,18 @@
 // walk made for this moment from the places published in the Studio
 // (components/NowPlanner.jsx), with partners on merit and labelled, and what
 // is on in town today. The hand-written walks are gone.
+//
+// 13 Oct 2026, the deals come first: "changing the concept so the deals is the
+// focus. Because some places shot down because of lack of visitors", and
+// "People will just use the chat bots for" the travelling. So the page opens
+// on what local places offer right now and how far each is on foot
+// (components/DealsNearYou.jsx); the walk planner is underneath, for a
+// visitor with more time.
 import { useEffect, useMemo, useState } from "react";
 import { C } from "../utils/theme";
 import { KlaipedaTop, keepOutOfSearch } from "../components/KlaipedaTop";
 import { NowPlanner } from "../components/NowPlanner";
+import { DealsNearYou } from "../components/DealsNearYou";
 import { LOCAL_TIPS, todayInKlaipeda } from "../data/klaipedaDemo";
 import { currentUiLanguage, t as uiT } from "../utils/uiLanguage";
 import { ensureLiveContentLoaded } from "../utils/liveContent";
@@ -23,10 +31,9 @@ import { foodSpots } from "../data/food";
 import { nightlifeSpots } from "../data/nightlife";
 import { shops } from "../data/shops";
 import { towns } from "../data/towns";
-import { livePromotions, promoCard } from "../utils/promotions";
+import { livePromotions } from "../utils/promotions";
 import { eventOnDays } from "../utils/eventWhen";
 import { rowCountry } from "../utils/countries";
-import { cleanBooking, busyAt } from "../utils/dealExtras";
 import { examplePromotionPools, KLAIPEDA_SKY } from "../data/klaipedaExamples";
 import { weatherIcon } from "../utils/helpers";
 
@@ -52,18 +59,15 @@ export const KlaipedaDemo = () => {
       // The made-up partners until the first real Klaipėda deal, the same
       // rule as the Special deals page (App.jsx exampleDeals), 7 Oct 2026.
       const examples = real.length === 0;
-      // A visitor off a ship has today, so only what is on today: on now
-      // first, then later today, then the ones on whenever the door is open.
-      const at = new Date();
-      const RANK = { now: 0, later: 1, always: 2 };
-      const deals = (examples ? livePromotions(examplePromotionPools()) : real)
-        .map(d => ({ d, card: promoCard(d, { today: at, lang }) }))
-        .filter(x => x.card.timing in RANK)
-        .sort((a, b) => RANK[a.card.timing] - RANK[b.card.timing] || String(a.d.__offer?.from || "").localeCompare(String(b.d.__offer?.from || "")))
-        .slice(0, 5)
-        .map(x => ({ ...x.d, _hours: x.card.timing === "always" ? "" : x.card.hours, _on: x.card.timing === "now" }));
+      // Which of them are on today, and in what order, is DealsNearYou's
+      // call, because it depends on where the visitor stands.
+      const deals = examples ? livePromotions(examplePromotionPools()) : real;
       setLive({ onToday, deals, examples });
-    }).catch(() => { /* the walk stands on its own */ });
+    }).catch(() => {
+      // The published rows could not be read: the made-up partners, marked
+      // Example, rather than an empty first screen.
+      if (!gone) setLive({ onToday: [], deals: livePromotions(examplePromotionPools()), examples: true });
+    });
     return () => { gone = true; };
   }, [today, lang]);
 
@@ -106,17 +110,20 @@ export const KlaipedaDemo = () => {
         <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 1.6, textTransform: "uppercase", marginBottom: 8 }}>Lithuania</div>
         <h1 style={{ fontSize: 38, fontWeight: 500, fontFamily: "'Fraunces', serif", lineHeight: 1.1, margin: "0 0 12px" }}>Klaipėda</h1>
         <p style={{ fontSize: 13, lineHeight: 1.65, color: C.muted, margin: "0 0 26px" }}>
-          {uiT("trips.intro", lang)}
+          {uiT("trips.introDeals", lang)}
         </p>
 
-        {/* The walk made for this moment. The QR at the terminal carries
-            ?from=terminal, the one at the centre ?from=centre. */}
+        {/* Deals first. The QR at the terminal carries ?from=terminal, the
+            one at the centre ?from=centre, and both lists start there. */}
+        <DealsNearYou deals={live.deals} examples={live.examples} lang={lang} defaultFrom={from} country="LT" />
+
+        <h2 style={{ fontSize: 22, fontWeight: 500, fontFamily: "'Fraunces', serif", lineHeight: 1.2, margin: "0 0 12px" }}>{uiT("trips.walkH", lang)}</h2>
         <NowPlanner country="LT" lang={lang} defaultFrom={from} />
 
         {/* The ships and their guests are for businesses, not for the people
             on them (Oliver, 5 Oct 2026), so they are on /lithuania/business.
             A passenger still sees when their own ship sails, in the walk. */}
-        {(live.onToday.length > 0 || live.deals.length > 0) && (
+        {live.onToday.length > 0 && (
           <div style={{ display: "grid", gap: 10, marginBottom: 28 }}>
             {live.onToday.length > 0 && (
               <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "13px 15px" }}>
@@ -127,27 +134,6 @@ export const KlaipedaDemo = () => {
                   </div>
                 ))}
               </div>
-            )}
-            {live.deals.length > 0 && (
-              <a href="/lithuania#promotions" style={{ display: "block", textDecoration: "none", background: `${C.gold}14`, border: `1px solid ${C.gold}55`, borderRadius: 14, padding: "13px 15px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 700, color: C.gold, letterSpacing: 0.6, marginBottom: 6 }}>
-                  ◈ {uiT("trips.deals", lang)}
-                  {live.examples && <span data-testid="trips-deals-examples" style={{ fontSize: 10, fontWeight: 700, color: C.text, border: `1px solid ${C.border}`, borderRadius: 100, padding: "2px 8px", letterSpacing: 0.4 }}>{uiT("deals.example", lang)}</span>}
-                </div>
-                {live.deals.map(d => {
-                  const busy = busyAt(d.__busy, new Date(), "Europe/Vilnius");
-                  return (
-                    <div key={`${d._src}-${d.id ?? d.name}`} style={{ fontSize: 13, color: C.light, lineHeight: 1.5, padding: "5px 0" }}>
-                      <strong style={{ color: C.text }}>{d.name}</strong>
-                      {d._hours && <span data-testid="trips-deal-hours" style={{ fontSize: 11, fontWeight: 700, color: d._on ? C.gold : C.muted }}>{` · ${d._on ? "● " : ""}${d._hours}`}</span>}
-                      {busy ? ` · ${uiT(`busy.${busy.level}`, lang)}` : ""}
-                      {cleanBooking(d.__booking) ? ` · ${uiT("deal.book", lang)}` : ""}
-                      {/* What the visitor gets, not only who gives it (7 Oct 2026). */}
-                      {String(d.__offer?.text || "").trim() && <div data-testid="trips-deal-offer" style={{ fontSize: 12.5, color: C.light }}>{String(d.__offer.text).trim()}</div>}
-                    </div>
-                  );
-                })}
-              </a>
             )}
           </div>
         )}
