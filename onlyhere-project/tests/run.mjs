@@ -425,6 +425,7 @@ writeFileSync(entry, `
   export { walkWeatherFrom } from ${JSON.stringify(join(root, "src/utils/walkWeather.js"))};
   export { placePinHtml, PLACE_PIN, turnSign, JOIN_ON_M, CARD_WALKING_MS, walkLegs, bearingOf, kmBetween as mapKm, glideAt, GLIDE_MS, FOCUS, SPARKS } from ${JSON.stringify(join(root, "src/components/GoogleWalkMap.jsx"))};
   export { guideTo, compassOf, distanceWords as walkDistanceWords, ARRIVE_M, COMPASS, FAR_M } from ${JSON.stringify(join(root, "src/components/WalkMode.jsx"))};
+  export * as DNY from ${JSON.stringify(join(root, "src/components/DealsNearYou.jsx"))};
   export * as SF from ${JSON.stringify(join(root, "src/utils/safeFetch.js"))};
   export * as LP from ${JSON.stringify(join(root, "src/utils/livePhoto.js"))};
   export * as CR from ${JSON.stringify(join(root, "src/utils/cruiseDays.js"))};
@@ -82316,8 +82317,10 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   const np = read("src/components/NowPlanner.jsx"), demo = read("src/pages/KlaipedaDemo.jsx");
   ok("a made-up partner on the QR walk is marked Example, with a line saying so", /tag=\{\(s\) => \(isExamplePartner\(s\.id\) \? uiT\("deals\.example", lang\) : null\)\}/.test(np) && /uiT\("walk\.examplesNote", lang\)/.test(np));
   ok("and the note reads in all four languages", ["en", "da", "de", "lt"].every(l => M.t("walk.examplesNote", l) && M.t("walk.examplesNote", l) !== "walk.examplesNote"));
-  ok("the QR page shows the example deals until a real one is live, marked Example", /const examples = real\.length === 0;/.test(demo) && /livePromotions\(examplePromotionPools\(\)\)/.test(demo) && /data-testid="trips-deals-examples"/.test(demo));
-  ok("only today's, on now first, with what the visitor gets", /\.filter\(x => x\.card\.timing in RANK\)/.test(demo) && /\.slice\(0, 5\)/.test(demo) && /data-testid="trips-deal-offer"/.test(demo));
+  // Batch 232: the deals moved into components/DealsNearYou.jsx, first on the page.
+  const dny = read("src/components/DealsNearYou.jsx");
+  ok("the QR page shows the example deals until a real one is live, marked Example", /const examples = real\.length === 0;/.test(demo) && /livePromotions\(examplePromotionPools\(\)\)/.test(demo) && /examples=\{live\.examples\}/.test(demo) && /data-testid="deals-near-examples"/.test(dny));
+  ok("only today's, on now first, with what the visitor gets", /\.filter\(x => x\.card\.timing in RANK\)/.test(dny) && /MAX_DEALS = 12/.test(dny) && /data-testid="deal-near-offer"/.test(dny));
   const pools = M.KEX.examplePromotionPools();
   ok("the example deals are read on Klaipėda's clock", Object.values(pools).flat().length > 0 && Object.values(pools).flat().every(p => p.country === "LT"));
 
@@ -82754,6 +82757,36 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("the privacy policy says what a place count holds", /<strong>Place counts\.<\/strong>/.test(read("public/privacy.html")));
   const pt = read("src/pages/KlaipedaPartner.jsx");
   ok("the partner page has no dashes in its words", !/[–—]/.test(pt));
+}
+
+// ── Batch 232: the Klaipėda page opens on the deals ──
+// Oliver, 13 Oct 2026: "changing the concept so the deals is the focus.
+// Because some places shot down because of lack of visitors", then "Yes".
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const D = M.DNY, S = M.PSTATS;
+  ok("a deal's place has the same id as in a walk", D.dealPlaceId({ _src: "food", id: 12 }) === "food:12" && D.dealPlaceId({ _src: "nightlife", id: 3 }) === "night:3" && D.dealPlaceId({ _exampleId: "food:devi" }) === "food:devi" && D.dealPlaceId({ _src: "event", id: 1 }) === "" && D.dealPlaceId({ _src: "food" }) === "");
+  ok("a place with no coordinates has no point", D.pointOf({ __lat: 55.7, __lon: 21.1 }).lat === 55.7 && D.pointOf({}) === null && D.pointOf({ __lat: 0, __lon: 0 }) === null);
+  const terminal = M.NOW_STARTS ? M.NOW_STARTS.LT.terminal : { lat: 55.70526, lon: 21.12217 };
+  const at = new Date("2026-10-14T10:30:00Z"); // 13:30 in Klaipėda, a Wednesday
+  const mk = (id, lat, lon, offer) => ({ _src: "food", id, name: `Place ${id}`, country: "LT", __lat: lat, __lon: lon, __offer: { text: `Gift ${id}`, until: "2027-12-31", ...offer } });
+  const list = D.nearbyDeals([
+    mk(1, 55.7120, 21.1340, {}),                               // on whenever open, far
+    mk(2, 55.7060, 21.1240, {}),                               // on whenever open, near
+    mk(3, 55.7065, 21.1250, { from: "17:00", to: "20:00" }),   // later today
+    mk(4, 55.7062, 21.1245, { from: "08:00", to: "10:00" }),   // over for today
+  ], terminal, { now: at, lang: "en" });
+  is("on now first and nearest first, later after, over left out", list.map(x => x.d.id), [2, 1, 3]);
+  ok("each carries how many minutes on foot", list.every(x => Number.isInteger(x.minutes) && x.minutes > 0) && list[0].minutes < list[1].minutes);
+  ok("no more than twelve", D.nearbyDeals(Array.from({ length: 30 }, (_, i) => mk(i + 1, 55.706, 21.124, {})), terminal, { now: at }).length === D.MAX_DEALS);
+  const walk = D.walkToDeal(terminal, list[0]);
+  ok("Walk there is a walk to that one place, carrying its offer", walk.stops.length === 1 && walk.stops[0].id === "food:2" && walk.stops[0].deal.text === "Gift 2" && walk.start.lat === terminal.lat && walk.stops[0].arrive === list[0].minutes);
+  is("the list being shown counts as the offer shown", S.eventKeys({ e: "deals", ids: ["food:2", "food:2", "bad id", "food:1"] }, 10), ["st:d:food:2", "st:d:food:1"]);
+  ok("the new words read in all four languages", ["trips.dealsH", "trips.introDeals", "trips.walkMin", "trips.go", "trips.onNow", "trips.noDeals", "trips.walkH", "trips.allDeals"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
+  const demo = read("src/pages/KlaipedaDemo.jsx"), dny = read("src/components/DealsNearYou.jsx");
+  ok("the page opens on the deals, with the walk underneath", demo.indexOf("<DealsNearYou") > 0 && demo.indexOf("<DealsNearYou") < demo.indexOf("<NowPlanner") && /uiT\("trips\.introDeals", lang\)/.test(demo) && /uiT\("trips\.walkH", lang\)/.test(demo));
+  ok("a visitor walked there is counted as came, and the list once per visit", /onReach=\{\(s\) => placeReached\(s, country\)\}/.test(dny) && /dealsSeen\(list\.map\(x => x\.id\), country\);/.test(dny) && /if \(counted\.current \|\| !list\.length\) return;/.test(dny));
+  ok("the walk to a deal ends at the place", /loop=\{false\}/.test(dny));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
