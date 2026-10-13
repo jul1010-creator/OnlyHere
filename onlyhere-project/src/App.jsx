@@ -88,7 +88,7 @@ import { KlaipedaPartner } from "./pages/KlaipedaPartner";
 import { ReworkPage } from "./pages/ReworkPage";
 import { KlaipedaExplore } from "./components/KlaipedaExplore";
 import { DealStudio } from "./components/DealStudio";
-import { DEAL_KINDS } from "./components/DealsNearYou";
+import { DEAL_CATEGORIES } from "./utils/dealCategories";
 import { KLAIPEDA_PARTNER_PATH } from "./utils/partnerStats";
 import { COUNTRY_PROFILES, DEFAULT_COUNTRY, countryProfile, setWorkingCountry, countryParam, rowCountry, activeCountry, homePath, plainTownName } from "./utils/countries";
 import { KLAIPEDA_DEMO_PATH } from "./data/klaipedaDemo";
@@ -2967,7 +2967,7 @@ function GemlyxApp() {
     setStudioOfferFrom(payload.__offer?.from || "");
     setStudioOfferTo(payload.__offer?.to || "");
     setStudioBooking(payload.__booking || "");
-    setStudioDealKind(DEAL_KINDS.includes(payload.__dealKind) ? payload.__dealKind : "");
+    setStudioDealKind(DEAL_CATEGORIES.includes(payload.__category) ? payload.__category : "");
     setDraftPasteError("");
     // The two bugs this function was carrying, studioFrozenGeo inheriting the
     // previous run's coordinate ("Stored at 0.000, 0.000") and editingId
@@ -2998,7 +2998,7 @@ function GemlyxApp() {
     setStudioOfferFrom(row.payload?.__offer?.from || "");
     setStudioOfferTo(row.payload?.__offer?.to || "");
     setStudioBooking(row.payload?.__booking || "");
-    setStudioDealKind(DEAL_KINDS.includes(row.payload?.__dealKind) ? row.payload.__dealKind : "");
+    setStudioDealKind(DEAL_CATEGORIES.includes(row.payload?.__category) ? row.payload.__category : "");
     setBusyFetch(null);
     const reelBlock = row.payload?.blogBody?.find(b => b.type === "instagram") || null;
     setStudioInstagramUrl(reelBlock?.url || "");
@@ -11392,7 +11392,7 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
     if (saved.photoName) setStudioPhotoName(saved.photoName);
     if (saved.offerText) setStudioOfferText(saved.offerText);
     if (saved.booking) setStudioBooking(saved.booking);
-    if (DEAL_KINDS.includes(saved.dealKind)) setStudioDealKind(saved.dealKind);
+    if (DEAL_CATEGORIES.includes(saved.dealKind)) setStudioDealKind(saved.dealKind);
     if (saved.offerUntil) setStudioOfferUntil(saved.offerUntil);
     if (saved.offerOngoing === true) setStudioOfferOngoing(true);
     if (Array.isArray(saved.offerDays) && saved.offerDays.length) setStudioOfferDays(saved.offerDays);
@@ -14588,8 +14588,10 @@ ${researchRules("festival", ev)}`
         if (cleanBooking(studioBooking)) shaped.__booking = studioBooking.trim();
         else delete shaped.__booking;
         // The Explore filter, on the same rule: the box is the truth.
-        if (DEAL_KINDS.includes(studioDealKind)) shaped.__dealKind = studioDealKind;
-        else delete shaped.__dealKind;
+        // The kind of place on Explore (14 Oct 2026: restaurants, nightlife,
+        // attractions, rentals), on the same rule: the box is the truth.
+        if (DEAL_CATEGORIES.includes(studioDealKind)) shaped.__category = studioDealKind;
+        else delete shaped.__category;
         // The busyness forecast is a paid lookup kept in the draft, and
         // shapeForLive's allow-list does not carry it, so a new entry lost it at
         // publish (review, 2 Oct 2026). Carried across here, checked.
@@ -29446,16 +29448,18 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           </div>
                         )}
 
-                        {/* ── WHICH EXPLORE FILTER ─────────────────────────────
-                            Oliver, 13 Oct 2026: Discounts, Entertainment,
-                            Activities on the Lithuanian Explore page. */}
-                        <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, margin: "12px 0 5px" }}>EXPLORE FILTER</div>
+                        {/* ── WHICH KIND OF PLACE ON EXPLORE ───────────────────
+                            Oliver, 14 Oct 2026: Restaurants, Nightlife,
+                            Attractions, Rentals on the Lithuanian Explore page,
+                            the round filters (CategoryFilter.jsx). */}
+                        <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, margin: "12px 0 5px" }}>KIND OF PLACE ON EXPLORE</div>
                         <select value={studioDealKind} onChange={e => setStudioDealKind(e.target.value)} data-testid="studio-deal-kind"
                           style={{ width: "100%", border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 12px", fontSize: 12, outline: "none", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif", boxSizing: "border-box" }}>
                           <option value="">Automatic, from the kind of place</option>
-                          <option value="discounts">Discounts</option>
-                          <option value="entertainment">Entertainment</option>
-                          <option value="activities">Activities</option>
+                          <option value="restaurants">Restaurants</option>
+                          <option value="nightlife">Nightlife</option>
+                          <option value="attractions">Attractions</option>
+                          <option value="rentals">Rentals</option>
                         </select>
 
                         {/* ── BOOK A TABLE, AND HOW BUSY ─────────────────────
