@@ -82808,7 +82808,7 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("a Static Maps picture first, in the guide's style, never saved into the site", /maps\/api\/staticmap\?center=/.test(cm) && /&map_id=\$\{encodeURIComponent\(GOOGLE_MAP_ID\)\}/.test(cm) && /&scale=2/.test(cm) && /\{near && !live && \(/.test(cm));
   ok("and the live map only when Google refuses, asked once a visit", /onError=\{\(\) => \{ staticRefused = true; setLive\(true\); \}\}/.test(cm) && /useState\(staticRefused\)/.test(cm) && /if \(!ok \|\| !near \|\| !live \|\| made\.current/.test(cm));
   ok("no key, no map, rather than a worse one", /googleMapsReady\(\)/.test(cm) && /if \(!ok\) return null;/.test(cm));
-  ok("every deal with a place gets one, and tapping it walks there", /<DealCornerMap lat=\{x\.at\.lat\} lon=\{x\.at\.lon\} name=\{x\.d\.name\}/.test(dny) && /onTap=\{\(\) => go\(x\)\} \/>/.test(dny));
+  ok("every deal with a place gets one, and tapping it walks there", /<DealCornerMap lat=\{x\.at\.lat\} lon=\{x\.at\.lon\} name=\{x\.d\.name\}/.test(dny) && /onTap=\{\(\) => setOpened\(/.test(dny));
 }
 
 // ── Batch 235: Explore is the deals on the Lithuanian site, and the Danish
@@ -82881,6 +82881,39 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("the walk map's own pointer, tip on the place", /import \{ PLACE_PIN, placePinHtml \} from "\.\/GoogleWalkMap";/.test(cm) && /marginTop: -PLACE_PIN\.h/.test(cm) && /transformOrigin: "50% 100%"/.test(cm) && /placePinHtml\(\{ sign, photo \}\)/.test(cm));
   ok("with the place's sign or its filter's in the window", M.DNY.signFor({ emoji: "🐟" }) === "🐟" && M.DNY.signFor({ _src: "nightlife" }) === "🎵" && M.DNY.signFor({ __dealKind: "other" }) === "📍" && /sign=\{signFor\(x\.d\)\} photo=\{x\.d\.photo \|\| ""\}/.test(dny));
   ok("abroad, arriving at the planner by its address opens Explore", /if \(PAGE_ABROAD && asked === "ai"\) return "home";/.test(app) && /return asked \|\| "home";/.test(app));
+}
+
+// ── Batch 239: tap the map, see the building, then Show directions ──
+// Oliver, 13 Oct 2026: "when you click the map, you zoom down to show only the
+// area and building of the place. Like the google earth frame from earlier.
+// Then under the map, you can click 'show directions' with a tracked location
+// from where you are currently."
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const pv = read("src/components/DealPlaceView.jsx"), dny = read("src/components/DealsNearYou.jsx");
+  ok("satellite, glided down and tilted over the building, like the walk map's arrival", /mapTypeId: "satellite"/.test(pv) && /RenderingType\?\.VECTOR/.test(pv) && /put\(glideAt\(start, end, t\)\)/.test(pv) && /to: \{ zoom: 18\.5, tilt: 55, heading: 35 \}/.test(pv));
+  ok("then turns slowly round it until touched, and not at all for less motion", /heading: \(end\.heading \+ \(ms \/ 1000\) \* TURN_DEG_PER_S\) % 360/.test(pv) && /\["pointerdown", "wheel", "touchstart"\]\.forEach\(e => el\.addEventListener\(e, stop/.test(pv) && /if \(reducedMotion\(\)\) \{ put\(end\); return; \}/.test(pv));
+  ok("the walk map's own pointer on the building", /pin\.innerHTML = placePinHtml\(\{ sign, photo \}\);/.test(pv) && /new AdvancedMarkerElement\(/.test(pv));
+  ok("made only when the corner map is tapped, one at a time", /\{opened === \(x\.id \|\| x\.d\.name\) && x\.at && \(/.test(dny) && /setOpened\(cur => \(cur === \(x\.id \|\| x\.d\.name\) \? null : \(x\.id \|\| x\.d\.name\)\)\)/.test(dny));
+  ok("Show directions under it walks there from where the phone is", /onDirections=\{\(\) => go\(x\)\}/.test(dny) && /data-testid="place-view-directions"/.test(pv) && /locate\(\(at\) => setGoing\(/.test(dny));
+  ok("the words read in all four languages", ["explore.directions", "explore.closeMap", "explore.mapFailed"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
+}
+
+// ── Batch 240: how long an offer has left ──
+// Oliver, 13 Oct 2026: "if it is friday 17:40 and an offer closes at 18:00,
+// then it'll say 'ends in 20 minutes'".
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const D = M.DNY;
+  const fri1740 = new Date("2026-10-16T14:40:00Z"); // 17:40 in Klaipėda
+  is("Friday 17:40, an offer to 18:00, is 20 minutes", D.minutesLeft({ from: "16:00", to: "18:00" }, fri1740), 20);
+  is("and reads that way in each language", ["en", "da", "de", "lt"].map(l => M.t("explore.endsIn", l).replace("{t}", D.leftWords(20, l))), ["Ends in 20 min", "Slutter om 20 min", "Endet in 20 Min.", "Baigiasi po 20 min."]);
+  is("hours and minutes past an hour", D.leftWords(80, "en"), "1 h 20 min");
+  is("a whole hour says only the hour", D.leftWords(120, "en"), "2 h");
+  is("an offer running past midnight counts on into the night", D.minutesLeft({ from: "22:00", to: "01:00" }, new Date("2026-10-16T20:30:00Z")), 90);
+  ok("an offer with no end time has no countdown", D.minutesLeft({}, fri1740) === null && D.minutesLeft({ to: "nonsense" }, fri1740) === null);
+  const dny = read("src/components/DealsNearYou.jsx");
+  ok("shown on an offer that is on, within three hours, and ticking", /ENDS_SOON_MIN = 180;/.test(dny) && /x\.card\.timing === "now" \? minutesLeft\(x\.d\.__offer, new Date\(\)\) : null/.test(dny) && /setInterval\(\(\) => setTick\(n => n \+ 1\), 30000\)/.test(dny) && /data-testid="deal-near-ends"/.test(dny));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
