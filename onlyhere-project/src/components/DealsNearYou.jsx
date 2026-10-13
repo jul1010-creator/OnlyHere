@@ -21,6 +21,7 @@ import { cleanBooking, busyAt } from "../utils/dealExtras";
 import { dealsSeen, placeReached } from "../utils/partnerStats";
 import { WalkMode, askForCompass } from "./WalkMode";
 import { DealCornerMap } from "./DealCornerMap";
+import { DealPlaceView } from "./DealPlaceView";
 
 const fill = (t, v) => String(t).replace(/\{(\w+)\}/g, (_, k) => (v[k] ?? ""));
 
@@ -120,6 +121,9 @@ export const DealsNearYou = ({ deals = [], examples = false, lang = "en", countr
   const [here, setHere] = useState(null);
   const [note, setNote] = useState("");
   const [going, setGoing] = useState(null);
+  // The card whose map was tapped open: the place from above, with Show
+  // directions under it (DealPlaceView.jsx, 13 Oct 2026). One at a time.
+  const [opened, setOpened] = useState(null);
   const [kind, setKind] = useState(null);
   const [sort, setSort] = useState("az");
   const canLocate = typeof navigator !== "undefined" && !!navigator.geolocation && !!NOW_AREAS[country];
@@ -234,10 +238,14 @@ export const DealsNearYou = ({ deals = [], examples = false, lang = "en", countr
                   </div>
                   {x.at && (
                     <DealCornerMap lat={x.at.lat} lon={x.at.lon} name={x.d.name} sign={signFor(x.d)} photo={x.d.photo || ""}
-                      onTap={() => go(x)} />
+                      onTap={() => setOpened(cur => (cur === (x.id || x.d.name) ? null : (x.id || x.d.name)))} />
                   )}
                 </div>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+                {opened === (x.id || x.d.name) && x.at && (
+                  <DealPlaceView lat={x.at.lat} lon={x.at.lon} name={x.d.name} sign={signFor(x.d)} photo={x.d.photo || ""} lang={lang}
+                    onDirections={() => go(x)} onClose={() => setOpened(null)} />
+                )}
+                {opened !== (x.id || x.d.name) && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
                   {x.at && (
                     <button onClick={() => go(x)} data-testid="deal-near-go"
                       style={{ background: C.gold, color: C.onGold, border: "none", borderRadius: 100, padding: "7px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
@@ -250,7 +258,7 @@ export const DealsNearYou = ({ deals = [], examples = false, lang = "en", countr
                       {uiT("deal.book", lang)}
                     </a>
                   )}
-                </div>
+                </div>}
               </div>
             );
           })}
