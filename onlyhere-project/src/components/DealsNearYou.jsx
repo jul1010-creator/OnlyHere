@@ -10,19 +10,27 @@
 // there inside Gemlyx. The made-up walk planner moves underneath it.
 //
 // What a partner gets from it is counted (utils/partnerStats.js): the offer
-// being listed here counts as "shown", and a visitor arriving through "Walk
-// there" counts as "came".
+// being listed here counts as "shown", a visitor opening it with "Redeem
+// offer" counts as "opened to redeem", and one arriving on the walk from Show
+// directions counts as "came".
+//
+// REDEEM, NOT WALK, 13 Oct 2026. Oliver: "the 'Walk There' gotta be changed
+// out with 'redeem offer'. Because i want these business to understand that if
+// they want this advertisement, then they gotta advetise for me." So the
+// button on an offer that is on opens the screen shown at the counter
+// (RedeemSheet.jsx), with Gemlyx's mark on it; the walk is under it.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { C } from "../utils/theme";
 import { t as uiT } from "../utils/uiLanguage";
 import { promoCard } from "../utils/promotions";
 import { NOW_AREAS, inNowArea, walkMinutes } from "../utils/nowPlanner";
 import { cleanBooking, busyAt } from "../utils/dealExtras";
-import { dealsSeen, placeReached } from "../utils/partnerStats";
+import { dealsSeen, placeReached, dealRedeemOpened } from "../utils/partnerStats";
 import { WalkMode, askForCompass } from "./WalkMode";
 import { DealCornerMap } from "./DealCornerMap";
 import { DealPlaceView } from "./DealPlaceView";
-import { placeClock } from "../utils/offerClock";
+import { placeClock, cleanClock } from "../utils/offerClock";
+import { RedeemSheet } from "./RedeemSheet";
 
 const fill = (t, v) => String(t).replace(/\{(\w+)\}/g, (_, k) => (v[k] ?? ""));
 
@@ -135,6 +143,37 @@ export const leftWords = (min, lang = "en") => {
   const hours = Math.floor(min / 60), mins = min % 60;
   return hours ? `${hours} ${h}${mins ? ` ${mins} ${m}` : ""}` : `${Math.max(1, mins)} ${m}`;
 };
+// ── WHEN THE OFFER HOLDS, IN ONE LINE ───────────────────────────────
+// Oliver, 13 Oct 2026: "'On now' gotta go. It has to be 'offer expires at' or
+// offer starts at... something like that." So the line under an offer says,
+// on the place's clock:
+//   on, three hours or less to go   Offer ends in 20 min
+//   on, with an end time            Offer expires at 18:00
+//   later today                     Offer starts at 16:00
+//   with a last day                 Offer valid until 31 October
+// and nothing at all when there is nothing true to say.
+const DATE_LOCALE = { en: "en-GB", da: "da-DK", de: "de-DE", lt: "lt-LT" };
+export const offerUntilWords = (until, lang = "en") => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(until || "").trim());
+  if (!m) return "";
+  try { return new Intl.DateTimeFormat(DATE_LOCALE[lang] || "en-GB", { day: "numeric", month: "long", timeZone: "UTC" }).format(new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]))); } catch { return `${m[3]}.${m[2]}`; }
+};
+export const offerWhen = (offer, timing, { now = new Date(), lang = "en", zone = "Europe/Vilnius" } = {}) => {
+  const say = (key, vars) => fill(uiT(key, lang), vars);
+  if (timing === "later") {
+    const from = cleanClock(offer?.from);
+    if (from) return { kind: "starts", text: say("offer.startsAt", { time: from }) };
+  }
+  if (timing === "now") {
+    const left = minutesLeft(offer, now, zone);
+    if (left !== null && left <= ENDS_SOON_MIN) return { kind: "ends", left, text: say("explore.endsIn", { t: leftWords(left, lang) }) };
+    const to = cleanClock(offer?.to);
+    if (to) return { kind: "expires", text: say("offer.expiresAt", { time: to }) };
+  }
+  const date = offerUntilWords(offer?.until, lang);
+  if (date) return { kind: "until", text: say("offer.validUntil", { date }) };
+  return null;
+};
 // The sign in the map pointer's window: the place's own, or its filter's.
 export const KIND_SIGN = { discounts: "🏷️", entertainment: "🎵", activities: "🎯", other: "📍" };
 export const signFor = (d) => (d?.emoji ? String(d.emoji) : KIND_SIGN[dealKind(d)] || "📍");
@@ -146,6 +185,9 @@ export const DealsNearYou = ({ deals = [], examples = false, lang = "en", countr
   // The card whose map was tapped open: the place from above, with Show
   // directions under it (DealPlaceView.jsx, 13 Oct 2026). One at a time.
   const [opened, setOpened] = useState(null);
+  // The offer opened to redeem: the screen shown at the counter
+  // (RedeemSheet.jsx, 13 Oct 2026), with Gemlyx on it.
+  const [redeem, setRedeem] = useState(null);
   // The countdown moves on by itself while the page is open.
   const [, setTick] = useState(0);
   useEffect(() => { const t = setInterval(() => setTick(n => n + 1), 30000); return () => clearInterval(t); }, []);
@@ -187,6 +229,10 @@ export const DealsNearYou = ({ deals = [], examples = false, lang = "en", countr
     askForCompass();
     if (start) { setGoing(x); return; }
     locate((at) => setGoing({ ...x, minutes: walkMinutes(at, x.at), _from: at }));
+  };
+  const openRedeem = (x, when) => {
+    setRedeem({ x, when: when?.text || "" });
+    dealRedeemOpened(x.id, country);
   };
   const walkStart = going?._from ? { id: "here", name: uiT("now.whereYouAre", lang), lat: going._from.lat, lon: going._from.lon, ship: false } : start;
 
@@ -248,6 +294,7 @@ export const DealsNearYou = ({ deals = [], examples = false, lang = "en", countr
             const book = cleanBooking(x.d.__booking);
             const on = x.card.timing !== "later";
             const offer = String(x.d.__offer?.text || "").trim();
+            const when = offerWhen(x.d.__offer, x.card.timing, { now: new Date(), lang });
             return (
               <div key={x.id || x.d.name} data-testid="deal-near" style={{ background: on ? `${C.gold}12` : C.surface, border: `1px solid ${on ? `${C.gold}66` : C.border}`, borderRadius: 14, padding: "13px 15px" }}>
                 {/* A fixed close map of where the place is, in the corner (13 Oct 2026). */}
@@ -257,14 +304,9 @@ export const DealsNearYou = ({ deals = [], examples = false, lang = "en", countr
                     {x.minutes != null && <div data-testid="deal-near-minutes" style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginTop: 1 }}>{fill(uiT("trips.walkMin", lang), { n: x.minutes })}</div>}
                     {offer && <div data-testid="deal-near-offer" style={{ fontSize: 14, fontWeight: 700, color: C.gold, lineHeight: 1.45, marginTop: 4 }}>{offer}</div>}
                     <div style={{ fontSize: 12, color: C.light, marginTop: 4 }}>
-                      {(() => {
-                        const left = x.card.timing === "now" ? minutesLeft(x.d.__offer, new Date()) : null;
-                        if (left !== null && left <= ENDS_SOON_MIN) {
-                          return <span data-testid="deal-near-ends" style={{ fontWeight: 800, color: left <= 30 ? "#FFB347" : C.gold }}>● {fill(uiT("explore.endsIn", lang), { t: leftWords(left, lang) })}</span>;
-                        }
-                        return x.card.hours ? <span style={{ fontWeight: on ? 700 : 400 }}>{on ? "● " : ""}{x.card.hours}</span> : <span style={{ fontWeight: 700 }}>● {uiT("trips.onNow", lang)}</span>;
-                      })()}
-                      {busy ? ` · ${uiT(`busy.${busy.level}`, lang)}` : ""}
+                      {when?.kind === "ends" && <span data-testid="deal-near-ends" style={{ fontWeight: 800, color: when.left <= 30 ? "#FFB347" : C.gold }}>● {when.text}</span>}
+                      {when && when.kind !== "ends" && <span data-testid="deal-near-when" style={{ fontWeight: on ? 700 : 400 }}>{when.text}</span>}
+                      {busy ? `${when ? " · " : ""}${uiT(`busy.${busy.level}`, lang)}` : ""}
                     </div>
                   </div>
                   {x.at && (
@@ -277,10 +319,10 @@ export const DealsNearYou = ({ deals = [], examples = false, lang = "en", countr
                     onDirections={() => go(x)} onClose={() => setOpened(null)} />
                 )}
                 {opened !== (x.id || x.d.name) && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
-                  {x.at && (
-                    <button onClick={() => go(x)} data-testid="deal-near-go"
+                  {offer && on && (
+                    <button onClick={() => openRedeem(x, when)} data-testid="deal-near-redeem"
                       style={{ background: C.gold, color: C.onGold, border: "none", borderRadius: 100, padding: "7px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                      ▶ {uiT("trips.go", lang)}
+                      {uiT("offer.redeem", lang)}
                     </button>
                   )}
                   {book && (
@@ -302,6 +344,11 @@ export const DealsNearYou = ({ deals = [], examples = false, lang = "en", countr
         </a>
       )}
 
+      {redeem && (
+        <RedeemSheet name={redeem.x.d.name} offer={String(redeem.x.d.__offer?.text || "").trim()} when={redeem.when} lang={lang}
+          onDirections={redeem.x.at ? () => { const x = redeem.x; setRedeem(null); go(x); } : null}
+          onClose={() => setRedeem(null)} />
+      )}
       {going && walkStart && (
         <WalkMode walk={walkToDeal(walkStart, going)} madeAt={null} lang={lang} country={country} loop={false}
           cardFor={() => ({ emoji: "◈", ...(going.d.photo ? { photo: going.d.photo } : {}) })}
