@@ -910,7 +910,7 @@ export const examplePromotionPools = () => {
     if (!src) return;
     // country, so the offer's hours are read on Klaipėda's clock and not
     // Copenhagen's, an hour behind (found 7 Oct 2026).
-    (pools[src] = pools[src] || []).push({ ...pg.item, country: "LT", _exampleId: id, _kind: pg.kind, ...(p.dealKind ? { __dealKind: p.dealKind } : {}) });
+    (pools[src] = pools[src] || []).push({ ...pg.item, country: "LT", _exampleId: id, _kind: pg.kind, ...(p.dealKind ? { __dealKind: p.dealKind } : {}), ...(p.category ? { __category: p.category } : {}) });
   });
   return pools;
 };
