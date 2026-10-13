@@ -44,7 +44,7 @@ export const emptyDeal = () => ({
   id: null, type: "food", published: false,
   name: "", street: "", lat: "", lon: "", sign: "",
   text: "", days: [], from: "", to: "", until: "", ongoing: false,
-  dealKind: "", booking: "", pin: "",
+  dealKind: "", booking: "", pin: "", photo: "",
 });
 
 // The form, from a row of gemlyx_content.
@@ -56,7 +56,7 @@ export const dealFromRow = (row) => {
     name: String(p.name || ""), street: String(p.location || ""),
     lat: p.__lat ?? p.lat ?? "", lon: p.__lon ?? p.lon ?? "", sign: String(p.emoji || ""),
     text: String(o.text || ""), days: Array.isArray(o.days) ? o.days : [], from: String(o.from || ""), to: String(o.to || ""), until: String(o.until || ""), ongoing: o.ongoing === true,
-    dealKind: DEAL_FILTERS.includes(p.__dealKind) ? p.__dealKind : "", booking: String(p.__booking || ""), pin: pinColour(p.__pin),
+    dealKind: DEAL_FILTERS.includes(p.__dealKind) ? p.__dealKind : "", booking: String(p.__booking || ""), pin: pinColour(p.__pin), photo: String(p.photo || ""),
   };
 };
 
@@ -73,6 +73,8 @@ export const dealProblems = (f) => {
   if (!String(f?.text || "").trim()) out.push("Write the offer: what a visitor gets.");
   if (!f?.ongoing && !String(f?.until || "").trim()) out.push("Give the offer a last day, or set it to No last day.");
   out.push(...offerProblems(offerOf(f)).filter(p => !/no end date|no text/.test(p)));
+  const ph = String(f?.photo || "").trim();
+  if (ph && !/^https:\/\//i.test(ph) && !/^\/[A-Za-z0-9_\-./]+$/.test(ph)) out.push("The photo has to be uploaded here or be a web address starting with https://.");
   const book = bookingProblem(f?.booking);
   if (book) out.push(book);
   return out;
@@ -99,6 +101,9 @@ export const payloadFromDeal = (f, base = {}) => {
   if (DEAL_FILTERS.includes(f.dealKind) && f.dealKind) p.__dealKind = f.dealKind; else delete p.__dealKind;
   if (cleanBooking(f.booking)) p.__booking = String(f.booking).trim(); else delete p.__booking;
   if (pinColour(f.pin)) p.__pin = pinColour(f.pin); else delete p.__pin;
+  // The tile's picture (13 Oct 2026). Empty means the map stands in for it.
+  const photo = String(f.photo || "").trim();
+  if (photo) p.photo = photo; else delete p.photo;
   return p;
 };
 
