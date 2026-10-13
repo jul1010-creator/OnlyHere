@@ -85,6 +85,9 @@ import { KlaipedaExamples } from "./pages/KlaipedaExamples";
 import { KlaipedaSculptures, KlaipedaSculpturesCentre } from "./pages/KlaipedaSculptures";
 import { KlaipedaBusiness } from "./pages/KlaipedaBusiness";
 import { KlaipedaPartner } from "./pages/KlaipedaPartner";
+import { ReworkPage } from "./pages/ReworkPage";
+import { KlaipedaExplore } from "./components/KlaipedaExplore";
+import { DEAL_KINDS } from "./components/DealsNearYou";
 import { KLAIPEDA_PARTNER_PATH } from "./utils/partnerStats";
 import { COUNTRY_PROFILES, DEFAULT_COUNTRY, countryProfile, setWorkingCountry, countryParam, rowCountry, activeCountry, homePath, plainTownName } from "./utils/countries";
 import { KLAIPEDA_DEMO_PATH } from "./data/klaipedaDemo";
@@ -121,7 +124,7 @@ import { roadTrips, seasonalItineraries } from "./data/roadtrips";
 import { WEATHER_CITIES } from "./data/mapShapes";
 import { cities, allProducts, campingSpots, PRODUCT_COORDS } from "./data/shop";
 
-import { SUPABASE_URL, SUPABASE_KEY, APP_VERSION, PAID_PLANS_LIVE, FOUNDER_IDS } from "./config";
+import { SUPABASE_URL, SUPABASE_KEY, APP_VERSION, PAID_PLANS_LIVE, FOUNDER_IDS, DENMARK_REWORK } from "./config";
 // The SAME predicate the api/ handlers gate on, imported rather than rewritten.
 // Two copies of an allow-list rule is two rules, and the day they disagree the
 // screen says yes while the endpoints say no, or the reverse, which is worse.
@@ -2953,6 +2956,7 @@ function GemlyxApp() {
     setStudioOfferFrom(payload.__offer?.from || "");
     setStudioOfferTo(payload.__offer?.to || "");
     setStudioBooking(payload.__booking || "");
+    setStudioDealKind(DEAL_KINDS.includes(payload.__dealKind) ? payload.__dealKind : "");
     setDraftPasteError("");
     // The two bugs this function was carrying, studioFrozenGeo inheriting the
     // previous run's coordinate ("Stored at 0.000, 0.000") and editingId
@@ -2982,6 +2986,7 @@ function GemlyxApp() {
     setStudioOfferFrom(row.payload?.__offer?.from || "");
     setStudioOfferTo(row.payload?.__offer?.to || "");
     setStudioBooking(row.payload?.__booking || "");
+    setStudioDealKind(DEAL_KINDS.includes(row.payload?.__dealKind) ? row.payload.__dealKind : "");
     setBusyFetch(null);
     const reelBlock = row.payload?.blogBody?.find(b => b.type === "instagram") || null;
     setStudioInstagramUrl(reelBlock?.url || "");
@@ -4186,6 +4191,10 @@ Say which answer came from which source, so a fact from a vouched page and a fac
   // Where to book a table (a link or a phone number), beside the offer. See
   // utils/dealExtras.js. The busyness forecast rides in the draft JSON itself.
   const [studioBooking, setStudioBooking] = useState("");
+  // Which Explore filter a deal sits under on the Lithuanian site, set by hand
+  // when the kind of place says otherwise (a bar's offer is Entertainment).
+  // Empty is automatic. See DealsNearYou.jsx, THE THREE FILTERS.
+  const [studioDealKind, setStudioDealKind] = useState("");
   const [busyFetch, setBusyFetch] = useState(null);
   const [studioInstagramUrl, setStudioInstagramUrl] = useState("");
   // ── AND WHETHER THAT REEL MAY BE SHOWN ──────────────────────────
@@ -11354,6 +11363,7 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
     if (saved.photoName) setStudioPhotoName(saved.photoName);
     if (saved.offerText) setStudioOfferText(saved.offerText);
     if (saved.booking) setStudioBooking(saved.booking);
+    if (DEAL_KINDS.includes(saved.dealKind)) setStudioDealKind(saved.dealKind);
     if (saved.offerUntil) setStudioOfferUntil(saved.offerUntil);
     if (Array.isArray(saved.offerDays) && saved.offerDays.length) setStudioOfferDays(saved.offerDays);
     if (saved.offerFrom) setStudioOfferFrom(saved.offerFrom);
@@ -11392,6 +11402,7 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
         offerFrom: studioOfferFrom,
         offerTo: studioOfferTo,
         booking: studioBooking,
+        dealKind: studioDealKind,
       } : null;
       const { store } = packStore({ queue: draftQueue, results: queueResults, editor }, Date.now());
       let storage = null;
@@ -11404,7 +11415,7 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
     return () => clearTimeout(t);
   }, [studioSession, draftQueue, queueResults, editingId, studioDraft, studioDraftText,
       studioType, studioTown, studioResult, studioFrozenGeo, studioIdentityWarning,
-      studioInventedWarning, studioPhotoName, studioOfferText, studioOfferUntil, studioOfferDays, studioOfferFrom, studioOfferTo, studioBooking]);
+      studioInventedWarning, studioPhotoName, studioOfferText, studioOfferUntil, studioOfferDays, studioOfferFrom, studioOfferTo, studioBooking, studioDealKind]);
 
   // Dropping the finished list is a deliberate act, so it needs a button. It is
   // also the only advice problemNote can give when storage is full.
@@ -14545,6 +14556,9 @@ ${researchRules("festival", ev)}`
         }
         if (cleanBooking(studioBooking)) shaped.__booking = studioBooking.trim();
         else delete shaped.__booking;
+        // The Explore filter, on the same rule: the box is the truth.
+        if (DEAL_KINDS.includes(studioDealKind)) shaped.__dealKind = studioDealKind;
+        else delete shaped.__dealKind;
         // The busyness forecast is a paid lookup kept in the draft, and
         // shapeForLive's allow-list does not carry it, so a new entry lost it at
         // publish (review, 2 Oct 2026). Carried across here, checked.
@@ -23580,7 +23594,9 @@ ${languageBlock()}`;
   // discounts are what sells, and only while a deal is live, so the gold button
   // never opens an empty page. The planner then moves into the menu like any
   // other page. Denmark keeps its gold planner.
-  const featuredTab = PAGE_ABROAD && TAB_ORDER.includes("promotions") ? "promotions" : "ai";
+  // 13 Oct 2026: Explore is the deals on another country's page now, so a
+  // gold Special deals button would only repeat it. No gold button there.
+  const featuredTab = PAGE_ABROAD ? null : "ai";
   // ── ACTIVITIES: EVENTS AND CALENDAR, ALWAYS ─────────────────────────
   // Oliver, 1 Oct 2026, of the navigation row: make it "calender" and
   // "events", "it can also be 'activities' instead?" So Activities is a
@@ -29395,6 +29411,18 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           </div>
                         )}
 
+                        {/* ── WHICH EXPLORE FILTER ─────────────────────────────
+                            Oliver, 13 Oct 2026: Discounts, Entertainment,
+                            Activities on the Lithuanian Explore page. */}
+                        <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, margin: "12px 0 5px" }}>EXPLORE FILTER</div>
+                        <select value={studioDealKind} onChange={e => setStudioDealKind(e.target.value)} data-testid="studio-deal-kind"
+                          style={{ width: "100%", border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 12px", fontSize: 12, outline: "none", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif", boxSizing: "border-box" }}>
+                          <option value="">Automatic, from the kind of place</option>
+                          <option value="discounts">Discounts</option>
+                          <option value="entertainment">Entertainment</option>
+                          <option value="activities">Activities</option>
+                        </select>
+
                         {/* ── BOOK A TABLE, AND HOW BUSY ─────────────────────
                             Oliver, 1 Oct 2026, for the Klaipėda pilot: cruise
                             passengers with a few hours, so convenience first.
@@ -29582,7 +29610,17 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             </div>
           )}
           {/* ── HOME LANDING ─────────────────────────────────── */}
-          {tab === "home" && (
+          {/* ── EXPLORE ON ANOTHER COUNTRY'S PAGE IS THE DEALS ─────────
+              Oliver, 13 Oct 2026: "let the Klaipėda deals be the explore page",
+              "more 'app-like' and less 'competitive' to the page". So no hero
+              and no guide sections here: the deals with their three filters,
+              and the tourism centre's own site for everything else. */}
+          {tab === "home" && PAGE_ABROAD && (
+            <div className={pageAnim} data-testid="explore-abroad" style={{ maxWidth: 680, margin: "0 auto", padding: "18px 16px 48px" }}>
+              <KlaipedaExplore lang={uiLang} />
+            </div>
+          )}
+          {tab === "home" && !PAGE_ABROAD && (
             <div className={pageAnim} style={{ margin: "-0px -0px" }}>
 
 
@@ -35690,10 +35728,35 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
 // lifted to a level that survives the route change (this wrapper, or a
 // context) — a real architectural change, not a one-line prop fix, and not
 // safe to attempt unverified overnight.
+// ── THE DANISH SIDE, OR "BEING REWORKED" ─────────────────────────────
+// DENMARK_REWORK in config.js (Oliver, 13 Oct 2026). Decided here, in front of
+// GemlyxApp rather than inside it, so none of its hooks run for a page that is
+// not shown. Lithuania is the same component on /lithuania and passes through,
+// and so does the Studio, which lives at #studio on the front page: the hash
+// is read live, because opening the Studio does not reload the page.
+// And a browser signed in to the Studio sees the Danish site as it is, so he
+// can still check his own pages. The pages are public anyway; this only
+// decides which screen is shown, never who may read anything.
+const studioHashNow = () => {
+  if (typeof window === "undefined") return false;
+  if (window.location.hash === "#studio") return true;
+  try { return !!localStorage.getItem("gemlyx_studio_session"); } catch { return false; }
+};
+const DanishSide = () => {
+  const [studio, setStudio] = useState(studioHashNow);
+  useEffect(() => {
+    const read = () => setStudio(studioHashNow());
+    window.addEventListener("hashchange", read);
+    return () => window.removeEventListener("hashchange", read);
+  }, []);
+  if (DENMARK_REWORK && !PAGE_ABROAD && !studio) return <ReworkPage />;
+  return <GemlyxApp />;
+};
+
 export default function Gemlyx() {
   return (
     <Routes>
-      <Route path="/" element={<GemlyxApp />} />
+      <Route path="/" element={<DanishSide />} />
       {/* ── A REAL ADDRESS FOR EVERY TOWN ────────────────────────────
           Seventy-odd researched entries rendered at no URL at all, so none of
           them could be found, linked or shared as itself. The country segment
@@ -35708,10 +35771,10 @@ export default function Gemlyx() {
           watches the path, for the reason the town routes give below: somebody
           arriving here from a link can close it and be inside the real thing
           rather than at a dead end. */}
-      <Route path={ABOUT_ME_PATH} element={<GemlyxApp />} />
-      <Route path={`${ABOUT_ME_PATH}/:meSection`} element={<GemlyxApp />} />
-      <Route path={`/${COUNTRY}`} element={<GemlyxApp />} />
-      <Route path={`/${COUNTRY}/:townSlug`} element={<GemlyxApp />} />
+      <Route path={ABOUT_ME_PATH} element={<DanishSide />} />
+      <Route path={`${ABOUT_ME_PATH}/:meSection`} element={<DanishSide />} />
+      <Route path={`/${COUNTRY}`} element={<DanishSide />} />
+      <Route path={`/${COUNTRY}/:townSlug`} element={<DanishSide />} />
       {/* ── AND AN ADDRESS FOR EVERYTHING THAT IS NOT A TOWN ─────────
           16 Aug 2026. The audit found the whole site was 33 URLs, /denmark and
           32 towns, because this table knew about one content type. Every
@@ -35728,7 +35791,7 @@ export default function Gemlyx() {
           /denmark/ribe still reaches :townSlug and /denmark/attraction/x does
           not. A segment nobody recognises falls through parseEntryUrl and opens
           the front page rather than a blank one. */}
-      <Route path={`/${COUNTRY}/:entrySeg/:entrySlug`} element={<GemlyxApp />} />
+      <Route path={`/${COUNTRY}/:entrySeg/:entrySlug`} element={<DanishSide />} />
       {/* ── THE EXAMPLE, WHEN THERE IS ONE ────────────────────────
           Oliver, 23 Aug 2026: "can we make an example of the guide
           somewhere? So people can see what Gemlyx will create them?"

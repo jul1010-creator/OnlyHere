@@ -117,6 +117,16 @@ export const FOUNDER_IDS = String(readFounderIds());
 // paying, so nothing else can drift out of agreement with it.
 export const PAID_PLANS_LIVE = false;
 
+// ── THE DANISH SIDE, CLOSED FOR REWORK ──────────────────────────────
+// Oliver, 13 Oct 2026, before the Klaipėda talks: "change the page to
+// temporary rework? So the tourism page don't look it up and is like 'Huh?
+// What is he making? This is about Denmark?'". While true, every Danish page
+// (the front page, /denmark and everything under it, About me) shows a short
+// "being reworked" page instead. Untouched: everything under /lithuania, the
+// Studio (#studio), saved guides, the trip library, support, terms and
+// privacy. Set it to false and the Danish site is back exactly as it was.
+export const DENMARK_REWORK = true;
+
 export const APP_VERSION = "v2.87 — AI plans become saveable guides with real data + mini-maps";
 
 // ── THE ONE PLACE THE PUBLIC ADDRESS IS WRITTEN DOWN ─────────────────
