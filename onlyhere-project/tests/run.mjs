@@ -82810,7 +82810,7 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("a Static Maps picture first, in the guide's style, never saved into the site", /maps\/api\/staticmap\?center=/.test(cm) && /&map_id=\$\{encodeURIComponent\(GOOGLE_MAP_ID\)\}/.test(cm) && /&scale=2/.test(cm) && /\{near && !live && \(/.test(cm));
   ok("and the live map only when Google refuses, asked once a visit", /onError=\{\(\) => \{ staticRefused = true; setLive\(true\); \}\}/.test(cm) && /useState\(staticRefused\)/.test(cm) && /if \(!ok \|\| !near \|\| !live \|\| made\.current/.test(cm));
   ok("no key, no map, rather than a worse one", /googleMapsReady\(\)/.test(cm) && /if \(!ok\) return null;/.test(cm));
-  ok("every deal with a place gets one, and tapping it walks there", /<DealCornerMap lat=\{at\.lat\} lon=\{at\.lon\} name=\{name\}/.test(read("src/components/DealCard.jsx")) && /onMap=\{\(\) => setOpened\(/.test(dny));
+  ok("every deal with a place gets one, and tapping it walks there", /<DealCornerMap fill ratio=\{ratio\} radius=\{radius\} lat=\{at\.lat\} lon=\{at\.lon\} name=\{name\}/.test(read("src/components/DealCard.jsx")) && /onOpen=\{\(\) => setOpened\(key\)\}/.test(dny) && /onTap=\{\(\) => setAbove\(true\)\}/.test(read("src/components/DealDetail.jsx")));
 }
 
 // ── Batch 235: Explore is the deals on the Lithuanian site, and the Danish
@@ -82881,7 +82881,7 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   const cm = read("src/components/DealCornerMap.jsx"), dny = read("src/components/DealsNearYou.jsx"), app = read("src/App.jsx");
   ok("a step further out", /export const CLOSE_ZOOM = 15;/.test(cm) && /zoom=\$\{CLOSE_ZOOM\}/.test(cm));
   ok("the walk map's own pointer, tip on the place", /import \{ PLACE_PIN, placePinHtml \} from "\.\/GoogleWalkMap";/.test(cm) && /marginTop: -PLACE_PIN\.h/.test(cm) && /transformOrigin: "50% 100%"/.test(cm) && /placePinHtml\(\{ sign, photo, color: pin \}\)/.test(cm));
-  ok("with the place's sign or its filter's in the window", M.DNY.signFor({ emoji: "🐟" }) === "🐟" && M.DNY.signFor({ _src: "nightlife" }) === "🎵" && M.DNY.signFor({ __dealKind: "other" }) === "📍" && /sign=\{signFor\(x\.d\)\} photo=\{x\.d\.photo \|\| ""\}/.test(dny));
+  ok("with the place's sign or its filter's in the window", M.DNY.signFor({ emoji: "🐟" }) === "🐟" && M.DNY.signFor({ _src: "nightlife" }) === "🎵" && M.DNY.signFor({ __dealKind: "other" }) === "📍" && /photo=\{x\.d\.photo \|\| ""\} at=\{x\.at\} sign=\{signFor\(x\.d\)\}/.test(dny));
   ok("abroad, arriving at the planner by its address opens Explore", /if \(PAGE_ABROAD && asked === "ai"\) return "home";/.test(app) && /return asked \|\| "home";/.test(app));
 }
 
@@ -82896,8 +82896,8 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("satellite, glided down and tilted over the building, like the walk map's arrival", /mapTypeId: "satellite"/.test(pv) && /RenderingType\?\.VECTOR/.test(pv) && /put\(glideAt\(start, end, t\)\)/.test(pv) && /to: \{ zoom: 18\.5, tilt: 55, heading: 35 \}/.test(pv));
   ok("then turns slowly round it until touched, and not at all for less motion", /heading: \(end\.heading \+ \(ms \/ 1000\) \* TURN_DEG_PER_S\) % 360/.test(pv) && /\["pointerdown", "wheel", "touchstart"\]\.forEach\(e => el\.addEventListener\(e, stop/.test(pv) && /if \(reducedMotion\(\)\) \{ put\(end\); return; \}/.test(pv));
   ok("the walk map's own pointer on the building", /pin\.innerHTML = placePinHtml\(\{ sign, photo, color: pinColor \}\);/.test(pv) && /new AdvancedMarkerElement\(/.test(pv));
-  ok("made only when the corner map is tapped, one at a time", /const key = x\.id \|\| x\.d\.name;/.test(dny) && /\{opened === key && x\.at && \(/.test(dny) && /setOpened\(cur => \(cur === key \? null : key\)\)/.test(dny));
-  ok("Show directions under it walks there from where the phone is", /onDirections=\{\(\) => go\(x\)\}/.test(dny) && /data-testid="place-view-directions"/.test(pv) && /locate\(\(at\) => setGoing\(/.test(dny));
+  ok("made only when the corner map is tapped, one at a time", /const key = x\.id \|\| x\.d\.name;/.test(dny) && /\{above \? \(\s*<DealPlaceView/.test(read("src/components/DealDetail.jsx")) && /const \[above, setAbove\] = useState\(false\);/.test(read("src/components/DealDetail.jsx")));
+  ok("Show directions under it walks there from where the phone is", /onDirections=\{\(\) => \{ setOpened\(null\); go\(x\); \}\}/.test(dny) && /onDirections=\{onDirections\}/.test(read("src/components/DealDetail.jsx")) && /data-testid="place-view-directions"/.test(pv) && /locate\(\(at\) => setGoing\(/.test(dny));
   ok("the words read in all four languages", ["explore.directions", "explore.closeMap", "explore.mapFailed"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
 }
 
@@ -82937,7 +82937,7 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("nothing true to say, nothing said", D.offerWhen({ text: "x" }, "always", { now: fri1200 }) === null);
   const dny = read("src/components/DealsNearYou.jsx");
   ok("'On now' is gone from the deals", !/trips\.onNow/.test(dny) && !/x\.card\.hours/.test(dny));
-  ok("Redeem offer in place of Walk there, on an offer that is on", !/deal-near-go/.test(dny) && !/trips\.go/.test(dny) && /\{offer && on && \(\s*<button onClick=\{\(\) => openRedeem\(x, when\)\} data-testid="deal-near-redeem"/.test(dny) && /uiT\("offer\.redeem", lang\)/.test(dny));
+  ok("Redeem offer in place of Walk there, on an offer that is on", !/deal-near-go/.test(dny) && !/trips\.go/.test(dny) && /onRedeem=\{!isSoon && offer \? \(\) => openRedeem\(x, when\) : null\}/.test(dny) && /data-testid="deal-near-redeem"/.test(read("src/components/DealDetail.jsx")) && /uiT\("offer\.redeem", lang\)/.test(dny));
   ok("it opens the counter screen, with the walk under it", /<RedeemSheet name=\{redeem\.x\.d\.name\}/.test(dny) && /setRedeem\(null\); go\(x\);/.test(dny));
   const rs = read("src/components/RedeemSheet.jsx");
   ok("the counter screen carries Gemlyx, the offer, when, and a running clock", /<GemlyxMark/.test(rs) && /<GemlyxWordmark/.test(rs) && /data-testid="redeem-offer"/.test(rs) && /data-testid="redeem-clock"/.test(rs) && /setInterval\(\(\) => setNow\(clockNow\(zone\)\), 1000\)/.test(rs));
@@ -82962,7 +82962,7 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("a spot outside Klaipėda is refused", S.dealProblems({ ...good, lat: 55.676, lon: 12.568 }).some(p => /outside Klaipėda/.test(p)));
   ok("half the hours is refused", S.dealProblems({ ...good, from: "14:00" }).some(p => /both a start and an end/.test(p)));
   ok("a booking that is neither link nor number is refused", S.dealProblems({ ...good, booking: "ring us" }).length === 1);
-  const pay = S.payloadFromDeal({ ...good, street: "Turgaus g. 7", days: [5, 1], from: "14:00", to: "16:00", dealKind: "discounts", booking: "+370 600 00000" }, { desc: "kept", photo: "/food/x.jpg" });
+  const pay = S.payloadFromDeal({ ...good, street: "Turgaus g. 7", days: [5, 1], from: "14:00", to: "16:00", dealKind: "discounts", booking: "+370 600 00000", photo: "/food/x.jpg" }, { desc: "kept", photo: "/food/x.jpg" });
   ok("the row is a Klaipėda place with its offer", pay.country === "LT" && pay.town === "Klaipėda" && pay.location === "Turgaus g. 7" && pay.__lat === 55.7087 && pay.__offer.text === "Free refill" && pay.__offer.from === "14:00" && pay.__dealKind === "discounts" && pay.__booking === "+370 600 00000");
   ok("and what the row already held stays", pay.desc === "kept" && pay.photo === "/food/x.jpg");
   ok("an automatic filter and an empty booking leave nothing behind", !("__dealKind" in S.payloadFromDeal(good, { __dealKind: "activities" })) && !("__booking" in S.payloadFromDeal(good, { __booking: "+370 1" })));
@@ -82974,7 +82974,7 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("a new deal starts hidden", S.emptyDeal().published === false);
   ok("a published row's id is the database id, as the walks and the partner link use it", D.dealPlaceId({ _src: "food", id: 100012 }) === "food:12" && D.dealPlaceId({ _src: "food", id: 12 }) === "food:12" && D.LIVE_OFFSET === M.LIVE_ID_OFFSET);
   const app = read("src/App.jsx"), ds = read("src/components/DealStudio.jsx"), ex = read("src/components/KlaipedaExplore.jsx");
-  ok("the Studio sits above the deals for him only", /studio=\{isStudio && studioSession \? <DealStudio supaFetch=\{supaFetch\} studioFetch=\{studioFetch\} onChanged=\{dealChanged\} \/>/.test(app) && /\{studio\}/.test(ex) && /useKlaipedaDeals\(null, version\)/.test(ex));
+  ok("the Studio sits above the deals for him only", /studio=\{isStudio && studioSession \? <DealStudio supaFetch=\{supaFetch\} studioFetch=\{studioFetch\} onChanged=\{dealChanged\} upload=/.test(app) && /\{studio\}/.test(ex) && /useKlaipedaDeals\(null, version\)/.test(ex));
   ok("a save reaches the page without a reload", /if \(now && !was\) await refreshLiveContent\(\);/.test(app) && /else if \(was && !now\) removeLiveRow\(after\.id, after\.type\);/.test(app) && /applyEditedRow\(after\.id, after\.type, after\.payload\)/.test(app) && /\}, \[today, version\]\);/.test(read("src/utils/useKlaipedaDeals.js")));
   ok("a second row with the same name is refused before the insert", /payload->>name=ilike\./.test(ds) && /is already in the database as/.test(ds));
   ok("no dashes in what he reads", !/[–—]/.test(ds) && !/[–—]/.test(read("src/utils/dealStudio.js").replace(/^\s*\/\/.*$/gm, "")));
@@ -83013,8 +83013,8 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   is("Upcoming, soonest first: later tonight, then Friday", D.upcomingDeals(deals, null, { now: tue2130 }).map(x => x.d.name), ["Coffee", "Candy"]);
   const dny = read("src/components/DealsNearYou.jsx");
   ok("the list is only what is on, what starts later waits in Upcoming", /\.filter\(x => x\.card\.timing !== "later"\), \[deals, start\?\.lat, start\?\.lon, lang, sort, tick\]\)/.test(dny) && /data-testid="deals-upcoming"/.test(dny) && /explore\.upcoming/.test(dny));
-  const upBlock = dny.slice(dny.indexOf('data-testid="deals-upcoming"'), dny.indexOf('{country === "LT" && ('));
-  ok("an upcoming card has no Redeem", !/openRedeem|deal-near-redeem|actions=/.test(upBlock) && /testid="deal-upcoming" upcoming/.test(upBlock) && /deal-upcoming-hours/.test(read("src/components/DealCard.jsx")));
+  const upBlock = dny.slice(dny.indexOf('data-testid="deals-upcoming"'), dny.indexOf('{(() => {'));
+  ok("an upcoming card has no Redeem", !/openRedeem|deal-near-redeem|actions=/.test(upBlock) && /testid="deal-upcoming" upcoming/.test(upBlock) && /onRedeem=\{!isSoon/.test(dny) && /\{onRedeem && !upcoming &&/.test(read("src/components/DealDetail.jsx")));
   ok("no 'No deals' flash while loading", /\{!ready \? \(/.test(dny) && /ready=\{live\.ready\}/.test(read("src/components/KlaipedaExplore.jsx")) && /ready=\{live\.ready\}/.test(read("src/pages/KlaipedaDemo.jsx")));
   ok("the Studio can set No last day", S.dealProblems({ ...S.emptyDeal(), name: "Lidl", lat: 55.7087, lon: 21.1339, text: "Friday candy", ongoing: true, days: [5], from: "15:00", to: "18:00" }).length === 0 && S.payloadFromDeal({ ...S.emptyDeal(), name: "Lidl", lat: 55.7, lon: 21.13, text: "x", ongoing: true }).__offer.ongoing === true && /"deal-studio-ongoing"/.test(read("src/components/DealStudio.jsx")) && /data-testid="studio-offer-ongoing"/.test(read("src/App.jsx")));
   ok("and the walks read it too", /if \(raw\.ongoing !== true\) \{/.test(read("src/utils/nowPlanner.js")));
@@ -83031,7 +83031,7 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("every theme has a bronze for the details", ["warm", "dark", "light"].every(k => /^#[0-9A-F]{6}$/i.test(M.THEMES[k].bronze || "")));
   ok("and it is still the default", M.DEFAULT_THEME === "dark");
   const card = read("src/components/DealCard.jsx"), dny = read("src/components/DealsNearYou.jsx"), ds = read("src/components/DealStudio.jsx");
-  ok("one card for Explore, Upcoming and the Studio's preview", /<DealCard key=\{key\}/.test(dny) && /<DealCard key=\{x\.id \|\| x\.d\.name\} testid="deal-upcoming" upcoming/.test(dny) && /<DealCard testid="deal-studio-card"/.test(ds));
+  ok("one card for Explore, Upcoming and the Studio's preview", /<DealTile key=\{key\} testid="deal-near"/.test(dny) && /<DealTile key=\{x\.id \|\| x\.d\.name\} testid="deal-upcoming" upcoming/.test(dny) && /<DealTile testid="deal-studio-card"/.test(ds));
   ok("no gold box around a card, one hairline", /border: `1px solid \$\{C\.border\}`, borderRadius: 18/.test(card) && !/\$\{C\.gold\}66/.test(card));
   ok("styles read the theme when drawn, not when imported", /export const eyebrow = \(\) => \(/.test(card) && /const field = \(\) => \(/.test(ds) && !/^const field = \{/m.test(ds));
   ok("the editor is in sections", ["The place", "The offer", "On the map", "On Explore", "Preview"].every(t => ds.includes(`>${t}</h3>`)));
@@ -83042,6 +83042,28 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
     && /pin=\{x\.d\.__pin \|\| ""\}/.test(dny) && M.placePinHtml({ color: "#2A9D8F" }).includes('fill="#2A9D8F"'));
   ok("the first paint is the new dark", /<meta name="theme-color" content="#0E0E11" \/>/.test(read("index.html")));
   ok("no navy left on the Lithuanian side's own components", ["DealCard", "DealsNearYou", "DealStudio", "DealCornerMap", "DealPlaceView", "RedeemSheet"].every(n => !/#0A0F1E/i.test(read(`src/components/${n}.jsx`))));
+}
+
+// ── Batch 245: deals as tiles, the way Lidl Plus shows its offers ──
+// Oliver, 13 Oct 2026, with a screenshot of lidl.dk: "Maybe this type?" Then:
+// a photo, or the map when there is none, and two tiles to a row on a phone.
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const D = M.DNY;
+  const card = read("src/components/DealCard.jsx"), dny = read("src/components/DealsNearYou.jsx"), det = read("src/components/DealDetail.jsx"), ds = read("src/components/DealStudio.jsx");
+  ok("two to a row on a phone, more on a wide screen", /gridTemplateColumns: "repeat\(auto-fill, minmax\(150px, 1fr\)\)"/.test(dny) && (390 - 32 - 12) / 2 >= 150 && (390 - 32 - 24) / 3 < 150);
+  ok("the picture is the photo, else the map, else the sign", /if \(src\) return <img/.test(card) && /if \(at && googleMapsReady\(\)\) return <DealCornerMap fill/.test(card) && /deal-picture-blank/.test(card));
+  ok("a photo is a web address or one deployed with the site", card.includes("export const safePhoto") && /\/\^https:/.test(card));
+  ok("the badge sits in the picture's corner, the name over its foot", /data-testid="deal-tile-badge" style=\{\{ position: "absolute", top: 8, left: 8/.test(card) && /linear-gradient\(to top, rgba\(10,10,12,0\.88\)/.test(card));
+  ok("tapping a tile opens the whole deal, where Redeem is", /<DealDetail name=\{x\.d\.name\}/.test(dny) && /onOpen=\{\(\) => setOpened\(`soon:\$\{x\.id \|\| x\.d\.name\}`\)\}/.test(dny));
+  const tue2130 = new Date("2026-10-13T18:30:00Z");
+  is("live badges", [D.liveBadge({ to: "18:00" }, { kind: "ends", left: 20 }), D.liveBadge({ to: "18:00" }, { kind: "expires" }), D.liveBadge({ until: "2026-12-31" }, { kind: "until" }), D.liveBadge({}, { kind: "ongoing", text: "Fridays" })], ["Ends in 20 min", "Until 18:00", "Until 31 Dec", "Fridays"]);
+  is("upcoming badges", [D.upcomingBadge({ inDays: 0, day: 2, from: "16:00" }), D.upcomingBadge({ inDays: 1, day: 3, from: "14:00" }), D.upcomingBadge({ inDays: 3, day: 5, from: "18:00" }), D.upcomingBadge({ inDays: 3, day: 5, from: "" })], ["From 16:00", "Tomorrow 14:00", "From Friday 18:00", "From Friday"]);
+  is("in Danish and Lithuanian", [D.upcomingBadge({ inDays: 3, day: 5, from: "18:00" }, "da"), D.upcomingBadge({ inDays: 3, day: 5, from: "18:00" }, "lt")], ["Fra fredag kl. 18.00", "Nuo penktadienio 18:00"]);
+  ok("the Studio uploads a photo, and Use the map takes it off", /data-testid="deal-studio-photo-upload"/.test(ds) && /Use the map/.test(ds) && /mediaPathFor\(file, "deals"/.test(read("src/App.jsx")) && !("photo" in M.DST.payloadFromDeal({ ...M.DST.emptyDeal(), name: "x", lat: 55.7, lon: 21.13, text: "x", ongoing: true, photo: "" }, { photo: "/a.jpg" })));
+  ok("a photo that is neither uploaded nor a web address is refused", M.DST.dealProblems({ ...M.DST.emptyDeal(), name: "x", lat: 55.7087, lon: 21.1339, text: "x", ongoing: true, photo: "C:\\pics\\a.jpg" }).some(p => /photo/.test(p)));
+  ok("the map from above is still one tap away in the deal", /onTap=\{\(\) => setAbove\(true\)\}/.test(det));
+  ok("the badge words read in all four languages", ["badge.endsIn", "badge.until", "badge.untilDate", "badge.from", "badge.tomorrowAt", "badge.tomorrow", "badge.fromDayAt", "badge.fromDay"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
