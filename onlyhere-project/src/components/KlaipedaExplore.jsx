@@ -19,7 +19,7 @@ export const KlaipedaExplore = ({ lang = "en", version = 0, studio = null }) => 
   return (
     <>
       {studio}
-      <DealsNearYou deals={live.deals} examples={live.examples} lang={lang} country="LT" sticky={false} />
+      <DealsNearYou deals={live.deals} examples={live.examples} ready={live.ready} lang={lang} country="LT" sticky={false} />
     </>
   );
 };

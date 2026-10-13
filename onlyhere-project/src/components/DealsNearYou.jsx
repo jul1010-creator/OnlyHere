@@ -23,14 +23,16 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { C } from "../utils/theme";
 import { t as uiT } from "../utils/uiLanguage";
 import { promoCard } from "../utils/promotions";
+import { offerHoursLabel, offerLive, cleanOffer } from "../utils/offer";
 import { NOW_AREAS, inNowArea, walkMinutes } from "../utils/nowPlanner";
 import { cleanBooking, busyAt } from "../utils/dealExtras";
 import { dealsSeen, placeReached, dealRedeemOpened } from "../utils/partnerStats";
 import { WalkMode, askForCompass } from "./WalkMode";
 import { DealCornerMap } from "./DealCornerMap";
 import { DealPlaceView } from "./DealPlaceView";
-import { placeClock, cleanClock } from "../utils/offerClock";
+import { placeClock, cleanClock, windowOf } from "../utils/offerClock";
 import { RedeemSheet } from "./RedeemSheet";
+import { dayKey, dayPlus } from "../utils/calendarDay";
 
 const fill = (t, v) => String(t).replace(/\{(\w+)\}/g, (_, k) => (v[k] ?? ""));
 
@@ -159,6 +161,7 @@ export const leftWords = (min, lang = "en") => {
 //   on, with an end time            Offer expires at 18:00
 //   later today                     Offer starts at 16:00
 //   with a last day                 Offer valid until 31 October
+//   ongoing, no last day            Fridays 15:00-18:00 / Every day
 // and nothing at all when there is nothing true to say.
 const DATE_LOCALE = { en: "en-GB", da: "da-DK", de: "de-DE", lt: "lt-LT" };
 export const offerUntilWords = (until, lang = "en") => {
@@ -178,15 +181,91 @@ export const offerWhen = (offer, timing, { now = new Date(), lang = "en", zone =
     const to = cleanClock(offer?.to);
     if (to) return { kind: "expires", text: say("offer.expiresAt", { time: to }) };
   }
+  // No last day, every week (13 Oct 2026, "friday candy EVERY friday"): the
+  // line says when it runs, as the place's other pages already write it.
+  if (offer?.ongoing === true) {
+    const runs = offerHoursLabel(offer, { timing: "off", lang });
+    return { kind: "ongoing", text: runs || uiT("offer.everyDay", lang) };
+  }
   const date = offerUntilWords(offer?.until, lang);
   if (date) return { kind: "until", text: say("offer.validUntil", { date }) };
   return null;
 };
+// ── UPCOMING, THE WAY LIDL PLUS SHOWS IT ─────────────────────────────
+// Oliver, 13 Oct 2026: "hide the offer the days where it is not there, and
+// just have it as an 'upcoming' offer. Similar to the Lidl+ app." So the list
+// is only what a visitor can use now. An offer that starts later today, or on
+// another day this week, waits underneath in Upcoming, greyed, saying when it
+// starts, with no Redeem button: nothing to show at a counter yet.
+//
+// When it next starts, on the place's clock, within the coming week and
+// inside its dates. null for one that runs all day every day, has ended, or
+// does not come round again before its last day. One that is on now starts
+// next on its next day, which is why only offers that are not on are asked.
+const dateIn = (when, zone) => {
+  try { return new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" }).format(when); } catch { return ""; }
+};
+export const nextStart = (offer, now = new Date(), zone = "Europe/Vilnius") => {
+  const o = cleanOffer(offer);
+  if (!o || !offerLive(o, now)) return null;
+  const w = windowOf(o);
+  if (!w) return null;
+  const pc = placeClock(now, zone);
+  for (let k = 0; k <= 7; k++) {
+    const day = (pc.day + k) % 7;
+    if (w.days.length && !w.days.includes(day)) continue;
+    if (k === 0 && pc.minutes >= w.fromMin) continue;
+    if (!o.ongoing && o.until) {
+      // The calendar day k days on at the place, counted on the calendar
+      // rather than in milliseconds, so a clock change cannot move it.
+      const on = dayKey(dayPlus(dateIn(now, zone), k)) || "";
+      if (on && on > o.until) return null;
+    }
+    return { inDays: k, day, from: w.from, at: k * 1440 + w.fromMin };
+  }
+  return null;
+};
+// Lithuanian wants the day in the accusative after "prasideda".
+const LT_DAY = ["sekmadienį", "pirmadienį", "antradienį", "trečiadienį", "ketvirtadienį", "penktadienį", "šeštadienį"];
+const DAY_LOCALE = { en: "en-GB", da: "da-DK", de: "de-DE", lt: "lt-LT" };
+const dayWord = (d, lang) => {
+  if (lang === "lt") return LT_DAY[d];
+  try { return new Intl.DateTimeFormat(DAY_LOCALE[lang] || "en-GB", { weekday: "long", timeZone: "UTC" }).format(new Date(Date.UTC(2026, 0, 4 + d))); } catch { return ""; }
+};
+export const startsWords = (ns, lang = "en") => {
+  if (!ns) return "";
+  const say = (key, vars) => fill(uiT(key, lang), vars);
+  const time = ns.from ? (lang === "da" ? ns.from.replace(":", ".") : ns.from) : "";
+  if (ns.inDays === 0) return say("offer.startsAt", { time });
+  if (ns.inDays === 1) return time ? say("offer.startsTomorrowAt", { time }) : uiT("offer.startsTomorrow", lang);
+  const day = dayWord(ns.day, lang);
+  return time ? say("offer.startsOnAt", { day, time }) : say("offer.startsOn", { day });
+};
+// The offer's days and hours, "Mon to Fri 14:00-16:00" or "Fridays
+// 18:00-21:00", under the line that says when it ends or starts. Oliver,
+// 13 Oct 2026: "It should also display the hours..". "" for an offer that runs
+// all day, every day.
+export const hoursOf = (offer, lang = "en") => { const h = offerHoursLabel(offer, { timing: "off", lang }); return h ? h.charAt(0).toUpperCase() + h.slice(1) : ""; };
+export const upcomingDeals = (deals, start, { now = new Date(), lang = "en", limit = MAX_DEALS } = {}) =>
+  (Array.isArray(deals) ? deals : [])
+    .map(d => {
+      const card = promoCard(d, { today: now, lang });
+      if (card.timing !== "later" && card.timing !== "off") return null;
+      const next = nextStart(d.__offer, now);
+      if (!next) return null;
+      const at = pointOf(d);
+      return { d, card, at, next, id: dealPlaceId(d), minutes: at && start ? walkMinutes(start, at) : null };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.next.at - b.next.at || nameOrder(a, b))
+    .slice(0, limit);
 // The sign in the map pointer's window: the place's own, or its filter's.
 export const KIND_SIGN = { discounts: "🏷️", entertainment: "🎵", activities: "🎯", other: "📍" };
 export const signFor = (d) => (d?.emoji ? String(d.emoji) : KIND_SIGN[dealKind(d)] || "📍");
 
-export const DealsNearYou = ({ deals = [], examples = false, lang = "en", country = "LT", sticky = true }) => {
+// `ready` is false while the deals are still loading, so the first paint is
+// not "No deals are on right now" for a list that is about to fill.
+export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang = "en", country = "LT", sticky = true }) => {
   const [here, setHere] = useState(null);
   const [note, setNote] = useState("");
   const [going, setGoing] = useState(null);
@@ -197,7 +276,7 @@ export const DealsNearYou = ({ deals = [], examples = false, lang = "en", countr
   // (RedeemSheet.jsx, 13 Oct 2026), with Gemlyx on it.
   const [redeem, setRedeem] = useState(null);
   // The countdown moves on by itself while the page is open.
-  const [, setTick] = useState(0);
+  const [tick, setTick] = useState(0);
   useEffect(() => { const t = setInterval(() => setTick(n => n + 1), 30000); return () => clearInterval(t); }, []);
   const [kind, setKind] = useState(null);
   const [sort, setSort] = useState("az");
@@ -231,8 +310,11 @@ export const DealsNearYou = ({ deals = [], examples = false, lang = "en", countr
     if (k === "closest" && !here) { setSort("closest"); locate(); return; }
     setSort(k);
   };
-  const all = useMemo(() => nearbyDeals(deals, start, { now: new Date(), lang, limit: Infinity, order: sort === "closest" && start ? "closest" : "az" }), [deals, start?.lat, start?.lon, lang, sort]);
+  // Only what can be used now; what starts later waits in Upcoming (13 Oct
+  // 2026). The tick moves an offer from one to the other as its hour comes.
+  const all = useMemo(() => nearbyDeals(deals, start, { now: new Date(), lang, limit: Infinity, order: sort === "closest" && start ? "closest" : "az" }).filter(x => x.card.timing !== "later"), [deals, start?.lat, start?.lon, lang, sort, tick]);
   const list = useMemo(() => (kind ? all.filter(x => dealKind(x.d) === kind) : all).slice(0, MAX_DEALS), [all, kind]);
+  const soon = useMemo(() => upcomingDeals(deals, start, { now: new Date(), lang, limit: Infinity }).filter(x => !kind || dealKind(x.d) === kind).slice(0, MAX_DEALS), [deals, start?.lat, start?.lon, lang, kind, tick]);
   const go = (x) => {
     askForCompass();
     if (start) { setGoing(x); return; }
@@ -291,9 +373,11 @@ export const DealsNearYou = ({ deals = [], examples = false, lang = "en", countr
         </div>
       </div>
       {note && <div data-testid="deals-near-note" style={{ fontSize: 12, color: "#FFB347", margin: "0 0 10px" }}>{note}</div>}
-      {list.length === 0 ? (
+      {!ready ? (
+        <div data-testid="deals-near-loading" style={{ height: 120 }} />
+      ) : list.length === 0 ? (
         <div data-testid="deals-near-none" style={{ fontSize: 13.5, color: C.light, lineHeight: 1.6, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "13px 15px" }}>
-          {uiT(kind && all.length ? "explore.noneHere" : "trips.noDeals", lang)}
+          {uiT(soon.length ? "explore.noneNowSoon" : kind && all.length ? "explore.noneHere" : "trips.noDeals", lang)}
         </div>
       ) : (
         <div style={{ display: "grid", gap: 10 }}>
@@ -316,6 +400,7 @@ export const DealsNearYou = ({ deals = [], examples = false, lang = "en", countr
                       {when && when.kind !== "ends" && <span data-testid="deal-near-when" style={{ fontWeight: on ? 700 : 400 }}>{when.text}</span>}
                       {busy ? `${when ? " · " : ""}${uiT(`busy.${busy.level}`, lang)}` : ""}
                     </div>
+                    {when?.kind !== "ongoing" && hoursOf(x.d.__offer, lang) && <div data-testid="deal-near-hours" style={{ fontSize: 11.5, color: C.muted, marginTop: 2 }}>{hoursOf(x.d.__offer, lang)}</div>}
                   </div>
                   {x.at && (
                     <DealCornerMap lat={x.at.lat} lon={x.at.lon} name={x.d.name} sign={signFor(x.d)} photo={x.d.photo || ""}
@@ -343,6 +428,30 @@ export const DealsNearYou = ({ deals = [], examples = false, lang = "en", countr
               </div>
             );
           })}
+        </div>
+      )}
+      {soon.length > 0 && (
+        <div data-testid="deals-upcoming" style={{ marginTop: 22 }}>
+          <h3 style={{ fontSize: 13, fontWeight: 800, letterSpacing: 1.2, textTransform: "uppercase", color: C.muted, margin: "0 0 10px" }}>{uiT("explore.upcoming", lang)}</h3>
+          <div style={{ display: "grid", gap: 10 }}>
+            {soon.map(x => {
+              const offer = String(x.d.__offer?.text || "").trim();
+              return (
+                <div key={x.id || x.d.name} data-testid="deal-upcoming" style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "13px 15px", opacity: 0.72 }}>
+                  <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 16, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, overflowWrap: "anywhere" }}>{x.d.name}</div>
+                      {x.minutes != null && <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginTop: 1 }}>{fill(uiT("trips.walkMin", lang), { n: x.minutes })}</div>}
+                      {offer && <div style={{ fontSize: 14, fontWeight: 700, color: C.light, lineHeight: 1.45, marginTop: 4 }}>{offer}</div>}
+                      <div data-testid="deal-upcoming-starts" style={{ fontSize: 12, fontWeight: 700, color: C.gold, marginTop: 4 }}>{startsWords(x.next, lang)}</div>
+                      {hoursOf(x.d.__offer, lang) && <div data-testid="deal-upcoming-hours" style={{ fontSize: 11.5, color: C.light, marginTop: 2 }}>{hoursOf(x.d.__offer, lang)}</div>}
+                    </div>
+                    {x.at && <DealCornerMap lat={x.at.lat} lon={x.at.lon} name={x.d.name} sign={signFor(x.d)} photo={x.d.photo || ""} size={84} />}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
       {country === "LT" && (

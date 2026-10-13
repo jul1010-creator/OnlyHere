@@ -13,7 +13,7 @@ import { createPortal } from "react-dom";
 import { C } from "../utils/theme";
 import { SUPABASE_URL } from "../config";
 import { DEAL_PLACE_TYPES, DEAL_FILTERS, DAY_SHORT, WEEK_ORDER, isDealRow, emptyDeal, dealFromRow, dealProblems, payloadFromDeal, dealWhenShort, offerOf } from "../utils/dealStudio";
-import { offerWhen, signFor } from "./DealsNearYou";
+import { offerWhen, signFor, nextStart, startsWords } from "./DealsNearYou";
 import { promoCard } from "../utils/promotions";
 import { DealCornerMap } from "./DealCornerMap";
 import { GOOGLE_MAP_ID, googleMapsReady, loadGoogleMaps } from "../utils/googleMapsLoader";
@@ -78,14 +78,18 @@ const Preview = ({ f }) => {
   const at = { lat: Number(f.lat), lon: Number(f.lon) };
   const d = { name: f.name, emoji: f.sign, category: TYPE_LABEL[f.type], __offer: offer, __dealKind: f.dealKind };
   const card = offer ? promoCard({ ...d, country: "LT" }, { today: new Date(), lang: "en" }) : null;
-  const when = offer ? offerWhen(offer, card?.timing, { now: new Date(), lang: "en" }) : null;
+  // An offer that is not on yet shows as Explore's Upcoming does: greyed,
+  // when it starts, no Redeem.
+  const waiting = card?.timing === "later" || card?.timing === "off";
+  const when = offer ? (waiting ? { text: startsWords(nextStart(offer, new Date()), "en") } : offerWhen(offer, card?.timing, { now: new Date(), lang: "en" })) : null;
   return (
-    <div data-testid="deal-studio-preview" style={{ background: `${C.gold}12`, border: `1px solid ${C.gold}66`, borderRadius: 14, padding: "13px 15px", display: "flex", gap: 12 }}>
+    <div data-testid="deal-studio-preview" style={{ background: waiting ? C.surface : `${C.gold}12`, border: `1px solid ${waiting ? C.border : `${C.gold}66`}`, borderRadius: 14, padding: "13px 15px", display: "flex", gap: 12, opacity: waiting ? 0.72 : 1 }}>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 16, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, overflowWrap: "anywhere" }}>{f.name || "The place's name"}</div>
         <div style={{ fontSize: 14, fontWeight: 700, color: C.gold, lineHeight: 1.45, marginTop: 4 }}>{offer?.text || "What a visitor gets"}</div>
-        <div style={{ fontSize: 12, color: C.light, marginTop: 4 }}>{when?.text || (card?.timing === "off" ? "Not on today" : card?.timing === "ended" ? "Ended" : "")}</div>
-        <span style={{ ...small(true), display: "inline-block", marginTop: 10, cursor: "default" }}>Redeem offer</span>
+        {waiting && <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: 1, color: C.muted, marginTop: 6 }}>UPCOMING</div>}
+        <div style={{ fontSize: 12, color: waiting ? C.gold : C.light, fontWeight: waiting ? 700 : 400, marginTop: 4 }}>{when?.text || (card?.timing === "ended" ? "Ended" : "")}</div>
+        {!waiting && <span style={{ ...small(true), display: "inline-block", marginTop: 10, cursor: "default" }}>Redeem offer</span>}
       </div>
       {Number.isFinite(at.lat) && Number.isFinite(at.lon) && f.lat !== "" && <DealCornerMap lat={at.lat} lon={at.lon} name={f.name} sign={signFor(d)} />}
     </div>
@@ -181,8 +185,12 @@ const Editor = ({ start, onSave, onClose, busy, error }) => {
           </div>
           <div style={{ fontSize: 11.5, color: C.muted, marginTop: 6 }}>Both empty means all day.</div>
 
-          <label style={label}>Last day</label>
-          <input type="date" value={f.until} onChange={e => set("until", e.target.value)} style={field} data-testid="deal-studio-until" />
+          <label style={label}>Runs</label>
+          <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+            <button type="button" onClick={() => set("ongoing", true)} style={chip(f.ongoing)} data-testid="deal-studio-ongoing">No last day</button>
+            <button type="button" onClick={() => set("ongoing", false)} style={chip(!f.ongoing)} data-testid="deal-studio-dated">Until a date</button>
+          </div>
+          {!f.ongoing && <input type="date" value={f.until} onChange={e => set("until", e.target.value)} style={field} data-testid="deal-studio-until" />}
 
           <label style={label}>Filter on Explore</label>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -331,7 +339,7 @@ export const DealStudio = ({ supaFetch, studioFetch, onChanged }) => {
                   <span style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: 0.5, color: row.published ? C.gold : C.muted, border: `1px solid ${row.published ? C.gold : C.border}`, borderRadius: 100, padding: "2px 8px", whiteSpace: "nowrap" }}>{row.published ? "SHOWING" : "HIDDEN"}</span>
                 </div>
                 <div style={{ fontSize: 12.5, color: C.gold, marginTop: 3 }}>{f.text}</div>
-                <div style={{ fontSize: 11.5, color: C.muted, marginTop: 2 }}>{dealWhenShort(f)}, until {f.until}</div>
+                <div style={{ fontSize: 11.5, color: C.muted, marginTop: 2 }}>{dealWhenShort(f)}{f.ongoing ? ", no last day" : `, until ${f.until}`}</div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
                   <button onClick={() => { setError(""); setEditing(f); }} style={small(false)}>Edit</button>
                   <button onClick={() => flip(row)} style={small(false)}>{row.published ? "Hide" : "Show"}</button>
