@@ -24,17 +24,8 @@ import { NowPlanner } from "../components/NowPlanner";
 import { DealsNearYou } from "../components/DealsNearYou";
 import { LOCAL_TIPS, todayInKlaipeda } from "../data/klaipedaDemo";
 import { currentUiLanguage, t as uiT } from "../utils/uiLanguage";
-import { ensureLiveContentLoaded } from "../utils/liveContent";
-import { events, majorEvents, calendarEvents } from "../data/events";
-import { freeEntrance } from "../data/freeEntrance";
-import { foodSpots } from "../data/food";
-import { nightlifeSpots } from "../data/nightlife";
-import { shops } from "../data/shops";
-import { towns } from "../data/towns";
-import { livePromotions } from "../utils/promotions";
-import { eventOnDays } from "../utils/eventWhen";
-import { rowCountry } from "../utils/countries";
-import { examplePromotionPools, KLAIPEDA_SKY } from "../data/klaipedaExamples";
+import { KLAIPEDA_SKY } from "../data/klaipedaExamples";
+import { useKlaipedaDeals } from "../utils/useKlaipedaDeals";
 import { weatherIcon } from "../utils/helpers";
 
 const SKY_EVERY_MS = 10 * 60 * 1000;
@@ -47,29 +38,9 @@ export const KlaipedaDemo = () => {
   }, []);
 
   // ── TODAY IN KLAIPĖDA, AND THE DEALS IN TOWN ──────────────────────
-  // The same published content the main site reads, loaded once.
-  const [live, setLive] = useState({ onToday: [], deals: [], examples: false });
-  useEffect(() => {
-    let gone = false;
-    ensureLiveContentLoaded().then(() => {
-      if (gone) return;
-      const lt = (r) => rowCountry(r) === "LT";
-      const onToday = [...events, ...majorEvents, ...calendarEvents].filter(lt).filter(e => eventOnDays(e, [today])).slice(0, 6);
-      const real = livePromotions({ free: freeEntrance, food: foodSpots, nightlife: nightlifeSpots, shop: shops, town: towns, event: [...events, ...majorEvents] }).filter(lt);
-      // The made-up partners until the first real Klaipėda deal, the same
-      // rule as the Special deals page (App.jsx exampleDeals), 7 Oct 2026.
-      const examples = real.length === 0;
-      // Which of them are on today, and in what order, is DealsNearYou's
-      // call, because it depends on where the visitor stands.
-      const deals = examples ? livePromotions(examplePromotionPools()) : real;
-      setLive({ onToday, deals, examples });
-    }).catch(() => {
-      // The published rows could not be read: the made-up partners, marked
-      // Example, rather than an empty first screen.
-      if (!gone) setLive({ onToday: [], deals: livePromotions(examplePromotionPools()), examples: true });
-    });
-    return () => { gone = true; };
-  }, [today, lang]);
+  // One loader for this page and the Explore tab of /lithuania, so the two
+  // always show the same deals (utils/useKlaipedaDeals.js, 13 Oct 2026).
+  const live = useKlaipedaDeals(today);
 
   // ── THE WEATHER IN KLAIPĖDA NOW, IN THE CORNER ────────────────────
   // Oliver, 7 Oct 2026: "implement up in the corner 'current weather' on the
@@ -107,9 +78,10 @@ export const KlaipedaDemo = () => {
         {/* A visitor's page only: no switch to the business side here. */}
         <KlaipedaTop place={null} corner={corner} />
 
-        <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 1.6, textTransform: "uppercase", marginBottom: 8 }}>Lithuania</div>
-        <h1 style={{ fontSize: 38, fontWeight: 500, fontFamily: "'Fraunces', serif", lineHeight: 1.1, margin: "0 0 12px" }}>Klaipėda</h1>
-        <p style={{ fontSize: 13, lineHeight: 1.65, color: C.muted, margin: "0 0 26px" }}>
+        {/* App-like, 13 Oct 2026: a short title and straight to the deals,
+            not a website's hero. */}
+        <h1 style={{ fontSize: 28, fontWeight: 500, fontFamily: "'Fraunces', serif", lineHeight: 1.1, margin: "0 0 4px" }}>Klaipėda</h1>
+        <p style={{ fontSize: 12.5, lineHeight: 1.55, color: C.muted, margin: "0 0 18px" }}>
           {uiT("trips.introDeals", lang)}
         </p>
 
