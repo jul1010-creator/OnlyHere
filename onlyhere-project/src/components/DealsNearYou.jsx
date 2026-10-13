@@ -22,6 +22,7 @@ import { dealsSeen, placeReached } from "../utils/partnerStats";
 import { WalkMode, askForCompass } from "./WalkMode";
 import { DealCornerMap } from "./DealCornerMap";
 import { DealPlaceView } from "./DealPlaceView";
+import { placeClock } from "../utils/offerClock";
 
 const fill = (t, v) => String(t).replace(/\{(\w+)\}/g, (_, k) => (v[k] ?? ""));
 
@@ -113,6 +114,27 @@ export const dealKind = (d) => {
 export const centreSite = (lang) => (lang === "lt" ? "https://klaipedatravel.lt/" : "https://klaipedatravel.lt/en/");
 
 export const SORTS = ["closest", "az"];
+
+// ── HOW LONG THE OFFER HAS LEFT ─────────────────────────────────────
+// Oliver, 13 Oct 2026: "if it is friday 17:40 and an offer closes at 18:00,
+// then it'll say 'ends in 20 minutes'". Read on the place's own clock, from
+// the offer's own end time; an offer that runs past midnight counts on into
+// the next day. Shown once there are three hours or less to go; before that
+// the card says the hours as it did.
+export const ENDS_SOON_MIN = 180;
+const clockMin = (v) => { const m = /^(\d{1,2})[:.](\d{2})$/.exec(String(v || "").trim()); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
+export const minutesLeft = (offer, now = new Date(), zone = "Europe/Vilnius") => {
+  const to = clockMin(offer?.to);
+  if (to === null) return null;
+  const left = (to - placeClock(now, zone).minutes + 1440) % 1440;
+  return left === 0 ? null : left;
+};
+const UNITS = { en: ["h", "min"], da: ["t", "min"], de: ["Std.", "Min."], lt: ["val.", "min."] };
+export const leftWords = (min, lang = "en") => {
+  const [h, m] = UNITS[lang] || UNITS.en;
+  const hours = Math.floor(min / 60), mins = min % 60;
+  return hours ? `${hours} ${h}${mins ? ` ${mins} ${m}` : ""}` : `${Math.max(1, mins)} ${m}`;
+};
 // The sign in the map pointer's window: the place's own, or its filter's.
 export const KIND_SIGN = { discounts: "🏷️", entertainment: "🎵", activities: "🎯", other: "📍" };
 export const signFor = (d) => (d?.emoji ? String(d.emoji) : KIND_SIGN[dealKind(d)] || "📍");
@@ -124,6 +146,9 @@ export const DealsNearYou = ({ deals = [], examples = false, lang = "en", countr
   // The card whose map was tapped open: the place from above, with Show
   // directions under it (DealPlaceView.jsx, 13 Oct 2026). One at a time.
   const [opened, setOpened] = useState(null);
+  // The countdown moves on by itself while the page is open.
+  const [, setTick] = useState(0);
+  useEffect(() => { const t = setInterval(() => setTick(n => n + 1), 30000); return () => clearInterval(t); }, []);
   const [kind, setKind] = useState(null);
   const [sort, setSort] = useState("az");
   const canLocate = typeof navigator !== "undefined" && !!navigator.geolocation && !!NOW_AREAS[country];
@@ -232,7 +257,13 @@ export const DealsNearYou = ({ deals = [], examples = false, lang = "en", countr
                     {x.minutes != null && <div data-testid="deal-near-minutes" style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginTop: 1 }}>{fill(uiT("trips.walkMin", lang), { n: x.minutes })}</div>}
                     {offer && <div data-testid="deal-near-offer" style={{ fontSize: 14, fontWeight: 700, color: C.gold, lineHeight: 1.45, marginTop: 4 }}>{offer}</div>}
                     <div style={{ fontSize: 12, color: C.light, marginTop: 4 }}>
-                      {x.card.hours ? <span style={{ fontWeight: on ? 700 : 400 }}>{on ? "● " : ""}{x.card.hours}</span> : <span style={{ fontWeight: 700 }}>● {uiT("trips.onNow", lang)}</span>}
+                      {(() => {
+                        const left = x.card.timing === "now" ? minutesLeft(x.d.__offer, new Date()) : null;
+                        if (left !== null && left <= ENDS_SOON_MIN) {
+                          return <span data-testid="deal-near-ends" style={{ fontWeight: 800, color: left <= 30 ? "#FFB347" : C.gold }}>● {fill(uiT("explore.endsIn", lang), { t: leftWords(left, lang) })}</span>;
+                        }
+                        return x.card.hours ? <span style={{ fontWeight: on ? 700 : 400 }}>{on ? "● " : ""}{x.card.hours}</span> : <span style={{ fontWeight: 700 }}>● {uiT("trips.onNow", lang)}</span>;
+                      })()}
                       {busy ? ` · ${uiT(`busy.${busy.level}`, lang)}` : ""}
                     </div>
                   </div>
