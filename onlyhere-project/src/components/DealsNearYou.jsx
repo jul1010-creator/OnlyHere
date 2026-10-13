@@ -112,6 +112,9 @@ export const dealKind = (d) => {
 export const centreSite = (lang) => (lang === "lt" ? "https://klaipedatravel.lt/" : "https://klaipedatravel.lt/en/");
 
 export const SORTS = ["closest", "az"];
+// The sign in the map pointer's window: the place's own, or its filter's.
+export const KIND_SIGN = { discounts: "🏷️", entertainment: "🎵", activities: "🎯", other: "📍" };
+export const signFor = (d) => (d?.emoji ? String(d.emoji) : KIND_SIGN[dealKind(d)] || "📍");
 
 export const DealsNearYou = ({ deals = [], examples = false, lang = "en", country = "LT", sticky = true }) => {
   const [here, setHere] = useState(null);
@@ -230,7 +233,7 @@ export const DealsNearYou = ({ deals = [], examples = false, lang = "en", countr
                     </div>
                   </div>
                   {x.at && (
-                    <DealCornerMap lat={x.at.lat} lon={x.at.lon} name={x.d.name}
+                    <DealCornerMap lat={x.at.lat} lon={x.at.lon} name={x.d.name} sign={signFor(x.d)} photo={x.d.photo || ""}
                       onTap={() => go(x)} />
                   )}
                 </div>

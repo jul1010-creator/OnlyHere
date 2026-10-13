@@ -25,9 +25,14 @@
 import { useEffect, useRef, useState } from "react";
 import { C } from "../utils/theme";
 import { GOOGLE_MAP_ID, GOOGLE_MAPS_BROWSER_KEY, googleMapsReady, loadGoogleMaps } from "../utils/googleMapsLoader";
+import { PLACE_PIN, placePinHtml } from "./GoogleWalkMap";
 
-// The street and a block or two around it.
-export const CLOSE_ZOOM = 16;
+// The street and the few around it: "zoom a bit out of the maps" (Oliver,
+// 13 Oct 2026). 16 showed one block; 15 shows where in the Old Town it is.
+export const CLOSE_ZOOM = 15;
+// The guide's own pointer, a little smaller to suit a thumbnail ("put better
+// pointers on the maps", same day). Its tip is on the place.
+export const PIN_SCALE = 0.78;
 
 export const staticMapUrl = ({ lat, lon, size }) =>
   `https://maps.googleapis.com/maps/api/staticmap?center=${Number(lat).toFixed(5)},${Number(lon).toFixed(5)}&zoom=${CLOSE_ZOOM}&size=${size}x${size}&scale=2&map_id=${encodeURIComponent(GOOGLE_MAP_ID)}&key=${encodeURIComponent(GOOGLE_MAPS_BROWSER_KEY)}`;
@@ -35,7 +40,7 @@ export const staticMapUrl = ({ lat, lon, size }) =>
 // Set on the first refusal, for this visit.
 let staticRefused = false;
 
-export const DealCornerMap = ({ lat, lon, name = "", size = 104, onTap = null }) => {
+export const DealCornerMap = ({ lat, lon, name = "", size = 104, onTap = null, sign = "📍", photo = "" }) => {
   const holder = useRef(null);
   const made = useRef(false);
   const [live, setLive] = useState(staticRefused);
@@ -86,10 +91,11 @@ export const DealCornerMap = ({ lat, lon, name = "", size = 104, onTap = null })
             style={{ display: "block", width: "100%", height: "100%", objectFit: "cover" }} />
         )}
       </div>
-      {/* The guide's gold pin, on the place, over the map. */}
-      <div aria-hidden="true" style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
-        <div style={{ width: 14, height: 14, borderRadius: "50%", background: C.gold, border: "3px solid #0A0F1E", boxShadow: `0 0 0 3px ${C.gold}55, 0 2px 6px rgba(0,0,0,.6)` }} />
-      </div>
+      {/* The walk map's own pointer, with the place's sign or photo in its
+          window, its tip on the place at the middle of the map. */}
+      <div aria-hidden="true" data-testid="deal-corner-pin"
+        style={{ position: "absolute", left: "50%", top: "50%", width: PLACE_PIN.w, height: PLACE_PIN.h, marginLeft: -PLACE_PIN.w / 2, marginTop: -PLACE_PIN.h, transform: `scale(${PIN_SCALE})`, transformOrigin: "50% 100%", filter: "drop-shadow(0 3px 5px rgba(0,0,0,.45))", pointerEvents: "none" }}
+        dangerouslySetInnerHTML={{ __html: placePinHtml({ sign, photo }) }} />
     </div>
   );
 };
