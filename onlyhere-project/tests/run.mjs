@@ -69429,7 +69429,7 @@ SOURCE: https://www.tripadvisor.com/whatever`;
   // ── AND IT IS WIRED, BOTH WAYS ──────────────────────────────────
   {
     ok("the page is read out of the address on arrival",
-       /useState\(\(\) => \{[\s\S]{0,200}?tabForHash\(window\.location\.hash\) \|\| "home"/.test(appT));
+       /useState\(\(\) => \{[\s\S]{0,200}?const asked = tabForHash\(window\.location\.hash\);[\s\S]{0,900}?return asked \|\| "home";/.test(appT));
     const writer = appT.slice(appT.indexOf("const tabLinkDone = useRef(false);"),
                               appT.indexOf("const stripRef = useRef(null);"));
     ok("the writer is findable", writer.length > 400);
@@ -82800,7 +82800,7 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
 {
   const read = (f) => readFileSync(join(root, f), "utf8");
   const cm = read("src/components/DealCornerMap.jsx"), dny = read("src/components/DealsNearYou.jsx");
-  ok("the guide's own Google map, in the guide's style, fixed on the street", /mapId: GOOGLE_MAP_ID,/.test(cm) && /zoom: CLOSE_ZOOM,/.test(cm) && /CLOSE_ZOOM = 16;/.test(cm) && !/leaflet|addTileLayer|flyTo/i.test(cm.replace(/\/\/.*$/gm, "")));
+  ok("the guide's own Google map, in the guide's style, fixed on the street", /mapId: GOOGLE_MAP_ID,/.test(cm) && /zoom: CLOSE_ZOOM,/.test(cm) && /CLOSE_ZOOM = 15;/.test(cm) && !/leaflet|addTileLayer|flyTo/i.test(cm.replace(/\/\/.*$/gm, "")));
   ok("a picture, not a control: nothing on it moves", /disableDefaultUI: true, gestureHandling: "none", keyboardShortcuts: false, clickableIcons: false/.test(cm));
   ok("raster, so a dozen do not need a dozen WebGL canvases", /RenderingType\?\.RASTER \|\| "RASTER"/.test(cm));
   ok("made when the card first comes near the screen, then kept", /new IntersectionObserver\(/.test(cm) && /\{ seen\.disconnect\(\); setNear\(true\); \}/.test(cm) && /made\.current = true;/.test(cm));
@@ -82868,6 +82868,19 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("a lunch price or a refill is a Discount", D.dealKind({ _src: "food", name: "Marios", __offer: { text: "Lunch of the day, €9" } }) === "discounts" && D.dealKind({ _src: "food", name: "Rūta", __offer: { text: "Free refill with any pastry" } }) === "discounts");
   ok("a service that is none of them is under All only", D.dealKind({ __dealKind: "other", __offer: { text: "€3 a bag" } }) === "other" && Object.values(M.KEX.examplePromotionPools()).flat().find(d => d._exampleId === "free:bags")?.__dealKind === "other");
   ok("the new words read in all four languages", ["explore.all", "explore.closest", "explore.az", "explore.needLocation"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[\u2013\u2014]/.test(M.t(k, l)))));
+}
+
+// ── Batch 238: a wider corner map, the guide's pointer, and Explore first ──
+// Oliver, 13 Oct 2026: "zoom a bit out of the maps. The default page of the
+// phone is the 'plan my trip' page. It is not the explore page... Also, put
+// better pointers on the maps."
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const cm = read("src/components/DealCornerMap.jsx"), dny = read("src/components/DealsNearYou.jsx"), app = read("src/App.jsx");
+  ok("a step further out", /export const CLOSE_ZOOM = 15;/.test(cm) && /zoom=\$\{CLOSE_ZOOM\}/.test(cm));
+  ok("the walk map's own pointer, tip on the place", /import \{ PLACE_PIN, placePinHtml \} from "\.\/GoogleWalkMap";/.test(cm) && /marginTop: -PLACE_PIN\.h/.test(cm) && /transformOrigin: "50% 100%"/.test(cm) && /placePinHtml\(\{ sign, photo \}\)/.test(cm));
+  ok("with the place's sign or its filter's in the window", M.DNY.signFor({ emoji: "🐟" }) === "🐟" && M.DNY.signFor({ _src: "nightlife" }) === "🎵" && M.DNY.signFor({ __dealKind: "other" }) === "📍" && /sign=\{signFor\(x\.d\)\} photo=\{x\.d\.photo \|\| ""\}/.test(dny));
+  ok("abroad, arriving at the planner by its address opens Explore", /if \(PAGE_ABROAD && asked === "ai"\) return "home";/.test(app) && /return asked \|\| "home";/.test(app));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
