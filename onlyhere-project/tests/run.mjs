@@ -82803,7 +82803,10 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("the guide's own Google map, in the guide's style, fixed on the street", /mapId: GOOGLE_MAP_ID,/.test(cm) && /zoom: CLOSE_ZOOM,/.test(cm) && /CLOSE_ZOOM = 16;/.test(cm) && !/leaflet|addTileLayer|flyTo/i.test(cm.replace(/\/\/.*$/gm, "")));
   ok("a picture, not a control: nothing on it moves", /disableDefaultUI: true, gestureHandling: "none", keyboardShortcuts: false, clickableIcons: false/.test(cm));
   ok("raster, so a dozen do not need a dozen WebGL canvases", /RenderingType\?\.RASTER \|\| "RASTER"/.test(cm));
-  ok("made when the card first comes near the screen, then kept", /new IntersectionObserver\(/.test(cm) && /\{ seen\.disconnect\(\); build\(\); \}/.test(cm) && /made\.current = true;/.test(cm));
+  ok("made when the card first comes near the screen, then kept", /new IntersectionObserver\(/.test(cm) && /\{ seen\.disconnect\(\); setNear\(true\); \}/.test(cm) && /made\.current = true;/.test(cm));
+  // Batch 237: Google's picture first, the live map only if the key refuses it.
+  ok("a Static Maps picture first, in the guide's style, never saved into the site", /maps\/api\/staticmap\?center=/.test(cm) && /&map_id=\$\{encodeURIComponent\(GOOGLE_MAP_ID\)\}/.test(cm) && /&scale=2/.test(cm) && /\{near && !live && \(/.test(cm));
+  ok("and the live map only when Google refuses, asked once a visit", /onError=\{\(\) => \{ staticRefused = true; setLive\(true\); \}\}/.test(cm) && /useState\(staticRefused\)/.test(cm) && /if \(!ok \|\| !near \|\| !live \|\| made\.current/.test(cm));
   ok("no key, no map, rather than a worse one", /googleMapsReady\(\)/.test(cm) && /if \(!ok\) return null;/.test(cm));
   ok("every deal with a place gets one, and tapping it walks there", /<DealCornerMap lat=\{x\.at\.lat\} lon=\{x\.at\.lon\} name=\{x\.d\.name\}/.test(dny) && /onTap=\{\(\) => go\(x\)\} \/>/.test(dny));
 }
