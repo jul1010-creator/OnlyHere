@@ -426,6 +426,7 @@ writeFileSync(entry, `
   export { placePinHtml, PLACE_PIN, turnSign, JOIN_ON_M, CARD_WALKING_MS, walkLegs, bearingOf, kmBetween as mapKm, glideAt, GLIDE_MS, FOCUS, SPARKS } from ${JSON.stringify(join(root, "src/components/GoogleWalkMap.jsx"))};
   export { guideTo, compassOf, distanceWords as walkDistanceWords, ARRIVE_M, COMPASS, FAR_M } from ${JSON.stringify(join(root, "src/components/WalkMode.jsx"))};
   export * as DNY from ${JSON.stringify(join(root, "src/components/DealsNearYou.jsx"))};
+  export * as DST from ${JSON.stringify(join(root, "src/utils/dealStudio.js"))};
   export * as SF from ${JSON.stringify(join(root, "src/utils/safeFetch.js"))};
   export * as LP from ${JSON.stringify(join(root, "src/utils/livePhoto.js"))};
   export * as CR from ${JSON.stringify(join(root, "src/utils/cruiseDays.js"))};
@@ -33702,7 +33703,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // A prop that is not passed is undefined, and undefined(...) is a crash on
   // the first correction rather than a 401. Both mount points, because this
   // component is rendered twice and one of them is the floating one.
-  is("both mount points pass it", (app16.match(/supaFetch=\{supaFetch\}/g) || []).length, 2);
+  is("both mount points pass it", (app16.match(/supaFetch=\{supaFetch\}/g) || []).length - (app16.match(/<DealStudio supaFetch=\{supaFetch\}/g) || []).length, 2);
 
   // ── AND WHEN THE REFRESH TOKEN IS DEAD TOO ───────────────────────
   // The one case a retry cannot fix. Supabase says invalid_grant, he is
@@ -82832,7 +82833,7 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   const dny = read("src/components/DealsNearYou.jsx"), app = read("src/App.jsx"), ex = read("src/components/KlaipedaExplore.jsx");
   ok("filtering happens before the twelve are cut, with All first", /nearbyDeals\(deals, start, \{ now: new Date\(\), lang, limit: Infinity, order: /.test(dny) && /\(kind \? all\.filter\(x => dealKind\(x\.d\) === kind\) : all\)\.slice\(0, MAX_DEALS\)/.test(dny) && /const FILTERS = \[\[null, "explore\.all"\], \.\.\.DEAL_KINDS/.test(dny));
   ok("and the tourism centre's own site is where the rest lives", /href=\{centreSite\(lang\)\}/.test(dny) && D.centreSite("lt") === "https://klaipedatravel.lt/" && D.centreSite("en") === "https://klaipedatravel.lt/en/");
-  ok("Explore on /lithuania is the deals, not the Danish front page", /\{tab === "home" && PAGE_ABROAD && \(/.test(app) && /<KlaipedaExplore lang=\{uiLang\} \/>/.test(app) && /\{tab === "home" && !PAGE_ABROAD && \(/.test(app) && /useKlaipedaDeals\(null\)/.test(ex));
+  ok("Explore on /lithuania is the deals, not the Danish front page", /\{tab === "home" && PAGE_ABROAD && \(/.test(app) && /<KlaipedaExplore lang=\{uiLang\} version=\{liveContentVersion\}/.test(app) && /\{tab === "home" && !PAGE_ABROAD && \(/.test(app) && /useKlaipedaDeals\(null, version\)/.test(ex));
   ok("Studio sets the filter by hand and saves it with the row", /data-testid="studio-deal-kind"/.test(app) && /if \(DEAL_KINDS\.includes\(studioDealKind\)\) shaped\.__dealKind = studioDealKind;/.test(app) && /setStudioDealKind\(DEAL_KINDS\.includes\(row\.payload\?\.__dealKind\)/.test(app));
   // The rework switch.
   const cfg = read("src/config.js");
@@ -82946,6 +82947,36 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("the new words read in all four languages", ["offer.expiresAt", "offer.startsAt", "offer.validUntil", "offer.redeem", "redeem.show", "redeem.via"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
   ok("and the heading no longer says on now", M.t("trips.dealsH", "en") === "Deals near you");
   ok("the business page says the visitor shows it at the counter", /The visitor shows it at your counter/.test(read("src/pages/KlaipedaBusiness.jsx")) && /Lankytojas jį parodo prie jūsų kasos/.test(read("src/pages/KlaipedaBusiness.jsx")));
+}
+
+// ── Batch 242: a Studio for the Explore deals ──
+// Oliver, 13 Oct 2026: "Bring in a studio so i can edit", the Explore deals.
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const S = M.DST, D = M.DNY;
+  const good = { ...S.emptyDeal(), name: "Kepyklėlė Rūta", type: "food", lat: 55.7087, lon: 21.1339, text: "Free refill", until: "2099-12-31" };
+  ok("a whole deal has nothing in its way", S.dealProblems(good).length === 0);
+  const empty = S.dealProblems(S.emptyDeal());
+  ok("an empty one says what to do, once each", empty.length === 4 && empty.some(p => /its name/.test(p)) && empty.some(p => /on the map/.test(p)) && empty.some(p => /Write the offer/.test(p)) && empty.some(p => /last day/.test(p)));
+  ok("a spot outside Klaipėda is refused", S.dealProblems({ ...good, lat: 55.676, lon: 12.568 }).some(p => /outside Klaipėda/.test(p)));
+  ok("half the hours is refused", S.dealProblems({ ...good, from: "14:00" }).some(p => /both a start and an end/.test(p)));
+  ok("a booking that is neither link nor number is refused", S.dealProblems({ ...good, booking: "ring us" }).length === 1);
+  const pay = S.payloadFromDeal({ ...good, street: "Turgaus g. 7", days: [5, 1], from: "14:00", to: "16:00", dealKind: "discounts", booking: "+370 600 00000" }, { desc: "kept", photo: "/food/x.jpg" });
+  ok("the row is a Klaipėda place with its offer", pay.country === "LT" && pay.town === "Klaipėda" && pay.location === "Turgaus g. 7" && pay.__lat === 55.7087 && pay.__offer.text === "Free refill" && pay.__offer.from === "14:00" && pay.__dealKind === "discounts" && pay.__booking === "+370 600 00000");
+  ok("and what the row already held stays", pay.desc === "kept" && pay.photo === "/food/x.jpg");
+  ok("an automatic filter and an empty booking leave nothing behind", !("__dealKind" in S.payloadFromDeal(good, { __dealKind: "activities" })) && !("__booking" in S.payloadFromDeal(good, { __booking: "+370 1" })));
+  const row = { id: 7, type: "night", published: true, payload: pay };
+  const back = S.dealFromRow(row);
+  ok("a row reads back into the form", back.id === 7 && back.type === "night" && back.published && back.name === "Kepyklėlė Rūta" && back.from === "14:00" && back.dealKind === "discounts");
+  ok("a deal row is a Klaipėda place with an offer", S.isDealRow(row) && !S.isDealRow({ ...row, payload: { ...pay, country: "DK" } }) && !S.isDealRow({ ...row, payload: { ...pay, __offer: undefined } }) && !S.isDealRow({ ...row, type: "festival" }));
+  is("the list says when at a glance", [S.dealWhenShort({ days: [1, 2, 3, 4, 5], from: "14:00", to: "16:00" }), S.dealWhenShort({ days: [6, 0] }), S.dealWhenShort({})], ["Mon to Fri, 14:00 to 16:00", "Sat, Sun, all day", "Every day, all day"]);
+  ok("a new deal starts hidden", S.emptyDeal().published === false);
+  ok("a published row's id is the database id, as the walks and the partner link use it", D.dealPlaceId({ _src: "food", id: 100012 }) === "food:12" && D.dealPlaceId({ _src: "food", id: 12 }) === "food:12" && D.LIVE_OFFSET === M.LIVE_ID_OFFSET);
+  const app = read("src/App.jsx"), ds = read("src/components/DealStudio.jsx"), ex = read("src/components/KlaipedaExplore.jsx");
+  ok("the Studio sits above the deals for him only", /studio=\{isStudio && studioSession \? <DealStudio supaFetch=\{supaFetch\} studioFetch=\{studioFetch\} onChanged=\{dealChanged\} \/>/.test(app) && /\{studio\}/.test(ex) && /useKlaipedaDeals\(null, version\)/.test(ex));
+  ok("a save reaches the page without a reload", /if \(now && !was\) await refreshLiveContent\(\);/.test(app) && /else if \(was && !now\) removeLiveRow\(after\.id, after\.type\);/.test(app) && /applyEditedRow\(after\.id, after\.type, after\.payload\)/.test(app) && /\}, \[today, version\]\);/.test(read("src/utils/useKlaipedaDeals.js")));
+  ok("a second row with the same name is refused before the insert", /payload->>name=ilike\./.test(ds) && /is already in the database as/.test(ds));
+  ok("no dashes in what he reads", !/[–—]/.test(ds) && !/[–—]/.test(read("src/utils/dealStudio.js").replace(/^\s*\/\/.*$/gm, "")));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
