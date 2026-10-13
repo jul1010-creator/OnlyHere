@@ -82789,5 +82789,20 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("the walk to a deal ends at the place", /loop=\{false\}/.test(dny));
 }
 
+// ── Batch 233: a map in the corner of each deal, zooming down ──
+// Oliver, 13 Oct 2026: "Put maps on them in the corner.. so we get that zoom
+// down that we made in the travel guide."
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const cm = read("src/components/DealCornerMap.jsx"), dny = read("src/components/DealsNearYou.jsx");
+  ok("it starts high over the coast and flies down to the street", /FLY_FROM_ZOOM = 7;/.test(cm) && /LAND_ZOOM = 15;/.test(cm) && /m\.setView\(at, first \? LAND_ZOOM : FLY_FROM_ZOOM\);/.test(cm) && /m\.flyTo\(at, LAND_ZOOM, \{ duration: FLY_SECONDS \}\);/.test(cm));
+  ok("once: coming back to a card draws it where it landed", /const first = flown\.current \|\| reducedMotion\(\);/.test(cm) && /flown\.current = true;/.test(cm));
+  ok("and not at all for a reader who asked for less motion", /prefers-reduced-motion: reduce/.test(cm));
+  ok("a picture, not a control: the page still scrolls over it", /dragging: false, touchZoom: false, scrollWheelZoom: false/.test(cm) && /doubleClickZoom: false, boxZoom: false, keyboard: false/.test(cm));
+  ok("built only near the screen and taken down far from it", /new IntersectionObserver\(/.test(cm) && /if \(e\.isIntersecting\) \{ wanted = true; build\(\); \} else drop\(\);/.test(cm) && /await import\("leaflet"\)/.test(cm) && !/^import L from "leaflet";/m.test(cm) && /map\.current\.remove\(\)/.test(cm));
+  ok("the map credit stays, small", /attributionControl: true/.test(cm) && /addTileLayer\(L, m\)/.test(cm) && /\.gemlyx-deal-map \.leaflet-control-attribution\{font-size:7px/.test(dny));
+  ok("every deal with a place gets one, and tapping it walks there", /<DealCornerMap lat=\{x\.at\.lat\} lon=\{x\.at\.lon\}/.test(dny) && /onTap=\{x\.minutes != null \? \(\) => \{ askForCompass\(\); setGoing\(x\); \} : null\}/.test(dny));
+}
+
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
 if (failed) { fails.forEach(f => console.log("  FAIL " + f + "\n")); process.exit(1); }
