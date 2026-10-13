@@ -21,7 +21,9 @@ import { eventOnDays } from "./eventWhen";
 import { rowCountry } from "./countries";
 import { examplePromotionPools } from "../data/klaipedaExamples";
 
-export const useKlaipedaDeals = (today) => {
+// `version` is the Studio's: a deal saved on Explore bumps it, and the list is
+// read again from the arrays the save has just updated (DealStudio.jsx).
+export const useKlaipedaDeals = (today, version = 0) => {
   const [live, setLive] = useState({ onToday: [], deals: [], examples: false, ready: false });
   useEffect(() => {
     let gone = false;
@@ -36,6 +38,6 @@ export const useKlaipedaDeals = (today) => {
       if (!gone) setLive({ onToday: [], deals: livePromotions(examplePromotionPools()), examples: true, ready: true });
     });
     return () => { gone = true; };
-  }, [today]);
+  }, [today, version]);
   return live;
 };
