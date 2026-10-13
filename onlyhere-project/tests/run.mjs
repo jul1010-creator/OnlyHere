@@ -82979,5 +82979,46 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("no dashes in what he reads", !/[–—]/.test(ds) && !/[–—]/.test(read("src/utils/dealStudio.js").replace(/^\s*\/\/.*$/gm, "")));
 }
 
+// ── Batch 243: offers with no last day, and Upcoming like Lidl Plus ──
+// Oliver, 13 Oct 2026: "There is friday candy EVERY friday. You should be able
+// to have the offer being permanent, but just certain days and hours", then
+// "hide the offer the days where it is not there, and just have it as an
+// 'upcoming' offer", then "It should also display the hours..".
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const D = M.DNY, S = M.DST;
+  const candy = { text: "Friday candy", ongoing: true, days: [5], from: "15:00", to: "18:00" };
+  const tue2130 = new Date("2026-10-13T18:30:00Z"); // Tuesday 21:30 in Klaipėda
+  const fri1600 = new Date("2026-10-16T13:00:00Z"); // Friday 16:00
+  const fri1000 = new Date("2026-10-16T07:00:00Z"); // Friday 10:00
+  ok("an offer marked ongoing lives with no last day", M.offerLive(candy, new Date("2031-05-01T12:00:00Z")) && M.offerProblems(candy).length === 0);
+  ok("one that only lacks a date is still refused and still invisible", !M.offerLive({ text: "Forgot the date" }) && M.offerProblems({ text: "Forgot the date" }).some(p => /no end date/.test(p)));
+  ok("ongoing drops any stray date", M.cleanOffer({ ...candy, until: "2020-01-01" }).until === "" && M.cleanOffer({ ...candy, until: "2020-01-01" }).ongoing === true);
+  ok("and only true means ongoing", !("ongoing" in M.cleanOffer({ text: "x", until: "2099-01-01", ongoing: "yes" })));
+  is("Tuesday night, Friday candy starts Friday", D.nextStart(candy, tue2130), { inDays: 3, day: 5, from: "15:00", at: 3 * 1440 + 900 });
+  is("Friday morning it starts today", D.nextStart(candy, fri1000)?.inDays, 0);
+  ok("on now is not upcoming", !D.upcomingDeals([{ name: "Candy", country: "LT", __offer: candy }], null, { now: fri1600 }).length && D.nextStart(candy, fri1600)?.inDays === 7);
+  ok("all day every day is never upcoming", D.nextStart({ text: "x", ongoing: true }, tue2130) === null);
+  ok("a dated offer past its last day does not come round again", D.nextStart({ text: "x", until: "2026-10-14", days: [5], from: "15:00", to: "18:00" }, tue2130) === null && D.nextStart({ text: "x", until: "2026-10-16", days: [5], from: "15:00", to: "18:00" }, tue2130)?.inDays === 3);
+  is("said in words", [D.startsWords({ inDays: 0, day: 2, from: "16:00" }), D.startsWords({ inDays: 1, day: 3, from: "14:00" }), D.startsWords({ inDays: 3, day: 5, from: "15:00" }), D.startsWords({ inDays: 3, day: 5, from: "" })], ["Offer starts at 16:00", "Offer starts tomorrow at 14:00", "Offer starts Friday at 15:00", "Offer starts Friday"]);
+  is("Lithuanian puts the day in the accusative", D.startsWords({ inDays: 3, day: 5, from: "15:00" }, "lt"), "Pasiūlymas prasideda penktadienį 15:00");
+  is("the hours, under it", [D.hoursOf(candy), D.hoursOf({ text: "x", ongoing: true, days: [1, 2, 3, 4, 5], from: "14:00", to: "16:00" }), D.hoursOf({ text: "x", ongoing: true })], ["Fridays 15:00-18:00", "Mon to Fri 14:00-16:00", ""]);
+  is("an ongoing offer that is on says when it runs", D.offerWhen({ text: "x", ongoing: true, days: [5] }, "now", { now: fri1600 })?.text, "Fridays");
+  const deals = [
+    { name: "Candy", country: "LT", __offer: candy },
+    { name: "Coffee", country: "LT", __offer: { text: "Refill", ongoing: true, from: "22:00", to: "23:00" } },
+    { name: "Bags", country: "LT", __offer: { text: "Bags", ongoing: true } },
+  ];
+  is("Upcoming, soonest first: later tonight, then Friday", D.upcomingDeals(deals, null, { now: tue2130 }).map(x => x.d.name), ["Coffee", "Candy"]);
+  const dny = read("src/components/DealsNearYou.jsx");
+  ok("the list is only what is on, what starts later waits in Upcoming", /\.filter\(x => x\.card\.timing !== "later"\), \[deals, start\?\.lat, start\?\.lon, lang, sort, tick\]\)/.test(dny) && /data-testid="deals-upcoming"/.test(dny) && /explore\.upcoming/.test(dny));
+  const upBlock = dny.slice(dny.indexOf('data-testid="deals-upcoming"'), dny.indexOf('{country === "LT" && ('));
+  ok("an upcoming card has no Redeem", !/openRedeem|deal-near-redeem/.test(upBlock) && /deal-upcoming-hours/.test(upBlock));
+  ok("no 'No deals' flash while loading", /\{!ready \? \(/.test(dny) && /ready=\{live\.ready\}/.test(read("src/components/KlaipedaExplore.jsx")) && /ready=\{live\.ready\}/.test(read("src/pages/KlaipedaDemo.jsx")));
+  ok("the Studio can set No last day", S.dealProblems({ ...S.emptyDeal(), name: "Lidl", lat: 55.7087, lon: 21.1339, text: "Friday candy", ongoing: true, days: [5], from: "15:00", to: "18:00" }).length === 0 && S.payloadFromDeal({ ...S.emptyDeal(), name: "Lidl", lat: 55.7, lon: 21.13, text: "x", ongoing: true }).__offer.ongoing === true && /data-testid="deal-studio-ongoing"/.test(read("src/components/DealStudio.jsx")) && /data-testid="studio-offer-ongoing"/.test(read("src/App.jsx")));
+  ok("and the walks read it too", /if \(raw\.ongoing !== true\) \{/.test(read("src/utils/nowPlanner.js")));
+  ok("the new words read in all four languages", ["offer.startsTomorrowAt", "offer.startsTomorrow", "offer.startsOnAt", "offer.startsOn", "explore.upcoming", "explore.noneNowSoon"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
+}
+
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
 if (failed) { fails.forEach(f => console.log("  FAIL " + f + "\n")); process.exit(1); }
