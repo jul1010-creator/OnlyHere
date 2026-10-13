@@ -42,7 +42,7 @@ export const isDealRow = (row) =>
 export const emptyDeal = () => ({
   id: null, type: "food", published: false,
   name: "", street: "", lat: "", lon: "", sign: "",
-  text: "", days: [], from: "", to: "", until: "",
+  text: "", days: [], from: "", to: "", until: "", ongoing: false,
   dealKind: "", booking: "",
 });
 
@@ -54,7 +54,7 @@ export const dealFromRow = (row) => {
     id: row?.id ?? null, type: TYPES.includes(row?.type) ? row.type : "food", published: !!row?.published,
     name: String(p.name || ""), street: String(p.location || ""),
     lat: p.__lat ?? p.lat ?? "", lon: p.__lon ?? p.lon ?? "", sign: String(p.emoji || ""),
-    text: String(o.text || ""), days: Array.isArray(o.days) ? o.days : [], from: String(o.from || ""), to: String(o.to || ""), until: String(o.until || ""),
+    text: String(o.text || ""), days: Array.isArray(o.days) ? o.days : [], from: String(o.from || ""), to: String(o.to || ""), until: String(o.until || ""), ongoing: o.ongoing === true,
     dealKind: DEAL_FILTERS.includes(p.__dealKind) ? p.__dealKind : "", booking: String(p.__booking || ""),
   };
 };
@@ -70,14 +70,14 @@ export const dealProblems = (f) => {
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) out.push("Put the place on the map: find it on Google, or tap the map where its door is.");
   else if (!inNowArea("LT", { lat, lon })) out.push("That spot is outside Klaipėda. Find the place again, or tap the map where its door is.");
   if (!String(f?.text || "").trim()) out.push("Write the offer: what a visitor gets.");
-  if (!String(f?.until || "").trim()) out.push("Give the offer a last day.");
+  if (!f?.ongoing && !String(f?.until || "").trim()) out.push("Give the offer a last day, or set it to No last day.");
   out.push(...offerProblems(offerOf(f)).filter(p => !/no end date|no text/.test(p)));
   const book = bookingProblem(f?.booking);
   if (book) out.push(book);
   return out;
 };
 
-export const offerOf = (f) => cleanOffer({ text: f?.text, until: f?.until, days: f?.days, from: f?.from, to: f?.to });
+export const offerOf = (f) => cleanOffer({ text: f?.text, until: f?.until, days: f?.days, from: f?.from, to: f?.to, ongoing: f?.ongoing === true });
 
 // The row's payload, from the form. Kept on top of what the row already holds,
 // so a place first written in the full Studio keeps its description, photo and

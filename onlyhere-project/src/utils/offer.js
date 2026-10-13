@@ -84,12 +84,20 @@ export const hasPaidPlan = (profile) => {
 export const cleanOffer = (raw) => {
   if (!raw || typeof raw !== "object") return null;
   const text = clean(raw.text).slice(0, OFFER_TEXT_MAX);
-  const until = clean(raw.until);
-  if (!text && !until) return null;
+  // ONGOING, 13 Oct 2026. Oliver: "you know the lidl+ app? There is friday
+  // candy EVERY friday. You should be able to have the offer being permanent,
+  // but just certain days and hours." So an offer may run with no last day,
+  // but only when it says so, `ongoing: true`, set by a control in the Studio.
+  // An offer that merely lacks a date is still refused and still invisible,
+  // because that one is a date somebody forgot, not a decision.
+  const ongoing = raw.ongoing === true;
+  const until = ongoing ? "" : clean(raw.until);
+  if (!text && !until && !ongoing) return null;
   const days = cleanDays(raw.days);
   const from = clean(raw.from), to = clean(raw.to);
   return {
     text, until,
+    ...(ongoing ? { ongoing: true } : {}),
     ...(days.length ? { days } : {}),
     ...(from || to ? { from: cleanClock(from) || from, to: cleanClock(to) || to } : {}),
   };
@@ -133,7 +141,8 @@ export const offerProblems = (offer) => {
   if (!o) return [];
   const out = [];
   if (!o.text) out.push("The offer has an end date and no text, so there is nothing to show. Write what the traveller gets, in the shop's own words where you can.");
-  if (!o.until) out.push("The offer has no end date, so it will not render. An offer with no end is a promise nobody is going to remember to take down: give it a date, even a far one, and it becomes a review rather than a leak.");
+  if (o.ongoing) { /* runs every week with no last day, by choice */ }
+  else if (!o.until) out.push("The offer has no end date, so it will not render. An offer with no end is a promise nobody is going to remember to take down: give it a date, even a far one, and it becomes a review rather than a leak.");
   else if (!dayEnd(o.until)) out.push(`"${o.until}" is not a date this can read. Use YYYY-MM-DD.`);
   else if (!offerLive(o)) out.push(`This offer ended on ${o.until}, so it is already invisible on the page. Change the date or clear the field.`);
   // The hours. Both or neither, each one a time, and the end after the start.
@@ -153,7 +162,9 @@ export const offerProblems = (offer) => {
 // until the 30th is valid all of the 30th.
 export const offerLive = (offer, today = new Date()) => {
   const o = cleanOffer(offer);
-  if (!o || !o.text || !o.until) return false;
+  if (!o || !o.text) return false;
+  if (o.ongoing) return true;
+  if (!o.until) return false;
   const end = dayEnd(o.until);
   const now = dayStart(today);
   return !!end && !!now && end.getTime() >= now.getTime();
