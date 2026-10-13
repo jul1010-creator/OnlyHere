@@ -732,6 +732,12 @@ export const UI_STRINGS = {
   "trips.noDeals":   { en: "No deals are on right now. Make a walk below instead.", da: "Ingen tilbud lige nu. Lav en gåtur nedenfor i stedet.", de: "Gerade gibt es keine Angebote. Plane stattdessen unten einen Spaziergang.", lt: "Šiuo metu pasiūlymų nėra. Vietoj to susidarykite maršrutą žemiau." },
   "trips.walkH":     { en: "More time? A walk for the hours you have", da: "Mere tid? En gåtur til de timer, du har", de: "Mehr Zeit? Ein Spaziergang für deine Stunden", lt: "Daugiau laiko? Maršrutas pagal jūsų turimas valandas" },
   "trips.allDeals":  { en: "All deals", da: "Alle tilbud", de: "Alle Angebote", lt: "Visi pasiūlymai" },
+  // Explore on the Lithuanian site, 13 Oct 2026: the deals, with three filters.
+  "explore.discounts":     { en: "Discounts", da: "Rabatter", de: "Rabatte", lt: "Nuolaidos" },
+  "explore.entertainment": { en: "Entertainment", da: "Underholdning", de: "Unterhaltung", lt: "Pramogos" },
+  "explore.activities":    { en: "Activities", da: "Aktiviteter", de: "Aktivitäten", lt: "Veiklos" },
+  "explore.noneHere":      { en: "Nothing in this one right now. Tap it again to see everything.", da: "Intet her lige nu. Tryk igen for at se alt.", de: "Gerade nichts hier. Tippe noch einmal, um alles zu sehen.", lt: "Šiuo metu čia nieko nėra. Bakstelėkite dar kartą, kad matytumėte viską." },
+  "explore.more":          { en: "More about Klaipėda from the tourism centre", da: "Mere om Klaipėda fra turistkontoret", de: "Mehr über Klaipėda von der Touristeninformation", lt: "Daugiau apie Klaipėdą iš turizmo informacijos centro" },
   "ride.far":        { en: "Too far to walk? {app} works here. Order a car in the app and see the price first.", da: "For langt at gå? {app} findes her. Bestil en bil i appen og se prisen først.", de: "Zu weit zu Fuß? {app} gibt es hier. Bestell ein Auto in der App und sieh den Preis vorher.", lt: "Per toli eiti pėsčiomis? Čia veikia {app}. Užsisakykite automobilį programėlėje ir pirmiausia pamatysite kainą." },
   "trips.intro":       { en: "Walks for the time you have, on foot from the ship. Gemlyx is opening Lithuania, starting here.", da: "Gåture til den tid, du har, til fods fra skibet. Gemlyx åbner i Litauen og begynder her.", de: "Spaziergänge für die Zeit, die du hast, zu Fuß vom Schiff. Gemlyx startet in Litauen, und zwar hier.", lt: "Pasivaikščiojimai pagal turimą laiką, pėsčiomis nuo laivo. Gemlyx pradeda Lietuvoje būtent čia." },
   // The list controls and the Events page's own words, 1 Oct 2026, when the
