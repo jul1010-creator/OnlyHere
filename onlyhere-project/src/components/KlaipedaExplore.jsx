@@ -12,9 +12,9 @@
 import { DealsNearYou } from "./DealsNearYou";
 import { useKlaipedaDeals } from "../utils/useKlaipedaDeals";
 
-export const KlaipedaExplore = ({ lang = "en", defaultFrom = "" }) => {
+export const KlaipedaExplore = ({ lang = "en" }) => {
   const live = useKlaipedaDeals(null);
-  return <DealsNearYou deals={live.deals} examples={live.examples} lang={lang} defaultFrom={defaultFrom} country="LT" sticky={false} />;
+  return <DealsNearYou deals={live.deals} examples={live.examples} lang={lang} country="LT" sticky={false} />;
 };
 
 export default KlaipedaExplore;
