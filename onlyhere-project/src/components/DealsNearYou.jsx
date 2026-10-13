@@ -20,6 +20,11 @@ import { NOW_STARTS, NOW_AREAS, inNowArea, walkMinutes } from "../utils/nowPlann
 import { cleanBooking, busyAt } from "../utils/dealExtras";
 import { dealsSeen, placeReached } from "../utils/partnerStats";
 import { WalkMode, askForCompass } from "./WalkMode";
+import { DealCornerMap } from "./DealCornerMap";
+
+// The map credit is the tile provider's condition (utils/mapTiles.js), so it
+// stays on the corner maps too, set small enough to fit a thumbnail.
+const CORNER_MAP_CSS = ".gemlyx-deal-map .leaflet-control-attribution{font-size:7px;line-height:1.25;padding:0 3px;background:rgba(10,15,30,.72);color:#8A93A8;white-space:normal;max-width:100%}.gemlyx-deal-map .leaflet-control-attribution a{color:#8A93A8}";
 
 const fill = (t, v) => String(t).replace(/\{(\w+)\}/g, (_, k) => (v[k] ?? ""));
 
@@ -104,6 +109,7 @@ export const DealsNearYou = ({ deals = [], examples = false, lang = "en", defaul
 
   return (
     <section data-testid="deals-near" style={{ marginBottom: 30 }}>
+      <style>{CORNER_MAP_CSS}</style>
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", margin: "0 0 10px" }}>
         <h2 style={{ fontSize: 24, fontWeight: 500, fontFamily: "'Fraunces', serif", lineHeight: 1.2, margin: 0 }}>{uiT("trips.dealsH", lang)}</h2>
         {examples && <span data-testid="deals-near-examples" style={{ fontSize: 10, fontWeight: 700, color: C.text, border: `1px solid ${C.border}`, borderRadius: 100, padding: "2px 8px", letterSpacing: 0.4 }}>{uiT("deals.example", lang)}</span>}
@@ -129,21 +135,28 @@ export const DealsNearYou = ({ deals = [], examples = false, lang = "en", defaul
         </div>
       ) : (
         <div style={{ display: "grid", gap: 10 }}>
-          {list.map(x => {
+          {list.map((x, i) => {
             const busy = busyAt(x.d.__busy, new Date(), "Europe/Vilnius");
             const book = cleanBooking(x.d.__booking);
             const on = x.card.timing !== "later";
             const offer = String(x.d.__offer?.text || "").trim();
             return (
               <div key={x.id || x.d.name} data-testid="deal-near" style={{ background: on ? `${C.gold}12` : C.surface, border: `1px solid ${on ? `${C.gold}66` : C.border}`, borderRadius: 14, padding: "13px 15px" }}>
-                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
-                  <div style={{ fontSize: 16, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, minWidth: 0, overflowWrap: "anywhere" }}>{x.d.name}</div>
-                  {x.minutes != null && <div data-testid="deal-near-minutes" style={{ flex: "0 0 auto", fontSize: 12, fontWeight: 700, color: C.muted }}>{fill(uiT("trips.walkMin", lang), { n: x.minutes })}</div>}
-                </div>
-                {offer && <div data-testid="deal-near-offer" style={{ fontSize: 14, fontWeight: 700, color: C.gold, lineHeight: 1.45, marginTop: 4 }}>{offer}</div>}
-                <div style={{ fontSize: 12, color: C.light, marginTop: 4 }}>
-                  {x.card.hours ? <span style={{ fontWeight: on ? 700 : 400 }}>{on ? "● " : ""}{x.card.hours}</span> : <span style={{ fontWeight: 700 }}>● {uiT("trips.onNow", lang)}</span>}
-                  {busy ? ` · ${uiT(`busy.${busy.level}`, lang)}` : ""}
+                {/* The map in the corner, flying down to the place (13 Oct 2026). */}
+                <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 16, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, overflowWrap: "anywhere" }}>{x.d.name}</div>
+                    {x.minutes != null && <div data-testid="deal-near-minutes" style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginTop: 1 }}>{fill(uiT("trips.walkMin", lang), { n: x.minutes })}</div>}
+                    {offer && <div data-testid="deal-near-offer" style={{ fontSize: 14, fontWeight: 700, color: C.gold, lineHeight: 1.45, marginTop: 4 }}>{offer}</div>}
+                    <div style={{ fontSize: 12, color: C.light, marginTop: 4 }}>
+                      {x.card.hours ? <span style={{ fontWeight: on ? 700 : 400 }}>{on ? "● " : ""}{x.card.hours}</span> : <span style={{ fontWeight: 700 }}>● {uiT("trips.onNow", lang)}</span>}
+                      {busy ? ` · ${uiT(`busy.${busy.level}`, lang)}` : ""}
+                    </div>
+                  </div>
+                  {x.at && (
+                    <DealCornerMap lat={x.at.lat} lon={x.at.lon} name={x.d.name} delay={(i % 4) * 180}
+                      onTap={x.minutes != null ? () => { askForCompass(); setGoing(x); } : null} />
+                  )}
                 </div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
                   {x.at && x.minutes != null && (
