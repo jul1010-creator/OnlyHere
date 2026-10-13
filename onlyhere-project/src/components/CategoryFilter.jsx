@@ -38,21 +38,27 @@ export const CATEGORY_ICON = {
   ),
 };
 
-// ── EACH ONE ITS OWN PAGE ───────────────────────────────────────────
-// Oliver, 14 Oct 2026, a few minutes after the tick-off version: "Don't have
-// those tick-offs. Let it be seperate navigations. And let change be fades."
-// So a circle is a way in, the way Lidl's departments are: tapping it opens
-// that kind of place on its own (DealsNearYou.jsx), and Back comes out again.
-export const CategoryNav = ({ onPick, label = (k) => k }) => (
+// ── ONE AT A TIME, NO TICKS ─────────────────────────────────────────
+// Oliver, 14 Oct 2026: "Don't have those tick-offs. Let it be seperate
+// navigations. And let change be fades", then "keep the round ones like
+// before. Just avoid having them be tick-offs. So it's filters/navigations."
+// So the row of circles stays where it was, and a tap shows that one kind of
+// place on its own (a ring says which); tapping it again shows them all.
+export const CategoryNav = ({ active = null, onPick, label = (k) => k }) => (
   <nav aria-label="Kinds of place" data-testid="deals-categories"
     style={{ display: "grid", gridTemplateColumns: `repeat(${DEAL_CATEGORIES.length}, minmax(0, 1fr))`, gap: 8 }}>
-    {DEAL_CATEGORIES.map(k => (
-      <button key={k} type="button" onClick={() => onPick(k)} data-testid={`deals-cat-${k}`}
-        style={{ background: "none", border: "none", padding: "4px 0", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, fontFamily: "'Inter', sans-serif" }}>
-        <CategoryCircle k={k} size={64} />
-        <span style={{ fontSize: 12.5, fontWeight: 600, color: C.text, textAlign: "center", lineHeight: 1.25 }}>{label(k)}</span>
-      </button>
-    ))}
+    {DEAL_CATEGORIES.map(k => {
+      const on = active === k;
+      return (
+        <button key={k} type="button" onClick={() => onPick(k)} aria-current={on ? "page" : undefined} data-testid={`deals-cat-${k}`}
+          style={{ background: "none", border: "none", padding: "4px 0", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, fontFamily: "'Inter', sans-serif" }}>
+          <span style={{ borderRadius: "50%", boxShadow: on ? `0 0 0 3px ${C.bg}, 0 0 0 5px ${C.text}` : "none", transition: "box-shadow .2s ease" }}>
+            <CategoryCircle k={k} size={64} />
+          </span>
+          <span style={{ fontSize: 12.5, fontWeight: on ? 700 : 600, color: on ? C.text : C.light, textAlign: "center", lineHeight: 1.25 }}>{label(k)}</span>
+        </button>
+      );
+    })}
   </nav>
 );
 

@@ -34,7 +34,7 @@ import { placeClock, cleanClock, windowOf } from "../utils/offerClock";
 import { RedeemSheet } from "./RedeemSheet";
 import { DealTile, eyebrow } from "./DealCard";
 import { DealDetail } from "./DealDetail";
-import { CategoryNav, CategoryCircle } from "./CategoryFilter";
+import { CategoryNav } from "./CategoryFilter";
 import { dealCategory, byCategories, CATEGORY_SIGN } from "../utils/dealCategories";
 import { dayKey, dayPlus } from "../utils/calendarDay";
 
@@ -329,13 +329,19 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
       setCat(k);
       setOpened(null);
       setFade(false);
-      try { if (sectionRef.current && sectionRef.current.getBoundingClientRect().top < 0) sectionRef.current.scrollIntoView({ block: "start" }); } catch { /* old browser */ }
     }, FADE_MS);
   };
   const sectionRef = useRef(null);
   const enterCat = (k) => {
     try { window.history.pushState({ ...(window.history.state || {}), gxCat: k }, ""); } catch { /* no history */ }
     showCat(k);
+  };
+  // Another circle swaps in place; the one already shown, tapped again, shows
+  // them all.
+  const pickCat = (k) => {
+    if (k === cat) { leaveCat(); return; }
+    if (cat) { try { window.history.replaceState({ ...(window.history.state || {}), gxCat: k }, ""); } catch { /* no history */ } showCat(k); return; }
+    enterCat(k);
   };
   const leaveCat = () => {
     try { if (window.history.state?.gxCat) { window.history.back(); return; } } catch { /* fall through */ }
@@ -416,19 +422,6 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
 
   return (
     <section ref={sectionRef} data-testid="deals-near" style={{ marginBottom: 30 }}>
-      <div data-testid="deals-view" data-cat={cat || "all"} style={{ opacity: fade ? 0 : 1, transition: `opacity ${FADE_MS}ms ease` }}>
-      {cat ? (
-        <div data-testid="deals-cat-page" style={{ margin: "0 0 14px" }}>
-          <button type="button" onClick={leaveCat} data-testid="deals-cat-back"
-            style={{ background: "none", border: "none", padding: "4px 0", color: C.light, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-            ‹ {uiT("trips.dealsH", lang)}
-          </button>
-          <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 10 }}>
-            <CategoryCircle k={cat} size={52} />
-            <h2 style={{ fontSize: 30, fontWeight: 500, fontFamily: "'Fraunces', serif", lineHeight: 1.1, letterSpacing: -0.3, margin: 0, color: C.text }}>{uiT(`explore.cat.${cat}`, lang)}</h2>
-          </div>
-        </div>
-      ) : (
       <div style={{ margin: "4px 0 14px" }}>
         <div style={{ ...eyebrow(), marginBottom: 8 }}>{country === "LT" ? "Klaipėda" : ""}</div>
         <div style={{ display: "flex", alignItems: "baseline", gap: 10, minWidth: 0, flexWrap: "wrap" }}>
@@ -436,10 +429,10 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
           {examples && <span data-testid="deals-near-examples" style={{ fontSize: 10, fontWeight: 700, color: C.muted, border: `1px solid ${C.border}`, borderRadius: 100, padding: "3px 9px", letterSpacing: 0.6, textTransform: "uppercase" }}>{uiT("deals.example", lang)}</span>}
         </div>
         <div style={{ marginTop: 18 }}>
-          <CategoryNav onPick={enterCat} label={(k) => uiT(`explore.cat.${k}`, lang)} />
+          <CategoryNav active={cat} onPick={pickCat} label={(k) => uiT(`explore.cat.${k}`, lang)} />
         </div>
       </div>
-      )}
+      <div data-testid="deals-view" data-cat={cat || "all"} style={{ opacity: fade ? 0 : 1, transition: `opacity ${FADE_MS}ms ease` }}>
 
       <div style={{ padding: "6px 0 8px", marginBottom: 8, ...(sticky ? { position: "sticky", top: 0, zIndex: 20, background: C.bg } : {}) }}>
         <div role="group" aria-label="Sort" data-testid="deals-sort" style={{ display: "inline-flex", gap: 2, background: `${C.border}55`, borderRadius: 100, padding: 2 }}>

@@ -11,7 +11,8 @@ import { GemlyxMark } from "./GemlyxLogo";
 
 export const SPIN_SECONDS = 90;
 
-export const SpinningMark = ({ opacity = 0.07 }) => (
+// 0.07 at first; "Can the background be more visible?" (14 Oct 2026), so 0.16.
+export const SpinningMark = ({ opacity = 0.16 }) => (
   <div aria-hidden="true" data-testid="spinning-mark"
     style={{ position: "absolute", inset: 0, zIndex: 0, pointerEvents: "none", overflow: "clip" }}>
     <style>{`@keyframes gx-spin { to { transform: rotate(360deg); } } .gx-spin { animation: gx-spin ${SPIN_SECONDS}s linear infinite; } @media (prefers-reduced-motion: reduce) { .gx-spin { animation: none; } }`}</style>
