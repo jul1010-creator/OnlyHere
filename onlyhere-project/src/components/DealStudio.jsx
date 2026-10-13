@@ -13,8 +13,8 @@ import { createPortal } from "react-dom";
 import { C } from "../utils/theme";
 import { SUPABASE_URL } from "../config";
 import { DEAL_PLACE_TYPES, DEAL_FILTERS, DAY_SHORT, WEEK_ORDER, isDealRow, emptyDeal, dealFromRow, dealProblems, payloadFromDeal, dealWhenShort, offerOf } from "../utils/dealStudio";
-import { offerWhen, signFor, nextStart, startsWords, hoursOf } from "./DealsNearYou";
-import { DealCard, eyebrow, primaryBtn } from "./DealCard";
+import { offerWhen, signFor, nextStart, liveBadge, upcomingBadge } from "./DealsNearYou";
+import { DealTile, DealPicture, eyebrow } from "./DealCard";
 import { PIN_COLOURS, PIN_NAMES } from "../utils/pinColours";
 import { promoCard } from "../utils/promotions";
 import { GOOGLE_MAP_ID, googleMapsReady, loadGoogleMaps } from "../utils/googleMapsLoader";
@@ -94,30 +94,36 @@ const SpotMap = ({ lat, lon, onPick }) => {
   return <div ref={box} data-testid="deal-studio-map" style={{ width: "100%", height: 220, borderRadius: 16, overflow: "hidden", background: C.bg }} />;
 };
 
-// ── THE CARD AS EXPLORE WILL SHOW IT ────────────────────────────────
-// Explore's own card (DealCard.jsx) with this deal in it, so what he sees here
-// is what a visitor will see, Upcoming included.
+// ── THE TILE AS EXPLORE WILL SHOW IT ────────────────────────────────
+// Explore's own tile (DealCard.jsx, DealTile) with this deal in it, at the
+// width it has on a phone, two to a row, Upcoming included.
 const Preview = ({ f }) => {
   const offer = offerOf(f);
   const has = f.lat !== "" && Number.isFinite(Number(f.lat)) && Number.isFinite(Number(f.lon));
   const d = { name: f.name, emoji: f.sign, category: TYPE_LABEL[f.type], __offer: offer, __dealKind: f.dealKind, country: "LT" };
   const card = offer ? promoCard(d, { today: new Date(), lang: "en" }) : null;
   const waiting = card?.timing === "later" || card?.timing === "off";
-  const when = !offer ? null : waiting ? { kind: "starts", text: startsWords(nextStart(offer, new Date()), "en") }
-    : card?.timing === "ended" ? { kind: "ended", text: "Ended" } : offerWhen(offer, card?.timing, { now: new Date(), lang: "en" });
+  const badge = !offer ? "" : waiting ? upcomingBadge(nextStart(offer, new Date()), "en")
+    : card?.timing === "ended" ? "Ended" : liveBadge(offer, offerWhen(offer, card?.timing, { now: new Date(), lang: "en" }), "en");
   return (
-    <div data-testid="deal-studio-preview">
-      {waiting && <div style={{ ...eyebrow(), marginBottom: 8 }}>Upcoming</div>}
-      <DealCard testid="deal-studio-card" upcoming={waiting} name={f.name || "The place's name"} offer={offer?.text || "What a visitor gets"}
-        tag={f.dealKind ? FILTER_LABEL[f.dealKind] : ""} when={when}
-        hours={when?.kind !== "ongoing" && offer ? hoursOf(offer, "en") : ""}
-        at={has ? { lat: Number(f.lat), lon: Number(f.lon) } : null} sign={signFor(d)} pin={f.pin}
-        actions={!waiting ? <span style={{ ...primaryBtn(), cursor: "default" }}>Redeem offer</span> : null} />
+    <div data-testid="deal-studio-preview" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 170px))", gap: 12 }}>
+      <div>
+        {waiting && <div style={{ ...eyebrow(), marginBottom: 8 }}>Upcoming</div>}
+        <DealTile testid="deal-studio-card" upcoming={waiting} name={f.name || "The place's name"} offer={offer?.text || "What a visitor gets"}
+          badge={badge} photo={f.photo} at={has ? { lat: Number(f.lat), lon: Number(f.lon) } : null} sign={signFor(d)} pin={f.pin} />
+      </div>
     </div>
   );
 };
 
-const Editor = ({ start, onSave, onClose, busy, error }) => {
+const Editor = ({ start, onSave, onClose, busy, error, upload = null }) => {
+  const [photoNote, setPhotoNote] = useState("");
+  const pickPhoto = async (file) => {
+    if (!file || !upload) return;
+    setPhotoNote("Uploading");
+    try { const url = await upload(file); setF(x => ({ ...x, photo: url })); setPhotoNote(""); }
+    catch (e) { setPhotoNote(e.message || "The photo did not upload."); }
+  };
   const [f, setF] = useState(start);
   const set = (k, v) => setF(x => ({ ...x, [k]: v }));
   const [finding, setFinding] = useState({ busy: false, note: "", list: [] });
@@ -177,6 +183,22 @@ const Editor = ({ start, onSave, onClose, busy, error }) => {
               {DEAL_PLACE_TYPES.map(t => (
                 <button key={t.type} type="button" disabled={!!start.id && start.type !== t.type} onClick={() => set("type", t.type)} style={{ ...chip(f.type === t.type), opacity: start.id && start.type !== t.type ? 0.35 : 1 }}>{t.label}</button>
               ))}
+            </div>
+            <label style={label()}>Photo</label>
+            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+              <div style={{ width: 84, flex: "0 0 auto", borderRadius: 12, overflow: "hidden" }}>
+                <DealPicture photo={f.photo} at={f.lat !== "" && Number.isFinite(Number(f.lat)) ? { lat: Number(f.lat), lon: Number(f.lon) } : null} name={f.name} sign={f.sign || "📍"} pin={f.pin} ratio="1 / 1" />
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                {upload && (
+                  <label style={{ ...small(true), display: "inline-block" }} data-testid="deal-studio-photo-upload">
+                    {f.photo ? "Change photo" : "Upload photo"}
+                    <input type="file" accept="image/*" onChange={e => pickPhoto(e.target.files?.[0])} style={{ display: "none" }} />
+                  </label>
+                )}
+                {f.photo && <button type="button" onClick={() => set("photo", "")} style={small(false)}>Use the map</button>}
+                {photoNote && <span style={{ fontSize: 12, color: C.light }}>{photoNote}</span>}
+              </div>
             </div>
             <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
               <label style={label()}>Where it is</label>
@@ -282,7 +304,7 @@ const Editor = ({ start, onSave, onClose, busy, error }) => {
   );
 };
 
-export const DealStudio = ({ supaFetch, studioFetch, onChanged }) => {
+export const DealStudio = ({ supaFetch, studioFetch, onChanged, upload = null }) => {
   const [rows, setRows] = useState(null);
   const [note, setNote] = useState("");
   const [editing, setEditing] = useState(null);
@@ -407,7 +429,7 @@ export const DealStudio = ({ supaFetch, studioFetch, onChanged }) => {
       {rows && rows.length === 0 && !note && (
         <div style={{ fontSize: 12.5, color: C.light, marginTop: 10, lineHeight: 1.55 }}>No real deals yet, so Explore shows the made-up examples. Add the first with New deal.</div>
       )}
-      {editing && <Editor key={editing.id ?? "new"} start={editing} busy={busy} error={error} onClose={() => setEditing(null)} onSave={{ save, locate }} />}
+      {editing && <Editor key={editing.id ?? "new"} start={editing} busy={busy} error={error} onClose={() => setEditing(null)} onSave={{ save, locate }} upload={upload} />}
     </section>
   );
 };

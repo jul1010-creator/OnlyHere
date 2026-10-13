@@ -40,7 +40,10 @@ export const staticMapUrl = ({ lat, lon, size }) =>
 // Set on the first refusal, for this visit.
 let staticRefused = false;
 
-export const DealCornerMap = ({ lat, lon, name = "", size = 104, onTap = null, sign = "📍", photo = "", pin = "" }) => {
+// `fill` makes it the picture of a deal tile (13 Oct 2026, Lidl Plus style):
+// as wide as the tile, at `ratio`, asking Google for a picture big enough.
+export const DealCornerMap = ({ lat, lon, name = "", size = 104, onTap = null, sign = "📍", photo = "", pin = "", fill = false, ratio = "1 / 1", radius = 14 }) => {
+  const px = fill ? 360 : size;
   const holder = useRef(null);
   const made = useRef(false);
   const [live, setLive] = useState(staticRefused);
@@ -83,10 +86,10 @@ export const DealCornerMap = ({ lat, lon, name = "", size = 104, onTap = null, s
   return (
     <div data-testid="deal-corner-map" role={onTap ? "button" : undefined} aria-label={name}
       onClick={onTap || undefined}
-      style={{ position: "relative", width: size, height: size, flex: "0 0 auto", borderRadius: 14, overflow: "hidden", border: `1px solid ${C.border}`, background: C.bg, cursor: onTap ? "pointer" : "default" }}>
+      style={{ position: "relative", ...(fill ? { width: "100%", aspectRatio: ratio } : { width: size, height: size, flex: "0 0 auto" }), borderRadius: radius, overflow: "hidden", border: fill ? "none" : `1px solid ${C.border}`, background: C.bg, cursor: onTap ? "pointer" : "default" }}>
       <div ref={holder} style={{ position: "absolute", inset: 0 }}>
         {near && !live && (
-          <img src={staticMapUrl({ lat, lon, size })} alt="" width={size} height={size} data-testid="deal-corner-static"
+          <img src={staticMapUrl({ lat, lon, size: px })} alt="" width={px} height={px} data-testid="deal-corner-static"
             onError={() => { staticRefused = true; setLive(true); }}
             style={{ display: "block", width: "100%", height: "100%", objectFit: "cover" }} />
         )}

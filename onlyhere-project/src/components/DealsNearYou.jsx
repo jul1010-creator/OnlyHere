@@ -32,7 +32,8 @@ import { DealCornerMap } from "./DealCornerMap";
 import { DealPlaceView } from "./DealPlaceView";
 import { placeClock, cleanClock, windowOf } from "../utils/offerClock";
 import { RedeemSheet } from "./RedeemSheet";
-import { DealCard, eyebrow, primaryBtn, quietBtn } from "./DealCard";
+import { DealTile, eyebrow } from "./DealCard";
+import { DealDetail } from "./DealDetail";
 import { dayKey, dayPlus } from "../utils/calendarDay";
 
 const fill = (t, v) => String(t).replace(/\{(\w+)\}/g, (_, k) => (v[k] ?? ""));
@@ -65,6 +66,8 @@ export const pointOf = (d) => {
 // visitor off a ship has today.
 const RANK = { now: 0, always: 0, later: 1 };
 export const MAX_DEALS = 12;
+// Two to a row on a phone, like Lidl Plus; three or four on a wider screen.
+const GRID = { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 12 };
 // ORDER, 13 Oct 2026: "Make alphabetic and closest filter. And only calculate
 // from you." So two orders a visitor picks, and distance only ever from where
 // the phone is. "default" is the order the page used before he chose these,
@@ -247,6 +250,33 @@ export const startsWords = (ns, lang = "en") => {
 // 13 Oct 2026: "It should also display the hours..". "" for an offer that runs
 // all day, every day.
 export const hoursOf = (offer, lang = "en") => { const h = offerHoursLabel(offer, { timing: "off", lang }); return h ? h.charAt(0).toUpperCase() + h.slice(1) : ""; };
+// ── THE BADGE IN THE PICTURE'S CORNER ───────────────────────────────
+// Lidl's says "Fra søndag 11.10."; ours says the one thing about time a
+// visitor needs at a glance, short enough for a tile two to a row.
+const LT_DAY_OF = ["sekmadienio", "pirmadienio", "antradienio", "trečiadienio", "ketvirtadienio", "penktadienio", "šeštadienio"];
+const shortDate = (until, lang) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(until || ""));
+  if (!m) return "";
+  try { return new Intl.DateTimeFormat(DAY_LOCALE[lang] || "en-GB", { day: "numeric", month: "short", timeZone: "UTC" }).format(new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]))); } catch { return `${m[3]}.${m[2]}`; }
+};
+export const liveBadge = (offer, when, lang = "en") => {
+  const say = (key, vars) => fill(uiT(key, lang), vars);
+  const clock = (t) => (lang === "da" ? t.replace(":", ".") : t);
+  if (when?.kind === "ends") return say("badge.endsIn", { t: leftWords(when.left, lang) });
+  if (when?.kind === "expires") return say("badge.until", { time: clock(cleanClock(offer?.to)) });
+  if (when?.kind === "ongoing") return when.text;
+  if (when?.kind === "until") return say("badge.untilDate", { date: shortDate(offer?.until, lang) });
+  return "";
+};
+export const upcomingBadge = (ns, lang = "en") => {
+  if (!ns) return "";
+  const say = (key, vars) => fill(uiT(key, lang), vars);
+  const time = ns.from ? (lang === "da" ? ns.from.replace(":", ".") : ns.from) : "";
+  if (ns.inDays === 0) return time ? say("badge.from", { time }) : "";
+  if (ns.inDays === 1) return time ? say("badge.tomorrowAt", { time }) : uiT("badge.tomorrow", lang);
+  const day = lang === "lt" ? LT_DAY_OF[ns.day] : dayWord(ns.day, lang);
+  return time ? say("badge.fromDayAt", { day, time }) : say("badge.fromDay", { day });
+};
 export const upcomingDeals = (deals, start, { now = new Date(), lang = "en", limit = MAX_DEALS } = {}) =>
   (Array.isArray(deals) ? deals : [])
     .map(d => {
@@ -384,36 +414,16 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
           {uiT(soon.length ? "explore.noneNowSoon" : kind && all.length ? "explore.noneHere" : "trips.noDeals", lang)}
         </div>
       ) : (
-        <div style={{ display: "grid", gap: 12 }}>
+        <div data-testid="deals-grid" style={GRID}>
           {list.map(x => {
-            const busy = busyAt(x.d.__busy, new Date(), "Europe/Vilnius");
-            const book = cleanBooking(x.d.__booking);
-            const on = x.card.timing !== "later";
             const offer = String(x.d.__offer?.text || "").trim();
             const when = offerWhen(x.d.__offer, x.card.timing, { now: new Date(), lang });
             const key = x.id || x.d.name;
             return (
-              <DealCard key={key} name={x.d.name} offer={offer} tag={tagFor(x.d, lang)}
+              <DealTile key={key} testid="deal-near" name={x.d.name} offer={offer} badge={liveBadge(x.d.__offer, when, lang)}
                 distance={x.minutes != null ? fill(uiT("trips.walkMin", lang), { n: x.minutes }) : ""}
-                when={when} hours={when?.kind !== "ongoing" ? hoursOf(x.d.__offer, lang) : ""}
-                note={busy ? uiT(`busy.${busy.level}`, lang) : ""}
-                at={x.at} sign={signFor(x.d)} photo={x.d.photo || ""} pin={x.d.__pin || ""}
-                onMap={() => setOpened(cur => (cur === key ? null : key))}
-                actions={opened !== key && (offer || book) ? (
-                  <>
-                    {offer && on && (
-                      <button onClick={() => openRedeem(x, when)} data-testid="deal-near-redeem" style={primaryBtn()}>{uiT("offer.redeem", lang)}</button>
-                    )}
-                    {book && (
-                      <a href={book.href} target={book.kind === "web" ? "_blank" : undefined} rel="noopener noreferrer" style={quietBtn()}>{uiT("deal.book", lang)}</a>
-                    )}
-                  </>
-                ) : null}>
-                {opened === key && x.at && (
-                  <DealPlaceView lat={x.at.lat} lon={x.at.lon} name={x.d.name} sign={signFor(x.d)} photo={x.d.photo || ""} pin={x.d.__pin || ""} lang={lang}
-                    onDirections={() => go(x)} onClose={() => setOpened(null)} />
-                )}
-              </DealCard>
+                photo={x.d.photo || ""} at={x.at} sign={signFor(x.d)} pin={x.d.__pin || ""}
+                onOpen={() => setOpened(key)} />
             );
           })}
         </div>
@@ -421,17 +431,40 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
       {soon.length > 0 && (
         <div data-testid="deals-upcoming" style={{ marginTop: 30 }}>
           <h3 style={{ ...eyebrow(), margin: "0 0 12px" }}>{uiT("explore.upcoming", lang)}</h3>
-          <div style={{ display: "grid", gap: 12 }}>
+          <div style={GRID}>
             {soon.map(x => (
-              <DealCard key={x.id || x.d.name} testid="deal-upcoming" upcoming name={x.d.name}
-                offer={String(x.d.__offer?.text || "").trim()} tag={tagFor(x.d, lang)}
+              <DealTile key={x.id || x.d.name} testid="deal-upcoming" upcoming name={x.d.name}
+                offer={String(x.d.__offer?.text || "").trim()} badge={upcomingBadge(x.next, lang)}
                 distance={x.minutes != null ? fill(uiT("trips.walkMin", lang), { n: x.minutes }) : ""}
-                when={{ kind: "starts", text: startsWords(x.next, lang) }} hours={hoursOf(x.d.__offer, lang)}
-                at={x.at} sign={signFor(x.d)} photo={x.d.photo || ""} pin={x.d.__pin || ""} />
+                photo={x.d.photo || ""} at={x.at} sign={signFor(x.d)} pin={x.d.__pin || ""}
+                onOpen={() => setOpened(`soon:${x.id || x.d.name}`)} />
             ))}
           </div>
         </div>
       )}
+      {(() => {
+        // The deal a tile opened, live or upcoming, read fresh from the lists.
+        if (!opened) return null;
+        const isSoon = String(opened).startsWith("soon:");
+        const key = isSoon ? String(opened).slice(5) : opened;
+        const x = (isSoon ? soon : list).find(y => (y.id || y.d.name) === key);
+        if (!x) return null;
+        const offer = String(x.d.__offer?.text || "").trim();
+        const when = isSoon ? { kind: "starts", text: startsWords(x.next, lang) } : offerWhen(x.d.__offer, x.card.timing, { now: new Date(), lang });
+        const busy = busyAt(x.d.__busy, new Date(), "Europe/Vilnius");
+        return (
+          <DealDetail name={x.d.name} offer={offer} tag={tagFor(x.d, lang)} upcoming={isSoon} lang={lang}
+            distance={x.minutes != null ? fill(uiT("trips.walkMin", lang), { n: x.minutes }) : ""}
+            when={when} hours={when?.kind !== "ongoing" ? hoursOf(x.d.__offer, lang) : ""}
+            note={busy ? uiT(`busy.${busy.level}`, lang) : ""}
+            photo={x.d.photo || ""} at={x.at} sign={signFor(x.d)} pin={x.d.__pin || ""}
+            book={cleanBooking(x.d.__booking)}
+            labels={{ redeem: uiT("offer.redeem", lang), directions: uiT("explore.directions", lang), close: uiT("explore.closeMap", lang), book: uiT("deal.book", lang) }}
+            onRedeem={!isSoon && offer ? () => openRedeem(x, when) : null}
+            onDirections={() => { setOpened(null); go(x); }}
+            onClose={() => setOpened(null)} />
+        );
+      })()}
       {country === "LT" && (
         <a href={centreSite(lang)} target="_blank" rel="noopener noreferrer" data-testid="deals-centre-link"
           style={{ display: "block", marginTop: 14, fontSize: 12.5, fontWeight: 700, color: C.muted, textDecoration: "none", textAlign: "center" }}>
