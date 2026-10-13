@@ -21,6 +21,7 @@ import { cleanOffer, offerProblems } from "./offer";
 import { cleanClock, OFFER_WEEK } from "./offerClock";
 import { bookingProblem, cleanBooking } from "./dealExtras";
 import { inNowArea } from "./nowPlanner";
+import { pinColour } from "./pinColours";
 
 // The kinds of place a deal can be, as the database types them. What each one
 // is called here is what a shop owner would call it, not the table's word.
@@ -43,7 +44,7 @@ export const emptyDeal = () => ({
   id: null, type: "food", published: false,
   name: "", street: "", lat: "", lon: "", sign: "",
   text: "", days: [], from: "", to: "", until: "", ongoing: false,
-  dealKind: "", booking: "",
+  dealKind: "", booking: "", pin: "",
 });
 
 // The form, from a row of gemlyx_content.
@@ -55,7 +56,7 @@ export const dealFromRow = (row) => {
     name: String(p.name || ""), street: String(p.location || ""),
     lat: p.__lat ?? p.lat ?? "", lon: p.__lon ?? p.lon ?? "", sign: String(p.emoji || ""),
     text: String(o.text || ""), days: Array.isArray(o.days) ? o.days : [], from: String(o.from || ""), to: String(o.to || ""), until: String(o.until || ""), ongoing: o.ongoing === true,
-    dealKind: DEAL_FILTERS.includes(p.__dealKind) ? p.__dealKind : "", booking: String(p.__booking || ""),
+    dealKind: DEAL_FILTERS.includes(p.__dealKind) ? p.__dealKind : "", booking: String(p.__booking || ""), pin: pinColour(p.__pin),
   };
 };
 
@@ -97,6 +98,7 @@ export const payloadFromDeal = (f, base = {}) => {
   if (offer) p.__offer = offer; else delete p.__offer;
   if (DEAL_FILTERS.includes(f.dealKind) && f.dealKind) p.__dealKind = f.dealKind; else delete p.__dealKind;
   if (cleanBooking(f.booking)) p.__booking = String(f.booking).trim(); else delete p.__booking;
+  if (pinColour(f.pin)) p.__pin = pinColour(f.pin); else delete p.__pin;
   return p;
 };
 

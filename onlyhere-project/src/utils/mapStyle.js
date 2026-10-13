@@ -64,6 +64,10 @@ export const OPENFREEMAP_ATTRIBUTION =
   + ' Data from <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>';
 
 // ── THE PALETTE, AND WHERE EACH COLOUR COMES FROM ───────────────────
+// 13 Oct 2026: the dark theme went from navy to charcoal and champagne
+// ("move away from the 2012-16 look"), and the map went with it, colour for
+// colour: the navy values in the notes below are now their charcoal
+// counterparts in theme.js, with the same roles and the same reasoning.
 // Every colour here is a token of the dark theme in theme.js or a stated blend
 // of two of them, so the map sits inside the same family as the cards around it
 // instead of arriving from another product. The dark theme is used whichever
@@ -93,7 +97,7 @@ export const OPENFREEMAP_ATTRIBUTION =
 //   RAIL   light, #A6B0C6, dashed so it is never mistaken for a road.
 //   BORDER the country border in muted, dashed, land only: the maritime halves
 //          of an admin boundary would draw box lines across the Kattegat.
-const WATER = "#0A0F1E";
+const WATER = "#0E0E11";
 // ── AND THEN WE LOOKED AT IT ────────────────────────────────────────
 // 14 Sep 2026, 01:20, on Oliver's own dev server with the real tiles up. The
 // land against the water was calculated at a ratio and never looked at, and on
@@ -101,16 +105,16 @@ const WATER = "#0A0F1E";
 // against the water by the WCAG formula, which is below the point where an
 // edge reads at a glance. #303F62 is 1.70:1, which is still a dark map and is
 // a country you can see the shape of.
-const LAND = "#303F62";
+const LAND = "#34343C";
 // Lifted ABOVE the land, which is the whole idea of it, so it moved with LAND.
-const BUILT = "#3E5080";
-const WOOD = "#1B2E36";
-const SAND = "#D9A441";
-const COAST = "#5A6A8C";
-const ROAD = "#7C88A6";
-const MINOR = "#5A6A8C";
-const RAIL = "#A6B0C6";
-const BORDER = "#7C88A6";
+const BUILT = "#46464F";
+const WOOD = "#24302A";
+const SAND = "#C9A46A";
+const COAST = "#6E6A62";
+const ROAD = "#8F897D";
+const MINOR = "#6E6A62";
+const RAIL = "#C9C3B7";
+const BORDER = "#8F897D";
 // ── AND THE WORDS, WHICH THE STYLE DID NOT HAVE ────────────
 //
 // Oliver, 14 Sep 2026, on the drawn map: "I don't like that map though.. I do
@@ -122,9 +126,9 @@ const BORDER = "#7C88A6";
 // name crossing a road or a coastline still has an edge. Towns sit a step
 // quieter than cities so a national view reads as a hierarchy rather than a
 // wall of equal words.
-const LABEL = "#E8ECF6";
-const LABEL_QUIET = "#B9C2D8";
-const HALO = "#1B2440";
+const LABEL = "#F3EFE7";
+const LABEL_QUIET = "#C9C3B7";
+const HALO = "#1C1C21";
 
 // Line widths grow with the zoom the way MapLibre's own styles do, base 1.4
 // per zoom level, so a road is a hairline at national zoom and a real stroke

@@ -32,6 +32,7 @@ export const THEMES = {
     fieldRing: "#E0AE4E",
     accent: "#A83545",   // oxblood: sits with the gold instead of shouting over it
     gold: "#E0AE4E",
+    bronze: "#B09062",
     text: "#F4F0E4",
     muted: "#968C76",
     light: "#D8D0BD",
@@ -47,32 +48,32 @@ export const THEMES = {
     grain: 0.055,
     scheme: "dark",
   },
-  // What the app looked like before. Kept because he asked for it kept, and
-  // because plenty of people genuinely prefer a cold dark.
+  // ── THE 2026 DARK ─────────────────────────────────────────────────
+  // Oliver, 13 Oct 2026, with a design review of the deal editor and a dark
+  // boutique travel page as the reference: "Make the dark theme. We need to
+  // move away from the 2012-16 look." The navy (#0A0F1E) and its bright gold
+  // read as an older dashboard. This is charcoal, warm off-white, and one
+  // champagne gold kept for what matters, with bronze for the details.
+  // Measured, as the others were:
+  //   text 16.8:1, light 11.0, muted 5.55, gold 8.26, bronze 5.57 on bg;
+  //   fieldBorder 3.32:1 on surface (the 3:1 the boxes you type into need);
+  //   onGold on gold 7.89, white on accent 5.6.
   dark: {
     name: "Dark",
-    hint: "The original deep navy.",
-    bg: "#0A0F1E",
-    surface: "#0F1628",
-    border: "#212C44",
-    // 3.32:1 against surface, 3.52:1 against bg.
-    fieldBorder: "#5A6A8C",
-    fieldRing: "#D9A441",
-    // ── BOTH OF THESE WERE UNDER AA ─────────────────────────────────
-    // Measured 22 Aug 2026. The red carried white text at 4.23:1 on the send
-    // button and on every message a traveller has typed, and #D23043 is the
-    // smallest move that clears the line at 4.95 while staying the same bright
-    // red rather than the oxblood the other two themes use.
-    accent: "#D23043",
-    gold: "#D9A441",
-    text: "#EDF0F7",
-    // 3.85:1 against the page, on the colour carrying nearly every piece of
-    // secondary text in the app, at 11 to 13px. #7C88A6 is 5.39 and still reads
-    // as muted rather than as body text.
-    muted: "#7C88A6",
-    light: "#A6B0C6",
-    scrim: "rgba(10,15,30,0.72)",
-    onGold: "#0A0F1E",
+    hint: "Charcoal and champagne.",
+    bg: "#0E0E11",
+    surface: "#17171B",
+    border: "#27272D",
+    fieldBorder: "#6E6A62",
+    fieldRing: "#C9A46A",
+    accent: "#B3404B",
+    gold: "#C9A46A",
+    bronze: "#A08660",
+    text: "#F3EFE7",
+    muted: "#8F897D",
+    light: "#C9C3B7",
+    scrim: "rgba(8,8,10,0.74)",
+    onGold: "#141416",
     onAccent: "#FFFFFF",
     grain: 0,
     scheme: "dark",
@@ -95,6 +96,7 @@ export const THEMES = {
     // both places it is used, and white text on a gold button was 4.43:1 as
     // well. #8A6216 is 4.89 and 5.38, and takes the button with it.
     gold: "#8A6216",     // the gold has to darken or it vanishes on paper
+    bronze: "#7A6440",
     text: "#241F16",
     // ── THE ONE THAT AFFECTED THE MOST WORDS ────────────────────────
     // 22 Aug 2026, measured off a screenshot of the studio screen rather than
