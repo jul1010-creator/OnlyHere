@@ -106,7 +106,7 @@ export const EXAMPLE_PARTNERS = [
     lt: { what: "Dviračių nuoma", offer: "Dvi valandos su šalmu ir spyna, 8 €. Dviratį grąžinkite kruizinių laivų terminale", idea: "Nuima vienintelį rūpestį: laiku grįžti į laivą." },
   },
   {
-    key: "bags", dealKind: "activities", stay: 15, type: "free", name: "Bagažinė", what: "Luggage room", street: "Danės g.",
+    key: "bags", dealKind: "other", stay: 15, type: "free", name: "Bagažinė", what: "Luggage room", street: "Danės g.",
     lat: 55.70950, lon: 21.13700, inWalks: false,
     hours: lines(every("08:00", "21:00")),
     offer: { text: "Leave a bag while you walk, €3 a bag for the day" },
