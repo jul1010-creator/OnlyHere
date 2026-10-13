@@ -82794,17 +82794,18 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
 }
 
 // ── Batch 233: a map in the corner of each deal ──
-// Oliver, 13 Oct 2026: "Put maps on them in the corner", first as a flight
-// down like the travel guide's, then "Is it possible to have a permanent
-// closure of where it is located? A permanent map inputted".
+// Oliver, 13 Oct 2026: "Put maps on them in the corner", then "a permanent
+// closure of where it is located", then "The openstreetmaps is very poorly
+// designed... Look at our map in the tourism guide.. use that." (Batch 236)
 {
   const read = (f) => readFileSync(join(root, f), "utf8");
   const cm = read("src/components/DealCornerMap.jsx"), dny = read("src/components/DealsNearYou.jsx");
-  ok("a fixed close view of the street, with no flight", /CLOSE_ZOOM = 15;/.test(cm) && /m\.setView\(at, CLOSE_ZOOM\);/.test(cm) && !/flyTo|FLY_FROM_ZOOM/.test(cm) && /zoomAnimation: false/.test(cm));
-  ok("a picture, not a control: the page still scrolls over it", /dragging: false, touchZoom: false, scrollWheelZoom: false/.test(cm) && /doubleClickZoom: false, boxZoom: false, keyboard: false/.test(cm));
-  ok("drawn when it first comes near the screen, then kept", /new IntersectionObserver\(/.test(cm) && /\{ seen\.disconnect\(\); build\(\); \}/.test(cm) && !/isIntersecting \? build\(\) : drop\(\)/.test(cm) && /await import\("leaflet"\)/.test(cm) && !/^import L from "leaflet";/m.test(cm));
-  ok("the map credit stays, small", /attributionControl: true/.test(cm) && /addTileLayer\(L, m\)/.test(cm) && /\.gemlyx-deal-map \.leaflet-control-attribution\{font-size:7px/.test(dny));
-  ok("every deal with a place gets one, and tapping it walks there", /<DealCornerMap lat=\{x\.at\.lat\} lon=\{x\.at\.lon\} name=\{x\.d\.name\}/.test(dny) && /onTap=\{x\.minutes != null \? \(\) => \{ askForCompass\(\); setGoing\(x\); \} : null\}/.test(dny));
+  ok("the guide's own Google map, in the guide's style, fixed on the street", /mapId: GOOGLE_MAP_ID,/.test(cm) && /zoom: CLOSE_ZOOM,/.test(cm) && /CLOSE_ZOOM = 16;/.test(cm) && !/leaflet|addTileLayer|flyTo/i.test(cm.replace(/\/\/.*$/gm, "")));
+  ok("a picture, not a control: nothing on it moves", /disableDefaultUI: true, gestureHandling: "none", keyboardShortcuts: false, clickableIcons: false/.test(cm));
+  ok("raster, so a dozen do not need a dozen WebGL canvases", /RenderingType\?\.RASTER \|\| "RASTER"/.test(cm));
+  ok("made when the card first comes near the screen, then kept", /new IntersectionObserver\(/.test(cm) && /\{ seen\.disconnect\(\); build\(\); \}/.test(cm) && /made\.current = true;/.test(cm));
+  ok("no key, no map, rather than a worse one", /googleMapsReady\(\)/.test(cm) && /if \(!ok\) return null;/.test(cm));
+  ok("every deal with a place gets one, and tapping it walks there", /<DealCornerMap lat=\{x\.at\.lat\} lon=\{x\.at\.lon\} name=\{x\.d\.name\}/.test(dny) && /onTap=\{\(\) => go\(x\)\} \/>/.test(dny));
 }
 
 // ── Batch 235: Explore is the deals on the Lithuanian site, and the Danish
@@ -82820,23 +82821,50 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   const D = M.DNY;
   is("three filters, in his words and order", D.DEAL_KINDS, ["discounts", "entertainment", "activities"]);
   ok("a deal set by hand in the Studio keeps that filter", D.dealKind({ _src: "food", __dealKind: "entertainment" }) === "entertainment" && D.dealKind({ _src: "food", __dealKind: "nonsense" }) === "discounts");
-  ok("otherwise the kind of place decides", D.dealKind({ _src: "food" }) === "discounts" && D.dealKind({ _src: "nightlife" }) === "entertainment" && D.dealKind({ _src: "free" }) === "activities" && D.dealKind({ _exampleId: "booking:amber" }) === "activities" && D.dealKind({}) === "discounts");
+  ok("otherwise the kind of place decides", D.dealKind({ _src: "food" }) === "discounts" && D.dealKind({ _src: "nightlife" }) === "entertainment" && D.dealKind({ _src: "free" }) === "activities" && D.dealKind({ _exampleId: "booking:amber" }) === "activities" && D.dealKind({}) === "other");
   const pools = M.KEX.examplePromotionPools();
   const kinds = new Set(Object.values(pools).flat().map(d => D.dealKind(d)));
   ok("the example partners fill all three filters", ["discounts", "entertainment", "activities"].every(k => kinds.has(k)) && Object.values(pools).flat().find(d => d._exampleId === "food:beer")?.__dealKind === "entertainment");
   ok("the filter words read in all four languages", ["explore.discounts", "explore.entertainment", "explore.activities", "explore.noneHere", "explore.more"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
   const dny = read("src/components/DealsNearYou.jsx"), app = read("src/App.jsx"), ex = read("src/components/KlaipedaExplore.jsx");
-  ok("filtering happens before the twelve are cut, and tapping again shows all", /nearbyDeals\(deals, start, \{ now: new Date\(\), lang, limit: Infinity \}\)/.test(dny) && /\(kind \? all\.filter\(x => dealKind\(x\.d\) === kind\) : all\)\.slice\(0, MAX_DEALS\)/.test(dny) && /setKind\(cur => \(cur === k \? null : k\)\)/.test(dny));
+  ok("filtering happens before the twelve are cut, with All first", /nearbyDeals\(deals, start, \{ now: new Date\(\), lang, limit: Infinity, order: /.test(dny) && /\(kind \? all\.filter\(x => dealKind\(x\.d\) === kind\) : all\)\.slice\(0, MAX_DEALS\)/.test(dny) && /const FILTERS = \[\[null, "explore\.all"\], \.\.\.DEAL_KINDS/.test(dny));
   ok("and the tourism centre's own site is where the rest lives", /href=\{centreSite\(lang\)\}/.test(dny) && D.centreSite("lt") === "https://klaipedatravel.lt/" && D.centreSite("en") === "https://klaipedatravel.lt/en/");
   ok("Explore on /lithuania is the deals, not the Danish front page", /\{tab === "home" && PAGE_ABROAD && \(/.test(app) && /<KlaipedaExplore lang=\{uiLang\} \/>/.test(app) && /\{tab === "home" && !PAGE_ABROAD && \(/.test(app) && /useKlaipedaDeals\(null\)/.test(ex));
   ok("Studio sets the filter by hand and saves it with the row", /data-testid="studio-deal-kind"/.test(app) && /if \(DEAL_KINDS\.includes\(studioDealKind\)\) shaped\.__dealKind = studioDealKind;/.test(app) && /setStudioDealKind\(DEAL_KINDS\.includes\(row\.payload\?\.__dealKind\)/.test(app));
   // The rework switch.
   const cfg = read("src/config.js");
   ok("one switch closes the Danish side", /export const DENMARK_REWORK = true;/.test(cfg) && (app.match(/element=\{<DanishSide \/>\}/g) || []).length === 6 && !/element=\{<GemlyxApp \/>\}/.test(app));
-  ok("and Lithuania, the Studio and a signed in Studio browser pass through", /if \(DENMARK_REWORK && !PAGE_ABROAD && !studio\) return <ReworkPage \/>;/.test(app) && /window\.location\.hash === "#studio"/.test(app) && /localStorage\.getItem\("gemlyx_studio_session"\)/.test(app) && /addEventListener\("hashchange", read\)/.test(app));
+  ok("and only Lithuania and the Studio address pass through", /if \(DENMARK_REWORK && !PAGE_ABROAD && !studio\) return <ReworkPage \/>;/.test(app) && /const studioHashNow = \(\) => typeof window !== "undefined" && window\.location\.hash === "#studio";/.test(app) && /addEventListener\("hashchange", read\)/.test(app));
   ok("guides, the library, support and the Klaipėda pages keep their own routes", /<Route path="\/guide\/:guideId" element=\{<GuidePage \/>\} \/>/.test(app) && /<Route path=\{KLAIPEDA_DEMO_PATH\} element=\{<KlaipedaDemo \/>\} \/>/.test(app) && /<Route path=\{KLAIPEDA_PARTNER_PATH\} element=\{<KlaipedaPartner \/>\} \/>/.test(app));
   const rw = read("src/pages/ReworkPage.jsx");
   ok("the rework page names no country and has no dashes", !/Denmark|Danish|Lithuania/.test(rw.replace(/\/\/.*$/gm, "")) && !/[–—]/.test(rw.replace(/\/\/.*$/gm, "")) && /We are reworking Gemlyx/.test(rw));
+}
+
+// ── Batch 236: two orders, measured from you, and filters that read the offer ──
+// Oliver, 13 Oct 2026: "those filters suck. Make alphabetic and closest filter.
+// And only calculate from you. And the filters about activities,
+// entertainments, and discounts, also need to be improved."
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const D = M.DNY;
+  is("two orders, in his words", D.SORTS, ["closest", "az"]);
+  const me = { lat: 55.7090, lon: 21.1335 };
+  const at = new Date("2026-10-14T08:30:00Z");
+  const mk = (id, name, lat, lon) => ({ _src: "free", id, name, country: "LT", __lat: lat, __lon: lon, __offer: { text: "Gift", until: "2027-12-31" } });
+  const deals = [mk(1, "Žuvinė", 55.7091, 21.1336), mk(2, "Arbatinė", 55.7200, 21.1500), mk(3, "Bokštas", 55.7100, 21.1340)];
+  is("A to Z, Lithuanian letters in their place", D.nearbyDeals(deals, null, { now: at, order: "az" }).map(x => x.d.name), ["Arbatinė", "Bokštas", "Žuvinė"]);
+  is("Closest, from you", D.nearbyDeals(deals, me, { now: at, order: "closest" }).map(x => x.d.name), ["Žuvinė", "Bokštas", "Arbatinė"]);
+  ok("and with no position nothing has minutes", D.nearbyDeals(deals, null, { now: at, order: "az" }).every(x => x.minutes === null));
+  const dny = read("src/components/DealsNearYou.jsx");
+  ok("no ship and no centre: distance only from the visitor", !/NOW_STARTS|starts\[|defaultFrom/.test(dny) && /const start = here \? \{ id: "here"/.test(dny));
+  ok("Closest asks for the position, and a phone that said yes opens on it", /if \(k === "closest" && !here\) \{ setSort\("closest"\); locate\(\); return; \}/.test(dny) && /st\?\.state === "granted"\) locate\(\(\) => setSort\("closest"\)\)/.test(dny));
+  ok("Walk there asks for the position when it has none", /locate\(\(at\) => setGoing\(\{ \.\.\.x, minutes: walkMinutes\(at, x\.at\), _from: at \}\)\)/.test(dny));
+  // The filters read what the offer says before the kind of place.
+  ok("a beer bar filed with food is Entertainment", D.dealKind({ _src: "food", name: "Inkaras", category: "Beer bar", __offer: { text: "Three beers" } }) === "entertainment");
+  ok("a workshop or a bike hire is an Activity", D.dealKind({ _src: "food", name: "Lašas", __offer: { text: "Polish amber yourself" } }) === "activities" && D.dealKind({ _src: "shop", name: "Vėjas", __offer: { text: "Two hours bike hire, €8" } }) === "activities");
+  ok("a lunch price or a refill is a Discount", D.dealKind({ _src: "food", name: "Marios", __offer: { text: "Lunch of the day, €9" } }) === "discounts" && D.dealKind({ _src: "food", name: "Rūta", __offer: { text: "Free refill with any pastry" } }) === "discounts");
+  ok("a service that is none of them is under All only", D.dealKind({ __dealKind: "other", __offer: { text: "€3 a bag" } }) === "other" && Object.values(M.KEX.examplePromotionPools()).flat().find(d => d._exampleId === "free:bags")?.__dealKind === "other");
+  ok("the new words read in all four languages", ["explore.all", "explore.closest", "explore.az", "explore.needLocation"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[\u2013\u2014]/.test(M.t(k, l)))));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
