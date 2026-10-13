@@ -85,9 +85,10 @@ export const KlaipedaDemo = () => {
           {uiT("trips.introDeals", lang)}
         </p>
 
-        {/* Deals first. The QR at the terminal carries ?from=terminal, the
-            one at the centre ?from=centre, and both lists start there. */}
-        <DealsNearYou deals={live.deals} examples={live.examples} lang={lang} defaultFrom={from} country="LT" />
+        {/* Deals first, measured from where the visitor is (13 Oct 2026).
+            ?from= still starts the walk planner below at the terminal or the
+            centre. */}
+        <DealsNearYou deals={live.deals} examples={live.examples} lang={lang} country="LT" />
 
         <h2 style={{ fontSize: 22, fontWeight: 500, fontFamily: "'Fraunces', serif", lineHeight: 1.2, margin: "0 0 12px" }}>{uiT("trips.walkH", lang)}</h2>
         <NowPlanner country="LT" lang={lang} defaultFrom={from} />
