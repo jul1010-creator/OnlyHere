@@ -12,10 +12,12 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { C } from "../utils/theme";
 import { SUPABASE_URL } from "../config";
-import { DEAL_PLACE_TYPES, DEAL_FILTERS, DAY_SHORT, WEEK_ORDER, isDealRow, emptyDeal, dealFromRow, dealProblems, payloadFromDeal, dealWhenShort, offerOf } from "../utils/dealStudio";
+import { DEAL_PLACE_TYPES, DEAL_FILTERS, DEAL_CATEGORIES, typeForCategory, DAY_SHORT, WEEK_ORDER, isDealRow, emptyDeal, dealFromRow, dealProblems, payloadFromDeal, dealWhenShort, offerOf } from "../utils/dealStudio";
 import { offerWhen, signFor, nextStart, liveBadge, upcomingBadge } from "./DealsNearYou";
 import { DealTile, DealPicture, eyebrow } from "./DealCard";
 import { PIN_COLOURS, PIN_NAMES } from "../utils/pinColours";
+import { CATEGORY_COLOUR } from "../utils/dealCategories";
+const CATEGORY_LABEL = { restaurants: "Restaurants", nightlife: "Nightlife", attractions: "Attractions", rentals: "Rentals" };
 import { promoCard } from "../utils/promotions";
 import { GOOGLE_MAP_ID, googleMapsReady, loadGoogleMaps } from "../utils/googleMapsLoader";
 import { NOW_AREAS } from "../utils/nowPlanner";
@@ -100,7 +102,7 @@ const SpotMap = ({ lat, lon, onPick }) => {
 const Preview = ({ f }) => {
   const offer = offerOf(f);
   const has = f.lat !== "" && Number.isFinite(Number(f.lat)) && Number.isFinite(Number(f.lon));
-  const d = { name: f.name, emoji: f.sign, category: TYPE_LABEL[f.type], __offer: offer, __dealKind: f.dealKind, country: "LT" };
+  const d = { name: f.name, emoji: f.sign, __category: f.category, __offer: offer, country: "LT" };
   const card = offer ? promoCard(d, { today: new Date(), lang: "en" }) : null;
   const waiting = card?.timing === "later" || card?.timing === "off";
   const badge = !offer ? "" : waiting ? upcomingBadge(nextStart(offer, new Date()), "en")
@@ -180,8 +182,11 @@ const Editor = ({ start, onSave, onClose, busy, error, upload = null }) => {
             </div>
             <label style={label()}>Kind of place</label>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {DEAL_PLACE_TYPES.map(t => (
-                <button key={t.type} type="button" disabled={!!start.id && start.type !== t.type} onClick={() => set("type", t.type)} style={{ ...chip(f.type === t.type), opacity: start.id && start.type !== t.type ? 0.35 : 1 }}>{t.label}</button>
+              {DEAL_CATEGORIES.map(c => (
+                <button key={c} type="button" data-testid={`deal-studio-cat-${c}`} onClick={() => setF(x => ({ ...x, category: c, ...(x.id ? {} : { type: typeForCategory(c) }) }))}
+                  style={{ ...chip(f.category === c), display: "inline-flex", alignItems: "center", gap: 7 }}>
+                  <span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: "50%", background: CATEGORY_COLOUR[c] }} />{CATEGORY_LABEL[c]}
+                </button>
               ))}
             </div>
             <label style={label()}>Photo</label>
@@ -265,12 +270,6 @@ const Editor = ({ start, onSave, onClose, busy, error, upload = null }) => {
               <div>
                 <label style={label()}>Sign in the pin</label>
                 <input value={f.sign} onChange={e => set("sign", e.target.value)} placeholder="☕" maxLength={4} style={{ ...field(), width: 90 }} />
-              </div>
-              <div>
-                <label style={label()}>Filter on Explore</label>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  {DEAL_FILTERS.map(k => <button key={k || "auto"} type="button" onClick={() => set("dealKind", k)} style={chip(f.dealKind === k)}>{FILTER_LABEL[k]}</button>)}
-                </div>
               </div>
             </div>
           </section>

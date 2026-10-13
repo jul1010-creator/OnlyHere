@@ -34,6 +34,8 @@ import { placeClock, cleanClock, windowOf } from "../utils/offerClock";
 import { RedeemSheet } from "./RedeemSheet";
 import { DealTile, eyebrow } from "./DealCard";
 import { DealDetail } from "./DealDetail";
+import { CategoryFilter } from "./CategoryFilter";
+import { dealCategory, byCategories, CATEGORY_SIGN } from "../utils/dealCategories";
 import { dayKey, dayPlus } from "../utils/calendarDay";
 
 const fill = (t, v) => String(t).replace(/\{(\w+)\}/g, (_, k) => (v[k] ?? ""));
@@ -290,11 +292,11 @@ export const upcomingDeals = (deals, start, { now = new Date(), lang = "en", lim
     .filter(Boolean)
     .sort((a, b) => a.next.at - b.next.at || nameOrder(a, b))
     .slice(0, limit);
-// The small line over the name: which of the three filters the deal is under.
-export const tagFor = (d, lang = "en") => { const k = dealKind(d); return k && k !== "other" ? uiT(`explore.${k}`, lang) : ""; };
+// The small line over the name: which kind of place it is (14 Oct 2026).
+export const tagFor = (d, lang = "en") => uiT(`explore.cat.${dealCategory(d)}`, lang);
 // The sign in the map pointer's window: the place's own, or its filter's.
 export const KIND_SIGN = { discounts: "🏷️", entertainment: "🎵", activities: "🎯", other: "📍" };
-export const signFor = (d) => (d?.emoji ? String(d.emoji) : KIND_SIGN[dealKind(d)] || "📍");
+export const signFor = (d) => (d?.emoji ? String(d.emoji) : CATEGORY_SIGN[dealCategory(d)] || "📍");
 
 // `ready` is false while the deals are still loading, so the first paint is
 // not "No deals are on right now" for a list that is about to fill.
@@ -311,7 +313,10 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
   // The countdown moves on by itself while the page is open.
   const [tick, setTick] = useState(0);
   useEffect(() => { const t = setInterval(() => setTick(n => n + 1), 30000); return () => clearInterval(t); }, []);
-  const [kind, setKind] = useState(null);
+  // The kinds of place ticked in the round filters (CategoryFilter.jsx, 14 Oct
+  // 2026). None ticked shows them all.
+  const [picked, setPicked] = useState(() => new Set());
+  const toggleCat = (k) => setPicked(cur => { const n = new Set(cur); if (n.has(k)) n.delete(k); else n.add(k); return n; });
   const [sort, setSort] = useState("az");
   const canLocate = typeof navigator !== "undefined" && !!navigator.geolocation && !!NOW_AREAS[country];
   // Distance only ever from the visitor (13 Oct 2026). No ship, no centre.
@@ -346,8 +351,8 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
   // Only what can be used now; what starts later waits in Upcoming (13 Oct
   // 2026). The tick moves an offer from one to the other as its hour comes.
   const all = useMemo(() => nearbyDeals(deals, start, { now: new Date(), lang, limit: Infinity, order: sort === "closest" && start ? "closest" : "az" }).filter(x => x.card.timing !== "later"), [deals, start?.lat, start?.lon, lang, sort, tick]);
-  const list = useMemo(() => (kind ? all.filter(x => dealKind(x.d) === kind) : all).slice(0, MAX_DEALS), [all, kind]);
-  const soon = useMemo(() => upcomingDeals(deals, start, { now: new Date(), lang, limit: Infinity }).filter(x => !kind || dealKind(x.d) === kind).slice(0, MAX_DEALS), [deals, start?.lat, start?.lon, lang, kind, tick]);
+  const list = useMemo(() => byCategories(all, picked, x => x.d).slice(0, MAX_DEALS), [all, picked]);
+  const soon = useMemo(() => byCategories(upcomingDeals(deals, start, { now: new Date(), lang, limit: Infinity }), picked, x => x.d).slice(0, MAX_DEALS), [deals, start?.lat, start?.lon, lang, picked, tick]);
   const go = (x) => {
     askForCompass();
     if (start) { setGoing(x); return; }
@@ -378,7 +383,6 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
     background: on ? C.surface : "transparent", color: on ? C.text : C.muted, border: "none", borderRadius: 100,
     padding: "5px 11px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap",
   });
-  const FILTERS = [[null, "explore.all"], ...DEAL_KINDS.map(k => [k, `explore.${k}`])];
 
   return (
     <section data-testid="deals-near" style={{ marginBottom: 30 }}>
@@ -391,12 +395,9 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
       </div>
 
       <div style={{ background: C.bg, padding: "6px 0 8px", marginBottom: 8, ...(sticky ? { position: "sticky", top: 0, zIndex: 20 } : {}) }}>
-        <div data-testid="deals-filters" role="tablist" style={{ display: "flex", gap: 6, overflowX: "auto", scrollbarWidth: "none", paddingBottom: 8 }}>
-          {FILTERS.map(([k, label]) => (
-            <button key={label} role="tab" aria-selected={kind === k} onClick={() => setKind(k)} style={pill(kind === k)} data-testid={`deals-filter-${k || "all"}`}>
-              {uiT(label, lang)}
-            </button>
-          ))}
+        <div style={{ marginBottom: 14 }}>
+          <CategoryFilter picked={picked} onToggle={toggleCat} onClear={() => setPicked(new Set())}
+            label={(k) => uiT(`explore.cat.${k}`, lang)} clearLabel={uiT("explore.clear", lang)} />
         </div>
         <div role="group" aria-label="Sort" data-testid="deals-sort" style={{ display: "inline-flex", gap: 2, background: `${C.border}55`, borderRadius: 100, padding: 2 }}>
           {SORTS.map(k => (
@@ -411,7 +412,7 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
         <div data-testid="deals-near-loading" style={{ height: 120 }} />
       ) : list.length === 0 ? (
         <div data-testid="deals-near-none" style={{ fontSize: 13.5, color: C.light, lineHeight: 1.6, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "13px 15px" }}>
-          {uiT(soon.length ? "explore.noneNowSoon" : kind && all.length ? "explore.noneHere" : "trips.noDeals", lang)}
+          {uiT(soon.length ? "explore.noneNowSoon" : picked.size && all.length ? "explore.noneHere" : "trips.noDeals", lang)}
         </div>
       ) : (
         <div data-testid="deals-grid" style={GRID}>
