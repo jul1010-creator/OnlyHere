@@ -45,8 +45,8 @@ export const BUSINESS_TEXT = {
     steps: [
       ["You set the offer", "Write what a visitor gets and pick the days and hours it is on. A coffee refill in the quiet hour, a lunch plate until three."],
       ["Places earn their stop", "A walk is made from what is open, close by and worth the time. An offer never moves a place up the walk."],
-      ["The visitor sees it when it is on", "When your place is in the walk and the offer is on for the whole visit, it shows on the stop, marked as a partner."],
-      ["You see what it brought", "How often your place was in a walk, how many visitors came, and when the ships are in. From your own private link, no account."],
+      ["The visitor shows it at your counter", "While your offer is on, a visitor taps Redeem offer in Gemlyx and shows you a screen with your place, the offer and the time. That screen is how you know Gemlyx sent them."],
+      ["You see what it brought", "How often your offer was shown and opened to redeem, how many visitors came, and when the ships are in. From your own private link, no account."],
     ],
     offersH: "Offers, the way you set them", examples: "Examples", example: "Example",
     offersLead: "The businesses and offers below are made up, to show how it works. Each one is shown as it stands on {moment}.",
@@ -75,8 +75,8 @@ export const BUSINESS_TEXT = {
     steps: [
       ["Jūs nustatote pasiūlymą", "Parašykite, ką gauna lankytojas, ir pasirinkite dienas bei valandas, kada jis galioja. Kavos papildymas ramią valandą, pietų patiekalas iki trečios."],
       ["Vietos atrenkamos pagal vertę", "Maršrutas sudaromas iš to, kas atidaryta, netoli ir verta laiko. Pasiūlymas niekada nepakelia vietos aukščiau maršrute."],
-      ["Lankytojas jį mato, kai jis galioja", "Kai jūsų vieta yra maršrute, o pasiūlymas galioja visą apsilankymo laiką, jis rodomas prie vietos, pažymėtas kaip partnerio."],
-      ["Matote, ką tai davė", "Kaip dažnai jūsų vieta pateko į maršrutą, kiek lankytojų atėjo ir kada uoste stovi laivai. Per jūsų asmeninę nuorodą, be paskyros."],
+      ["Lankytojas jį parodo prie jūsų kasos", "Kol pasiūlymas galioja, lankytojas Gemlyx paspaudžia „Pasinaudoti pasiūlymu“ ir parodo jums ekraną su jūsų vieta, pasiūlymu ir laiku. Iš šio ekrano žinote, kad jį atsiuntė Gemlyx."],
+      ["Matote, ką tai davė", "Kaip dažnai jūsų pasiūlymas buvo parodytas ir atidarytas pasinaudoti, kiek lankytojų atėjo ir kada uoste stovi laivai. Per jūsų asmeninę nuorodą, be paskyros."],
     ],
     offersH: "Pasiūlymai, kaip juos nustatote jūs", examples: "Pavyzdžiai", example: "Pavyzdys",
     offersLead: "Žemiau pateiktos įmonės ir pasiūlymai yra išgalvoti, kad parodytų, kaip tai veikia. Kiekvienas rodomas toks, koks yra {moment}.",
