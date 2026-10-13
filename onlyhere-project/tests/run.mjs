@@ -82833,7 +82833,7 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("the example partners fill all three filters", ["discounts", "entertainment", "activities"].every(k => kinds.has(k)) && Object.values(pools).flat().find(d => d._exampleId === "food:beer")?.__dealKind === "entertainment");
   ok("the filter words read in all four languages", ["explore.discounts", "explore.entertainment", "explore.activities", "explore.noneHere", "explore.more"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
   const dny = read("src/components/DealsNearYou.jsx"), app = read("src/App.jsx"), ex = read("src/components/KlaipedaExplore.jsx");
-  ok("filtering happens before the twelve are cut, with All first", /nearbyDeals\(deals, start, \{ now: new Date\(\), lang, limit: Infinity, order: /.test(dny) && /byCategories\(all, picked, x => x\.d\)\.slice\(0, MAX_DEALS\)/.test(dny) && /<CategoryFilter picked=\{picked\}/.test(dny));
+  ok("filtering happens before the twelve are cut, with All first", /nearbyDeals\(deals, start, \{ now: new Date\(\), lang, limit: Infinity, order: /.test(dny) && /byCategories\(all, only, x => x\.d\)\.slice\(0, MAX_DEALS\)/.test(dny) && /<CategoryNav onPick=\{enterCat\}/.test(dny));
   ok("and the tourism centre's own site is where the rest lives", /href=\{centreSite\(lang\)\}/.test(dny) && D.centreSite("lt") === "https://klaipedatravel.lt/" && D.centreSite("en") === "https://klaipedatravel.lt/en/");
   ok("Explore on /lithuania is the deals, not the Danish front page", /\{tab === "home" && PAGE_ABROAD && \(/.test(app) && /<KlaipedaExplore lang=\{uiLang\} version=\{liveContentVersion\}/.test(app) && /\{tab === "home" && !PAGE_ABROAD && \(/.test(app) && /useKlaipedaDeals\(null, version\)/.test(ex));
   ok("Studio sets the filter by hand and saves it with the row", /data-testid="studio-deal-kind"/.test(app) && /if \(DEAL_CATEGORIES\.includes\(studioDealKind\)\) shaped\.__category = studioDealKind;/.test(app) && /setStudioDealKind\(DEAL_CATEGORIES\.includes\(row\.payload\?\.__category\)/.test(app));
@@ -83088,13 +83088,28 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   is("ticking more than one shows each of them", K.byCategories(items, new Set(["restaurants", "rentals"])).map(x => x.n), [1, 3]);
   is("none ticked shows everything", K.byCategories(items, new Set()).length, 3);
   const cf = read("src/components/CategoryFilter.jsx"), dny = read("src/components/DealsNearYou.jsx");
-  ok("round, coloured, with a tick on what is ticked", /borderRadius: "50%", background: CATEGORY_COLOUR\[k\]/.test(cf) && /role="checkbox" aria-checked=\{on\}/.test(cf) && /deals-cat-\$\{k\}-tick/.test(cf));
-  ok("ticking toggles, and Show all clears", /if \(n\.has\(k\)\) n\.delete\(k\); else n\.add\(k\);/.test(dny) && /onClear=\{\(\) => setPicked\(new Set\(\)\)\}/.test(dny));
+  ok("round and coloured", /borderRadius: "50%", background: CATEGORY_COLOUR\[k\]/.test(cf));
   ok("Upcoming follows the same ticks", /byCategories\(upcomingDeals\(/.test(dny));
   ok("the examples carry their kind of place", M.KXR.EXAMPLE_PARTNERS.every(p => K.DEAL_CATEGORIES.includes(p.category)));
   ok("the deal editor picks the kind of place, and a new deal's type follows it", /deal-studio-cat-\$\{c\}/.test(read("src/components/DealStudio.jsx")) && M.DST.typeForCategory("nightlife") === "night" && M.DST.typeForCategory("rentals") === "free"
     && M.DST.payloadFromDeal({ ...M.DST.emptyDeal(), name: "x", lat: 55.7, lon: 21.13, text: "x", ongoing: true, category: "rentals" }).__category === "rentals");
   ok("the words read in all four languages", ["explore.cat.restaurants", "explore.cat.nightlife", "explore.cat.attractions", "explore.cat.rentals", "explore.clear"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
+}
+
+// ── Batch 247: each kind of place its own page, fading, over a turning mark ──
+// Oliver, 14 Oct 2026: "Don't have those tick-offs. Let it be seperate
+// navigations. And let change be fades. And make the background a spinning
+// Gemlyx Logo."
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const dny = read("src/components/DealsNearYou.jsx"), cf = read("src/components/CategoryFilter.jsx"), sm = read("src/components/SpinningMark.jsx"), ex = read("src/components/KlaipedaExplore.jsx");
+  ok("no tick-offs left", !/role="checkbox"|-tick|setPicked|toggleCat/.test(cf + dny));
+  ok("a circle opens its own page, one kind of place at a time", /export const CategoryNav = \(\{ onPick/.test(cf) && /const only = useMemo\(\(\) => new Set\(cat \? \[cat\] : \[\]\), \[cat\]\);/.test(dny) && /data-testid="deals-cat-page"/.test(dny) && /data-testid="deals-cat-back"/.test(dny));
+  ok("going in and out fades", /opacity: fade \? 0 : 1, transition: `opacity \$\{FADE_MS\}ms ease`/.test(dny) && /setFade\(true\);\s*setTimeout\(\(\) => \{\s*setCat\(k\);/.test(dny));
+  ok("the phone's Back comes out of a kind of place", /window\.history\.pushState\(\{ \.\.\.\(window\.history\.state \|\| \{\}\), gxCat: k \}, ""\)/.test(dny) && /window\.addEventListener\("popstate", onPop\)/.test(dny) && /window\.history\.back\(\)/.test(dny));
+  ok("the mark turns behind Explore, stands still for less motion, takes no taps", /<SpinningMark \/>/.test(ex) && /animation: gx-spin \$\{SPIN_SECONDS\}s linear infinite/.test(sm) && /prefers-reduced-motion: reduce\) \{ \.gx-spin \{ animation: none; \}/.test(sm) && /pointerEvents: "none"/.test(sm) && /zIndex: 1/.test(ex));
+  ok("upcoming tiles dim without letting the mark through", /filter: upcoming \? "brightness\(0\.62\) saturate\(0\.6\)" : "none"/.test(read("src/components/DealCard.jsx")));
+  ok("the words read in all four languages", ["explore.noneCat"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
