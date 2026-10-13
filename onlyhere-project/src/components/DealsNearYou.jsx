@@ -135,14 +135,14 @@ export const DealsNearYou = ({ deals = [], examples = false, lang = "en", defaul
         </div>
       ) : (
         <div style={{ display: "grid", gap: 10 }}>
-          {list.map((x, i) => {
+          {list.map(x => {
             const busy = busyAt(x.d.__busy, new Date(), "Europe/Vilnius");
             const book = cleanBooking(x.d.__booking);
             const on = x.card.timing !== "later";
             const offer = String(x.d.__offer?.text || "").trim();
             return (
               <div key={x.id || x.d.name} data-testid="deal-near" style={{ background: on ? `${C.gold}12` : C.surface, border: `1px solid ${on ? `${C.gold}66` : C.border}`, borderRadius: 14, padding: "13px 15px" }}>
-                {/* The map in the corner, flying down to the place (13 Oct 2026). */}
+                {/* A fixed close map of where the place is, in the corner (13 Oct 2026). */}
                 <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 16, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, overflowWrap: "anywhere" }}>{x.d.name}</div>
@@ -154,7 +154,7 @@ export const DealsNearYou = ({ deals = [], examples = false, lang = "en", defaul
                     </div>
                   </div>
                   {x.at && (
-                    <DealCornerMap lat={x.at.lat} lon={x.at.lon} name={x.d.name} delay={(i % 4) * 180}
+                    <DealCornerMap lat={x.at.lat} lon={x.at.lon} name={x.d.name}
                       onTap={x.minutes != null ? () => { askForCompass(); setGoing(x); } : null} />
                   )}
                 </div>
