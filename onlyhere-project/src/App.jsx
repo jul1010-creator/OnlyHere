@@ -29653,7 +29653,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           {tab === "home" && PAGE_ABROAD && (
             <div className={pageAnim} data-testid="explore-abroad" style={{ maxWidth: 680, margin: "0 auto", padding: "18px 16px 48px" }}>
               <KlaipedaExplore lang={uiLang} version={liveContentVersion}
-                studio={isStudio && studioSession ? <DealStudio supaFetch={supaFetch} studioFetch={studioFetch} onChanged={dealChanged} />
+                studio={isStudio && studioSession ? <DealStudio supaFetch={supaFetch} studioFetch={studioFetch} onChanged={dealChanged} upload={(file) => uploadToMedia(file, mediaPathFor(file, "deals", `deal-${Date.now()}`))} />
                   : isStudio && studioDoorOpen ? (
                     <div data-testid="deal-studio-login" style={{ background: C.surface, border: `1px dashed ${C.gold}66`, borderRadius: 14, padding: "12px 15px", marginBottom: 18, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
                       <div style={{ fontSize: 13, color: C.light }}>Log in to Studio to edit the deals.</div>
