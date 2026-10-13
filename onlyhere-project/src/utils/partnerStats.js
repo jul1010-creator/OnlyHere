@@ -8,7 +8,8 @@
 // What is counted, per place and per day, and nothing else:
 //
 //   w   the place was in a walk a visitor was shown
-//   d   its offer was on and shown on that walk
+//   d   its offer was on and shown: on a walk, or in the "Deals near you"
+//       list the Klaipėda page opens on (13 Oct 2026)
 //   r   a visitor on the walk reached it (the phone says they are there, or,
 //       with no GPS, they moved on from it)
 //   rh  the same, by the hour at the place, for "your busiest hour"
@@ -48,6 +49,10 @@ export const eventKeys = (body, hour) => {
     if (!ids.length) return [];
     const deals = new Set((Array.isArray(body?.deals) ? body.deals : []).map(cleanStatId).filter(id => ids.includes(id)));
     return [...ids.map(id => statKey("w", id)), ...[...deals].map(id => statKey("d", id))];
+  }
+  if (e === "deals") {
+    const ids = [...new Set((Array.isArray(body?.ids) ? body.ids : []).map(cleanStatId).filter(Boolean))].slice(0, MAX_WALK_IDS);
+    return ids.map(id => statKey("d", id));
   }
   if (e === "reach") {
     const id = cleanStatId(body?.id);
@@ -104,6 +109,10 @@ export const walkSeenBody = (walk, country) => {
   return { e: "walk", c: String(country || ""), ids, deals: stops.filter(s => s?.deal && cleanStatId(s.id)).map(s => s.id) };
 };
 export const walkSeen = (walk, country) => { const b = walkSeenBody(walk, country); if (b) send(b); };
+export const dealsSeen = (ids, country) => {
+  const clean = [...new Set((Array.isArray(ids) ? ids : []).map(cleanStatId).filter(Boolean))].slice(0, MAX_WALK_IDS);
+  if (clean.length) send({ e: "deals", c: String(country || ""), ids: clean });
+};
 export const placeReached = (stop, country) => {
   const id = cleanStatId(stop?.id);
   if (id) send({ e: "reach", c: String(country || ""), id });

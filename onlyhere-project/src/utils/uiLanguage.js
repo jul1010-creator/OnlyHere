@@ -723,6 +723,15 @@ export const UI_STRINGS = {
   "trips.onToday":   { en: "On today in Klaipėda", da: "I dag i Klaipėda", de: "Heute in Klaipėda", lt: "Šiandien Klaipėdoje" },
   "trips.weatherNow": { en: "Weather in Klaipėda now", da: "Vejret i Klaipėda lige nu", de: "Wetter in Klaipėda jetzt", lt: "Orai Klaipėdoje dabar" },
   "trips.deals":     { en: "Special deals in town", da: "Særlige tilbud i byen", de: "Sonderangebote in der Stadt", lt: "Specialūs pasiūlymai mieste" },
+  // Deals first, 13 Oct 2026 (components/DealsNearYou.jsx).
+  "trips.dealsH":    { en: "Deals near you, on now", da: "Tilbud tæt på dig, lige nu", de: "Angebote in deiner Nähe, gerade jetzt", lt: "Pasiūlymai šalia jūsų, dabar" },
+  "trips.introDeals": { en: "Local places with something extra for you today, and how far each one is on foot. More time? Make a walk further down.", da: "Lokale steder med lidt ekstra til dig i dag, og hvor langt der er til fods. Mere tid? Lav en gåtur længere nede.", de: "Lokale Orte mit einem kleinen Extra für dich heute, und wie weit sie zu Fuß sind. Mehr Zeit? Plane weiter unten einen Spaziergang.", lt: "Vietos, kurios šiandien turi jums kažką ypatingo, ir kiek iki kiekvienos eiti pėsčiomis. Daugiau laiko? Žemiau susidarykite maršrutą." },
+  "trips.walkMin":   { en: "{n} min walk", da: "{n} min. gang", de: "{n} Min. zu Fuß", lt: "{n} min. pėsčiomis" },
+  "trips.go":        { en: "Walk there", da: "Gå derhen", de: "Hinlaufen", lt: "Eiti ten" },
+  "trips.onNow":     { en: "On now", da: "Lige nu", de: "Jetzt", lt: "Dabar" },
+  "trips.noDeals":   { en: "No deals are on right now. Make a walk below instead.", da: "Ingen tilbud lige nu. Lav en gåtur nedenfor i stedet.", de: "Gerade gibt es keine Angebote. Plane stattdessen unten einen Spaziergang.", lt: "Šiuo metu pasiūlymų nėra. Vietoj to susidarykite maršrutą žemiau." },
+  "trips.walkH":     { en: "More time? A walk for the hours you have", da: "Mere tid? En gåtur til de timer, du har", de: "Mehr Zeit? Ein Spaziergang für deine Stunden", lt: "Daugiau laiko? Maršrutas pagal jūsų turimas valandas" },
+  "trips.allDeals":  { en: "All deals", da: "Alle tilbud", de: "Alle Angebote", lt: "Visi pasiūlymai" },
   "ride.far":        { en: "Too far to walk? {app} works here. Order a car in the app and see the price first.", da: "For langt at gå? {app} findes her. Bestil en bil i appen og se prisen først.", de: "Zu weit zu Fuß? {app} gibt es hier. Bestell ein Auto in der App und sieh den Preis vorher.", lt: "Per toli eiti pėsčiomis? Čia veikia {app}. Užsisakykite automobilį programėlėje ir pirmiausia pamatysite kainą." },
   "trips.intro":       { en: "Walks for the time you have, on foot from the ship. Gemlyx is opening Lithuania, starting here.", da: "Gåture til den tid, du har, til fods fra skibet. Gemlyx åbner i Litauen og begynder her.", de: "Spaziergänge für die Zeit, die du hast, zu Fuß vom Schiff. Gemlyx startet in Litauen, und zwar hier.", lt: "Pasivaikščiojimai pagal turimą laiką, pėsčiomis nuo laivo. Gemlyx pradeda Lietuvoje būtent čia." },
   // The list controls and the Events page's own words, 1 Oct 2026, when the
