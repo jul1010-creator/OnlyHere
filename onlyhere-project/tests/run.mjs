@@ -14801,7 +14801,8 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("and one for the country page", /path=\{`\/\$\{COUNTRY\}`\}/.test(app));
   // The root stays the root. Redirecting it would move the homepage authority
   // to a subpath to solve a second-country problem that does not exist yet.
-  ok("the root still serves the app", /<Route path="\/" element=\{<GemlyxApp \/>\} \/>/.test(app));
+  // Through DanishSide since Batch 235, which is the app unless the rework switch is on.
+  ok("the root still serves the app", /<Route path="\/" element=\{<DanishSide \/>\} \/>/.test(app) && /return <GemlyxApp \/>;/.test(app));
   ok("and is not redirected away", !/<Navigate to="\/denmark"/.test(app));
 
   // THE RETRY IS THE WHOLE THING. towns is filled from Supabase after first
@@ -32911,7 +32912,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // shape that has cost this codebase four separate features.
   {
     const appU = readFileSync(join(root, "src/App.jsx"), "utf8");
-    ok("there is one route for every kind", /<Route path=\{`\/\$\{COUNTRY\}\/:entrySeg\/:entrySlug`\} element=\{<GemlyxApp \/>\} \/>/.test(appU));
+    ok("there is one route for every kind", /<Route path=\{`\/\$\{COUNTRY\}\/:entrySeg\/:entrySlug`\} element=\{<DanishSide \/>\} \/>/.test(appU));
     ok("the route sits after the town one, so a town still wins",
        appU.indexOf(":townSlug`} element") < appU.indexOf(":entrySeg/:entrySlug`} element"));
     ok("the arrival is read through the shared reader", /const kind = kindForSeg\(entrySeg\);/.test(appU));
@@ -80666,7 +80667,8 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
 // ── Batch 168: Special deals on the gold button, the planner in the menu ──
 {
   const app = readFileSync(join(root, "src/App.jsx"), "utf8");
-  ok("the gold button is Special deals only on another country's page with deals", /const featuredTab = PAGE_ABROAD && TAB_ORDER\.includes\("promotions"\) \? "promotions" : "ai";/.test(app));
+  // 13 Oct 2026: Explore is the deals abroad, so no gold button there (Batch 235).
+  ok("no gold button on another country's page, the planner at home", /const featuredTab = PAGE_ABROAD \? null : "ai";/.test(app));
   ok("and it opens whatever it names", /data-testid="nav-featured" onClick=\{\(\) => goTab\(featuredTab\)\}/.test(app));
   ok("the burger's gradient row follows it", /NAV_ITEMS\.filter\(item => item\.id === featuredTab\)/.test(app));
   const withAi = ["home", "gems", "promotions", "ai"].map(id => ({ id, label: id, ico: null }));
@@ -80976,7 +80978,8 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
 
   const page = readFileSync(join(root, "src/pages/KlaipedaDemo.jsx"), "utf8");
   ok("it reads where the code hangs from the address", /new URLSearchParams\(window\.location\.search\)\.get\("from"\)/.test(page) && /defaultFrom=\{from\}/.test(page));
-  ok("and shows today's events and the deals in town, Lithuanian rows only", /rowCountry\(r\) === "LT"/.test(page) && /eventOnDays\(e, \[today\]\)/.test(page) && /livePromotions\(/.test(page));
+  const kdeals = readFileSync(join(root, "src/utils/useKlaipedaDeals.js"), "utf8");
+  ok("and shows today's events and the deals in town, Lithuanian rows only", /rowCountry\(r\) === "LT"/.test(kdeals) && /eventOnDays\(e, \[today\]\)/.test(kdeals) && /livePromotions\(/.test(kdeals) && /const live = useKlaipedaDeals\(today\);/.test(page));
 
   // Bolt, from the Klaipėda tourism site's own tips (1 Oct 2026).
   ok("a long walk in Lithuania names Bolt", M.rideFor({ country: "LT", minutes: 25 })?.name === "Bolt" && M.rideFor({ country: "LT", tooFar: true })?.name === "Bolt");
@@ -82319,7 +82322,8 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("and the note reads in all four languages", ["en", "da", "de", "lt"].every(l => M.t("walk.examplesNote", l) && M.t("walk.examplesNote", l) !== "walk.examplesNote"));
   // Batch 232: the deals moved into components/DealsNearYou.jsx, first on the page.
   const dny = read("src/components/DealsNearYou.jsx");
-  ok("the QR page shows the example deals until a real one is live, marked Example", /const examples = real\.length === 0;/.test(demo) && /livePromotions\(examplePromotionPools\(\)\)/.test(demo) && /examples=\{live\.examples\}/.test(demo) && /data-testid="deals-near-examples"/.test(dny));
+  const kd = read("src/utils/useKlaipedaDeals.js");
+  ok("the QR page shows the example deals until a real one is live, marked Example", /const examples = real\.length === 0;/.test(kd) && /livePromotions\(examplePromotionPools\(\)\)/.test(kd) && /examples=\{live\.examples\}/.test(demo) && /data-testid="deals-near-examples"/.test(dny));
   ok("only today's, on now first, with what the visitor gets", /\.filter\(x => x\.card\.timing in RANK\)/.test(dny) && /MAX_DEALS = 12/.test(dny) && /data-testid="deal-near-offer"/.test(dny));
   const pools = M.KEX.examplePromotionPools();
   ok("the example deals are read on Klaipėda's clock", Object.values(pools).flat().length > 0 && Object.values(pools).flat().every(p => p.country === "LT"));
@@ -82801,6 +82805,38 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("drawn when it first comes near the screen, then kept", /new IntersectionObserver\(/.test(cm) && /\{ seen\.disconnect\(\); build\(\); \}/.test(cm) && !/isIntersecting \? build\(\) : drop\(\)/.test(cm) && /await import\("leaflet"\)/.test(cm) && !/^import L from "leaflet";/m.test(cm));
   ok("the map credit stays, small", /attributionControl: true/.test(cm) && /addTileLayer\(L, m\)/.test(cm) && /\.gemlyx-deal-map \.leaflet-control-attribution\{font-size:7px/.test(dny));
   ok("every deal with a place gets one, and tapping it walks there", /<DealCornerMap lat=\{x\.at\.lat\} lon=\{x\.at\.lon\} name=\{x\.d\.name\}/.test(dny) && /onTap=\{x\.minutes != null \? \(\) => \{ askForCompass\(\); setGoing\(x\); \} : null\}/.test(dny));
+}
+
+// ── Batch 235: Explore is the deals on the Lithuanian site, and the Danish
+// side is closed for rework ──
+// Oliver, 13 Oct 2026: "let the Klaipéda deals be the explore page. And then
+// make filters called 'Discounts' 'Entertainment' 'Activities'" (partner deals
+// only, on /lithuania and the QR page, the gold button removed), "more
+// 'app-like' and less 'competitive' to the page", and "change the page to
+// temporary rework? So the tourism page don't look it up and is like 'Huh?
+// What is he making? This is about Denmark?'"
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const D = M.DNY;
+  is("three filters, in his words and order", D.DEAL_KINDS, ["discounts", "entertainment", "activities"]);
+  ok("a deal set by hand in the Studio keeps that filter", D.dealKind({ _src: "food", __dealKind: "entertainment" }) === "entertainment" && D.dealKind({ _src: "food", __dealKind: "nonsense" }) === "discounts");
+  ok("otherwise the kind of place decides", D.dealKind({ _src: "food" }) === "discounts" && D.dealKind({ _src: "nightlife" }) === "entertainment" && D.dealKind({ _src: "free" }) === "activities" && D.dealKind({ _exampleId: "booking:amber" }) === "activities" && D.dealKind({}) === "discounts");
+  const pools = M.KEX.examplePromotionPools();
+  const kinds = new Set(Object.values(pools).flat().map(d => D.dealKind(d)));
+  ok("the example partners fill all three filters", ["discounts", "entertainment", "activities"].every(k => kinds.has(k)) && Object.values(pools).flat().find(d => d._exampleId === "food:beer")?.__dealKind === "entertainment");
+  ok("the filter words read in all four languages", ["explore.discounts", "explore.entertainment", "explore.activities", "explore.noneHere", "explore.more"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
+  const dny = read("src/components/DealsNearYou.jsx"), app = read("src/App.jsx"), ex = read("src/components/KlaipedaExplore.jsx");
+  ok("filtering happens before the twelve are cut, and tapping again shows all", /nearbyDeals\(deals, start, \{ now: new Date\(\), lang, limit: Infinity \}\)/.test(dny) && /\(kind \? all\.filter\(x => dealKind\(x\.d\) === kind\) : all\)\.slice\(0, MAX_DEALS\)/.test(dny) && /setKind\(cur => \(cur === k \? null : k\)\)/.test(dny));
+  ok("and the tourism centre's own site is where the rest lives", /href=\{centreSite\(lang\)\}/.test(dny) && D.centreSite("lt") === "https://klaipedatravel.lt/" && D.centreSite("en") === "https://klaipedatravel.lt/en/");
+  ok("Explore on /lithuania is the deals, not the Danish front page", /\{tab === "home" && PAGE_ABROAD && \(/.test(app) && /<KlaipedaExplore lang=\{uiLang\} \/>/.test(app) && /\{tab === "home" && !PAGE_ABROAD && \(/.test(app) && /useKlaipedaDeals\(null\)/.test(ex));
+  ok("Studio sets the filter by hand and saves it with the row", /data-testid="studio-deal-kind"/.test(app) && /if \(DEAL_KINDS\.includes\(studioDealKind\)\) shaped\.__dealKind = studioDealKind;/.test(app) && /setStudioDealKind\(DEAL_KINDS\.includes\(row\.payload\?\.__dealKind\)/.test(app));
+  // The rework switch.
+  const cfg = read("src/config.js");
+  ok("one switch closes the Danish side", /export const DENMARK_REWORK = true;/.test(cfg) && (app.match(/element=\{<DanishSide \/>\}/g) || []).length === 6 && !/element=\{<GemlyxApp \/>\}/.test(app));
+  ok("and Lithuania, the Studio and a signed in Studio browser pass through", /if \(DENMARK_REWORK && !PAGE_ABROAD && !studio\) return <ReworkPage \/>;/.test(app) && /window\.location\.hash === "#studio"/.test(app) && /localStorage\.getItem\("gemlyx_studio_session"\)/.test(app) && /addEventListener\("hashchange", read\)/.test(app));
+  ok("guides, the library, support and the Klaipėda pages keep their own routes", /<Route path="\/guide\/:guideId" element=\{<GuidePage \/>\} \/>/.test(app) && /<Route path=\{KLAIPEDA_DEMO_PATH\} element=\{<KlaipedaDemo \/>\} \/>/.test(app) && /<Route path=\{KLAIPEDA_PARTNER_PATH\} element=\{<KlaipedaPartner \/>\} \/>/.test(app));
+  const rw = read("src/pages/ReworkPage.jsx");
+  ok("the rework page names no country and has no dashes", !/Denmark|Danish|Lithuania/.test(rw.replace(/\/\/.*$/gm, "")) && !/[–—]/.test(rw.replace(/\/\/.*$/gm, "")) && /We are reworking Gemlyx/.test(rw));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
