@@ -41,7 +41,7 @@ export const UNTIL = "2027-12-31";
 // Lithuanian (6 Oct 2026). A native speaker should read these over.
 export const EXAMPLE_PARTNERS = [
   {
-    key: "bakery", stay: 25, type: "food", name: "Kepyklėlė Rūta", what: "Bakery café", street: "Turgaus g.",
+    key: "bakery", dealKind: "discounts", stay: 25, type: "food", name: "Kepyklėlė Rūta", what: "Bakery café", street: "Turgaus g.",
     lat: 55.70870, lon: 21.13390,
     hours: lines({ ...every("08:00", "18:00"), 0: ["09:00", "15:00"] }),
     offer: { text: "Free refill of filter coffee with any pastry", days: [1, 2, 3, 4, 5], from: "14:00", to: "16:00" },
@@ -49,7 +49,7 @@ export const EXAMPLE_PARTNERS = [
     lt: { what: "Kepyklėlė kavinė", offer: "Nemokamai papildome filtruotos kavos puodelį perkant bet kokį kepinį", idea: "Ramiausia jų valanda, užpildyta." },
   },
   {
-    key: "fish", stay: 40, type: "food", name: "Rūkykla Marios", what: "Smokehouse kitchen", street: "Žvejų g.",
+    key: "fish", dealKind: "discounts", stay: 40, type: "food", name: "Rūkykla Marios", what: "Smokehouse kitchen", street: "Žvejų g.",
     lat: 55.70890, lon: 21.13120,
     hours: lines(every("11:00", "22:00")),
     offer: { text: "Lunch of the day with a glass of kvass, €9", days: [1, 2, 3, 4, 5], from: "12:00", to: "15:00" },
@@ -57,7 +57,7 @@ export const EXAMPLE_PARTNERS = [
     lt: { what: "Rūkykla ir virtuvė", offer: "Dienos pietūs su stikline giros, 9 €", idea: "Fiksuota pietų kaina: būtent tai, ką nori žinoti keleivis, turintis tris valandas." },
   },
   {
-    key: "amber", stay: 25, type: "booking", name: "Gintaro dirbtuvė Lašas", what: "Amber workshop", street: "Kurpių g.",
+    key: "amber", dealKind: "activities", stay: 25, type: "booking", name: "Gintaro dirbtuvė Lašas", what: "Amber workshop", street: "Kurpių g.",
     lat: 55.70850, lon: 21.13260,
     hours: lines({ 2: ["10:00", "17:00"], 3: ["10:00", "17:00"], 4: ["10:00", "17:00"], 5: ["10:00", "17:00"], 6: ["10:00", "17:00"], 0: ["11:00", "16:00"] }),
     offer: { text: "Polish a raw piece of Baltic amber yourself in 20 minutes and keep it, €6" },
@@ -65,7 +65,7 @@ export const EXAMPLE_PARTNERS = [
     lt: { what: "Gintaro dirbtuvė", offer: "Per 20 minučių patys nušlifuokite žalio Baltijos gintaro gabalėlį ir pasilikite jį, 6 €", idea: "Užsiėmimas, o ne nuolaida: dvidešimt minučių ir pačių pagamintas suvenyras." },
   },
   {
-    key: "tea", stay: 30, type: "food", name: "Arbatinė Debesis", what: "Tea room", street: "Tiltų g.",
+    key: "tea", dealKind: "discounts", stay: 30, type: "food", name: "Arbatinė Debesis", what: "Tea room", street: "Tiltų g.",
     lat: 55.70720, lon: 21.13650,
     hours: lines(every("10:00", "20:00")),
     offer: { text: "A pot of herbal tea for two at the price of one cup", days: [6, 0], from: "11:00", to: "14:00" },
@@ -73,7 +73,7 @@ export const EXAMPLE_PARTNERS = [
     lt: { what: "Arbatinė", offer: "Žolelių arbatos arbatinukas dviem už vieno puodelio kainą", idea: "Savaitgalio rytai, kai salė pustuštė." },
   },
   {
-    key: "beer", stay: 40, type: "food", name: "Alaus baras Inkaras", what: "Beer bar", street: "Daržų g.",
+    key: "beer", dealKind: "entertainment", stay: 40, type: "food", name: "Alaus baras Inkaras", what: "Beer bar", street: "Daržų g.",
     lat: 55.70640, lon: 21.13900,
     hours: lines({ 1: ["16:00", "00:00"], 2: ["16:00", "00:00"], 3: ["16:00", "00:00"], 4: ["16:00", "00:00"], 5: ["14:00", "02:00"], 6: ["14:00", "02:00"], 0: ["14:00", "22:00"] }),
     offer: { text: "Three Lithuanian beers, 0.1 l each, for the price of a large one", days: [1, 2, 3, 4, 5], from: "16:00", to: "19:00" },
@@ -81,7 +81,7 @@ export const EXAMPLE_PARTNERS = [
     lt: { what: "Alaus baras", offer: "Trys lietuviško alaus po 0,1 l už didelio bokalo kainą", idea: "Degustacija: lankytojas paragauja trijų vietinių bravorų, o ne vieno." },
   },
   {
-    key: "post", stay: 15, type: "free", name: "Atvirukų krautuvėlė", what: "Postcard shop", street: "Tomo g.",
+    key: "post", dealKind: "activities", stay: 15, type: "free", name: "Atvirukų krautuvėlė", what: "Postcard shop", street: "Tomo g.",
     lat: 55.70760, lon: 21.13390,
     hours: lines({ ...every("10:00", "18:00"), 0: ["11:00", "16:00"] }),
     offer: { text: "Write a postcard at our table and we post it for you, stamp included" },
@@ -89,7 +89,7 @@ export const EXAMPLE_PARTNERS = [
     lt: { what: "Atvirukų parduotuvėlė", offer: "Parašykite atviruką prie mūsų stalo, o mes jį išsiųsime, pašto ženklas įskaičiuotas", idea: "Paslauga. Lankytojui nereikia nieko nešiotis ir ieškoti pašto." },
   },
   {
-    key: "jazz", stay: 60, type: "booking", name: "Rūsys", what: "Jazz cellar", street: "Sukilėlių g.",
+    key: "jazz", dealKind: "entertainment", stay: 60, type: "booking", name: "Rūsys", what: "Jazz cellar", street: "Sukilėlių g.",
     lat: 55.70800, lon: 21.13550,
     hours: lines({ 3: ["18:00", "01:00"], 4: ["18:00", "01:00"], 5: ["18:00", "01:00"], 6: ["18:00", "01:00"] }),
     offer: { text: "No cover charge before 21:00, live music from 20:00", days: [5, 6], from: "18:00", to: "21:00" },
@@ -98,7 +98,7 @@ export const EXAMPLE_PARTNERS = [
   },
   // These two never fit a short walk, so they are only in the list of offers.
   {
-    key: "bike", stay: 120, type: "booking", name: "Dviračių nuoma Vėjas", what: "Bike hire", street: "Naujoji Uosto g.",
+    key: "bike", dealKind: "activities", stay: 120, type: "booking", name: "Dviračių nuoma Vėjas", what: "Bike hire", street: "Naujoji Uosto g.",
     lat: 55.70600, lon: 21.12500, inWalks: false,
     hours: lines(every("09:00", "19:00")),
     offer: { text: "Two hours with helmet and lock, €8. Hand the bike back at the cruise terminal" },
@@ -106,7 +106,7 @@ export const EXAMPLE_PARTNERS = [
     lt: { what: "Dviračių nuoma", offer: "Dvi valandos su šalmu ir spyna, 8 €. Dviratį grąžinkite kruizinių laivų terminale", idea: "Nuima vienintelį rūpestį: laiku grįžti į laivą." },
   },
   {
-    key: "bags", stay: 15, type: "free", name: "Bagažinė", what: "Luggage room", street: "Danės g.",
+    key: "bags", dealKind: "activities", stay: 15, type: "free", name: "Bagažinė", what: "Luggage room", street: "Danės g.",
     lat: 55.70950, lon: 21.13700, inWalks: false,
     hours: lines(every("08:00", "21:00")),
     offer: { text: "Leave a bag while you walk, €3 a bag for the day" },
