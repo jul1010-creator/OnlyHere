@@ -35734,14 +35734,11 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
 // not shown. Lithuania is the same component on /lithuania and passes through,
 // and so does the Studio, which lives at #studio on the front page: the hash
 // is read live, because opening the Studio does not reload the page.
-// And a browser signed in to the Studio sees the Danish site as it is, so he
-// can still check his own pages. The pages are public anyway; this only
-// decides which screen is shown, never who may read anything.
-const studioHashNow = () => {
-  if (typeof window === "undefined") return false;
-  if (window.location.hash === "#studio") return true;
-  try { return !!localStorage.getItem("gemlyx_studio_session"); } catch { return false; }
-};
+// Only the Studio address passes. A signed in Studio browser used to see the
+// Danish site too, and that is why he saw no rework page on his own computer
+// ("There is no 'rework' page", 13 Oct 2026), so it is gone: everyone sees
+// what the tourism centre would see.
+const studioHashNow = () => typeof window !== "undefined" && window.location.hash === "#studio";
 const DanishSide = () => {
   const [studio, setStudio] = useState(studioHashNow);
   useEffect(() => {
