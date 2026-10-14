@@ -12,11 +12,16 @@
 // motion, or to save data, gets the still instead, and so does a browser that
 // will not play it.
 //
-// The films live in public/video, each twice: WebM, the smaller, for the
-// browsers that play it, and MP4 for the rest (Safari on older iPhones), named
-// without the ending here. About 0.4 to 2 MB each, cut from his 18 MB export.
-// The tall nightlife film is cut from the middle of the wide one until
-// Oliver's own phone edit replaces it.
+// The films live in public/video as MP4 only, named without the ending here.
+// There was a WebM beside each until 14 Oct 2026, when Oliver set it next to
+// lidl.dk and hivecph.dk: "Our quality is far inferior". WebM was what most
+// browsers chose, and it smoothed away the grain of the footage however much
+// room it was given. H.264 at quality 20 keeps it, at about 6.6 MB wide and
+// 4.4 MB on a phone.
+//
+// The phone's film is a 960 by 1080 cut from the middle of the wide one, the
+// shape of the banner on a phone. A 9:16 strip (608 wide) was cut first, and
+// the near square banner then showed only 608 by 730 of it, stretched.
 import { useEffect, useRef, useState } from "react";
 
 export const CATEGORY_VIDEO = {
@@ -80,8 +85,7 @@ export const CategoryVideo = ({ k = null, playing = true }) => {
         <img src={film.still} alt="" style={media} />
       ) : (
         <video key={film.src} ref={vid} poster={film.still} autoPlay muted defaultMuted loop playsInline webkit-playsinline="true" preload="metadata" style={media}>
-          <source src={`${film.src}.webm`} type="video/webm" />
-          {/* The last source's error is the one that means nothing played. */}
+          {/* Its error is the one that means nothing played. */}
           <source src={`${film.src}.mp4`} type="video/mp4" onError={() => setFailed(true)} />
         </video>
       )}
