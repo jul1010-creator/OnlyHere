@@ -2,9 +2,18 @@ import { useEffect } from "react";
 import { dayStart } from "../utils/calendarDay";
 import { C } from "../utils/theme";
 import { weatherIcon } from "../utils/helpers";
+import { t as uiT, currentUiLanguage } from "../utils/uiLanguage";
+import { activeCountry } from "../utils/countries";
 
-export const WeatherStrip = ({ label, weatherKey, lat, lon, weather, weatherLoading, checkWeather }) => {
+// In the reader's language since 14 Oct 2026, when Oliver found the Lithuanian
+// page still saying "Loading forecast..." and pointing a Klaipėda reader at
+// DMI, the Danish weather service.
+const DAY_LOCALE = { en: "en-GB", da: "da-DK", de: "de-DE", lt: "lt-LT" };
+const SERVICE = { LT: "meteo.lt" };
+
+export const WeatherStrip = ({ label, weatherKey, lat, lon, weather, weatherLoading, checkWeather, lang = currentUiLanguage() }) => {
   const data = weather[weatherKey];
+  const src = `${SERVICE[activeCountry()] || "DMI"} ${uiT("weather.or", lang)} Yr`;
   useEffect(() => {
     if (!data && weatherLoading !== weatherKey) checkWeather(weatherKey, lat, lon);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -14,7 +23,7 @@ export const WeatherStrip = ({ label, weatherKey, lat, lon, weather, weatherLoad
     <div style={{ background: C.surface, borderRadius: 16, padding: "16px", border: `1px solid ${C.border}`, marginBottom: 20 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
         <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif" }}>{label}</div>
-        {weatherLoading === weatherKey && <span style={{ fontSize: 11, color: C.muted }}>Loading...</span>}
+        {weatherLoading === weatherKey && <span style={{ fontSize: 11, color: C.muted }}>{uiT("weather.loading", lang)}</span>}
       </div>
 
       {data && !data.error ? (
@@ -23,7 +32,7 @@ export const WeatherStrip = ({ label, weatherKey, lat, lon, weather, weatherLoad
             <span style={{ fontSize: 40 }}>{weatherIcon(data.condition)}</span>
             <div>
               <div style={{ fontSize: 30, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif", lineHeight: 1 }}>{Math.round(data.temperature_c)}°C</div>
-              <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>Wind {data.wind_speed_ms} m/s · Humidity {data.humidity_percent}%</div>
+              <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>{uiT("weather.windHumidity", lang).replace("{w}", data.wind_speed_ms).replace("{h}", data.humidity_percent)}</div>
             </div>
           </div>
 
@@ -43,7 +52,7 @@ export const WeatherStrip = ({ label, weatherKey, lat, lon, weather, weatherLoad
                 // Greenwich. Measured: "2026-08-17", a Monday, rendered "Sun"
                 // in New York. See utils/calendarDay.js.
                 const d = dayStart(day.date);
-                const label = i === 0 ? "Today" : d ? d.toLocaleDateString("en", { weekday: "short" }) : "";
+                const label = i === 0 ? uiT("events.today", lang) : d ? d.toLocaleDateString(DAY_LOCALE[lang] || "en-GB", { weekday: "short" }) : "";
                 return (
                   <div key={day.date} style={{ flexShrink: 0, background: C.bg, borderRadius: 10, padding: "8px 10px", textAlign: "center", minWidth: 56 }}>
                     <div style={{ fontSize: 10, color: C.muted, fontWeight: 700, marginBottom: 4 }}>{label}</div>
@@ -66,9 +75,9 @@ export const WeatherStrip = ({ label, weatherKey, lat, lon, weather, weatherLoad
         // must never be able to read "no forecast could be loaded" as
         // "there is no weather worth reporting", so the sentence names the
         // load as the thing that failed and points them somewhere real.
-        <div style={{ fontSize: 12, color: C.muted }}>The forecast could not be loaded just now. This is our end, not a quiet spell: check DMI or Yr for these days.</div>
+        <div style={{ fontSize: 12, color: C.muted }}>{uiT("weather.failed", lang).replace("{src}", src)}</div>
       ) : (
-        <div style={{ fontSize: 12, color: C.muted }}>Loading forecast...</div>
+        <div style={{ fontSize: 12, color: C.muted }}>{uiT("weather.loadingForecast", lang)}</div>
       )}
     </div>
   );

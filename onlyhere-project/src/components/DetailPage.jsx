@@ -1547,7 +1547,7 @@ export const DetailPage = ({ item: itemIn, onClose, kind, liveInfo, liveInfoLoad
             have paid the shop to put the offer there. */}
         {(() => {
           // The offer's hours run on the place's clock, not the reader's.
-          const view = offerView(item.__offer, { paid, zone: countryProfile(rowCountry(item)).zone });
+          const view = offerView(item.__offer, { paid, zone: countryProfile(rowCountry(item)).zone, lang });
           if (!view.show) return null;
           const hours = offerHoursLabel(item.__offer, { timing: view.timing, lang });
           return (

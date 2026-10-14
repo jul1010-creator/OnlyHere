@@ -24,7 +24,7 @@ import { createPortal } from "react-dom";
 import { C } from "../utils/theme";
 import { t as uiT } from "../utils/uiLanguage";
 import { promoCard } from "../utils/promotions";
-import { offerHoursLabel, offerLive, cleanOffer } from "../utils/offer";
+import { offerHoursLabel, offerLive, cleanOffer, offerTextIn } from "../utils/offer";
 import { NOW_AREAS, inNowArea, walkMinutes } from "../utils/nowPlanner";
 import { cleanBooking, busyAt } from "../utils/dealExtras";
 import { dealsSeen, placeReached, dealRedeemOpened } from "../utils/partnerStats";
@@ -95,9 +95,9 @@ export const nearbyDeals = (deals, start, { now = new Date(), lang = "en", limit
 // One place, walked to from the start, for WalkMode. It ends at the place:
 // there is no way back to plan when somebody is going for a coffee.
 export const STAY_AT_DEAL = 20;
-export const walkToDeal = (start, x) => ({
+export const walkToDeal = (start, x, lang = "en") => ({
   start: { ...start },
-  stops: [{ id: x.id || `deal:${x.d.name}`, name: x.d.name, lat: x.at.lat, lon: x.at.lon, arrive: x.minutes, stay: STAY_AT_DEAL, why: String(x.d.__offer?.text || "").trim(), deal: { text: String(x.d.__offer?.text || "").trim() } }],
+  stops: [{ id: x.id || `deal:${x.d.name}`, name: x.d.name, lat: x.at.lat, lon: x.at.lon, arrive: x.minutes, stay: STAY_AT_DEAL, why: offerTextIn(x.d.__offer, lang), deal: { text: offerTextIn(x.d.__offer, lang) } }],
   back: { at: x.minutes * 2 + STAY_AT_DEAL },
 });
 
@@ -262,7 +262,9 @@ const LT_DAY_OF = ["sekmadienio", "pirmadienio", "antradienio", "trečiadienio",
 const shortDate = (until, lang) => {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(until || ""));
   if (!m) return "";
-  try { return new Intl.DateTimeFormat(DAY_LOCALE[lang] || "en-GB", { day: "numeric", month: "short", timeZone: "UTC" }).format(new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]))); } catch { return `${m[3]}.${m[2]}`; }
+  // Lithuanian's short form is "12-31", a dash and a month first, so it gets
+  // the long one, "gruodžio 31 d." (14 Oct 2026).
+  try { return new Intl.DateTimeFormat(DAY_LOCALE[lang] || "en-GB", { day: "numeric", month: lang === "lt" ? "long" : "short", timeZone: "UTC" }).format(new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]))); } catch { return `${m[3]}.${m[2]}`; }
 };
 export const liveBadge = (offer, when, lang = "en") => {
   const say = (key, vars) => fill(uiT(key, lang), vars);
@@ -479,7 +481,7 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
       ) : (
         <div data-testid="deals-grid" style={GRID}>
           {list.map(x => {
-            const offer = String(x.d.__offer?.text || "").trim();
+            const offer = offerTextIn(x.d.__offer, lang);
             const when = offerWhen(x.d.__offer, x.card.timing, { now: new Date(), lang });
             const key = x.id || x.d.name;
             return (
@@ -497,7 +499,7 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
           <div style={GRID}>
             {soon.map(x => (
               <DealTile key={x.id || x.d.name} testid="deal-upcoming" upcoming name={x.d.name}
-                offer={String(x.d.__offer?.text || "").trim()} badge={upcomingBadge(x.next, lang)}
+                offer={offerTextIn(x.d.__offer, lang)} badge={upcomingBadge(x.next, lang)}
                 distance={x.minutes != null ? fill(uiT("trips.walkMin", lang), { n: x.minutes }) : ""}
                 photo={x.d.photo || ""} at={x.at} sign={signFor(x.d)} pin={x.d.__pin || ""}
                 onOpen={() => { pushSheet(1); setOpened(`soon:${x.id || x.d.name}`); }} />
@@ -513,7 +515,7 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
         const key = isSoon ? String(opened).slice(5) : opened;
         const x = (isSoon ? soon : list).find(y => (y.id || y.d.name) === key);
         if (!x) return null;
-        const offer = String(x.d.__offer?.text || "").trim();
+        const offer = offerTextIn(x.d.__offer, lang);
         const when = isSoon ? { kind: "starts", text: startsWords(x.next, lang) } : offerWhen(x.d.__offer, x.card.timing, { now: new Date(), lang });
         const busy = busyAt(x.d.__busy, new Date(), "Europe/Vilnius");
         return (
@@ -537,7 +539,7 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
       )}
 
       {redeem && (
-        <RedeemSheet name={redeem.x.d.name} offer={String(redeem.x.d.__offer?.text || "").trim()} when={redeem.when} lang={lang}
+        <RedeemSheet name={redeem.x.d.name} offer={offerTextIn(redeem.x.d.__offer, lang)} when={redeem.when} lang={lang}
           onDirections={redeem.x.at ? () => { const x = redeem.x; dropSheets(); setRedeem(null); setOpened(null); go(x); } : null}
           onClose={() => closeSheet(() => setRedeem(null))} />
       )}
@@ -545,7 +547,7 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
           transform would pin a fixed walk to the page rather than the phone
           (Fable's review, 14 Oct 2026), as RedeemSheet's note says. */}
       {going && walkStart && typeof document !== "undefined" && createPortal(
-        <WalkMode walk={walkToDeal(walkStart, going)} madeAt={null} lang={lang} country={country} loop={false}
+        <WalkMode walk={walkToDeal(walkStart, going, lang)} madeAt={null} lang={lang} country={country} loop={false}
           cardFor={() => ({ emoji: "◈", ...(going.d.photo ? { photo: going.d.photo } : {}) })}
           onReach={(s) => placeReached(s, country)} onClose={() => setGoing(null)} />,
         document.body,

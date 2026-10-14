@@ -12,7 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { C } from "../utils/theme";
 import { SUPABASE_URL } from "../config";
-import { DEAL_PLACE_TYPES, DEAL_FILTERS, DEAL_CATEGORIES, typeForCategory, DAY_SHORT, WEEK_ORDER, isDealRow, emptyDeal, dealFromRow, dealProblems, payloadFromDeal, dealWhenShort, offerOf } from "../utils/dealStudio";
+import { DEAL_PLACE_TYPES, DEAL_FILTERS, DEAL_CATEGORIES, typeForCategory, DAY_SHORT, WEEK_ORDER, isDealRow, emptyDeal, dealFromRow, dealProblems, payloadFromDeal, dealWhenShort, offerOf, OFFER_LANG_NAMES, translationsCurrent } from "../utils/dealStudio";
 import { offerWhen, signFor, nextStart, liveBadge, upcomingBadge } from "./DealsNearYou";
 import { DealTile, DealPicture, eyebrow } from "./DealCard";
 import { PIN_COLOURS, PIN_NAMES } from "../utils/pinColours";
@@ -118,7 +118,7 @@ const Preview = ({ f }) => {
   );
 };
 
-const Editor = ({ start, onSave, onClose, busy, error, upload = null }) => {
+const Editor = ({ start, onSave, onClose, busy, error, upload = null, translate = null }) => {
   const [photoNote, setPhotoNote] = useState("");
   const pickPhoto = async (file) => {
     if (!file || !upload) return;
@@ -147,7 +147,43 @@ const Editor = ({ start, onSave, onClose, busy, error, upload = null }) => {
     setFinding({ busy: false, note: `Placed at ${c.name}${c.address ? `, ${c.address}` : ""}.`, list: [] });
   };
   const toggleDay = (d) => set("days", f.days.includes(d) ? f.days.filter(x => x !== d) : [...f.days, d]);
-  const save = () => { setTried(true); if (!problems.length) onSave.save(f); };
+  // Lithuanian, Danish and German, written by Claude when asked or on save
+  // (utils/dealStudio.js, THE OFFER IN LITHUANIAN, DANISH AND GERMAN).
+  const [trBusy, setTrBusy] = useState(false);
+  const [trNote, setTrNote] = useState("");
+  const squash = (v) => String(v ?? "").replace(/\s+/g, " ").trim();
+  const trLangs = ["lt", "da", "de"];
+  const trStale = trLangs.some(l => squash(f[l])) && squash(f.trFor) !== squash(f.text);
+  const runTranslate = async (form, keepWritten) => {
+    if (!translate || !squash(form.text)) return form;
+    setTrBusy(true); setTrNote("");
+    try {
+      const got = await translate(form.text);
+      if (!got) throw new Error("no reply");
+      const next = { ...form, trFor: form.text };
+      trLangs.forEach(l => { next[l] = keepWritten && squash(form[l]) ? form[l] : (got[l] || ""); });
+      setF(next);
+      return next;
+    } catch {
+      setTrNote("The translation did not come through. The offer shows in English until it does.");
+      return form;
+    } finally { setTrBusy(false); }
+  };
+  // Typing in one of the boxes makes it a translation of the offer as it is
+  // now. Any other box still holding a translation of an older offer is
+  // emptied, so it is written again rather than saved as if it were current.
+  const setTr = (l, v) => setF(x => {
+    const stale = squash(x.trFor) !== squash(x.text);
+    return { ...x, ...(stale ? { lt: "", da: "", de: "" } : {}), [l]: v, trFor: x.text };
+  });
+  const save = async () => {
+    setTried(true);
+    if (problems.length) return;
+    const current = translationsCurrent(f);
+    const missing = trLangs.some(l => !squash(f[l]));
+    const out = translate && (!current || missing) ? await runTranslate(f, current) : f;
+    onSave.save(out);
+  };
   useEffect(() => {
     const esc = (e) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", esc);
@@ -230,6 +266,24 @@ const Editor = ({ start, onSave, onClose, busy, error, upload = null }) => {
             <h3 style={sectionTitle()}>The offer</h3>
             <label style={label()}>What a visitor gets</label>
             <textarea value={f.text} onChange={e => set("text", e.target.value)} rows={2} placeholder="Free refill of filter coffee with any pastry" style={{ ...field(), resize: "vertical", lineHeight: 1.5 }} data-testid="deal-studio-text" />
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
+              <label style={label()}>In other languages</label>
+              {translate && (
+                <button type="button" onClick={() => runTranslate(f, false)} disabled={trBusy || !squash(f.text)} data-testid="deal-studio-translate" style={small(false)}>
+                  {trBusy ? "Translating" : trStale ? "Translate again" : "Translate"}
+                </button>
+              )}
+            </div>
+            <div style={{ display: "grid", gap: 6 }}>
+              {trLangs.map(l => (
+                <div key={l} style={{ display: "grid", gridTemplateColumns: "74px 1fr", gap: 10, alignItems: "center" }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: C.muted }}>{OFFER_LANG_NAMES[l]}</span>
+                  <input value={f[l] || ""} onChange={e => setTr(l, e.target.value)} aria-label={OFFER_LANG_NAMES[l]} data-testid={`deal-studio-tr-${l}`}
+                    style={{ ...field(), opacity: trStale ? 0.5 : 1 }} />
+                </div>
+              ))}
+            </div>
+            {trNote && <div style={{ fontSize: 12.5, color: "#E8A35C", marginTop: 8 }}>{trNote}</div>}
             <label style={label()}>Days</label>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
               <button type="button" onClick={() => set("days", [])} style={chip(f.days.length === 0)}>Every day</button>
@@ -295,7 +349,7 @@ const Editor = ({ start, onSave, onClose, busy, error, upload = null }) => {
       <div style={{ borderTop: `1px solid ${C.border}`, background: C.bg, padding: "12px 16px calc(14px + env(safe-area-inset-bottom, 0px))" }}>
         <div style={{ maxWidth: 620, margin: "0 auto", display: "flex", gap: 10, justifyContent: "flex-end" }}>
           <button onClick={onClose} style={{ ...small(false), padding: "12px 20px", fontSize: 14 }}>Cancel</button>
-          <button onClick={save} disabled={busy} data-testid="deal-studio-save" style={{ ...small(true), padding: "12px 28px", fontSize: 14, flex: "0 1 220px" }}>{busy ? "Saving" : start.id ? "Save changes" : "Save deal"}</button>
+          <button onClick={save} disabled={busy || trBusy} data-testid="deal-studio-save" style={{ ...small(true), padding: "12px 28px", fontSize: 14, flex: "0 1 220px" }}>{busy ? "Saving" : trBusy ? "Translating" : start.id ? "Save changes" : "Save deal"}</button>
         </div>
       </div>
     </div>,
@@ -303,7 +357,7 @@ const Editor = ({ start, onSave, onClose, busy, error, upload = null }) => {
   );
 };
 
-export const DealStudio = ({ supaFetch, studioFetch, onChanged, upload = null }) => {
+export const DealStudio = ({ supaFetch, studioFetch, onChanged, upload = null, translate = null }) => {
   const [rows, setRows] = useState(null);
   const [note, setNote] = useState("");
   const [editing, setEditing] = useState(null);
@@ -428,7 +482,7 @@ export const DealStudio = ({ supaFetch, studioFetch, onChanged, upload = null })
       {rows && rows.length === 0 && !note && (
         <div style={{ fontSize: 12.5, color: C.light, marginTop: 10, lineHeight: 1.55 }}>No real deals yet, so Explore shows the made-up examples. Add the first with New deal.</div>
       )}
-      {editing && <Editor key={editing.id ?? "new"} start={editing} busy={busy} error={error} onClose={() => setEditing(null)} onSave={{ save, locate }} upload={upload} />}
+      {editing && <Editor key={editing.id ?? "new"} start={editing} busy={busy} error={error} onClose={() => setEditing(null)} onSave={{ save, locate }} upload={upload} translate={translate} />}
     </section>
   );
 };
