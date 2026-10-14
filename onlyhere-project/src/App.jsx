@@ -88,6 +88,7 @@ import { KlaipedaPartner } from "./pages/KlaipedaPartner";
 import { ReworkPage } from "./pages/ReworkPage";
 import { KlaipedaExplore } from "./components/KlaipedaExplore";
 import { DealStudio } from "./components/DealStudio";
+import { offerTranslatePrompt, readOfferTranslation } from "./utils/dealStudio";
 import { DEAL_CATEGORIES } from "./utils/dealCategories";
 import { KLAIPEDA_PARTNER_PATH } from "./utils/partnerStats";
 import { COUNTRY_PROFILES, DEFAULT_COUNTRY, countryProfile, setWorkingCountry, countryParam, rowCountry, activeCountry, homePath, plainTownName } from "./utils/countries";
@@ -4199,6 +4200,14 @@ Say which answer came from which source, so a fact from a vouched page and a fac
   // on the page without a reload, by the same three operations the full Studio
   // uses: a row that starts showing is fetched in, one that stops is taken
   // out, and one that keeps showing is replaced where it stands.
+  // The offer in Lithuanian, Danish and German, 14 Oct 2026 ("some things are
+  // stuck in English"). Null when the reply is not usable; DealStudio then
+  // saves the deal with its English text and says so.
+  const translateDealOffer = async (text) => {
+    const r = await askClaude(offerTranslatePrompt(text), 600, "claude-sonnet-5", true);
+    if (!r || r.error) throw new Error(r?.error || "No reply");
+    return readOfferTranslation(r.text);
+  };
   const dealChanged = async ({ before, after }) => {
     const was = !!before?.published, now = !!after?.published;
     try {
@@ -14572,7 +14581,9 @@ ${researchRules("festival", ev)}`
       // keeps the standing rule from PASS 45: what you review is what you
       // publish, and a field on screen that the save ignores is the thing that
       // rule exists to stop.
-      const offerFromFields = cleanOffer(studioOfferFields);
+      // Its translations ride along from the row (14 Oct 2026); cleanOffer
+      // drops them by itself when the text in the box is no longer theirs.
+      const offerFromFields = cleanOffer({ ...studioOfferFields, tr: shaped.__offer?.tr });
       const offerFaults = offerProblems(offerFromFields);
       if (offerFaults.length) {
         setPublishStatus(null);
@@ -29650,7 +29661,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               were fixed without 71 redrafts. See liveContentFailure. */}
           {libraryFailed && (
             <div style={{ margin: "10px 16px 0", padding: "10px 14px", borderRadius: 12, background: `${C.gold}14`, border: `1px solid ${C.gold}44`, fontSize: 12, color: C.text, lineHeight: 1.55 }}>
-              <b>We could not load the latest content.</b> What is shown below is what this page already had, so some places may be missing. It is not that they are not published. Reload in a moment and it should come back.
+              <b>{uiT("load.failedTitle", uiLang)}</b> {uiT("load.failedBody", uiLang)}
             </div>
           )}
           {/* ── HOME LANDING ─────────────────────────────────── */}
@@ -29662,7 +29673,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           {tab === "home" && PAGE_ABROAD && (
             <div className={pageAnim} data-testid="explore-abroad" style={{ maxWidth: 680, margin: "0 auto", padding: "18px 16px 48px" }}>
               <KlaipedaExplore lang={uiLang} version={liveContentVersion}
-                studio={isStudio && studioSession ? <DealStudio supaFetch={supaFetch} studioFetch={studioFetch} onChanged={dealChanged} upload={(file) => uploadToMedia(file, mediaPathFor(file, "deals", `deal-${Date.now()}`))} />
+                studio={isStudio && studioSession ? <DealStudio supaFetch={supaFetch} studioFetch={studioFetch} onChanged={dealChanged} upload={(file) => uploadToMedia(file, mediaPathFor(file, "deals", `deal-${Date.now()}`))} translate={translateDealOffer} />
                   : isStudio && studioDoorOpen ? (
                     <div data-testid="deal-studio-login" style={{ background: C.surface, border: `1px dashed ${C.gold}66`, borderRadius: 14, padding: "12px 15px", marginBottom: 18, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
                       <div style={{ fontSize: 13, color: C.light }}>Log in to Studio to edit the deals.</div>
@@ -29772,7 +29783,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 2, textTransform: "uppercase", marginBottom: 12, textAlign: "center" }}>Today in {PAGE_LAND.name} <span style={{ color: C.muted }}>·</span> <DenmarkClock style={{ color: C.text, letterSpacing: 1 }} /></div>
 
                 <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
-                  <WeatherHeaderStrip weather={weather} weatherLoading={weatherLoading} checkWeather={checkWeather} />
+                  <WeatherHeaderStrip weather={weather} weatherLoading={weatherLoading} checkWeather={checkWeather} lang={uiLang} />
                 </div>
                 {(userCoords === null || userCoords === "denied") && (
                   <button onClick={requestLocation}
@@ -32706,8 +32717,8 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             return (
             <div className={pageAnim} style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
               <div style={{ marginBottom: 16 }}>
-                <div style={{ fontSize: 20, fontWeight: 700, fontFamily: "'Fraunces', serif", color: C.text }}>{onTips ? "✦ Tips" : "✓ Travel Essentials"}</div>
-                <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>{onTips ? "Worth knowing. None of it will strand you, all of it makes the trip better." : "The short list. Sort these before you go, or they cost you money on the day."}</div>
+                <div style={{ fontSize: 20, fontWeight: 700, fontFamily: "'Fraunces', serif", color: C.text }}>{onTips ? `✦ ${uiT("nav.tips", uiLang)}` : `✓ ${uiT("ess.title", uiLang)}`}</div>
+                <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>{uiT(onTips ? "tips.lead" : "ess.lead", uiLang)}</div>
               </div>
               <PageHero src="/checklist.jpg" emoji={onTips ? "✦" : "✓"} color={onTips ? "#B8860B" : "#2E7D32"} />
               {/* ── THE TWO PAGES POINT AT EACH OTHER ─────────────────
@@ -32719,7 +32730,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               {!(PAGE_ABROAD && onTips && essentialsOnly(essentials).length === 0) && (
               <button data-testid="ess-tips-pointer" onClick={() => goTab(onTips ? "essentials" : "tips")}
                 style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 12, padding: "10px 14px", marginBottom: 16, cursor: "pointer", fontFamily: "'Inter', sans-serif", fontSize: 12, fontWeight: 600, color: C.gold }}>
-                {onTips ? (PAGE_ABROAD ? "Tickets, money and transport are on Essentials →" : "Tickets, money and the transit fine are on Essentials →") : (PAGE_ABROAD ? "Extras worth knowing are on Tips →" : "The Copenhagen Card, bikes and other extras are on Tips →")}
+                {uiT(onTips ? (PAGE_ABROAD ? "ess.toEss" : "ess.toEssDk") : (PAGE_ABROAD ? "ess.toTips" : "ess.toTipsDk"), uiLang).replace("{to}", uiT(onTips ? "nav.essentials" : "nav.tips", uiLang))}
               </button>
               )}
 
@@ -32732,7 +32743,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   </div>
                   <div style={{ fontSize: 12, color: C.light, lineHeight: 1.6, marginBottom: 8 }}>{item.desc}</div>
                   <div style={{ background: C.bg, borderRadius: 8, padding: "8px 10px", marginBottom: 8 }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: "#FFB347", marginBottom: 3 }}>The 3 mistakes to avoid</div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#FFB347", marginBottom: 3 }}>{uiT("ess.mistakes", uiLang)}</div>
                     <div style={{ fontSize: 11, color: C.text, lineHeight: 1.5 }}>{item.howTo}</div>
                   </div>
                   {/* Guarded: a draft with no tip published a card showing a
@@ -32753,9 +32764,9 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   // Essentials keeps it. Tips is advice worth reading before a
                   // trip and a five day forecast is neither advice nor worth
                   // reading in advance, so the chip goes with the block below.
-                  ...(onTips ? [] : [{ id: "ess-weather", icon: "🌤", label: "Weather", color: "#1565C0" }]),
+                  ...(onTips ? [] : [{ id: "ess-weather", icon: "🌤", label: uiT("ess.weather", uiLang), color: "#1565C0" }]),
                   ...cats.map(c => ({ id: c.anchor, icon: c.icon, label: c.cat, color: c.color })),
-                  { id: "ess-faq", icon: "❓", label: "FAQ", color: "#455A64" },
+                  { id: "ess-faq", icon: "❓", label: uiT("menu.faq", uiLang), color: "#455A64" },
                 ].map(s => (
                   <button key={s.id} onClick={() => document.getElementById(s.id)?.scrollIntoView({ behavior: "smooth", block: "start" })}
                     style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px 6px", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
@@ -32769,7 +32780,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               {!onTips && (
                 <div id="ess-weather" style={{ scrollMarginTop: 90 }}>
                   {WEATHER_CITIES.map(c => (
-                    <WeatherStrip key={c.key} label={`🌤 ${c.label}`} weatherKey={c.key} lat={c.lat} lon={c.lon} weather={weather} weatherLoading={weatherLoading} checkWeather={checkWeather} />
+                    <WeatherStrip key={c.key} label={`🌤 ${c.label}`} weatherKey={c.key} lat={c.lat} lon={c.lon} weather={weather} weatherLoading={weatherLoading} checkWeather={checkWeather} lang={uiLang} />
                   ))}
                 </div>
               )}
@@ -33101,13 +33112,11 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               <div id="ess-faq" style={{ marginBottom: 20, scrollMarginTop: 90 }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>{uiT("menu.faq", uiLang)}</div>
                 {[
-                  { q: "Is Gemlyx free?", a: "Everything on the site today is free: browsing, saving, the map, the guides and the finds. If a paid plan is ever added it will be for extra things on top, the free part stays free, and we will say so here before anything changes rather than after." },
-                  { q: "How do I save a find?", a: "Tap the ♡ heart on any business. It gets saved to your Saved tab instantly." },
-                  { q: "How do I get my shop listed?", a: "Send us a message on Instagram or email hello@gemlyxtravel.com. Every listing is hand-researched and checked against multiple sources before it goes live." },
-                  { q: "Are all finds verified?", a: "Every listing is researched and checked by one person before it goes live, and nothing here is invented. Where the sources are recorded we show them on the page, including the corrections we had to make and the questions still open. Older entries were written before we started storing sources, so some show fewer than others, and we are working back through them." },
+                  // In the reader's language since 14 Oct 2026 (uiLanguage.js, faq.*).
+                  ...["free", "save", "listed", "verified"].map(k => ({ q: uiT(`faq.${k}.q`, uiLang), a: uiT(`faq.${k}.a`, uiLang) })),
                   PAGE_ABROAD
-                    ? { q: "Which cities are covered?", a: `${towns.length ? towns.map(t => t.name).join(", ") : "Klaipėda"} for now, with more of ${PAGE_LAND.name} to follow. Denmark has its own guide at gemlyxtravel.com.` }
-                    : { q: "Which cities are covered?", a: "All of Denmark, not just Copenhagen. Towns across Jutland, North Zealand and the islands are covered too, along with the coasts most visitors to Denmark are already heading for." },
+                    ? { q: uiT("faq.cities.q", uiLang), a: uiT("faq.citiesAbroad.a", uiLang).replace("{towns}", towns.length ? towns.map(t => t.name).join(", ") : "Klaipėda").replace("{land}", countryName(PAGE_COUNTRY, uiLang, PAGE_LAND.name)) }
+                    : { q: uiT("faq.cities.q", uiLang), a: uiT("faq.citiesDk.a", uiLang) },
                 ].map((item, i) => (
                   <div key={i} style={{ background: C.surface, borderRadius: 12, padding: "12px 16px", marginBottom: 8, border: `1px solid ${C.border}` }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 4 }}>{item.q}</div>
@@ -33115,7 +33124,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   </div>
                 ))}
                 <div style={{ background: C.surface, borderRadius: 12, padding: "12px 16px", border: `1px solid ${C.border}` }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 4 }}>Still need help?</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 4 }}>{uiT("faq.help", uiLang)}</div>
                   <a href="mailto:hello@gemlyxtravel.com" style={{ display: "inline-block", background: C.accent, color: C.onAccent, borderRadius: 100, padding: "6px 14px", fontSize: 11, fontWeight: 700, textDecoration: "none", marginTop: 6 }}>✉ hello@gemlyxtravel.com</a>
                 </div>
               </div>
