@@ -20,6 +20,7 @@
 // button on an offer that is on opens the screen shown at the counter
 // (RedeemSheet.jsx), with Gemlyx's mark on it; the walk is under it.
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { C } from "../utils/theme";
 import { t as uiT } from "../utils/uiLanguage";
 import { promoCard } from "../utils/promotions";
@@ -35,7 +36,7 @@ import { RedeemSheet } from "./RedeemSheet";
 import { DealTile, eyebrow } from "./DealCard";
 import { DealDetail } from "./DealDetail";
 import { CategoryNav } from "./CategoryFilter";
-import { dealCategory, byCategories, CATEGORY_SIGN } from "../utils/dealCategories";
+import { dealCategory, byCategories, CATEGORY_SIGN, DEAL_CATEGORIES } from "../utils/dealCategories";
 import { dayKey, dayPlus } from "../utils/calendarDay";
 
 const fill = (t, v) => String(t).replace(/\{(\w+)\}/g, (_, k) => (v[k] ?? ""));
@@ -213,11 +214,13 @@ const dateIn = (when, zone) => {
 };
 export const nextStart = (offer, now = new Date(), zone = "Europe/Vilnius") => {
   const o = cleanOffer(offer);
-  if (!o || !offerLive(o, now)) return null;
+  if (!o || !offerLive(o, now, zone)) return null;
   const w = windowOf(o);
   if (!w) return null;
   const pc = placeClock(now, zone);
-  for (let k = 0; k <= 7; k++) {
+  // Six days on at most: a weekly offer already over today drops out for the
+  // evening rather than reading "From Friday" on a Friday (Fable's review).
+  for (let k = 0; k <= 6; k++) {
     const day = (pc.day + k) % 7;
     if (w.days.length && !w.days.includes(day)) continue;
     if (k === 0 && pc.minutes >= w.fromMin) continue;
@@ -319,8 +322,11 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
   // shown, null for all of them. Going in or out fades the page out, swaps it,
   // and fades it back in. Going in is a step in the phone's history, so the
   // phone's own Back comes out again rather than leaving Explore.
-  // 2026). None ticked shows them all.
-  const [cat, setCat] = useState(null);
+  // Seeded from the phone's history, so a reload or a swipe away and back
+  // shows what the history says is shown (Fable's review, 14 Oct 2026).
+  const [cat, setCat] = useState(() => { try { const k = window.history.state?.gxCat; return DEAL_CATEGORIES.includes(k) ? k : null; } catch { return null; } });
+  const catRef = useRef(cat);
+  catRef.current = cat;
   const [fade, setFade] = useState(false);
   const FADE_MS = 200;
   const showCat = (k) => {
@@ -347,8 +353,27 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
     try { if (window.history.state?.gxCat) { window.history.back(); return; } } catch { /* fall through */ }
     showCat(null);
   };
+  // ── BACK CLOSES WHAT IS OPEN, ONE THING AT A TIME ──────────────────
+  // Fable's review, 14 Oct 2026: the deal sheet and the Redeem screen took no
+  // step in the phone's history, so Back left Explore instead of closing them.
+  // Each pushes a step (gxSheet 1 for the deal, 2 for Redeem over it), and
+  // Back reads what is left: the sheets above that level close, and the kind
+  // of place follows the history too.
+  const sheetLevel = () => { try { return Number(window.history.state?.gxSheet) || 0; } catch { return 0; } };
+  const pushSheet = (level) => { try { window.history.pushState({ ...(window.history.state || {}), gxSheet: level }, ""); } catch { /* no history */ } };
+  const closeSheet = (fallback) => { if (sheetLevel() > 0) { try { window.history.back(); return; } catch { /* fall through */ } } fallback(); };
+  // Leaving every sheet at once, for a walk: back past their steps first.
+  const dropSheets = () => { const n = sheetLevel(); if (n > 0) { try { window.history.go(-n); } catch { /* none */ } } };
   useEffect(() => {
-    const onPop = () => { let k = null; try { k = window.history.state?.gxCat || null; } catch { /* none */ } showCat(k); };
+    const onPop = () => {
+      let st = {};
+      try { st = window.history.state || {}; } catch { /* none */ }
+      const level = Number(st.gxSheet) || 0;
+      if (level < 2) setRedeem(null);
+      if (level < 1) setOpened(null);
+      const k = DEAL_CATEGORIES.includes(st.gxCat) ? st.gxCat : null;
+      if (k !== catRef.current) showCat(k);
+    };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
@@ -395,6 +420,7 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
     locate((at) => setGoing({ ...x, minutes: walkMinutes(at, x.at), _from: at }));
   };
   const openRedeem = (x, when) => {
+    pushSheet(2);
     setRedeem({ x, when: when?.text || "" });
     dealRedeemOpened(x.id, country);
   };
@@ -460,7 +486,7 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
               <DealTile key={key} testid="deal-near" name={x.d.name} offer={offer} badge={liveBadge(x.d.__offer, when, lang)}
                 distance={x.minutes != null ? fill(uiT("trips.walkMin", lang), { n: x.minutes }) : ""}
                 photo={x.d.photo || ""} at={x.at} sign={signFor(x.d)} pin={x.d.__pin || ""}
-                onOpen={() => setOpened(key)} />
+                onOpen={() => { pushSheet(1); setOpened(key); }} />
             );
           })}
         </div>
@@ -474,7 +500,7 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
                 offer={String(x.d.__offer?.text || "").trim()} badge={upcomingBadge(x.next, lang)}
                 distance={x.minutes != null ? fill(uiT("trips.walkMin", lang), { n: x.minutes }) : ""}
                 photo={x.d.photo || ""} at={x.at} sign={signFor(x.d)} pin={x.d.__pin || ""}
-                onOpen={() => setOpened(`soon:${x.id || x.d.name}`)} />
+                onOpen={() => { pushSheet(1); setOpened(`soon:${x.id || x.d.name}`); }} />
             ))}
           </div>
         </div>
@@ -499,8 +525,8 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
             book={cleanBooking(x.d.__booking)}
             labels={{ redeem: uiT("offer.redeem", lang), directions: uiT("explore.directions", lang), close: uiT("explore.closeMap", lang), book: uiT("deal.book", lang) }}
             onRedeem={!isSoon && offer ? () => openRedeem(x, when) : null}
-            onDirections={() => { setOpened(null); go(x); }}
-            onClose={() => setOpened(null)} />
+            onDirections={() => { dropSheets(); setOpened(null); go(x); }}
+            onClose={() => closeSheet(() => setOpened(null))} />
         );
       })()}
       {country === "LT" && (
@@ -512,13 +538,17 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
 
       {redeem && (
         <RedeemSheet name={redeem.x.d.name} offer={String(redeem.x.d.__offer?.text || "").trim()} when={redeem.when} lang={lang}
-          onDirections={redeem.x.at ? () => { const x = redeem.x; setRedeem(null); go(x); } : null}
-          onClose={() => setRedeem(null)} />
+          onDirections={redeem.x.at ? () => { const x = redeem.x; dropSheets(); setRedeem(null); setOpened(null); go(x); } : null}
+          onClose={() => closeSheet(() => setRedeem(null))} />
       )}
-      {going && walkStart && (
+      {/* On the body: on /lithuania Explore sits in the swiping pager, whose
+          transform would pin a fixed walk to the page rather than the phone
+          (Fable's review, 14 Oct 2026), as RedeemSheet's note says. */}
+      {going && walkStart && typeof document !== "undefined" && createPortal(
         <WalkMode walk={walkToDeal(walkStart, going)} madeAt={null} lang={lang} country={country} loop={false}
           cardFor={() => ({ emoji: "◈", ...(going.d.photo ? { photo: going.d.photo } : {}) })}
-          onReach={(s) => placeReached(s, country)} onClose={() => setGoing(null)} />
+          onReach={(s) => placeReached(s, country)} onClose={() => setGoing(null)} />,
+        document.body,
       )}
     </section>
   );

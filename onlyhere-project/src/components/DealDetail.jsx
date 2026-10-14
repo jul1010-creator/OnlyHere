@@ -59,7 +59,7 @@ export const DealDetail = ({
                   <DealPlaceView lat={at.lat} lon={at.lon} name={name} sign={sign} photo={photo} pin={pin} lang={lang}
                     onDirections={onDirections} onClose={() => setAbove(false)} />
                 ) : (
-                  <DealCornerMap fill ratio="16 / 9" radius={16} lat={at.lat} lon={at.lon} name={name} sign={sign} photo={photo} pin={pin} onTap={() => setAbove(true)} />
+                  <DealCornerMap fill ratio="16 / 9" radius={16} lat={at.lat} lon={at.lon} name={name} sign={sign} pin={pin} onTap={() => setAbove(true)} />
                 )}
               </div>
             )}
