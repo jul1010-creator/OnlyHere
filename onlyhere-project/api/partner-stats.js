@@ -28,6 +28,8 @@ export const PER_SITE = 50000;
 // hotspot, but a script on one connection cannot move a place's numbers far.
 export const PER_PLACE_WALKS = 12;
 export const PER_PLACE_REACH = 3;
+// Opening an offer to show at the counter: a family of four, twice.
+export const PER_PLACE_REDEEM = 8;
 const COUNTED = 1e9;
 
 // ── ONLY PLACES THAT HAVE A PARTNER LINK ARE COUNTED ────────────────
@@ -149,9 +151,12 @@ export default async function handler(req, res) {
   const salt = serviceKey.slice(-16);
   const net = visitorKey(req.headers, salt).replace(/^ai:v:/, "pst:v:");
   const net48 = visitorKey48(req.headers, salt).replace(/^ai:v48:/, "pst:v48:");
-  const perPlace = [...new Set(keys.map(idOfStatKey))].map(id => (body.e === "reach"
-    ? { key: `${net}:r:${id}`, limit: PER_PLACE_REACH }
-    : { key: `${net}:w:${id}`, limit: PER_PLACE_WALKS }));
+  // Each kind of event on its own per-place key (Fable's review, 14 Oct 2026):
+  // with one shared key, a hotel wifi that opened Explore a dozen times had
+  // spent the place's budget, and every later Redeem from it went uncounted.
+  const PER_PLACE = { reach: ["r", PER_PLACE_REACH], redeem: ["x", PER_PLACE_REDEEM], deals: ["d", PER_PLACE_WALKS] };
+  const [tag, cap] = PER_PLACE[body.e] || ["w", PER_PLACE_WALKS];
+  const perPlace = [...new Set(keys.map(idOfStatKey))].map(id => ({ key: `${net}:${tag}:${id}`, limit: cap }));
   const took = await takeDaily({
     day: copenhagenDay(new Date()),
     keys: [
