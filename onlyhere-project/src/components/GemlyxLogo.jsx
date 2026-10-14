@@ -56,6 +56,65 @@ export const GemlyxMark = ({ size = 24, ring = true, ringColor = "#EDF0F7", tone
   </svg>
 );
 
+// ── THE MARK, LARGE ─────────────────────────────────────────────────
+// Oliver, 14 Oct 2026, of the mark turning behind Explore: "make the spinning
+// Gemlyx logo non-cartoonish". At 24px the flat gold points read as a gem; at
+// 700px they read as stickers. So this is the same icon, point for point, as
+// cut metal: each point a lit face and a shaded face in graded gold, hairline
+// edges where the faces meet, the ring a fine line of gold that catches the
+// light at the top and fades round the side, and the centre a dark stone in a
+// thin setting. `id` keeps two of them on one page from sharing gradients.
+export const GemlyxMarkFine = ({ size = "100%", id = "gxf", style }) => {
+  const g = (n) => `${id}-${n}`;
+  return (
+    <svg width={size} height={size} viewBox="0 0 120 120" aria-hidden="true" style={{ display: "block", overflow: "visible", ...style }}>
+      <defs>
+        <linearGradient id={g("lit")} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#F6DFA0" stopOpacity="0.95" />
+          <stop offset="0.55" stopColor="#D9A441" stopOpacity="0.7" />
+          <stop offset="1" stopColor="#8A6420" stopOpacity="0.35" />
+        </linearGradient>
+        <linearGradient id={g("shade")} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#B88A34" stopOpacity="0.7" />
+          <stop offset="1" stopColor="#3A2A0E" stopOpacity="0.25" />
+        </linearGradient>
+        <linearGradient id={g("ring")} x1="0.15" y1="0" x2="0.85" y2="1">
+          <stop offset="0" stopColor="#F6DFA0" stopOpacity="0.9" />
+          <stop offset="0.45" stopColor="#C9A46A" stopOpacity="0.18" />
+          <stop offset="0.8" stopColor="#C9A46A" stopOpacity="0.08" />
+          <stop offset="1" stopColor="#E8C25E" stopOpacity="0.55" />
+        </linearGradient>
+        <radialGradient id={g("stone")} cx="0.4" cy="0.35" r="0.8">
+          <stop offset="0" stopColor="#2A2620" />
+          <stop offset="1" stopColor="#0B0A08" />
+        </radialGradient>
+      </defs>
+      <circle cx="60" cy="60" r="54" fill="none" stroke={`url(#${g("ring")})`} strokeWidth="0.6" />
+      <circle cx="60" cy="60" r="51.8" fill="none" stroke={`url(#${g("ring")})`} strokeWidth="0.2" opacity="0.6" />
+      <g transform="translate(12,12) scale(0.8)" strokeLinejoin="round">
+        {[45, 135, 225, 315].map(r => (
+          <g key={r} transform={`rotate(${r} 60 60)`} opacity="0.75">
+            <path d="M 60 30 L 70 60 L 60 60 Z" fill={`url(#${g("lit")})`} />
+            <path d="M 60 30 L 50 60 L 60 60 Z" fill={`url(#${g("shade")})`} />
+            <path d="M 50 60 L 60 30 L 70 60" fill="none" stroke="#E8C25E" strokeOpacity="0.45" strokeWidth="0.35" />
+          </g>
+        ))}
+        {[0, 90, 180, 270].map(r => (
+          <g key={r} transform={`rotate(${r} 60 60)`}>
+            <path d="M 60 8 L 75 60 L 60 60 Z" fill={`url(#${g("lit")})`} />
+            <path d="M 60 8 L 45 60 L 60 60 Z" fill={`url(#${g("shade")})`} />
+            <path d="M 45 60 L 60 8 L 75 60" fill="none" stroke="#F6DFA0" strokeOpacity="0.6" strokeWidth="0.35" />
+            <path d="M 60 8 L 60 60" stroke="#F6DFA0" strokeOpacity="0.35" strokeWidth="0.25" />
+          </g>
+        ))}
+        <g transform="rotate(45 60 60)">
+          <rect x="51.5" y="51.5" width="17" height="17" fill={`url(#${g("stone")})`} stroke="#E8C25E" strokeOpacity="0.85" strokeWidth="0.6" />
+        </g>
+      </g>
+    </svg>
+  );
+};
+
 // Oliver's custom GEMLYX letterforms, verbatim from the logo file.
 export const GemlyxWordmark = ({ height = 13, color = "#EDF0F7", style }) => (
   <svg height={height} viewBox="0 -52 390 54" style={{ display: "inline-block", verticalAlign: "middle", flexShrink: 0, ...style }} aria-label="GEMLYX" fill={color}>

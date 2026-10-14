@@ -12,11 +12,15 @@
 // points in their own colours, as in the header, with only the two outlines
 // thinned to what a large drawing needs, and a soft gold glow behind it.
 //
+// Then, the same day, "make the spinning Gemlyx logo non-cartoonish": the
+// icon is now drawn as cut gold (GemlyxMarkFine), not flat stickers, and
+// quieter here, since the banner over it now shows the mark at full strength.
+//
 // It stays put while the page scrolls (sticky inside the page's own box, so it
 // works inside the swiping pager, where a fixed one would scroll away), never
 // takes a tap, and stands still for anybody whose phone asks for less motion.
 import { C } from "../utils/theme";
-import { GemlyxMark } from "./GemlyxLogo";
+import { GemlyxMarkFine } from "./GemlyxLogo";
 
 export const SPIN_SECONDS = 90;
 
@@ -24,7 +28,7 @@ const Glow = ({ gold = C.gold }) => (
   <svg viewBox="0 0 120 120" width="100%" height="100%" aria-hidden="true" style={{ position: "absolute", inset: 0 }}>
     <defs>
       <radialGradient id="gx-glow" cx="50%" cy="50%" r="50%">
-        <stop offset="0%" stopColor={gold} stopOpacity="0.35" />
+        <stop offset="0%" stopColor={gold} stopOpacity="0.2" />
         <stop offset="60%" stopColor={gold} stopOpacity="0.06" />
         <stop offset="100%" stopColor={gold} stopOpacity="0" />
       </radialGradient>
@@ -33,14 +37,14 @@ const Glow = ({ gold = C.gold }) => (
   </svg>
 );
 
-export const SpinningMark = ({ opacity = 0.42 }) => (
+export const SpinningMark = ({ opacity = 0.22 }) => (
   <div aria-hidden="true" data-testid="spinning-mark"
     style={{ position: "absolute", inset: 0, zIndex: 0, pointerEvents: "none", overflow: "clip" }}>
     <style>{`@keyframes gx-spin { to { transform: rotate(360deg); } } .gx-spin { animation: gx-spin ${SPIN_SECONDS}s linear infinite; } @media (prefers-reduced-motion: reduce) { .gx-spin { animation: none; } }`}</style>
     <div style={{ position: "sticky", top: 0, height: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div className="gx-spin" style={{ position: "relative", width: "min(120vw, 720px)", aspectRatio: "1 / 1", opacity }}>
         <Glow />
-        <GemlyxMark size="100%" ringColor={C.text} ringWidth={1.2} rimWidth={1.2} style={{ position: "relative", display: "block" }} />
+        <GemlyxMarkFine id="gx-bg" style={{ position: "relative" }} />
       </div>
     </div>
   </div>

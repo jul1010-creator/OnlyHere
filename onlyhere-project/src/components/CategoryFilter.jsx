@@ -55,7 +55,7 @@ export const CategoryNav = ({ active = null, onPick, label = (k) => k }) => (
           <span style={{ borderRadius: "50%", boxShadow: on ? `0 0 0 3px ${C.bg}, 0 0 0 5px ${C.text}` : "none", transition: "box-shadow .2s ease" }}>
             <CategoryCircle k={k} size={64} />
           </span>
-          <span style={{ fontSize: 12.5, fontWeight: on ? 700 : 600, color: on ? C.text : C.light, textAlign: "center", lineHeight: 1.25 }}>{label(k)}</span>
+          <span style={{ fontSize: 12.5, fontWeight: on ? 700 : 600, color: on ? C.text : C.light, textAlign: "center", lineHeight: 1.25, textShadow: `0 1px 6px ${C.bg}, 0 0 2px ${C.bg}` }}>{label(k)}</span>
         </button>
       );
     })}

@@ -36,7 +36,7 @@ import { RedeemSheet } from "./RedeemSheet";
 import { DealTile, eyebrow } from "./DealCard";
 import { DealDetail } from "./DealDetail";
 import { CategoryNav } from "./CategoryFilter";
-import { CategoryVideo } from "./CategoryVideo";
+import { ExploreBanner, MAX_DEAL_SLIDES } from "./ExploreBanner";
 import { dealCategory, byCategories, CATEGORY_SIGN, DEAL_CATEGORIES } from "../utils/dealCategories";
 import { dayKey, dayPlus } from "../utils/calendarDay";
 
@@ -306,7 +306,7 @@ export const signFor = (d) => (d?.emoji ? String(d.emoji) : CATEGORY_SIGN[dealCa
 
 // `ready` is false while the deals are still loading, so the first paint is
 // not "No deals are on right now" for a list that is about to fill.
-export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang = "en", country = "LT", sticky = true }) => {
+export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang = "en", country = "LT", sticky = true, banner = false }) => {
   const [here, setHere] = useState(null);
   const [note, setNote] = useState("");
   const [going, setGoing] = useState(null);
@@ -417,6 +417,12 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
   const all = useMemo(() => nearbyDeals(deals, start, { now: new Date(), lang, limit: Infinity, order: sort === "closest" && start ? "closest" : "az" }).filter(x => x.card.timing !== "later"), [deals, start?.lat, start?.lon, lang, sort, tick]);
   const list = useMemo(() => byCategories(all, only, x => x.d).slice(0, MAX_DEALS), [all, only]);
   const soon = useMemo(() => byCategories(upcomingDeals(deals, start, { now: new Date(), lang, limit: Infinity }), only, x => x.d).slice(0, MAX_DEALS), [deals, start?.lat, start?.lon, lang, only, tick]);
+  // The banner's slides (ExploreBanner.jsx): Gemlyx's own, then deals that
+  // are on now, whatever kind of place is chosen.
+  const slides = useMemo(() => [{ kind: "brand", key: "brand" }, ...all.slice(0, MAX_DEAL_SLIDES).map(x => {
+    const when = offerWhen(x.d.__offer, x.card.timing, { now: new Date(), lang });
+    return { kind: "deal", key: x.id || x.d.name, name: x.d.name, offer: offerTextIn(x.d.__offer, lang), tag: tagFor(x.d, lang), badge: liveBadge(x.d.__offer, when, lang), photo: x.d.photo || "", cat: dealCategory(x.d) };
+  })], [all, lang]);
   const go = (x) => {
     askForCompass();
     if (start) { setGoing(x); return; }
@@ -451,8 +457,17 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
 
   return (
     <section ref={sectionRef} data-testid="deals-near" style={{ marginBottom: 30, position: "relative" }}>
-      <CategoryVideo k={cat} />
-      <div style={{ margin: "4px 0 14px", position: "relative", zIndex: 1 }}>
+      {banner && (
+        <ExploreBanner slides={slides} cat={cat} catLabel={cat ? uiT(`explore.cat.${cat}`, lang) : ""} lang={lang} examples={examples}
+          onOpen={(key) => { pushSheet(1); setOpened(key); }} />
+      )}
+      <div style={banner ? { maxWidth: 1120, margin: "0 auto", padding: "8px 16px 0" } : undefined}>
+      {banner ? (
+        <div style={{ maxWidth: 640, margin: "0 auto 18px" }}>
+          <CategoryNav active={cat} onPick={pickCat} label={(k) => uiT(`explore.cat.${k}`, lang)} />
+        </div>
+      ) : (
+      <div style={{ margin: "4px 0 14px" }}>
         <div style={{ ...eyebrow(), marginBottom: 8 }}>{country === "LT" ? "Klaipėda" : ""}</div>
         <div style={{ display: "flex", alignItems: "baseline", gap: 10, minWidth: 0, flexWrap: "wrap" }}>
           <h2 style={{ fontSize: 30, fontWeight: 500, fontFamily: "'Fraunces', serif", lineHeight: 1.1, letterSpacing: -0.3, margin: 0, color: C.text }}>{uiT("trips.dealsH", lang)}</h2>
@@ -462,6 +477,7 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
           <CategoryNav active={cat} onPick={pickCat} label={(k) => uiT(`explore.cat.${k}`, lang)} />
         </div>
       </div>
+      )}
       <div data-testid="deals-view" data-cat={cat || "all"} style={{ position: "relative", zIndex: 1, opacity: fade ? 0 : 1, transition: `opacity ${FADE_MS}ms ease` }}>
 
       <div style={{ padding: "6px 0 8px", marginBottom: 8, ...(sticky ? { position: "sticky", top: 0, zIndex: 20, background: C.bg } : {}) }}>
@@ -533,6 +549,7 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
             onClose={() => closeSheet(() => setOpened(null))} />
         );
       })()}
+      </div>
       {country === "LT" && (
         <a href={centreSite(lang)} target="_blank" rel="noopener noreferrer" data-testid="deals-centre-link"
           style={{ display: "block", marginTop: 14, fontSize: 12.5, fontWeight: 700, color: C.muted, textDecoration: "none", textAlign: "center" }}>

@@ -23,8 +23,10 @@ export const KlaipedaExplore = ({ lang = "en", version = 0, studio = null }) => 
     <div style={{ position: "relative" }}>
       <SpinningMark />
       <div style={{ position: "relative", zIndex: 1 }}>
-        {studio}
-        <DealsNearYou deals={live.deals} examples={live.examples} ready={live.ready} lang={lang} country="LT" sticky={false} />
+        {studio && <div style={{ maxWidth: 1120, margin: "0 auto", padding: "18px 16px 0" }}>{studio}</div>}
+        {/* The banner across the top and the circles under it, as lidl.dk's
+            front page (14 Oct 2026). */}
+        <DealsNearYou deals={live.deals} examples={live.examples} ready={live.ready} lang={lang} country="LT" sticky={false} banner />
       </div>
     </div>
   );

@@ -2,9 +2,9 @@
 //
 // Oliver, 14 Oct 2026: "try rush through Lidl+ and you'll see they got alot of
 // videos", then a ten second nightlife film, "different video on phone and pc
-// because otherwise the format will look silly", and it plays "Behind
-// Nightlife": tap the Nightlife circle and the top of the page is the film,
-// under the heading and the circles, running down into the deal tiles.
+// because otherwise the format will look silly". Then, with lidl.dk's front
+// page: a banner across the top, the circles under it, "when you click the
+// navigations, the video will replace the banner".
 //
 // A tall film on a phone held upright and a wide one on anything wider, chosen
 // by the screen's shape, so neither is a letterbox. No sound, on a loop, and it
@@ -18,7 +18,6 @@
 // The tall nightlife film is cut from the middle of the wide one until
 // Oliver's own phone edit replaces it.
 import { useEffect, useRef, useState } from "react";
-import { C } from "../utils/theme";
 
 export const CATEGORY_VIDEO = {
   nightlife: {
@@ -38,7 +37,7 @@ export const filmFor = (k, tall) => {
 const matches = (q) => { try { return !!window.matchMedia?.(q).matches; } catch { return false; } };
 const savesData = () => { try { return !!navigator.connection?.saveData; } catch { return false; } };
 
-export const CategoryVideo = ({ k = null }) => {
+export const CategoryVideo = ({ k = null, playing = true }) => {
   const [tall, setTall] = useState(() => typeof window !== "undefined" && matches(TALL_QUERY));
   const [still] = useState(() => typeof window !== "undefined" && (matches("(prefers-reduced-motion: reduce)") || savesData()));
   const [failed, setFailed] = useState(false);
@@ -58,26 +57,25 @@ export const CategoryVideo = ({ k = null }) => {
   const vid = useRef(null);
   useEffect(() => {
     const v = vid.current, b = box.current;
-    if (!v || !b || typeof IntersectionObserver === "undefined") return undefined;
+    if (!v || !b) return undefined;
+    if (!on || !playing) { v.pause?.(); return undefined; }
+    if (typeof IntersectionObserver === "undefined") { v.play?.().catch(() => {}); return undefined; }
     const io = new IntersectionObserver(([e]) => {
-      if (e.isIntersecting && on) v.play?.().catch(() => {});
+      if (e.isIntersecting) v.play?.().catch(() => {});
       else v.pause?.();
     }, { threshold: 0.05 });
     io.observe(b);
     return () => io.disconnect();
-  }, [on, shown, tall, still, failed]);
+  }, [on, playing, shown, tall, still, failed]);
 
   const film = shown ? filmFor(shown, tall) : null;
   if (!film) return null;
   const media = { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" };
+  // It fills the box it is put in: the banner at the top of Explore
+  // (ExploreBanner.jsx), which it replaces while its kind of place is shown.
   return (
     <div ref={box} aria-hidden="true" data-testid="category-video" data-cat={shown}
-      style={{
-        position: "absolute", top: -18, left: "50%", width: "100vw", marginLeft: "-50vw",
-        height: tall ? "min(78vh, 640px)" : "min(62vh, 560px)",
-        zIndex: 0, pointerEvents: "none", overflow: "hidden",
-        opacity: on ? 1 : 0, transition: "opacity 400ms ease",
-      }}>
+      style={{ position: "absolute", inset: 0, zIndex: 2, pointerEvents: "none", overflow: "hidden", background: "#0B0A08", opacity: on ? 1 : 0, transition: "opacity 450ms ease" }}>
       {still || failed ? (
         <img src={film.still} alt="" style={media} />
       ) : (
@@ -87,9 +85,9 @@ export const CategoryVideo = ({ k = null }) => {
           <source src={`${film.src}.mp4`} type="video/mp4" onError={() => setFailed(true)} />
         </video>
       )}
-      {/* Darker at the top for the heading, then into the page's own colour, so
-          the tiles below start on plain ground. */}
-      <div style={{ position: "absolute", inset: 0, background: `linear-gradient(to bottom, ${C.bg}B3 0%, ${C.bg}8C 40%, ${C.bg}D9 75%, ${C.bg} 100%)` }} />
+      {/* Only the bottom is darkened, for the name over it, as Lidl's own
+          category film does. "Can it be a little less faded?" (14 Oct 2026). */}
+      <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(0,0,0,0) 45%, rgba(0,0,0,0.55) 100%)" }} />
     </div>
   );
 };
