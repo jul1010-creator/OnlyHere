@@ -83255,5 +83255,21 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("the weather box speaks the reader's language and names meteo.lt in Lithuania", !/Loading forecast\.\.\.<|check DMI or Yr|>Wind \{/.test(ws) && /SERVICE = \{ LT: "meteo\.lt" \}/.test(ws) && /lang=\{uiLang\}/.test(app));
 }
 
+// ── The nightlife film, 14 Oct 2026: "Behind Nightlife" ──
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const cv = read("src/components/CategoryVideo.jsx"), dny = read("src/components/DealsNearYou.jsx");
+  const { statSync } = await import("node:fs");
+  const files = ["wide", "tall"].flatMap(w => [`nightlife-${w}.mp4`, `nightlife-${w}.webm`, `nightlife-${w}.jpg`]);
+  ok("both films and their stills are in public/video, each under 3 MB", files.every(f => { try { return statSync(join(root, "public/video", f)).size < 3e6; } catch { return false; } }));
+  ok("the film sits behind the heading and circles, only for a kind of place that has one", /<CategoryVideo k=\{cat\} \/>/.test(dny) && /CATEGORY_VIDEO = \{\s*nightlife:/.test(cv));
+  ok("the heading and the deals are drawn above it", /margin: "4px 0 14px", position: "relative", zIndex: 1/.test(dny) && /data-testid="deals-view" data-cat=\{cat \|\| "all"\} style=\{\{ position: "relative", zIndex: 1,/.test(dny));
+  ok("upright phones get the tall film, everything else the wide one", /TALL_QUERY = "\(orientation: portrait\) and \(max-width: 820px\)"/.test(cv));
+  ok("no sound, inline, looping, and WebM before MP4", /autoPlay muted defaultMuted loop playsInline/.test(cv) && cv.indexOf("video/webm") < cv.indexOf("video/mp4"));
+  ok("less motion or saving data shows the still, and so does a film that will not play", /prefers-reduced-motion: reduce/.test(cv) && /saveData/.test(cv) && /still \|\| failed \?/.test(cv));
+  ok("it pauses out of sight", /IntersectionObserver/.test(cv) && /v\.pause\?\.\(\)/.test(cv));
+  ok("it never takes a tap", /pointerEvents: "none"/.test(cv));
+}
+
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
 if (failed) { fails.forEach(f => console.log("  FAIL " + f + "\n")); process.exit(1); }
