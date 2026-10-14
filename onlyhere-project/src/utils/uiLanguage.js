@@ -919,6 +919,14 @@ export const UI_STRINGS = {
   "weather.windHumidity": { en: "Wind {w} m/s · Humidity {h}%", da: "Vind {w} m/s · Luftfugtighed {h} %", de: "Wind {w} m/s · Luftfeuchtigkeit {h} %", lt: "Vėjas {w} m/s · Drėgmė {h} %" },
   "weather.failed":   { en: "The forecast could not be loaded just now. This is our end, not a quiet spell: check {src} for these days.", da: "Vejrudsigten kunne ikke hentes lige nu. Fejlen er hos os og betyder ikke stille vejr: se {src} for de her dage.", de: "Die Vorhersage konnte gerade nicht geladen werden. Das liegt an uns, nicht am Wetter: schau für diese Tage bei {src} nach.", lt: "Šiuo metu prognozės įkelti nepavyko. Tai mūsų gedimas, o ne ramūs orai: šioms dienoms žiūrėkite {src}." },
   "weather.or":       { en: "or", da: "eller", de: "oder", lt: "arba" },
+  // The banner across the top of Explore, as lidl.dk's (14 Oct 2026).
+  "banner.only":  { en: "Only on Gemlyx.", da: "Kun på Gemlyx.", de: "Nur auf Gemlyx.", lt: "Tik per Gemlyx." },
+  "banner.sub":   { en: "Tap a deal, walk there and show your phone at the counter.", da: "Tryk på et tilbud, gå derhen og vis din telefon ved disken.", de: "Tippe auf ein Angebot, geh hin und zeig dein Handy an der Kasse.", lt: "Paspauskite pasiūlymą, nueikite ir parodykite telefoną prie kasos." },
+  "banner.see":   { en: "See the deal", da: "Se tilbuddet", de: "Zum Angebot", lt: "Žiūrėti pasiūlymą" },
+  "banner.prev":  { en: "Previous", da: "Forrige", de: "Zurück", lt: "Ankstesnis" },
+  "banner.next":  { en: "Next", da: "Næste", de: "Weiter", lt: "Kitas" },
+  "banner.pause": { en: "Pause", da: "Pause", de: "Pause", lt: "Pristabdyti" },
+  "banner.play":  { en: "Play", da: "Afspil", de: "Abspielen", lt: "Paleisti" },
 };
 
 export const UI_KEYS = Object.keys(UI_STRINGS);
