@@ -22127,6 +22127,9 @@ If the conversation only covers a single day or a few stops with no explicit day
     const ownedByAScroller = (target) => {
       let el = target;
       while (el && el !== root) {
+        // A carousel that turns its own slides on a swipe, the banner on
+        // Explore (ExploreBanner.jsx, 14 Oct 2026), says so with this.
+        if (el.hasAttribute?.("data-own-swipe")) return true;
         if (el.scrollWidth - el.clientWidth > 4) {
           const ox = getComputedStyle(el).overflowX;
           if (ox === "auto" || ox === "scroll") return true;
@@ -29671,7 +29674,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               and no guide sections here: the deals with their three filters,
               and the tourism centre's own site for everything else. */}
           {tab === "home" && PAGE_ABROAD && (
-            <div className={pageAnim} data-testid="explore-abroad" style={{ maxWidth: 680, margin: "0 auto", padding: "18px 16px 48px" }}>
+            <div className={pageAnim} data-testid="explore-abroad" style={{ paddingBottom: 48 }}>
               <KlaipedaExplore lang={uiLang} version={liveContentVersion}
                 studio={isStudio && studioSession ? <DealStudio supaFetch={supaFetch} studioFetch={studioFetch} onChanged={dealChanged} upload={(file) => uploadToMedia(file, mediaPathFor(file, "deals", `deal-${Date.now()}`))} translate={translateDealOffer} />
                   : isStudio && studioDoorOpen ? (
