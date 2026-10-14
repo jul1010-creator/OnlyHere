@@ -40,7 +40,7 @@ import { dayStart, dayEnd } from "./calendarDay";
 import { stripDashes } from "./helpers";
 import { PAID_PLANS_LIVE } from "../config";
 import { t as uiT } from "./uiLanguage";
-import { OFFER_WEEK, cleanDays, cleanClock, minutesOf, placeClock, windowOf, timingAt } from "./offerClock";
+import { OFFER_WEEK, cleanDays, cleanClock, minutesOf, placeClock, placeDayKey, windowOf, timingAt } from "./offerClock";
 export { OFFER_WEEK, cleanClock, placeClock };
 import { activeCountry, DEFAULT_COUNTRY } from "./countries";
 
@@ -129,7 +129,7 @@ export const offerWindow = (offer) => windowOf(cleanOffer(offer));
 //   "off"     not today, or already over for today
 // An offer outside its dates is "ended", whatever its window says.
 export const offerTiming = (offer, { now = new Date(), zone = "" } = {}) => {
-  if (!offerLive(offer, now)) return "ended";
+  if (!offerLive(offer, now, zone)) return "ended";
   return timingAt(offerWindow(offer), placeClock(now, zone));
 };
 
@@ -160,11 +160,16 @@ export const offerProblems = (offer) => {
 // Live means: readable text, a readable end date, and that date not yet past.
 // The last day counts in full, which is what dayEnd is for: an offer valid
 // until the 30th is valid all of the 30th.
-export const offerLive = (offer, today = new Date()) => {
+// `zone` reads "today" on the place's own calendar (Fable's review, 14 Oct
+// 2026): a cruise passenger's phone on New York time would otherwise still
+// show, past midnight in Klaipėda, an offer whose last day was yesterday.
+export const offerLive = (offer, today = new Date(), zone = "") => {
   const o = cleanOffer(offer);
   if (!o || !o.text) return false;
   if (o.ongoing) return true;
   if (!o.until) return false;
+  const day = zone ? placeDayKey(today, zone) : "";
+  if (day && /^\d{4}-\d{2}-\d{2}$/.test(o.until)) return o.until >= day;
   const end = dayEnd(o.until);
   const now = dayStart(today);
   return !!end && !!now && end.getTime() >= now.getTime();
@@ -220,7 +225,7 @@ export const offerHoursLabel = (offer, { timing = "", lang = "en" } = {}) => {
 // `timing` and `window` ride along for the hours (see OFFER HOURS): the badge
 // says "On now until 16:00" or when it runs, and the lock rule is untouched.
 export const offerView = (offer, { paid = false, today = new Date(), zone = "" } = {}) => {
-  if (!offerLive(offer, today)) return { show: false, locked: false, text: "", until: "", timing: "ended", window: null };
+  if (!offerLive(offer, today, zone)) return { show: false, locked: false, text: "", until: "", timing: "ended", window: null };
   const o = cleanOffer(offer);
   const timing = offerTiming(o, { now: today, zone });
   const win = offerWindow(o);

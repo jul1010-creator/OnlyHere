@@ -44,7 +44,7 @@ export const livePromotions = (pools = {}, today = new Date()) => {
   for (const [src, rows] of Object.entries(pools)) {
     if (!PROMO_KINDS[src]) continue;
     for (const row of (Array.isArray(rows) ? rows : [])) {
-      if (!row?.name || !offerLive(row.__offer, today)) continue;
+      if (!row?.name || !offerLive(row.__offer, today, zoneOf(row))) continue;
       const key = `${src}:${row.id ?? row.name}`;
       if (seen.has(key)) continue;
       seen.add(key);
