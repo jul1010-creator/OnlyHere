@@ -5,7 +5,10 @@
 import { takeDaily, limitOf, SUPABASE_FALLBACK_URL } from "./aiGate.js";
 import { copenhagenDay } from "./guideAllowance.js";
 
-export const FOUNDER_DEFAULTS = { "places-hours": 300, "places-locate": 400, "social-find": 400, busyness: 100, firecrawl: 200, places: 1500, all: 3000 };
+// tickets, commons-photo and pagereads (find-email, calendar) added 13 Oct 2026:
+// free to Gemlyx, but a copied token could empty Ticketmaster's daily quota or
+// get Gemlyx's User-Agent blocked by Wikimedia.
+export const FOUNDER_DEFAULTS = { "places-hours": 300, "places-locate": 400, "social-find": 400, busyness: 100, firecrawl: 200, places: 1500, tickets: 500, "commons-photo": 600, pagereads: 1500, all: 3000 };
 const envName = (route) => `GEMLYX_FOUNDER_${String(route).toUpperCase().replace(/-/g, "_")}`;
 export const FOUNDER_BUSY = "Studio's counter could not be reached, so this paid lookup did not run.";
 export const FOUNDER_DONE = "Studio has reached today's limit for this lookup. It starts again at midnight, Copenhagen time.";

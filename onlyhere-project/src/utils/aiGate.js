@@ -138,6 +138,14 @@ export const visitorAddress = (headers) =>
 // Kept only as a salted hash, so the counter table never holds an address.
 export const visitorKey = (headers, salt = "") =>
   `ai:v:${createHash("sha256").update(`${salt}|${visitorAddress(headers)}`).digest("hex").slice(0, 24)}`;
+// The /48 around a /64, for routes that must not let one routed /48 count as
+// 65,536 visitors (security review, 13 Oct 2026). IPv4 is left whole.
+export const addressBlock48 = (addr) => {
+  const b = addressBlock(addr);
+  return b.endsWith("::/64") ? `${b.split(":").slice(0, 3).join(":")}::/48` : b;
+};
+export const visitorKey48 = (headers, salt = "") =>
+  `ai:v48:${createHash("sha256").update(`${salt}|48|${addressBlock48((headerOf(headers, "x-real-ip") || headerOf(headers, "x-forwarded-for").split(",")[0] || "").trim()) || "unknown"}`).digest("hex").slice(0, 24)}`;
 
 const tokenOf = (headers) => {
   const h = headers || {};

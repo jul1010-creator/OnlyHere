@@ -32,6 +32,12 @@ import { Buffer } from "node:buffer";
 export const SAFE_MAX_BYTES = 3_000_000;
 export const SAFE_TIMEOUT_MS = 15000;
 export const SAFE_MAX_HOPS = 5;
+// The whole read, every hop included (security review, 13 Oct 2026).
+// SAFE_TIMEOUT_MS is the socket's idle limit, so a site sending a byte every
+// few seconds was never stopped by it.
+export const SAFE_TOTAL_MS = 20000;
+// Never carried to a redirect on another host.
+const PRIVATE_HEADERS = /^(authorization|cookie|proxy-authorization|x-api-key)$/i;
 const PORTS = new Set(["", "80", "443"]);
 
 // ── WHICH ADDRESSES ARE PUBLIC ──────────────────────────────────────
@@ -81,6 +87,11 @@ const publicV6 = (ip) => {
   if ((g[0] & 0xff00) === 0xff00) return false;                                 // ff00::/8 multicast
   if (g[0] === 0x2001 && g[1] === 0x0db8) return false;                         // documentation
   if (g[0] === 0x0100 && g.slice(1, 4).every(x => x === 0)) return false;       // discard
+  // Ranges that carry or reach an IPv4 address (security review, 13 Oct 2026).
+  if (g[0] === 0x2002) return false;                                            // 6to4
+  if (g[0] === 0x2001 && g[1] === 0) return false;                              // Teredo
+  if (g[0] === 0x64 && g[1] === 0xff9b && g[2] === 1) return false;             // local NAT64
+  if (g.slice(0, 4).every(x => x === 0) && g[4] === 0xffff && g[5] === 0) return publicV4(asV4(g[6], g[7])); // ::ffff:0:a.b.c.d
   return true;
 };
 export const isPublicAddress = (ip) => {
@@ -180,21 +191,29 @@ const answer = (url, got, hops) => {
 
 // fetch(url, init), for the public internet only. A refused address throws,
 // the way fetch throws when it cannot connect, with the reason in the message.
-export const safeFetch = async (input, init = {}, { lookup = dns.lookup, send = requestOnce, httpsOnly = false } = {}) => {
+export const safeFetch = async (input, init = {}, { lookup = dns.lookup, send = requestOnce, httpsOnly = false, totalMs = SAFE_TOTAL_MS } = {}) => {
   let target = typeof input === "string" ? input : input?.url;
   let method = String(init.method || "GET").toUpperCase();
   let body = init.body || null;
   const headers = Object.fromEntries(Object.entries(init.headers instanceof Map ? Object.fromEntries(init.headers) : (init.headers || {})).map(([k, v]) => [k, String(v)]));
   const follow = init.redirect !== "manual" && init.redirect !== "error";
+  const deadline = AbortSignal.timeout(totalMs);
+  const signal = init.signal ? (typeof AbortSignal.any === "function" ? AbortSignal.any([init.signal, deadline]) : init.signal) : deadline;
   for (let hop = 0; hop <= SAFE_MAX_HOPS; hop++) {
+    if (signal.aborted) throw Object.assign(new Error("The site did not answer in time."), { name: "AbortError" });
     const checked = await checkUrl(target, { lookup, httpsOnly });
     if (!checked.ok) throw Object.assign(new Error(`Refused: ${checked.why}.`), { name: "RefusedAddress" });
-    const got = await send(checked.url, checked.address, checked.family, { method, headers, body, signal: init.signal });
+    const got = await send(checked.url, checked.address, checked.family, { method, headers, body, signal });
     if (got.location && follow) {
       let next;
       try { next = new URL(got.location, checked.url); } catch { throw new Error("A redirect went to an address that does not read."); }
       // A 303, and a 301 or 302 after a POST, carry on as a GET with no body.
       if (got.status === 303 || ((got.status === 301 || got.status === 302) && method === "POST")) { method = "GET"; body = null; }
+      // Another host gets no key, cookie or body that was meant for this one.
+      if (next.host !== checked.url.host) {
+        for (const k of Object.keys(headers)) if (PRIVATE_HEADERS.test(k)) delete headers[k];
+        if (body) throw new Error("A redirect tried to send the request to another site.");
+      }
       target = next.toString();
       continue;
     }
