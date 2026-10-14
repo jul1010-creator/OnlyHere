@@ -11,6 +11,7 @@
 // given must not be a free proxy for the rest of the internet.
 
 import { requestIsFromSite, NOT_FROM_SITE, resolveUser, isFounder } from "../src/utils/apiGuard.js";
+import { gateFounder } from "../src/utils/founderGate.js";
 import { findContactEmails } from "../src/utils/contactEmail.js";
 // Public internet only (security review, 6 Oct 2026, finding 1).
 import { safeFetch } from "../src/utils/safeFetch.js";
@@ -50,6 +51,10 @@ export default async function handler(req, res) {
   if (!/^https?:\/\//i.test(url)) {
     return res.status(400).json({ error: "Provide a valid ?url=" });
   }
+  // A daily ceiling, so a copied Studio token cannot use up this route
+  // (security review, 13 Oct 2026). See src/utils/founderGate.js.
+  const counted = await gateFounder({ route: "pagereads", env: process.env });
+  if (!counted.ok) return res.status(counted.status).json({ error: counted.error });
   const out = await findContactEmails(url, fetchHtml);
   res.setHeader("Cache-Control", "no-store");
   return res.status(200).json(out);

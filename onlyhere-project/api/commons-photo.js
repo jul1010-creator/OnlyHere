@@ -322,6 +322,7 @@ const uniq = (list) => {
 };
 
 import { requestIsFromSite, NOT_FROM_SITE, resolveUser, isFounder } from "../src/utils/apiGuard.js";
+import { gateFounder } from "../src/utils/founderGate.js";
 
 export default async function handler(req, res) {
   // ── SECURITY, 17 AUG 2026 ─────────────────────────────────────────
@@ -365,6 +366,10 @@ export default async function handler(req, res) {
   const land = COUNTRY_PROFILES[String(req.query.country || "").toUpperCase()] || COUNTRY_PROFILES[DEFAULT_COUNTRY];
   const localWiki = `${land.wikiLanguage}.wikipedia.org`;
   if (!q || !String(q).trim()) return res.status(400).json({ error: "q required" });
+  // A daily ceiling, so a copied Studio token cannot use up this route
+  // (security review, 13 Oct 2026). See src/utils/founderGate.js.
+  const counted = await gateFounder({ route: "commons-photo", env: process.env });
+  if (!counted.ok) return res.status(counted.status).json({ error: counted.error });
 
   const term = String(q).trim();
   const articleHint = String(article || term).trim();

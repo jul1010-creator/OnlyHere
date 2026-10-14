@@ -46,6 +46,7 @@ const HOST = "https://app.ticketmaster.com/discovery/v2/events.json";
 const tmTime = (d) => `${d.toISOString().slice(0, 19)}Z`;
 
 import { requestIsFromSite, NOT_FROM_SITE, resolveUser, isFounder } from "../src/utils/apiGuard.js";
+import { gateFounder } from "../src/utils/founderGate.js";
 
 export default async function handler(req, res) {
   // ── SECURITY, 17 AUG 2026 ─────────────────────────────────────────
@@ -98,6 +99,10 @@ export default async function handler(req, res) {
     if (req.query.city) params.set("city", String(req.query.city).slice(0, 60));
   }
 
+  // A daily ceiling, so a copied Studio token cannot use up this route
+  // (security review, 13 Oct 2026). See src/utils/founderGate.js.
+  const counted = await gateFounder({ route: "tickets", env: process.env });
+  if (!counted.ok) return res.status(counted.status).json({ error: counted.error });
   try {
     const r = await fetch(`${HOST}?${params.toString()}`);
     if (r.status === 429) {
