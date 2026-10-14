@@ -36,6 +36,7 @@ import { RedeemSheet } from "./RedeemSheet";
 import { DealTile, eyebrow } from "./DealCard";
 import { DealDetail } from "./DealDetail";
 import { CategoryNav } from "./CategoryFilter";
+import { CategoryVideo } from "./CategoryVideo";
 import { dealCategory, byCategories, CATEGORY_SIGN, DEAL_CATEGORIES } from "../utils/dealCategories";
 import { dayKey, dayPlus } from "../utils/calendarDay";
 
@@ -449,8 +450,9 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
   });
 
   return (
-    <section ref={sectionRef} data-testid="deals-near" style={{ marginBottom: 30 }}>
-      <div style={{ margin: "4px 0 14px" }}>
+    <section ref={sectionRef} data-testid="deals-near" style={{ marginBottom: 30, position: "relative" }}>
+      <CategoryVideo k={cat} />
+      <div style={{ margin: "4px 0 14px", position: "relative", zIndex: 1 }}>
         <div style={{ ...eyebrow(), marginBottom: 8 }}>{country === "LT" ? "Klaipėda" : ""}</div>
         <div style={{ display: "flex", alignItems: "baseline", gap: 10, minWidth: 0, flexWrap: "wrap" }}>
           <h2 style={{ fontSize: 30, fontWeight: 500, fontFamily: "'Fraunces', serif", lineHeight: 1.1, letterSpacing: -0.3, margin: 0, color: C.text }}>{uiT("trips.dealsH", lang)}</h2>
@@ -460,7 +462,7 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
           <CategoryNav active={cat} onPick={pickCat} label={(k) => uiT(`explore.cat.${k}`, lang)} />
         </div>
       </div>
-      <div data-testid="deals-view" data-cat={cat || "all"} style={{ opacity: fade ? 0 : 1, transition: `opacity ${FADE_MS}ms ease` }}>
+      <div data-testid="deals-view" data-cat={cat || "all"} style={{ position: "relative", zIndex: 1, opacity: fade ? 0 : 1, transition: `opacity ${FADE_MS}ms ease` }}>
 
       <div style={{ padding: "6px 0 8px", marginBottom: 8, ...(sticky ? { position: "sticky", top: 0, zIndex: 20, background: C.bg } : {}) }}>
         <div role="group" aria-label="Sort" data-testid="deals-sort" style={{ display: "inline-flex", gap: 2, background: `${C.border}55`, borderRadius: 100, padding: 2 }}>
