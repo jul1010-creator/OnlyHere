@@ -83161,7 +83161,7 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("tapping the one shown again shows them all, another swaps in place", /if \(k === cat\) \{ leaveCat\(\); return; \}/.test(dny) && /window\.history\.replaceState\(/.test(dny));
   ok("going in and out fades", /opacity: fade \? 0 : 1, transition: `opacity \$\{FADE_MS\}ms ease`/.test(dny) && /setFade\(true\);\s*setTimeout\(\(\) => \{\s*setCat\(k\);/.test(dny));
   ok("the phone's Back comes out of a kind of place", /window\.history\.pushState\(\{ \.\.\.\(window\.history\.state \|\| \{\}\), gxCat: k \}, ""\)/.test(dny) && /window\.addEventListener\("popstate", onPop\)/.test(dny) && /window\.history\.back\(\)/.test(dny));
-  ok("the mark turns behind Explore, stands still for less motion, takes no taps", /<SpinningMark \/>/.test(ex) && /opacity = 0\.42/.test(sm) && /<GemlyxMark size="100%" ringColor=\{C\.text\} ringWidth=\{1\.2\} rimWidth=\{1\.2\}/.test(sm) && /animation: gx-spin \$\{SPIN_SECONDS\}s linear infinite/.test(sm) && /prefers-reduced-motion: reduce\) \{ \.gx-spin \{ animation: none; \}/.test(sm) && /pointerEvents: "none"/.test(sm) && /zIndex: 1/.test(ex));
+  ok("the mark turns behind Explore, stands still for less motion, takes no taps", /<SpinningMark \/>/.test(ex) && /opacity = 0\.22/.test(sm) && /<GemlyxMarkFine id="gx-bg"/.test(sm) && /animation: gx-spin \$\{SPIN_SECONDS\}s linear infinite/.test(sm) && /prefers-reduced-motion: reduce\) \{ \.gx-spin \{ animation: none; \}/.test(sm) && /pointerEvents: "none"/.test(sm) && /zIndex: 1/.test(ex));
   ok("upcoming tiles dim without letting the mark through", /filter: upcoming \? "brightness\(0\.62\) saturate\(0\.6\)" : "none"/.test(read("src/components/DealCard.jsx")));
   ok("the words read in all four languages", ["explore.noneCat"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
 }
@@ -83262,13 +83262,33 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   const { statSync } = await import("node:fs");
   const files = ["wide", "tall"].flatMap(w => [`nightlife-${w}.mp4`, `nightlife-${w}.webm`, `nightlife-${w}.jpg`]);
   ok("both films and their stills are in public/video, each under 3 MB", files.every(f => { try { return statSync(join(root, "public/video", f)).size < 3e6; } catch { return false; } }));
-  ok("the film sits behind the heading and circles, only for a kind of place that has one", /<CategoryVideo k=\{cat\} \/>/.test(dny) && /CATEGORY_VIDEO = \{\s*nightlife:/.test(cv));
-  ok("the heading and the deals are drawn above it", /margin: "4px 0 14px", position: "relative", zIndex: 1/.test(dny) && /data-testid="deals-view" data-cat=\{cat \|\| "all"\} style=\{\{ position: "relative", zIndex: 1,/.test(dny));
+  // Since lidl.dk's front page (14 Oct 2026) the film fills the banner box.
+  const eb = read("src/components/ExploreBanner.jsx");
+  ok("the film replaces the banner, only for a kind of place that has one", /<CategoryVideo k=\{cat\} playing=\{!filmPaused\} \/>/.test(eb) && /CATEGORY_VIDEO = \{\s*nightlife:/.test(cv) && /const film = !!\(cat && CATEGORY_VIDEO\[cat\]\);/.test(eb));
+  ok("the film fills its box, over the slides", /position: "absolute", inset: 0, zIndex: 2, pointerEvents: "none"/.test(cv));
   ok("upright phones get the tall film, everything else the wide one", /TALL_QUERY = "\(orientation: portrait\) and \(max-width: 820px\)"/.test(cv));
   ok("no sound, inline, looping, and WebM before MP4", /autoPlay muted defaultMuted loop playsInline/.test(cv) && cv.indexOf("video/webm") < cv.indexOf("video/mp4"));
   ok("less motion or saving data shows the still, and so does a film that will not play", /prefers-reduced-motion: reduce/.test(cv) && /saveData/.test(cv) && /still \|\| failed \?/.test(cv));
   ok("it pauses out of sight", /IntersectionObserver/.test(cv) && /v\.pause\?\.\(\)/.test(cv));
   ok("it never takes a tap", /pointerEvents: "none"/.test(cv));
+}
+
+// ── The banner across the top of Explore, as lidl.dk's, 14 Oct 2026 ──
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const eb = read("src/components/ExploreBanner.jsx"), dny = read("src/components/DealsNearYou.jsx"), ke = read("src/components/KlaipedaExplore.jsx"), app = read("src/App.jsx"), logo = read("src/components/GemlyxLogo.jsx");
+  ok("Explore on /lithuania opens on the banner, the circles under it", /sticky=\{false\} banner \/>/.test(ke) && dny.indexOf("<ExploreBanner") < dny.indexOf('<CategoryNav active={cat} onPick={pickCat}'));
+  ok("the banner runs the full width of the page, the rest in a column", /data-testid="explore-abroad" style=\{\{ paddingBottom: 48 \}\}/.test(app) && /maxWidth: 1120, margin: "0 auto", padding: "8px 16px 0"/.test(dny));
+  ok("Gemlyx's own slide first, then up to three deals that are on now", /\[\{ kind: "brand", key: "brand" \}, \.\.\.all\.slice\(0, MAX_DEAL_SLIDES\)/.test(dny) && /export const MAX_DEAL_SLIDES = 3;/.test(eb));
+  ok("a deal slide opens the deal, as its tile does", /onOpen=\{\(key\) => \{ pushSheet\(1\); setOpened\(key\); \}\}/.test(dny));
+  ok("arrows on a computer, dots under it, a pause button", /\.gx-banner-arrow \{ display: none; \}/.test(eb) && /@media \(hover: hover\) and \(min-width: 720px\) \{ \.gx-banner-arrow \{ display: flex; \} \}/.test(eb) && /role="tablist"/.test(eb) && /data-testid="banner-pause"/.test(eb));
+  ok("it moves on by itself, but not when paused, calm, filmed or hidden", /if \(paused \|\| calm \|\| film \|\| n < 2\) return undefined;/.test(eb) && /document\.visibilityState !== "hidden"/.test(eb));
+  ok("a swipe turns it and the page pager leaves that swipe alone", /data-own-swipe=""/.test(eb) && /if \(el\.hasAttribute\?\.\("data-own-swipe"\)\) return true;/.test(app));
+  ok("the kind of place is named over its film, as Lidl's", /data-testid="banner-film-title"/.test(eb) && /\{film \? catLabel : ""\}/.test(eb));
+  ok("the Example mark stays on the banner while examples show", /\{examples && \(\s*<span data-testid="deals-near-examples"/.test(eb));
+  const keys = ["banner.only", "banner.sub", "banner.see", "banner.prev", "banner.next", "banner.pause", "banner.play"];
+  ok("the banner speaks all four languages, no dashes", keys.every(k => ["en", "da", "de", "lt"].every(l => M.UI_STRINGS[k]?.[l] && !/[‐-―−]/.test(M.UI_STRINGS[k][l]))));
+  ok("the large mark is the icon as cut gold, not flat shapes", /export const GemlyxMarkFine = /.test(logo) && /linearGradient id=\{g\("lit"\)\}/.test(logo) && /<GemlyxMarkFine id="gx-banner" \/>/.test(eb));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
