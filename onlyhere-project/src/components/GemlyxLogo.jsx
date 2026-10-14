@@ -24,7 +24,9 @@ const TONES = {
 };
 
 // The gem itself, drawn in the logo file's 120×120 coordinate space.
-const GemCore = ({ tone = "gold" }) => {
+// `rimWidth` is the centre diamond's outline. 3 suits the badge sizes; drawn
+// large (the turning mark behind Explore, 14 Oct 2026) it wants less.
+const GemCore = ({ tone = "gold", rimWidth = 3 }) => {
   const t = TONES[tone] || TONES.gold;
   return (
     <g transform="translate(12,12) scale(0.8)">
@@ -41,16 +43,16 @@ const GemCore = ({ tone = "gold" }) => {
         </g>
       ))}
       <g transform="rotate(45 60 60)">
-        <rect x="51.5" y="51.5" width="17" height="17" fill="rgba(10,15,30,0.5)" stroke={t.bright} strokeWidth="3" />
+        <rect x="51.5" y="51.5" width="17" height="17" fill="rgba(10,15,30,0.5)" stroke={t.bright} strokeWidth={rimWidth} />
       </g>
     </g>
   );
 };
 
-export const GemlyxMark = ({ size = 24, ring = true, ringColor = "#EDF0F7", tone = "gold", style }) => (
+export const GemlyxMark = ({ size = 24, ring = true, ringColor = "#EDF0F7", tone = "gold", style, ringWidth = 4, rimWidth = 3 }) => (
   <svg width={size} height={size} viewBox="0 0 120 120" style={{ display: "inline-block", verticalAlign: "middle", flexShrink: 0, ...style }} aria-label="Gemlyx">
-    {ring && <circle cx="60" cy="60" r="54" fill="none" stroke={ringColor} strokeWidth="4" opacity="0.9" />}
-    <GemCore tone={tone} />
+    {ring && <circle cx="60" cy="60" r="54" fill="none" stroke={ringColor} strokeWidth={ringWidth} opacity="0.9" />}
+    <GemCore tone={tone} rimWidth={rimWidth} />
   </svg>
 );
 
