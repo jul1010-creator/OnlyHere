@@ -2695,6 +2695,9 @@ function GemlyxApp() {
   };
 
   const [editingId, setEditingId] = useState(null); // id of the row being edited, or null for a fresh draft
+  // The open row's own type, so a type chip tapped while editing cannot change
+  // which place a partner link names (security review, 13 Oct 2026).
+  const [editingType, setEditingType] = useState(null);
   // ── THE REPORTS PANEL ───────────────────────────────────────────
   //
   // Oliver, 15 Sep 2026: "all the reports should go to Oliververhein@gmail.com's
@@ -2985,6 +2988,7 @@ function GemlyxApp() {
     // for a different place than the one on screen. It says what is open now.
     setStudioTown(row.payload?.name || "");
     setEditingId(row.id);
+    setEditingType(row.type || null);
     setStudioDraft(row.payload);
     setStudioDraftText(JSON.stringify(row.payload, null, 2));
     setStudioResult("// Editing an existing published entry — Save changes below updates it in place.\n// (No manual-paste code needed for edits — this goes straight to Supabase.)");
@@ -3038,6 +3042,7 @@ function GemlyxApp() {
     clearPreviousEntry();
     setStudioTown(name);
     setEditingId(null);
+    setEditingType(null);
     const blank = shapeForLive(studioType, { name });
     setStudioDraft(blank);
     setStudioDraftText(JSON.stringify(blank, null, 2));
@@ -3565,7 +3570,7 @@ function GemlyxApp() {
       if (renewed?.access_token) token = renewed.access_token;
     }
     if (token) {
-      fetch(`${SUPABASE_URL}/auth/v1/logout?scope=local`, { method: "POST", headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}` } }).catch(() => { /* cleared here either way */ });
+      fetch(`${SUPABASE_URL}/auth/v1/logout?scope=global`, { method: "POST", headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}` } }).catch(() => { /* cleared here either way */ });
     }
     localStorage.removeItem("gemlyx_studio_session");
     setStudioSession(null);
@@ -4210,7 +4215,7 @@ Say which answer came from which source, so a fact from a vouched page and a fac
       const r = await studioFetch("/api/partner-stats", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ make: { id: `${studioType}:${forId}`, name: studioDraft?.name || "" } }),
+        body: JSON.stringify({ make: { id: `${editingType || studioType}:${forId}`, name: studioDraft?.name || "" } }),
       });
       const j = await r.json().catch(() => ({}));
       if (!r.ok || !j.path) { setPartnerLink({ forId, url: "", note: j.error || `The link could not be made (${r.status}).` }); return; }
@@ -29335,7 +29340,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         {editingId !== null && (
                           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: `${C.gold}12`, border: `1px solid ${C.gold}44`, borderRadius: 8, padding: "8px 12px", marginBottom: 10 }}>
                             <span style={{ fontSize: 11, color: C.gold, fontWeight: 700 }}>✏️ Editing an existing published entry (id {editingId})</span>
-                            <button onClick={() => { setEditingId(null); setStudioResult(null); setStudioDraft(null); setStudioDraftText(""); setStudioInstagramUrl(""); setStudioReelActive(false); setStudioFrozenGeo(null); }}
+                            <button onClick={() => { setEditingId(null); setEditingType(null); setStudioResult(null); setStudioDraft(null); setStudioDraftText(""); setStudioInstagramUrl(""); setStudioReelActive(false); setStudioFrozenGeo(null); }}
                               style={{ background: "none", border: "none", color: C.muted, fontSize: 11, cursor: "pointer", textDecoration: "underline" }}>Cancel</button>
                           </div>
                         )}
