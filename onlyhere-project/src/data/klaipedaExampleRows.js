@@ -38,7 +38,9 @@ export const UNTIL = "2027-12-31";
 // ── THE PARTNERS, ALL MADE UP ───────────────────────────────────────
 // `street` only, never a house number, so no real door is pointed at.
 // Each partner also reads in Lithuanian (`lt`), for the business page in
-// Lithuanian (6 Oct 2026). A native speaker should read these over.
+// Lithuanian (6 Oct 2026). A native speaker should read these over. The offer
+// also reads in Danish and German (14 Oct 2026), so the Explore tiles are not
+// English on a Danish or German page.
 export const EXAMPLE_PARTNERS = [
   {
     key: "bakery", category: "restaurants", dealKind: "discounts", stay: 25, type: "food", name: "Kepyklėlė Rūta", what: "Bakery café", street: "Turgaus g.",
@@ -47,6 +49,8 @@ export const EXAMPLE_PARTNERS = [
     offer: { text: "Free refill of filter coffee with any pastry", days: [1, 2, 3, 4, 5], from: "14:00", to: "16:00" },
     idea: "Their quiet hour, filled.",
     lt: { what: "Kepyklėlė kavinė", offer: "Nemokamai papildome filtruotos kavos puodelį perkant bet kokį kepinį", idea: "Ramiausia jų valanda, užpildyta." },
+    da: { offer: "Gratis genopfyldning af filterkaffe til ethvert stykke bagværk" },
+    de: { offer: "Filterkaffee kostenlos nachgeschenkt zu jedem Gebäck" },
   },
   {
     key: "fish", category: "restaurants", dealKind: "discounts", stay: 40, type: "food", name: "Rūkykla Marios", what: "Smokehouse kitchen", street: "Žvejų g.",
@@ -55,6 +59,8 @@ export const EXAMPLE_PARTNERS = [
     offer: { text: "Lunch of the day with a glass of kvass, €9", days: [1, 2, 3, 4, 5], from: "12:00", to: "15:00" },
     idea: "A fixed lunch price, the thing a passenger with three hours wants to know.",
     lt: { what: "Rūkykla ir virtuvė", offer: "Dienos pietūs su stikline giros, 9 €", idea: "Fiksuota pietų kaina: būtent tai, ką nori žinoti keleivis, turintis tris valandas." },
+    da: { offer: "Dagens frokost med et glas kvas, 9 €" },
+    de: { offer: "Mittagstisch mit einem Glas Kwass, 9 €" },
   },
   {
     key: "amber", category: "attractions", dealKind: "activities", stay: 25, type: "booking", name: "Gintaro dirbtuvė Lašas", what: "Amber workshop", street: "Kurpių g.",
@@ -63,6 +69,8 @@ export const EXAMPLE_PARTNERS = [
     offer: { text: "Polish a raw piece of Baltic amber yourself in 20 minutes and keep it, €6" },
     idea: "Something to do, not a discount: twenty minutes and a souvenir they made.",
     lt: { what: "Gintaro dirbtuvė", offer: "Per 20 minučių patys nušlifuokite žalio Baltijos gintaro gabalėlį ir pasilikite jį, 6 €", idea: "Užsiėmimas, o ne nuolaida: dvidešimt minučių ir pačių pagamintas suvenyras." },
+    da: { offer: "Slib selv et råt stykke baltisk rav på 20 minutter, og behold det, 6 €" },
+    de: { offer: "Schleifen Sie in 20 Minuten selbst ein Stück rohen Ostseebernstein und behalten Sie es, 6 €" },
   },
   {
     key: "tea", category: "restaurants", dealKind: "discounts", stay: 30, type: "food", name: "Arbatinė Debesis", what: "Tea room", street: "Tiltų g.",
@@ -71,6 +79,8 @@ export const EXAMPLE_PARTNERS = [
     offer: { text: "A pot of herbal tea for two at the price of one cup", days: [6, 0], from: "11:00", to: "14:00" },
     idea: "Weekend mornings, when the room is half empty.",
     lt: { what: "Arbatinė", offer: "Žolelių arbatos arbatinukas dviem už vieno puodelio kainą", idea: "Savaitgalio rytai, kai salė pustuštė." },
+    da: { offer: "En kande urtete til to til prisen for én kop" },
+    de: { offer: "Eine Kanne Kräutertee für zwei zum Preis einer Tasse" },
   },
   {
     key: "beer", category: "nightlife", dealKind: "entertainment", stay: 40, type: "food", name: "Alaus baras Inkaras", what: "Beer bar", street: "Daržų g.",
@@ -79,6 +89,8 @@ export const EXAMPLE_PARTNERS = [
     offer: { text: "Three Lithuanian beers, 0.1 l each, for the price of a large one", days: [1, 2, 3, 4, 5], from: "16:00", to: "19:00" },
     idea: "A tasting, so a visitor tries three local breweries instead of one.",
     lt: { what: "Alaus baras", offer: "Trys lietuviško alaus po 0,1 l už didelio bokalo kainą", idea: "Degustacija: lankytojas paragauja trijų vietinių bravorų, o ne vieno." },
+    da: { offer: "Tre litauiske øl à 0,1 l til prisen for en stor" },
+    de: { offer: "Drei litauische Biere zu je 0,1 l zum Preis eines großen" },
   },
   {
     key: "post", category: "attractions", dealKind: "activities", stay: 15, type: "free", name: "Atvirukų krautuvėlė", what: "Postcard shop", street: "Tomo g.",
@@ -87,6 +99,8 @@ export const EXAMPLE_PARTNERS = [
     offer: { text: "Write a postcard at our table and we post it for you, stamp included" },
     idea: "A service. The visitor leaves with nothing to carry and the post office found for them.",
     lt: { what: "Atvirukų parduotuvėlė", offer: "Parašykite atviruką prie mūsų stalo, o mes jį išsiųsime, pašto ženklas įskaičiuotas", idea: "Paslauga. Lankytojui nereikia nieko nešiotis ir ieškoti pašto." },
+    da: { offer: "Skriv et postkort ved vores bord, så sender vi det for dig, frimærke inkluderet" },
+    de: { offer: "Schreiben Sie an unserem Tisch eine Postkarte, wir schicken sie für Sie ab, Briefmarke inklusive" },
   },
   {
     key: "jazz", category: "nightlife", dealKind: "entertainment", stay: 60, type: "booking", name: "Rūsys", what: "Jazz cellar", street: "Sukilėlių g.",
@@ -95,6 +109,8 @@ export const EXAMPLE_PARTNERS = [
     offer: { text: "No cover charge before 21:00, live music from 20:00", days: [5, 6], from: "18:00", to: "21:00" },
     idea: "The early hour sold on the music, so the room is not empty when the band starts.",
     lt: { what: "Džiazo rūsys", offer: "Iki 21:00 įėjimas nemokamas, gyva muzika nuo 20:00", idea: "Ankstyva valanda patraukia muzika, tad salė nebūna tuščia, kai pradeda groti grupė." },
+    da: { offer: "Gratis entré før kl. 21.00, livemusik fra kl. 20.00" },
+    de: { offer: "Kein Eintritt vor 21:00, Livemusik ab 20:00" },
   },
   // These two never fit a short walk, so they are only in the list of offers.
   {
@@ -104,6 +120,8 @@ export const EXAMPLE_PARTNERS = [
     offer: { text: "Two hours with helmet and lock, €8. Hand the bike back at the cruise terminal" },
     idea: "Takes away the one worry: getting back to the ship on time.",
     lt: { what: "Dviračių nuoma", offer: "Dvi valandos su šalmu ir spyna, 8 €. Dviratį grąžinkite kruizinių laivų terminale", idea: "Nuima vienintelį rūpestį: laiku grįžti į laivą." },
+    da: { offer: "To timer med hjelm og lås, 8 €. Aflever cyklen ved krydstogtterminalen" },
+    de: { offer: "Zwei Stunden mit Helm und Schloss, 8 €. Rückgabe am Kreuzfahrtterminal" },
   },
   {
     key: "bags", category: "rentals", dealKind: "other", stay: 15, type: "free", name: "Bagažinė", what: "Luggage room", street: "Danės g.",
@@ -112,6 +130,8 @@ export const EXAMPLE_PARTNERS = [
     offer: { text: "Leave a bag while you walk, €3 a bag for the day" },
     idea: "For the people between a hotel and a late bus or ferry.",
     lt: { what: "Bagažo saugykla", offer: "Palikite krepšį, kol vaikštote, 3 € už krepšį visai dienai", idea: "Tiems, kurie laukia tarp viešbučio ir vėlyvo autobuso ar kelto." },
+    da: { offer: "Efterlad en taske, mens du går rundt, 3 € pr. taske for hele dagen" },
+    de: { offer: "Lassen Sie eine Tasche hier, während Sie unterwegs sind, 3 € pro Tasche für den Tag" },
   },
 ];
 
@@ -134,9 +154,16 @@ export const exampleRows = () => [
   ...REAL.map(p => ({ id: p.key, type: p.type, payload: { name: p.name, country: "LT", __lat: p.lat, __lon: p.lon, __stay: p.stay, tier: p.tier, ...(p.desc ? { desc: p.desc } : {}), ...(p.hours ? { __hours: { hours: p.hours } } : {}) } })),
   ...EXAMPLE_PARTNERS.filter(p => p.inWalks !== false).map(p => ({
     id: p.key, type: p.type,
-    payload: { name: p.name, country: "LT", __lat: p.lat, __lon: p.lon, __stay: p.stay, __hours: { hours: p.hours }, __offer: { ...p.offer, until: UNTIL } },
+    payload: { name: p.name, country: "LT", __lat: p.lat, __lon: p.lon, __stay: p.stay, __hours: { hours: p.hours }, __offer: exampleOffer(p) },
   })),
 ];
+
+// A partner's offer as a row holds it, with its translations (offer.js,
+// THE OFFER IN THE READER'S LANGUAGE).
+export const exampleOffer = (p) => ({
+  ...p.offer, until: UNTIL,
+  tr: { src: p.offer.text, ...(p.lt?.offer ? { lt: p.lt.offer } : {}), ...(p.da?.offer ? { da: p.da.offer } : {}), ...(p.de?.offer ? { de: p.de.offer } : {}) },
+});
 
 export const isExamplePartner = (id) => EXAMPLE_PARTNERS.some(p => id === `${p.type}:${p.key}`);
 

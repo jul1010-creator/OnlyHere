@@ -33,7 +33,7 @@ export const KLAIPEDA_EXAMPLES_PATH = "/lithuania/examples";
 // the ship.. so seperate it."
 export const KLAIPEDA_BUSINESS_PATH = "/lithuania/business";
 
-import { EXAMPLE_PARTNERS, exampleRows, isExamplePartner, UNTIL } from "./klaipedaExampleRows";
+import { EXAMPLE_PARTNERS, exampleRows, isExamplePartner, exampleOffer } from "./klaipedaExampleRows";
 export { EXAMPLE_PARTNERS, exampleRows, isExamplePartner };
 
 // ── FOUR MOMENTS ────────────────────────────────────────────────────
@@ -574,7 +574,7 @@ export const EXAMPLE_PAGES = {
 
   "food:fish": page({
     kind: "food",
-    row: { id: "x-fish", name: "Rūkykla Marios", location: "Žvejų g., Klaipėda", category: "Smokehouse", price: "Lunch €9", emoji: "🐟", __lat: 55.70890, __lon: 21.13120, mapHint: "Žvejų g., Klaipėda", __offer: { ...EXAMPLE_PARTNERS.find(p => p.key === "fish").offer, until: UNTIL } },
+    row: { id: "x-fish", name: "Rūkykla Marios", location: "Žvejų g., Klaipėda", category: "Smokehouse", price: "Lunch €9", emoji: "🐟", __lat: 55.70890, __lon: 21.13120, mapHint: "Žvejų g., Klaipėda", __offer: exampleOffer(EXAMPLE_PARTNERS.find(p => p.key === "fish")) },
     en: {
       ...fromGuide("fish", "en"),
       tip: "Ask what came in that morning.",
@@ -882,7 +882,7 @@ EXAMPLE_PARTNERS.forEach(p => {
   const { kind, desc, tip, ...rest } = PARTNER_PAGE[p.key];
   EXAMPLE_PAGES[id] = page({
     kind,
-    row: { id: `x-${p.key}`, name: p.name, location: `${p.street}, Klaipėda`, town: "Klaipėda", __lat: p.lat, __lon: p.lon, mapHint: `${p.street}, Klaipėda`, __offer: { ...p.offer, until: UNTIL }, ...rest },
+    row: { id: `x-${p.key}`, name: p.name, location: `${p.street}, Klaipėda`, town: "Klaipėda", __lat: p.lat, __lon: p.lon, mapHint: `${p.street}, Klaipėda`, __offer: exampleOffer(p), ...rest },
     en: { desc, ...(tip ? { tip } : {}), body: [["h", "Being There"], ["p", `${p.what} on ${p.street}${p.street.endsWith(".") ? "" : "."} Made up for this page, like its offer.`]] },
   });
 });
