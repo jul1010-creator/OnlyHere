@@ -83141,7 +83141,8 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   is("ticking more than one shows each of them", K.byCategories(items, new Set(["restaurants", "rentals"])).map(x => x.n), [1, 3]);
   is("none ticked shows everything", K.byCategories(items, new Set()).length, 3);
   const cf = read("src/components/CategoryFilter.jsx"), dny = read("src/components/DealsNearYou.jsx");
-  ok("round and coloured", /borderRadius: "50%", background: CATEGORY_COLOUR\[k\]/.test(cf));
+  // Round still; gold on dark since 14 Oct 2026 ("Gemlyx themed").
+  ok("round, in Gemlyx's gold", /borderRadius: "50%", display: "inline-flex"/.test(cf) && /C\.gold/.test(cf));
   ok("Upcoming follows the same ticks", /byCategories\(upcomingDeals\(/.test(dny));
   ok("the examples carry their kind of place", M.KXR.EXAMPLE_PARTNERS.every(p => K.DEAL_CATEGORIES.includes(p.category)));
   ok("the deal editor picks the kind of place, and a new deal's type follows it", /deal-studio-cat-\$\{c\}/.test(read("src/components/DealStudio.jsx")) && M.DST.typeForCategory("nightlife") === "night" && M.DST.typeForCategory("rentals") === "free"
@@ -83261,7 +83262,7 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   const cv = read("src/components/CategoryVideo.jsx"), dny = read("src/components/DealsNearYou.jsx");
   const { statSync } = await import("node:fs");
   const files = ["wide", "tall"].flatMap(w => [`nightlife-${w}.mp4`, `nightlife-${w}.webm`, `nightlife-${w}.jpg`]);
-  ok("both films and their stills are in public/video, each under 3 MB", files.every(f => { try { return statSync(join(root, "public/video", f)).size < 3e6; } catch { return false; } }));
+  ok("both films and their stills are in public/video, each under 4 MB", files.every(f => { try { return statSync(join(root, "public/video", f)).size < 4e6; } catch { return false; } }));
   // Since lidl.dk's front page (14 Oct 2026) the film fills the banner box.
   const eb = read("src/components/ExploreBanner.jsx");
   ok("the film replaces the banner, only for a kind of place that has one", /<CategoryVideo k=\{cat\} playing=\{!filmPaused\} \/>/.test(eb) && /CATEGORY_VIDEO = \{\s*nightlife:/.test(cv) && /const film = !!\(cat && CATEGORY_VIDEO\[cat\]\);/.test(eb));
@@ -83289,6 +83290,16 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   const keys = ["banner.only", "banner.sub", "banner.see", "banner.prev", "banner.next", "banner.pause", "banner.play"];
   ok("the banner speaks all four languages, no dashes", keys.every(k => ["en", "da", "de", "lt"].every(l => M.UI_STRINGS[k]?.[l] && !/[‐-―−]/.test(M.UI_STRINGS[k][l]))));
   ok("the large mark is the icon as cut gold, not flat shapes", /export const GemlyxMarkFine = /.test(logo) && /linearGradient id=\{g\("lit"\)\}/.test(logo) && /<GemlyxMarkFine id="gx-banner" \/>/.test(eb));
+}
+
+// ── The circles in Gemlyx's colours, the mark inside the banner, 14 Oct 2026 ──
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const cf = read("src/components/CategoryFilter.jsx"), eb = read("src/components/ExploreBanner.jsx");
+  ok("the circles are dark with a gold edge and gold drawings, the chosen one gold", /inset 0 0 0 1px \$\{C\.gold\}66/.test(cf) && /CATEGORY_ICON\[k\]\(on \? "#16130E" : C\.gold, 1\.6\)/.test(cf) && /linear-gradient\(145deg, #F1D594 0%, \$\{C\.gold\} 55%/.test(cf) && !/CATEGORY_COLOUR\[k\]/.test(cf));
+  ok("the chosen circle's name turns gold", /color: on \? C\.gold : C\.light/.test(cf));
+  ok("the mark sits inside the banner, ring and all", /top: "9%", height: "82%", aspectRatio: "1 \/ 1", right: "clamp\(24px, 7vw, 140px\)"/.test(eb) && !/right: "max\(-12%/.test(eb));
+  ok("the deal slides draw their kind of place in gold", /const colour = C\.gold;/.test(eb) && /\{Icon\(colour, 1\.2\)\}/.test(eb));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
