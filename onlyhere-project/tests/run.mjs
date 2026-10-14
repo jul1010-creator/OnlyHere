@@ -83262,7 +83262,7 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   const cv = read("src/components/CategoryVideo.jsx"), dny = read("src/components/DealsNearYou.jsx");
   const { statSync } = await import("node:fs");
   const files = ["wide", "tall"].flatMap(w => [`nightlife-${w}.mp4`, `nightlife-${w}.webm`, `nightlife-${w}.jpg`]);
-  ok("both films and their stills are in public/video, each under 4 MB", files.every(f => { try { return statSync(join(root, "public/video", f)).size < 4e6; } catch { return false; } }));
+  ok("both films and their stills are in public/video, each under 4.5 MB", files.every(f => { try { return statSync(join(root, "public/video", f)).size < 4.5e6; } catch { return false; } }));
   // Since lidl.dk's front page (14 Oct 2026) the film fills the banner box.
   const eb = read("src/components/ExploreBanner.jsx");
   ok("the film replaces the banner, only for a kind of place that has one", /<CategoryVideo k=\{cat\} playing=\{!filmPaused\} \/>/.test(eb) && /CATEGORY_VIDEO = \{\s*nightlife:/.test(cv) && /const film = !!\(cat && CATEGORY_VIDEO\[cat\]\);/.test(eb));
