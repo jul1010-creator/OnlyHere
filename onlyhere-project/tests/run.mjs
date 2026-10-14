@@ -33674,7 +33674,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     "/auth/v1/token?grant_type=password",
     // 6 Oct 2026: Log out tells Supabase to end the session (security review,
     // finding 4). It carries the session's own token, not the anon key alone.
-    "/auth/v1/logout?scope=local",
+    "/auth/v1/logout?scope=global",
     // 7 Oct 2026: suggestions and workshop requests go through
     // /api/send-form, counted per network (security review), so they are
     // off this list.
@@ -82261,6 +82261,18 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   try { await SF.safeFetch("http://shop.example.com/start", {}, { lookup: lookupBy, send }); } catch (e) { refused = `${e.name} ${e.message}`; }
   ok("a redirect into the private network is refused before it is fetched", /RefusedAddress/.test(refused) && hops.length === 1);
   const okRes = await SF.safeFetch("http://shop.example.com/page", {}, { lookup: lookupBy, send });
+  // Security review, 13 Oct 2026: transition ranges, a total time limit, and
+  // no key carried to another host.
+  ok("IPv6 ranges that carry an IPv4 address are refused", ["2002:7f00:1::1", "2001:0:4136:e378:8000:63bf:3fff:fdd2", "64:ff9b:1::7f00:1", "::ffff:0:7f00:1", "::ffff:0:10.0.0.1"].every(a => !SF.isPublicAddress(a)) && SF.isPublicAddress("::ffff:0:808:808") && pub.every(SF.isPublicAddress));
+  // A socket that never ends keeps the process alive; the timer stands in for it.
+  const slow = (url, a, f, { signal }) => new Promise((res, rej) => { const keep = setTimeout(() => {}, 2000); signal?.addEventListener("abort", () => { clearTimeout(keep); rej(Object.assign(new Error("aborted"), { name: "AbortError" })); }, { once: true }); });
+  let cut = "";
+  try { await SF.safeFetch("http://shop.example.com/page", {}, { lookup: lookupBy, send: slow, totalMs: 50 }); } catch (e) { cut = e.name; }
+  ok("a read that never finishes is cut at the total limit", cut === "AbortError");
+  const seen = [];
+  const sendX = async (url, a, f, { headers }) => { seen.push({ host: url.host, headers: { ...headers } }); return url.pathname === "/go" ? { status: 302, location: "http://other.example.org/y", headers: {} } : { status: 200, headers: {}, buf: Buffer.from("ok") }; };
+  await SF.safeFetch("http://shop.example.com/go", { headers: { Authorization: "Bearer k", "User-Agent": "Gemlyx" } }, { lookup: lookupTo("93.184.216.34"), send: sendX });
+  ok("a redirect to another host gets no key", seen[0].headers.Authorization === "Bearer k" && !("Authorization" in seen[1].headers) && seen[1].headers["User-Agent"] === "Gemlyx");
   ok("and a public page answers in fetch's own shape", okRes.ok && okRes.status === 200 && (await okRes.text()) === "fine" && okRes.headers.get("Content-Type") === "text/plain");
   const read = (f) => readFileSync(join(root, f), "utf8");
   ok("every Studio page reader fetches through it", /pageFetch: safeFetch/.test(read("api/scan-source.js")) && /await safeFetch\(url, \{ headers/.test(read("api/find-email.js")) && /await safeFetch\(url, \{\s*signal: ctrl\.signal/.test(read("api/social-find.js")) && /await safeFetch\(url\.toString\(\)/.test(read("api/calendar.js")) && /\}, \{ httpsOnly: true \}\);/.test(read("api/calendar.js")) && /await safeFetch\(raw, \{/.test(read("api/link-alive.js")));
@@ -82276,7 +82288,7 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
 
   // The Lows.
   ok("finding 3: the inbox SQL asks is_founder(), never an email", /using \(public\.is_founder\(\)\)/.test(M.INBOX_SETUP_SQL) && !/'email'/.test(M.INBOX_SETUP_SQL));
-  ok("finding 4: Log out ends the session on Supabase too", /\/auth\/v1\/logout\?scope=local/.test(read("src/App.jsx")));
+  ok("finding 4: Log out ends the session on Supabase too", /\/auth\/v1\/logout\?scope=global/.test(read("src/App.jsx")));
   ok("finding 5: the founder's account cannot be deleted from the reader's button", /founderIds\(process\.env\.GEMLYX_FOUNDER_IDS\)\.includes\(String\(who\.userId\)\.toLowerCase\(\)\) \|\| who\.userId === FOUNDER_FALLBACK_ID/.test(read("api/delete-account.js")));
   ok("finding 6: the three missing founder routes are on the list, and the two tools carry the token", ["places", "link-alive", "calendar"].every(e => M.STUDIO_ONLY_ENDPOINTS.includes(e)) && /await studioFetch\(`\/api\/link-alive\?url=/.test(read("src/App.jsx")) && /\(studioFetch \|\| fetch\)\(`\/api\/places-locate/.test(read("src/components/CheapGemsPanel.jsx")) && /studioFetch=\{studioFetch\} \/>/.test(read("src/App.jsx")));
   ok("finding 7: scan-source answers 200 and puts the site's status in the body", /return res\.status\(200\)\.json\(\{\s*siteStatus: Number\(r\.status\) \|\| 0,/.test(read("api/scan-source.js")) && !/res\.status\(httpStatus\)/.test(read("api/scan-source.js")));
@@ -82563,7 +82575,7 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("fix 27: the founder's email is not written into entries", !/by: studioSession\?\.email/.test(app) && /by: "founder",/.test(app));
   ok("fix 28: only a plain address becomes a reply link", /PLAIN_ADDRESS\.test\(String\(row\.email\)\) \? `mailto:/.test(read("src/components/StudioReports.jsx")));
   const lo = app.slice(app.indexOf("const studioLogout = async () => {"), app.indexOf("const studioLogout = async () => {") + 900);
-  ok("fix 29: Log out renews a lapsed token before it ends the session", lo.indexOf("tokenExpiresAt(token)") > 0 && lo.indexOf("tokenExpiresAt(token)") < lo.indexOf("/auth/v1/logout?scope=local"));
+  ok("fix 29: Log out renews a lapsed token before it ends the session", lo.indexOf("tokenExpiresAt(token)") > 0 && lo.indexOf("tokenExpiresAt(token)") < lo.indexOf("/auth/v1/logout?scope=global"));
   ok("fix 30: the old events secret is gone from the notes", /`UPDATE_EVENTS_SECRET` with this value: `<redacted>`/.test(read("CHANGES_THIS_PASS.md")));
 }
 
@@ -82718,10 +82730,14 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   process.env.SUPABASE_SERVICE_ROLE_KEY = "svc-key-for-tests";
   delete process.env.PARTNER_LINK_SECRET;
   const sent = [];
+  let partnersAnswer = { ok: true, status: 200, rows: [{ id: "food:7" }] };
+  let rpcAnswer = "ok";
+  R.resetPartnersCache();
   globalThis.fetch = async (url, init = {}) => {
     sent.push({ url: String(url), body: init.body ? JSON.parse(init.body) : null });
-    if (String(url).includes("/rpc/gemlyx_take_guide")) return { ok: true, json: async () => "ok" };
+    if (String(url).includes("/rpc/gemlyx_take_guide")) return { ok: true, json: async () => rpcAnswer };
     if (String(url).includes("/auth/v1/user")) return { ok: true, json: async () => ({ id: "467fb712-e3e9-4d43-b1b8-e4e1bb32b76d", email_confirmed_at: "x" }) };
+    if (String(url).includes("/rest/v1/gemlyx_partners")) return init.method === "POST" ? { ok: partnersAnswer.ok, status: partnersAnswer.ok ? 201 : partnersAnswer.status, json: async () => null } : { ok: partnersAnswer.ok, status: partnersAnswer.status, json: async () => partnersAnswer.rows };
     return { ok: true, json: async () => [{ day: "2026-10-11", key: "st:w:food:7", n: 5 }, { day: "2026-10-11", key: "st:r:food:7", n: 2 }, { day: "2026-10-11", key: "st:rh:food:7:13", n: 2 }] };
   };
   const site = { origin: "https://www.gemlyxtravel.com" };
@@ -82737,14 +82753,48 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
     const link = L.makePartnerToken({ id: "food:7", name: "Devi Indian" }, L.partnerSecret(process.env));
     const g = await run({ method: "GET", headers: { referer: "https://www.gemlyxtravel.com/lithuania/partner" }, query: { k: link } });
     ok("the partner page gets its own numbers", g.code === 200 && g.out.name === "Devi Indian" && g.out.totals.walks === 5 && g.out.totals.reached === 2 && g.out.busiest.hour === 13);
-    const q = sent[sent.length - 1].url;
-    ok("read only for its own keys and the last 30 days", /gemlyx_guide_allowance\?select=day,key,n&day=gte\.\d{4}-\d{2}-\d{2}&key=in\./.test(q) && decodeURIComponent(q).includes('"st:w:food:7"') && !decodeURIComponent(q).includes("food:8"));
+    const q = sent[sent.length - 1];
+    ok("read only for its own place and the last 30 days, through the narrow function", q.url.endsWith("/rest/v1/rpc/gemlyx_partner_stats") && q.body.p_id === "food:7" && /^\d{4}-\d{2}-\d{2}$/.test(q.body.p_from));
     is("a bad link reads nothing", (await run({ method: "GET", headers: site, query: { k: "nope.nope" } })).code, 404);
     process.env.GEMLYX_FOUNDER_IDS = "";
     const mk = await run({ method: "POST", headers: { ...site, authorization: "Bearer t" }, body: { make: { id: "food:7", name: "Devi Indian" } } });
     ok("Studio makes a link that reads back", mk.code === 200 && /^\/lithuania\/partner\?k=/.test(mk.out.path) && L.readPartnerToken(decodeURIComponent(mk.out.path.split("k=")[1]), L.partnerSecret(process.env))?.id === "food:7");
     is("and nobody else can", (await run({ method: "POST", headers: site, body: { make: { id: "food:7", name: "x" } } })).code, 401);
     ok("the days-back helper counts back across a month", R.daysBack("2026-10-12", 29) === "2026-09-13");
+    // Security review, 13 Oct 2026: only places with a partner link are counted.
+    sent.length = 0;
+    const nobody = await run({ method: "POST", headers: site, body: { e: "walk", c: "LT", ids: ["food:8", "zz:invented"] } });
+    ok("a place with no partner link writes no row", nobody.code === 200 && nobody.out.ok === false && !sent.some(x => x.url.includes("/rpc/")));
+    sent.length = 0;
+    await run({ method: "POST", headers: site, body: { e: "walk", c: "LT", ids: ["food:7", "food:8"], deals: ["food:7", "food:8"] } });
+    const only = sent.find(x => x.url.includes("/rpc/gemlyx_take_guide"));
+    ok("a walk with a partner and a stranger counts only the partner", only && only.body.p_keys.includes("st:w:food:7") && !only.body.p_keys.some(k => k.includes("food:8")));
+    ok("one network adds a bounded number of walks to one place, and a /48 is one network too", only.body.p_keys.some((k, i) => /^pst:v:[0-9a-f]+:w:food:7$/.test(k) && only.body.p_limits[i] === R.PER_PLACE_WALKS) && only.body.p_keys.some(k => k.startsWith("pst:v48:")));
+    sent.length = 0;
+    await run({ method: "POST", headers: site, body: { e: "reach", c: "LT", id: "food:7" } });
+    const rr = sent.find(x => x.url.includes("/rpc/gemlyx_take_guide"));
+    ok("and a bounded number of visits", rr && rr.body.p_keys.some((k, i) => /^pst:v:[0-9a-f]+:r:food:7$/.test(k) && rr.body.p_limits[i] === R.PER_PLACE_REACH));
+    is("a country name from the object prototype is refused", (await run({ method: "POST", headers: site, body: { e: "reach", c: "constructor", id: "food:7" } })).code, 400);
+    process.env.GEMLYX_PARTNER_PER_SITE = "0";
+    sent.length = 0;
+    const off = await run({ method: "POST", headers: site, body: { e: "reach", c: "LT", id: "food:7" } });
+    ok("GEMLYX_PARTNER_PER_SITE=0 switches counting off", off.code === 200 && off.out.ok === false && !sent.some(x => x.url.includes("/rpc/")));
+    delete process.env.GEMLYX_PARTNER_PER_SITE;
+    is("a link for a place not on the partner list reads nothing", (await run({ method: "GET", headers: site, query: { k: L.makePartnerToken({ id: "food:8", name: "x" }, L.partnerSecret(process.env)) } })).code, 404);
+    partnersAnswer = { ok: false, status: 404, rows: null };
+    R.resetPartnersCache();
+    is("before the partner SQL has run, the page says not available", (await run({ method: "GET", headers: site, query: { k: link } })).code, 503);
+    const noTable = await run({ method: "POST", headers: site, body: { e: "reach", c: "LT", id: "food:7" } });
+    ok("and nothing is counted", noTable.code === 200 && noTable.out.ok === false);
+    const mk404 = await run({ method: "POST", headers: { ...site, authorization: "Bearer t" }, body: { make: { id: "food:7", name: "x" } } });
+    ok("and Studio is told the table is missing", mk404.code === 503 && /gemlyx_partners/.test(mk404.out.error));
+    partnersAnswer = { ok: true, status: 200, rows: [{ id: "food:7" }] };
+    R.resetPartnersCache();
+    const realUser = globalThis.fetch;
+    globalThis.fetch = async (u, init) => String(u).includes("/auth/v1/user") ? { ok: true, status: 200, json: async () => ({ id: "someone-else" }) } : realUser(u, init);
+    is("a signed-in member who is not the founder cannot make a link", (await run({ method: "POST", headers: { ...site, authorization: "Bearer t" }, body: { make: { id: "food:7", name: "x" } } })).code, 403);
+    globalThis.fetch = realUser;
+    ok("a link secret set too short is refused, never replaced", L.partnerSecret({ PARTNER_LINK_SECRET: "short", SUPABASE_SERVICE_ROLE_KEY: "svc" }) === "");
   } finally {
     globalThis.fetch = realFetch;
     for (const k of Object.keys(process.env)) if (!(k in saved)) delete process.env[k];
@@ -82755,9 +82805,9 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   const np = read("src/components/NowPlanner.jsx"), wm = read("src/components/WalkMode.jsx"), app = read("src/App.jsx");
   ok("the QR walk counts the walk it shows and the places reached", /walkSeen\(walk, country\);/.test(np) && /onReach=\{\(s\) => placeReached\(s, country\)\}/.test(np) && /onReach=\{onReach\}/.test(np));
   ok("Studio's tests and the examples page count nothing", !/walkSeen|placeReached|onReach/.test(read("src/components/RandomWalkTest.jsx") + read("src/pages/KlaipedaExamples.jsx")));
-  ok("a place is reached on arrival, or on moving on without GPS", /reach\(target\); \}\s*\}, \[g\?\.here, idx\]\);/.test(wm) && /const moveOn = \(\) => \{ if \(!back && \(gpsOff \|\| !pos\)\) reach\(target\); setIdx\(i => i \+ 1\); \};/.test(wm) && (wm.match(/onClick=\{moveOn\}/g) || []).length === 2);
+  ok("a place is reached on arrival, or on moving on without GPS", /reach\(target\); \}\s*\}, \[g\?\.here, idx\]\);/.test(wm) && /const moveOn = \(\) => \{ if \(!back && gpsOff\) reach\(target\); setIdx\(i => i \+ 1\); \};/.test(wm) && (wm.match(/onClick=\{moveOn\}/g) || []).length === 2);
   ok("the partner page has its route, kept out of search", /<Route path=\{KLAIPEDA_PARTNER_PATH\} element=\{<KlaipedaPartner \/>\} \/>/.test(app) && /keepOutOfSearch\(T\.title\)/.test(read("src/pages/KlaipedaPartner.jsx")));
-  ok("Studio's offer editor makes the link for the open place", /data-testid="studio-partner-link"/.test(app) && /make: \{ id: `\$\{studioType\}:\$\{forId\}`/.test(app));
+  ok("Studio's offer editor makes the link for the open place", /data-testid="studio-partner-link"/.test(app) && /make: \{ id: `\$\{editingType \|\| studioType\}:\$\{forId\}`/.test(app));
   ok("the link code stays on the server", !/partnerLink\.js|node:crypto/.test(read("src/pages/KlaipedaPartner.jsx") + np + wm) && !/from "\.\/utils\/partnerLink"/.test(app));
   const biz = read("src/pages/KlaipedaBusiness.jsx");
   ok("the business page promises what is counted, in both languages", /visitors walked to you/.test(biz) && /lankytojų atėjo pas jus/.test(biz) && !/was opened|buvo atidaryta/.test(biz));
@@ -83108,9 +83158,40 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("tapping the one shown again shows them all, another swaps in place", /if \(k === cat\) \{ leaveCat\(\); return; \}/.test(dny) && /window\.history\.replaceState\(/.test(dny));
   ok("going in and out fades", /opacity: fade \? 0 : 1, transition: `opacity \$\{FADE_MS\}ms ease`/.test(dny) && /setFade\(true\);\s*setTimeout\(\(\) => \{\s*setCat\(k\);/.test(dny));
   ok("the phone's Back comes out of a kind of place", /window\.history\.pushState\(\{ \.\.\.\(window\.history\.state \|\| \{\}\), gxCat: k \}, ""\)/.test(dny) && /window\.addEventListener\("popstate", onPop\)/.test(dny) && /window\.history\.back\(\)/.test(dny));
-  ok("the mark turns behind Explore, stands still for less motion, takes no taps", /<SpinningMark \/>/.test(ex) && /opacity = 0\.55/.test(sm) && /strokeWidth="0\.32"/.test(sm) && !/GemlyxMark/.test(sm) && /animation: gx-spin \$\{SPIN_SECONDS\}s linear infinite/.test(sm) && /prefers-reduced-motion: reduce\) \{ \.gx-spin \{ animation: none; \}/.test(sm) && /pointerEvents: "none"/.test(sm) && /zIndex: 1/.test(ex));
+  ok("the mark turns behind Explore, stands still for less motion, takes no taps", /<SpinningMark \/>/.test(ex) && /opacity = 0\.42/.test(sm) && /<GemlyxMark size="100%" ringColor=\{C\.text\} ringWidth=\{1\.2\} rimWidth=\{1\.2\}/.test(sm) && /animation: gx-spin \$\{SPIN_SECONDS\}s linear infinite/.test(sm) && /prefers-reduced-motion: reduce\) \{ \.gx-spin \{ animation: none; \}/.test(sm) && /pointerEvents: "none"/.test(sm) && /zIndex: 1/.test(ex));
   ok("upcoming tiles dim without letting the mark through", /filter: upcoming \? "brightness\(0\.62\) saturate\(0\.6\)" : "none"/.test(read("src/components/DealCard.jsx")));
   ok("the words read in all four languages", ["explore.noneCat"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
+}
+
+// ── Security review, 13 Oct 2026: Studio and founder routes ──
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const { STUDIO_ONLY_ENDPOINTS: ONLY } = await import(pathToFileURL(join(root, "src/utils/apiGuard.js")).href);
+  // The bare-fetch check covers all of src/, not App.jsx alone. geo.js reaches
+  // /api/places through installApiAuth (src/utils/apiAuth.js TOKEN_PATHS), which
+  // adds the Studio token, so it is the one file allowed a plain fetch.
+  const walkSrc = (d) => readdirSync(join(root, d), { withFileTypes: true }).flatMap(e => e.isDirectory() ? walkSrc(`${d}/${e.name}`) : /\.(jsx?|mjs)$/.test(e.name) ? [`${d}/${e.name}`] : []);
+  const bare = [];
+  for (const f of walkSrc("src")) {
+    const s = read(f);
+    for (const n of ONLY) if (new RegExp("(?<![\\w.])fetch\\(`/api/" + n + "(?![\\w-])").test(s) && !(f === "src/utils/geo.js" && n === "places")) bare.push(`${f} ${n}`);
+  }
+  is("no file in src/ calls a founder route with a plain fetch", bare, []);
+  ok("geo.js's /api/places call is carried by the token hook", /export const TOKEN_PATHS = .*\|places\)/.test(read("src/utils/apiAuth.js")) && /fetch\(`\/api\/places\?/.test(read("src/utils/geo.js")));
+  // Each founder route is called by name, not matched on a longer name's prefix.
+  const app = read("src/App.jsx");
+  const called = ONLY.filter(n => n !== "places").filter(n => !new RegExp("studioFetch\\(`/api/" + n + "(?![\\w-])").test(app));
+  is("every founder route but places is called through studioFetch by its exact name", called, []);
+  // The new ceilings are taken before the outside call.
+  const before = (f, gate, call) => { const s = read(f); return s.indexOf(gate) > 0 && s.indexOf(gate) < s.indexOf(call); };
+  ok("tickets, Commons and the page readers take a founder count first",
+     before("api/tickets.js", 'gateFounder({ route: "tickets"', "await fetch(`${HOST}") &&
+     before("api/commons-photo.js", 'gateFounder({ route: "commons-photo"', "resolveTitle(localWiki") &&
+     before("api/find-email.js", 'gateFounder({ route: "pagereads"', "findContactEmails(url, fetchHtml)") &&
+     before("api/calendar.js", 'gateFounder({ route: "pagereads"', "await safeFetch(url.toString()"));
+  ok("places-hours checks its input before the paid count", before("api/places-hours.js", "hasPoint", 'gateFounder({ route: "places-hours"') && /slice\(0, 200\)/.test(read("api/places-hours.js")));
+  ok("Studio Log out ends every session of the account", /\/auth\/v1\/logout\?scope=global/.test(app) && !/\/auth\/v1\/logout\?scope=local/.test(app));
+  ok("a partner link names the open row's own type", /const \[editingType, setEditingType\] = useState\(null\);/.test(app) && /setEditingType\(row\.type \|\| null\);/.test(app));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
