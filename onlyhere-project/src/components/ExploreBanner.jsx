@@ -22,7 +22,6 @@ import { t as uiT } from "../utils/uiLanguage";
 import { GemlyxMarkFine } from "./GemlyxLogo";
 import { CategoryVideo, CATEGORY_VIDEO } from "./CategoryVideo";
 import { CATEGORY_ICON } from "./CategoryFilter";
-import { CATEGORY_COLOUR } from "../utils/dealCategories";
 
 export const SLIDE_SECONDS = 7;
 export const MAX_DEAL_SLIDES = 3;
@@ -34,7 +33,7 @@ const CSS = `
 @media (max-width: 719px) {
   .gx-banner { height: min(112vw, 470px); }
   .gx-banner-text { align-items: flex-end !important; padding-bottom: 72px; }
-  .gx-brand-mark { top: 6% !important; right: -14% !important; width: 74% !important; transform: none !important; }
+  .gx-brand-mark { top: 6% !important; height: 42% !important; right: auto !important; left: 50% !important; transform: translateX(-50%) !important; }
   .gx-deal-icon { top: 8% !important; right: 6% !important; height: 30% !important; transform: none !important; opacity: 0.14 !important; }
 }
 @keyframes gx-banner-spin { to { transform: rotate(360deg); } }
@@ -53,7 +52,9 @@ const roundBtn = () => ({
 // Gemlyx's own slide: the headline on the left, the mark turning on the right.
 const BrandSlide = ({ lang }) => (
   <div style={{ position: "absolute", inset: 0, background: `radial-gradient(120% 140% at 85% 40%, #2A2216 0%, #16130E 45%, ${C.bg} 100%)` }}>
-    <div aria-hidden="true" className="gx-brand-mark" style={{ position: "absolute", top: "50%", right: "max(-12%, -80px)", width: "min(78vh, 60%)", aspectRatio: "1 / 1", transform: "translateY(-50%)", opacity: 0.9 }}>
+    {/* Inside the banner, ring and all (14 Oct 2026: "that circle should be
+        inside the banner"). */}
+    <div aria-hidden="true" className="gx-brand-mark" style={{ position: "absolute", top: "9%", height: "82%", aspectRatio: "1 / 1", right: "clamp(24px, 7vw, 140px)", opacity: 0.95 }}>
       <div className="gx-banner-spin" style={{ width: "100%", height: "100%" }}>
         <GemlyxMarkFine id="gx-banner" />
       </div>
@@ -71,10 +72,10 @@ const BrandSlide = ({ lang }) => (
 );
 
 // A deal that is on now. Its photo when it has one; otherwise its kind of
-// place in its colour, drawn large and quiet on the right.
+// place drawn large and quiet on the right, in gold like the circles.
 const DealSlide = ({ s, lang, onOpen }) => {
   const photo = safePhoto(s.photo);
-  const colour = CATEGORY_COLOUR[s.cat] || C.gold;
+  const colour = C.gold;
   const Icon = CATEGORY_ICON[s.cat];
   return (
     <div style={{ position: "absolute", inset: 0, background: photo ? "#0B0A08" : `radial-gradient(120% 140% at 85% 45%, ${colour}38 0%, #15130F 50%, ${C.bg} 100%)` }}>
@@ -84,8 +85,8 @@ const DealSlide = ({ s, lang, onOpen }) => {
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(90deg, rgba(0,0,0,0.72) 0%, rgba(0,0,0,0.35) 55%, rgba(0,0,0,0.1) 100%)" }} />
         </>
       ) : Icon && (
-        <svg aria-hidden="true" className="gx-deal-icon" viewBox="0 0 24 24" style={{ position: "absolute", top: "50%", right: "6%", height: "62%", transform: "translateY(-50%)", opacity: 0.18 }}>
-          <g style={{ stroke: colour }}>{Icon()}</g>
+        <svg aria-hidden="true" className="gx-deal-icon" viewBox="0 0 24 24" style={{ position: "absolute", top: "50%", right: "6%", height: "62%", transform: "translateY(-50%)", opacity: 0.3 }}>
+          {Icon(colour, 1.2)}
         </svg>
       )}
       <div className="gx-banner-text" style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center" }}>
