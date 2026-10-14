@@ -23,7 +23,7 @@ export const PARTNER_TEXT = {
     bad: "This link does not work. Ask Gemlyx for a new one.",
     error: "The numbers could not be loaded just now. Try again in a moment.",
     keep: "Keep this link to yourself: anyone who has it can see these numbers.",
-    foot: "A walk counts when a visitor is shown it with your place in it. A visit counts when their phone says they reached you, or, without GPS, when they move on from your place. An opened offer counts when a visitor taps Redeem offer to show it at your counter. Counts are kept for 30 days.",
+    foot: "A walk counts when a visitor is shown it with your place in it. A visit counts when their phone says they reached you, or, without GPS, when they move on from your place. An opened offer counts when a visitor taps Redeem offer to show it at your counter. The counts are approximate: they are not checked against a booking or a payment, and a day is a Copenhagen day. Counts are kept for 30 days.",
   },
   lt: {
     title: "Jūsų vieta Gemlyx · Gemlyx",
@@ -37,7 +37,7 @@ export const PARTNER_TEXT = {
     bad: "Ši nuoroda neveikia. Paprašykite Gemlyx naujos.",
     error: "Šiuo metu skaičių įkelti nepavyko. Pabandykite po akimirkos.",
     keep: "Šią nuorodą laikykite sau: kas ją turi, gali matyti šiuos skaičius.",
-    foot: "Maršrutas skaičiuojamas, kai jis su jūsų vieta parodomas lankytojui. Apsilankymas skaičiuojamas, kai lankytojo telefonas rodo, kad jis pasiekė jūsų vietą, arba, be GPS, kai jis eina toliau. Atidarytas pasiūlymas skaičiuojamas, kai lankytojas paspaudžia „Pasinaudoti pasiūlymu“, kad parodytų jį prie jūsų kasos. Skaičiai saugomi 30 dienų.",
+    foot: "Maršrutas skaičiuojamas, kai jis su jūsų vieta parodomas lankytojui. Apsilankymas skaičiuojamas, kai lankytojo telefonas rodo, kad jis pasiekė jūsų vietą, arba, be GPS, kai jis eina toliau. Atidarytas pasiūlymas skaičiuojamas, kai lankytojas paspaudžia „Pasinaudoti pasiūlymu“, kad parodytų jį prie jūsų kasos. Skaičiai apytiksliai: jie netikrinami pagal užsakymą ar mokėjimą, o diena skaičiuojama Kopenhagos laiku. Skaičiai saugomi 30 dienų.",
   },
 };
 
