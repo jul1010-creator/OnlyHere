@@ -117,7 +117,7 @@ writeFileSync(entry, `
   export { literalRenderings, literalNote, looksLikeAName, FALSE_FRIENDS, FALSE_FRIEND_RULE, NAME_RULE } from ${JSON.stringify(join(root, "src/utils/literalDanish.js"))};
   export { licenseUrl, creditIsRequired } from ${JSON.stringify(join(root, "src/utils/imageCredits.js"))};
   export { STUDIO_VOICE } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
-  export { cleanOffer, offerProblems, offerLive, offerView, offerTiming, offerWindow, offerHoursLabel, cleanClock, placeClock, OFFER_WEEK, hasPaidPlan, OFFER_TEXT_MAX, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE, offerLockedNote } from ${JSON.stringify(join(root, "src/utils/offer.js"))};
+  export { offerTextIn, OFFER_LANGS, cleanOffer, offerProblems, offerLive, offerView, offerTiming, offerWindow, offerHoursLabel, cleanClock, placeClock, OFFER_WEEK, hasPaidPlan, OFFER_TEXT_MAX, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE, offerLockedNote } from ${JSON.stringify(join(root, "src/utils/offer.js"))};
   export { AI_DISCLOSURE, aiDisclosure, aiDisclosureFor, disclosureLanguage, AI_CHAT_SURFACES, AI_IMAGE_NOTE, aiImageNote, inReaderLanguage } from ${JSON.stringify(join(root, "src/utils/aiDisclosure.js"))};
   export { splitReport, sortReports, filterReports, reportAge, isHandled, unhandledCount, INBOX_SETUP_SQL, FILTERS as INBOX_FILTERS, topicLabel as inboxTopicLabel, reportCountry } from ${JSON.stringify(join(root, "src/utils/supportInbox.js"))};
   export { SUPPORT_TOPICS, REPORT_TOPIC, topicIds, topicLabel, isTopic, GOOD_FAITH_STATEMENT, messagePrompt, MESSAGE_MIN, MESSAGE_MAX, NAME_MAX, looksLikeEmail, looksLikeUrl, supportProblems, problemFor, supportReference, supportPayload, supportMailto, supportReceipt, SUPPORT_TABLE, SUPPORT_SETUP_SQL, SUPPORT_EMAIL, PRIVACY_EMAIL } from ${JSON.stringify(join(root, "src/utils/support.js"))};
@@ -44185,11 +44185,12 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // the assertion passed on the survivors. Pinned to the answer that carries
     // the claim, by its own sentence, and counted so a quiet deletion shows.
     ok("but the honest description of the process stays",
-       /Every listing is researched and checked by one person before it goes live, and nothing here is invented/.test(appV));
+       // In uiLanguage.js since the FAQ was translated, 14 Oct 2026.
+       /Every listing is researched and checked by one person before it goes live, and nothing here is invented/.test(M.UI_STRINGS["faq.verified.a"].en) && /\["free", "save", "listed", "verified"\]\.map\(k => \(\{ q: uiT\(`faq\.\$\{k\}\.q`, uiLang\), a: uiT\(`faq\.\$\{k\}\.a`, uiLang\) \}\)\)/.test(appV));
     ok("and it admits the older entries show fewer sources",
-       /Older entries were written before we started storing sources/.test(appV));
+       /Older entries were written before we started storing sources/.test(M.UI_STRINGS["faq.verified.a"].en));
     is("every place that describes the process still does",
-       (appV.match(/hand-researched and checked against multiple sources/g) || []).length, 4);
+       ((appV + readFileSync(join(root, "src/utils/uiLanguage.js"), "utf8")).match(/hand-researched and checked against multiple sources/g) || []).length, 4);
     // And the real version of the claim is per entry and checkable, which is why
     // the badge going costs nothing: HowWeKnow prints that entry's own sources,
     // its corrections and its open questions.
@@ -48539,9 +48540,11 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // What it says instead has to do the one job the old string did not: stop a
   // reader reading a failed request as a claim about the weather. The same
   // rule ReviewsSection already keeps about a failed reviews read.
-  ok("a failed forecast read says the load failed", /could not be loaded just now/.test(ws));
-  ok("and refuses to be read as a quiet spell", /not a quiet spell/.test(ws));
-  ok("and points somewhere real", /DMI or Yr/.test(ws));
+  // The sentence is in uiLanguage.js since 14 Oct 2026, in four languages.
+  const wsSays = M.UI_STRINGS["weather.failed"].en;
+  ok("a failed forecast read says the load failed", /could not be loaded just now/.test(wsSays) && /uiT\("weather\.failed", lang\)/.test(ws));
+  ok("and refuses to be read as a quiet spell", /not a quiet spell/.test(wsSays));
+  ok("and points somewhere real", /\{src\}/.test(wsSays) && /SERVICE\[activeCountry\(\)\] \|\| "DMI"\} \$\{uiT\("weather\.or", lang\)\} Yr/.test(ws));
 }
 
 // ── AND NO DASH IN ANYTHING A TRAVELLER READS ──────────────────────
@@ -63561,7 +63564,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("and one banner covers every tab at once",
      /const renderTab = \(tab\) => \(\s*<>[\s\S]{0,900}\{libraryFailed && \(/.test(appS));
   ok("which says the places may be missing rather than absent",
-     /It is not that they are not published/.test(appS));
+     /It is not that they are not published/.test(M.UI_STRINGS["load.failedBody"].en) && /uiT\("load\.failedBody", uiLang\)/.test(appS));
 
   // ── 3. TWO SAVE SYSTEMS, ONE OF THEM UNREACHABLE ────────────────
   //
@@ -81070,10 +81073,10 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const card = M.promoCard(M.livePromotions(pools, tue1330)[0], { paid: true, today: tue1330 });
   ok("and the card carries the badge", card.timing === "now" && card.hours === "On now until 16:00");
   const appH = readFileSync(join(root, "src/App.jsx"), "utf8");
-  ok("the Studio picks the days and the hours and publishes them", /OFFER_WEEK\.map\(d => \{/.test(appH) && /setStudioOfferFrom\(e\.target\.value\)/.test(appH) && /setStudioOfferTo\(e\.target\.value\)/.test(appH) && /const offerFromFields = cleanOffer\(studioOfferFields\);/.test(appH));
+  ok("the Studio picks the days and the hours and publishes them", /OFFER_WEEK\.map\(d => \{/.test(appH) && /setStudioOfferFrom\(e\.target\.value\)/.test(appH) && /setStudioOfferTo\(e\.target\.value\)/.test(appH) && /const offerFromFields = cleanOffer\(\{ \.\.\.studioOfferFields, tr: shaped\.__offer\?\.tr \}\);/.test(appH));
   ok("and opening a published row brings its hours back", /setStudioOfferDays\(Array\.isArray\(row\.payload\?\.__offer\?\.days\)/.test(appH) && /setStudioOfferFrom\(row\.payload\?\.__offer\?\.from \|\| ""\);/.test(appH));
   const dpH = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
-  ok("the entry page reads the place's clock", /offerView\(item\.__offer, \{ paid, zone: countryProfile\(rowCountry\(item\)\)\.zone \}\)/.test(dpH) && /data-testid="offer-hours"/.test(dpH));
+  ok("the entry page reads the place's clock", /offerView\(item\.__offer, \{ paid, zone: countryProfile\(rowCountry\(item\)\)\.zone, lang \}\)/.test(dpH) && /data-testid="offer-hours"/.test(dpH));
   ok("and so does the Special deals page", /promoCard\(p, \{ paid, today, lang \}\)/.test(readFileSync(join(root, "src/components/PromotionsPage.jsx"), "utf8")));
 }
 
@@ -82861,7 +82864,7 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("a Static Maps picture first, in the guide's style, never saved into the site", /maps\/api\/staticmap\?center=/.test(cm) && /&map_id=\$\{encodeURIComponent\(GOOGLE_MAP_ID\)\}/.test(cm) && /&scale=2/.test(cm) && /\{near && !live && \(/.test(cm));
   ok("and the live map only when Google refuses, asked once a visit", /onError=\{\(\) => \{ staticRefused = true; setLive\(true\); \}\}/.test(cm) && /useState\(staticRefused\)/.test(cm) && /if \(!ok \|\| !near \|\| !live \|\| made\.current/.test(cm));
   ok("no key, no map, rather than a worse one", /googleMapsReady\(\)/.test(cm) && /if \(!ok\) return null;/.test(cm));
-  ok("every deal with a place gets one, and tapping it walks there", /<DealCornerMap fill ratio=\{ratio\} radius=\{radius\} lat=\{at\.lat\} lon=\{at\.lon\} name=\{name\}/.test(read("src/components/DealCard.jsx")) && /onOpen=\{\(\) => setOpened\(key\)\}/.test(dny) && /onTap=\{\(\) => setAbove\(true\)\}/.test(read("src/components/DealDetail.jsx")));
+  ok("every deal with a place gets one, and tapping it walks there", /<DealCornerMap fill ratio=\{ratio\} radius=\{radius\} lat=\{at\.lat\} lon=\{at\.lon\} name=\{name\}/.test(read("src/components/DealCard.jsx")) && /onOpen=\{\(\) => \{ pushSheet\(1\); setOpened\(key\); \}\}/.test(dny) && /onTap=\{\(\) => setAbove\(true\)\}/.test(read("src/components/DealDetail.jsx")));
 }
 
 // ── Batch 235: Explore is the deals on the Lithuanian site, and the Danish
@@ -82948,7 +82951,7 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("then turns slowly round it until touched, and not at all for less motion", /heading: \(end\.heading \+ \(ms \/ 1000\) \* TURN_DEG_PER_S\) % 360/.test(pv) && /\["pointerdown", "wheel", "touchstart"\]\.forEach\(e => el\.addEventListener\(e, stop/.test(pv) && /if \(reducedMotion\(\)\) \{ put\(end\); return; \}/.test(pv));
   ok("the walk map's own pointer on the building", /pin\.innerHTML = placePinHtml\(\{ sign, photo, color: pinColor \}\);/.test(pv) && /new AdvancedMarkerElement\(/.test(pv));
   ok("made only when the corner map is tapped, one at a time", /const key = x\.id \|\| x\.d\.name;/.test(dny) && /\{above \? \(\s*<DealPlaceView/.test(read("src/components/DealDetail.jsx")) && /const \[above, setAbove\] = useState\(false\);/.test(read("src/components/DealDetail.jsx")));
-  ok("Show directions under it walks there from where the phone is", /onDirections=\{\(\) => \{ setOpened\(null\); go\(x\); \}\}/.test(dny) && /onDirections=\{onDirections\}/.test(read("src/components/DealDetail.jsx")) && /data-testid="place-view-directions"/.test(pv) && /locate\(\(at\) => setGoing\(/.test(dny));
+  ok("Show directions under it walks there from where the phone is", /onDirections=\{\(\) => \{ dropSheets\(\); setOpened\(null\); go\(x\); \}\}/.test(dny) && /onDirections=\{onDirections\}/.test(read("src/components/DealDetail.jsx")) && /data-testid="place-view-directions"/.test(pv) && /locate\(\(at\) => setGoing\(/.test(dny));
   ok("the words read in all four languages", ["explore.directions", "explore.closeMap", "explore.mapFailed"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
 }
 
@@ -82989,7 +82992,7 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   const dny = read("src/components/DealsNearYou.jsx");
   ok("'On now' is gone from the deals", !/trips\.onNow/.test(dny) && !/x\.card\.hours/.test(dny));
   ok("Redeem offer in place of Walk there, on an offer that is on", !/deal-near-go/.test(dny) && !/trips\.go/.test(dny) && /onRedeem=\{!isSoon && offer \? \(\) => openRedeem\(x, when\) : null\}/.test(dny) && /data-testid="deal-near-redeem"/.test(read("src/components/DealDetail.jsx")) && /uiT\("offer\.redeem", lang\)/.test(dny));
-  ok("it opens the counter screen, with the walk under it", /<RedeemSheet name=\{redeem\.x\.d\.name\}/.test(dny) && /setRedeem\(null\); go\(x\);/.test(dny));
+  ok("it opens the counter screen, with the walk under it", /<RedeemSheet name=\{redeem\.x\.d\.name\}/.test(dny) && /dropSheets\(\); setRedeem\(null\); setOpened\(null\); go\(x\);/.test(dny));
   const rs = read("src/components/RedeemSheet.jsx");
   ok("the counter screen carries Gemlyx, the offer, when, and a running clock", /<GemlyxMark/.test(rs) && /<GemlyxWordmark/.test(rs) && /data-testid="redeem-offer"/.test(rs) && /data-testid="redeem-clock"/.test(rs) && /setInterval\(\(\) => setNow\(clockNow\(zone\)\), 1000\)/.test(rs));
   ok("opening it is counted for the partner", /dealRedeemOpened\(x\.id, country\)/.test(dny) && S.eventKeys({ e: "redeem", id: "food:7" }, 12).join() === "st:x:food:7" && S.eventKeys({ e: "redeem", id: "bad id" }, 12).length === 0);
@@ -83049,7 +83052,7 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("and only true means ongoing", !("ongoing" in M.cleanOffer({ text: "x", until: "2099-01-01", ongoing: "yes" })));
   is("Tuesday night, Friday candy starts Friday", D.nextStart(candy, tue2130), { inDays: 3, day: 5, from: "15:00", at: 3 * 1440 + 900 });
   is("Friday morning it starts today", D.nextStart(candy, fri1000)?.inDays, 0);
-  ok("on now is not upcoming", !D.upcomingDeals([{ name: "Candy", country: "LT", __offer: candy }], null, { now: fri1600 }).length && D.nextStart(candy, fri1600)?.inDays === 7);
+  ok("on now is not upcoming", !D.upcomingDeals([{ name: "Candy", country: "LT", __offer: candy }], null, { now: fri1600 }).length && D.nextStart(candy, fri1600) === null);
   ok("all day every day is never upcoming", D.nextStart({ text: "x", ongoing: true }, tue2130) === null);
   ok("a dated offer past its last day does not come round again", D.nextStart({ text: "x", until: "2026-10-14", days: [5], from: "15:00", to: "18:00" }, tue2130) === null && D.nextStart({ text: "x", until: "2026-10-16", days: [5], from: "15:00", to: "18:00" }, tue2130)?.inDays === 3);
   is("said in words", [D.startsWords({ inDays: 0, day: 2, from: "16:00" }), D.startsWords({ inDays: 1, day: 3, from: "14:00" }), D.startsWords({ inDays: 3, day: 5, from: "15:00" }), D.startsWords({ inDays: 3, day: 5, from: "" })], ["Offer starts at 16:00", "Offer starts tomorrow at 14:00", "Offer starts Friday at 15:00", "Offer starts Friday"]);
@@ -83106,7 +83109,7 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("the picture is the photo, else the map, else the sign", /if \(src\) return <img/.test(card) && /if \(at && googleMapsReady\(\)\) return <DealCornerMap fill/.test(card) && /deal-picture-blank/.test(card));
   ok("a photo is a web address or one deployed with the site", card.includes("export const safePhoto") && /\/\^https:/.test(card));
   ok("the badge sits in the picture's corner, the name over its foot", /data-testid="deal-tile-badge" style=\{\{ position: "absolute", top: 8, left: 8/.test(card) && /linear-gradient\(to top, rgba\(10,10,12,0\.88\)/.test(card));
-  ok("tapping a tile opens the whole deal, where Redeem is", /<DealDetail name=\{x\.d\.name\}/.test(dny) && /onOpen=\{\(\) => setOpened\(`soon:\$\{x\.id \|\| x\.d\.name\}`\)\}/.test(dny));
+  ok("tapping a tile opens the whole deal, where Redeem is", /<DealDetail name=\{x\.d\.name\}/.test(dny) && /onOpen=\{\(\) => \{ pushSheet\(1\); setOpened\(`soon:\$\{x\.id \|\| x\.d\.name\}`\); \}\}/.test(dny));
   const tue2130 = new Date("2026-10-13T18:30:00Z");
   is("live badges", [D.liveBadge({ to: "18:00" }, { kind: "ends", left: 20 }), D.liveBadge({ to: "18:00" }, { kind: "expires" }), D.liveBadge({ until: "2026-12-31" }, { kind: "until" }), D.liveBadge({}, { kind: "ongoing", text: "Fridays" })], ["Ends in 20 min", "Until 18:00", "Until 31 Dec", "Fridays"]);
   is("upcoming badges", [D.upcomingBadge({ inDays: 0, day: 2, from: "16:00" }), D.upcomingBadge({ inDays: 1, day: 3, from: "14:00" }), D.upcomingBadge({ inDays: 3, day: 5, from: "18:00" }), D.upcomingBadge({ inDays: 3, day: 5, from: "" })], ["From 16:00", "Tomorrow 14:00", "From Friday 18:00", "From Friday"]);
@@ -83192,6 +83195,64 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("places-hours checks its input before the paid count", before("api/places-hours.js", "hasPoint", 'gateFounder({ route: "places-hours"') && /slice\(0, 200\)/.test(read("api/places-hours.js")));
   ok("Studio Log out ends every session of the account", /\/auth\/v1\/logout\?scope=global/.test(app) && !/\/auth\/v1\/logout\?scope=local/.test(app));
   ok("a partner link names the open row's own type", /const \[editingType, setEditingType\] = useState\(null\);/.test(app) && /setEditingType\(row\.type \|\| null\);/.test(app));
+}
+
+// ── Fable's review of the deals work, 14 Oct 2026 ──
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const dny = read("src/components/DealsNearYou.jsx"), D = M.DNY;
+  ok("1: the walk opens on the body, not inside the swiping pager", /going && walkStart && typeof document !== "undefined" && createPortal\(\s*<WalkMode/.test(dny));
+  ok("2: Show directions from Redeem closes the deal sheet too", /dropSheets\(\); setRedeem\(null\); setOpened\(null\); go\(x\);/.test(dny));
+  const ps = read("api/partner-stats.js");
+  ok("3: each kind of event has its own per-place budget", /reach: \["r", PER_PLACE_REACH\], redeem: \["x", PER_PLACE_REDEEM\], deals: \["d", PER_PLACE_WALKS\]/.test(ps) && /export const PER_PLACE_REDEEM = 8;/.test(ps));
+  ok("4: the kind of place shown is seeded from the phone's history", /useState\(\(\) => \{ try \{ const k = window\.history\.state\?\.gxCat; return DEAL_CATEGORIES\.includes\(k\) \? k : null;/.test(dny) && /if \(k !== catRef\.current\) showCat\(k\);/.test(dny));
+  ok("5: Back closes Redeem, then the deal, before it leaves Explore", /const openRedeem = \(x, when\) => \{\s*pushSheet\(2\);/.test(dny) && /if \(level < 2\) setRedeem\(null\);\s*if \(level < 1\) setOpened\(null\);/.test(dny) && /onClose=\{\(\) => closeSheet\(\(\) => setOpened\(null\)\)\}/.test(dny) && /onClose=\{\(\) => closeSheet\(\(\) => setRedeem\(null\)\)\}/.test(dny));
+  const candy = { text: "Friday candy", ongoing: true, days: [5], from: "15:00", to: "18:00" };
+  ok("6: a weekly offer over for today is not 'From Friday' on a Friday", D.nextStart(candy, new Date("2026-10-16T16:00:00Z")) === null && D.nextStart(candy, new Date("2026-10-17T09:00:00Z"))?.inDays === 6);
+  // 00:30 on 15 Oct in Klaipėda is still 14 Oct in New York.
+  const late = new Date("2026-10-14T21:30:00Z");
+  ok("7: an offer's last day is read on the place's calendar", !M.offerLive({ text: "x", until: "2026-10-14" }, late, "Europe/Vilnius") && M.offerLive({ text: "x", until: "2026-10-15" }, late, "Europe/Vilnius"));
+  ok("8: the deal sheet's map leaves the photo out of its pin", !/<DealCornerMap fill ratio="16 \/ 9" radius=\{16\} lat=\{at\.lat\} lon=\{at\.lon\} name=\{name\} sign=\{sign\} photo=/.test(read("src/components/DealDetail.jsx")));
+}
+
+// ── Languages, 14 Oct 2026: "some things are stuck in English" ──
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const S = M.DST, D = M.DNY;
+  const o = { text: "Free refill", ongoing: true, tr: { src: "Free refill", lt: "Nemokamas papildymas", da: "Gratis påfyldning", de: "Gratis Nachschenken", xx: "no" } };
+  ok("an offer keeps its translations while they are of its text", M.cleanOffer(o).tr?.lt === "Nemokamas papildymas" && !("xx" in M.cleanOffer(o).tr));
+  ok("and reads in the reader's language, English as written", M.offerTextIn(o, "lt") === "Nemokamas papildymas" && M.offerTextIn(o, "de") === "Gratis Nachschenken" && M.offerTextIn(o, "en") === "Free refill");
+  const changed = { ...o, text: "Free refill with any pastry" };
+  ok("a changed offer drops last week's translations", !M.cleanOffer(changed).tr && M.offerTextIn(changed, "lt") === "Free refill with any pastry");
+  ok("a language with no translation falls back to the text", M.offerTextIn({ text: "A", until: "2027-01-01", tr: { src: "A", lt: "B" } }, "da") === "A");
+  ok("offerView gives the text in the reader's language", M.offerView(o, { paid: true, lang: "da" }).text === "Gratis påfyldning" && M.offerView(o, { paid: true }).text === "Free refill");
+  // The examples, in all four languages.
+  const pools = M.KEX.examplePromotionPools();
+  const all = Object.values(pools).flat();
+  ok("every example offer reads in Lithuanian, Danish and German", all.length >= 9 && all.every(r => ["lt", "da", "de"].every(l => M.offerTextIn(r.__offer, l) && M.offerTextIn(r.__offer, l) !== r.__offer.text)));
+  ok("the example walk rows carry them too", M.KXR.exampleRows().filter(r => r.payload.__offer).every(r => M.offerTextIn(r.payload.__offer, "lt") !== r.payload.__offer.text));
+  ok("no example translation has a dash", !all.some(r => /[‐-―−]|\s-\s/.test(JSON.stringify(r.__offer.tr))));
+  ok("the tiles, the sheet, Redeem and the walk read the offer in the reader's language", (read("src/components/DealsNearYou.jsx").match(/offerTextIn\((x|redeem\.x)\.d\.__offer, lang\)/g) || []).length >= 6 && !/__offer\?\.text \|\| ""\)\.trim\(\)/.test(read("src/components/DealsNearYou.jsx").replace(/const words = .*$/m, "")));
+  ok("a deal page's offer box reads in the reader's language", /offerView\(item\.__offer, \{ paid, zone: countryProfile\(rowCountry\(item\)\)\.zone, lang \}\)/.test(read("src/components/DetailPage.jsx")));
+  // The Studio.
+  const f = { ...S.emptyDeal(), name: "Bakery", lat: 55.7087, lon: 21.1339, text: "Free refill", ongoing: true, lt: "Nemokamas papildymas", da: "Gratis påfyldning", de: "", trFor: "Free refill" };
+  ok("the Studio saves the translations with the offer", S.payloadFromDeal(f).__offer.tr?.da === "Gratis påfyldning" && S.translationsCurrent(f));
+  ok("and reads them back into its boxes", (() => { const g = S.dealFromRow({ id: 1, type: "food", payload: S.payloadFromDeal(f) }); return g.lt === "Nemokamas papildymas" && g.trFor === "Free refill"; })());
+  ok("translations of an older text are not current and not saved", !S.translationsCurrent({ ...f, text: "Two for one" }) && !S.payloadFromDeal({ ...f, text: "Two for one" }).__offer.tr);
+  ok("the translate reply is read, dashes taken out", (() => { const r = S.readOfferTranslation('Here: {"lt": "Du už vieno kainą", "da": "To for én – i dag", "de": "Zwei zum Preis von einem"}'); return r?.lt === "Du už vieno kainą" && r.da === "To for én, i dag" && r.de; })() && S.readOfferTranslation("no json") === null);
+  ok("the prompt avoids the words localisePrompt swaps", !/Danish|Denmark|Danmark|\bDanes?\b/.test(S.offerTranslatePrompt("Free refill")));
+  const ds = read("src/components/DealStudio.jsx"), app = read("src/App.jsx");
+  ok("the Studio has the three boxes and a Translate button", /data-testid=\{`deal-studio-tr-\$\{l\}`\}/.test(ds) && /data-testid="deal-studio-translate"/.test(ds) && /translate=\{translateDealOffer\}/.test(app));
+  ok("saving writes missing translations first", /translate && \(!current \|\| missing\) \? await runTranslate\(f, current\) : f;/.test(ds));
+  ok("the full Studio keeps a row's translations through an edit", /cleanOffer\(\{ \.\.\.studioOfferFields, tr: shaped\.__offer\?\.tr \}\)/.test(app));
+  // The page's own words.
+  const keys = ["load.failedTitle", "load.failedBody", "ess.title", "ess.lead", "tips.lead", "ess.toEss", "ess.toTips", "ess.toEssDk", "ess.toTipsDk", "ess.mistakes", "ess.weather", "faq.free.q", "faq.free.a", "faq.save.q", "faq.save.a", "faq.listed.q", "faq.listed.a", "faq.verified.q", "faq.verified.a", "faq.cities.q", "faq.citiesAbroad.a", "faq.citiesDk.a", "faq.help", "weather.loading", "weather.loadingForecast", "weather.windHumidity", "weather.failed", "weather.or"];
+  ok("the new words exist in all four languages, without dashes", keys.every(k => ["en", "da", "de", "lt"].every(l => M.UI_STRINGS[k]?.[l] && !/[‐-―−]/.test(M.UI_STRINGS[k][l]))));
+  ok("the Lithuanian ones differ from the English", keys.filter(k => !/weather\.or/.test(k)).every(k => M.UI_STRINGS[k].lt !== M.UI_STRINGS[k].en));
+  ok("the page no longer prints them in English", !/We could not load the latest content|"✓ Travel Essentials"|"Is Gemlyx free\?"|>Still need help\?<|The 3 mistakes to avoid<|label: "Weather"/.test(app));
+  const ws = read("src/components/WeatherStrip.jsx");
+  ok("a Lithuanian badge date has no dash", (() => { const t = D.liveBadge({ text: "x", until: "2027-12-31" }, { kind: "until" }, "lt"); return /gruodžio 31/.test(t) && !/-/.test(t); })());
+  ok("the weather box speaks the reader's language and names meteo.lt in Lithuania", !/Loading forecast\.\.\.<|check DMI or Yr|>Wind \{/.test(ws) && /SERVICE = \{ LT: "meteo\.lt" \}/.test(ws) && /lang=\{uiLang\}/.test(app));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
