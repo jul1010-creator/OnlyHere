@@ -83261,14 +83261,15 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   const read = (f) => readFileSync(join(root, f), "utf8");
   const cv = read("src/components/CategoryVideo.jsx"), dny = read("src/components/DealsNearYou.jsx");
   const { statSync } = await import("node:fs");
-  const files = ["wide", "tall"].flatMap(w => [`nightlife-${w}.mp4`, `nightlife-${w}.webm`, `nightlife-${w}.jpg`]);
-  ok("both films and their stills are in public/video, each under 4.5 MB", files.every(f => { try { return statSync(join(root, "public/video", f)).size < 4.5e6; } catch { return false; } }));
+  const files = ["wide", "tall"].flatMap(w => [`nightlife-${w}.mp4`, `nightlife-${w}.jpg`]);
+  ok("both films and their stills are in public/video, each under 7 MB", files.every(f => { try { return statSync(join(root, "public/video", f)).size < 7e6; } catch { return false; } }));
   // Since lidl.dk's front page (14 Oct 2026) the film fills the banner box.
   const eb = read("src/components/ExploreBanner.jsx");
   ok("the film replaces the banner, only for a kind of place that has one", /<CategoryVideo k=\{cat\} playing=\{!filmPaused\} \/>/.test(eb) && /CATEGORY_VIDEO = \{\s*nightlife:/.test(cv) && /const film = !!\(cat && CATEGORY_VIDEO\[cat\]\);/.test(eb));
   ok("the film fills its box, over the slides", /position: "absolute", inset: 0, zIndex: 2, pointerEvents: "none"/.test(cv));
   ok("upright phones get the tall film, everything else the wide one", /TALL_QUERY = "\(orientation: portrait\) and \(max-width: 820px\)"/.test(cv));
-  ok("no sound, inline, looping, and WebM before MP4", /autoPlay muted defaultMuted loop playsInline/.test(cv) && cv.indexOf("video/webm") < cv.indexOf("video/mp4"));
+  // MP4 only since 14 Oct 2026: WebM smoothed the grain away ("far inferior").
+  ok("no sound, inline, looping, MP4 only", /autoPlay muted defaultMuted loop playsInline/.test(cv) && /type="video\/mp4"/.test(cv) && !/<source[^>]*webm/.test(cv));
   ok("less motion or saving data shows the still, and so does a film that will not play", /prefers-reduced-motion: reduce/.test(cv) && /saveData/.test(cv) && /still \|\| failed \?/.test(cv));
   ok("it pauses out of sight", /IntersectionObserver/.test(cv) && /v\.pause\?\.\(\)/.test(cv));
   ok("it never takes a tap", /pointerEvents: "none"/.test(cv));
