@@ -95,12 +95,41 @@ export const cleanOffer = (raw) => {
   if (!text && !until && !ongoing) return null;
   const days = cleanDays(raw.days);
   const from = clean(raw.from), to = clean(raw.to);
+  const tr = cleanOfferTr(raw.tr, text);
   return {
     text, until,
     ...(ongoing ? { ongoing: true } : {}),
     ...(days.length ? { days } : {}),
     ...(from || to ? { from: cleanClock(from) || from, to: cleanClock(to) || to } : {}),
+    ...(tr ? { tr } : {}),
   };
+};
+
+// ── THE OFFER IN THE READER'S LANGUAGE ──────────────────────────────
+//
+// Oliver, 14 Oct 2026: "Also look into languages.. some things are stuck in
+// English." The offer was the biggest of them: a Lithuanian reader saw "Free
+// refill of filter coffee" on a Klaipėda bakery's tile.
+//
+// So an offer may carry its own translations, `tr`, written in the Studio:
+// { src: the text they were made from, lt, da, de }. They are kept only while
+// `src` is still the offer's text. When the owner changes the offer, the old
+// translations stop being shown on their own, because a translation of last
+// week's offer is a promise the counter no longer makes. The English text is
+// then shown until the new ones are written.
+export const OFFER_LANGS = ["lt", "da", "de"];
+const cleanOfferTr = (raw, text) => {
+  if (!raw || typeof raw !== "object" || !text) return null;
+  if (clean(raw.src).slice(0, OFFER_TEXT_MAX) !== text) return null;
+  const out = { src: text };
+  OFFER_LANGS.forEach(l => { const t = clean(raw[l]).slice(0, OFFER_TEXT_MAX); if (t) out[l] = t; });
+  return Object.keys(out).length > 1 ? out : null;
+};
+// The offer's text as `lang` reads it, or the text as written.
+export const offerTextIn = (offer, lang = "en") => {
+  const o = cleanOffer(offer);
+  if (!o) return "";
+  return (lang !== "en" && o.tr?.[lang]) || o.text;
 };
 
 // ── OFFER HOURS ─────────────────────────────────────────────────────
@@ -224,13 +253,13 @@ export const offerHoursLabel = (offer, { timing = "", lang = "en" } = {}) => {
 //
 // `timing` and `window` ride along for the hours (see OFFER HOURS): the badge
 // says "On now until 16:00" or when it runs, and the lock rule is untouched.
-export const offerView = (offer, { paid = false, today = new Date(), zone = "" } = {}) => {
+export const offerView = (offer, { paid = false, today = new Date(), zone = "", lang = "en" } = {}) => {
   if (!offerLive(offer, today, zone)) return { show: false, locked: false, text: "", until: "", timing: "ended", window: null };
   const o = cleanOffer(offer);
   const timing = offerTiming(o, { now: today, zone });
   const win = offerWindow(o);
   if (!paid) return { show: true, locked: true, text: "", until: o.until, timing, window: win };
-  return { show: true, locked: false, text: o.text, until: o.until, timing, window: win };
+  return { show: true, locked: false, text: (lang !== "en" && o.tr?.[lang]) || o.text, until: o.until, timing, window: win };
 };
 
 // What the locked state says. Names the thing and the condition, and promises

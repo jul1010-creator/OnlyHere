@@ -63,7 +63,7 @@ export const livePromotions = (pools = {}, today = new Date()) => {
 // What one card says, through offerView so the locked rule is the entry
 // page's rule and not a second copy of it.
 export const promoCard = (promo, { paid = false, today = new Date(), lang = "en" } = {}) => {
-  const view = offerView(promo?.__offer, { paid, today, zone: zoneOf(promo) });
+  const view = offerView(promo?.__offer, { paid, today, zone: zoneOf(promo), lang });
   return {
     kind: PROMO_KINDS[promo?._src] || "",
     where: promo?._where || "",

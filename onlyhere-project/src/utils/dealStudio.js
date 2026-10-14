@@ -17,7 +17,7 @@
 // which is how one is got ready before that moment.
 //
 // This file is the rules, with no React, so the tests read them directly.
-import { cleanOffer, offerProblems } from "./offer";
+import { cleanOffer, offerProblems, OFFER_TEXT_MAX } from "./offer";
 import { cleanClock, OFFER_WEEK } from "./offerClock";
 import { bookingProblem, cleanBooking } from "./dealExtras";
 import { inNowArea } from "./nowPlanner";
@@ -49,18 +49,21 @@ export const emptyDeal = () => ({
   name: "", street: "", lat: "", lon: "", sign: "",
   text: "", days: [], from: "", to: "", until: "", ongoing: false,
   dealKind: "", booking: "", pin: "", photo: "", category: "restaurants",
+  lt: "", da: "", de: "", trFor: "",
 });
 
 // The form, from a row of gemlyx_content.
 export const dealFromRow = (row) => {
   const p = row?.payload || {};
   const o = p.__offer || {};
+  const tr = cleanOffer(o)?.tr || null;
   return {
     id: row?.id ?? null, type: TYPES.includes(row?.type) ? row.type : "food", published: !!row?.published,
     name: String(p.name || ""), street: String(p.location || ""),
     lat: p.__lat ?? p.lat ?? "", lon: p.__lon ?? p.lon ?? "", sign: String(p.emoji || ""),
     text: String(o.text || ""), days: Array.isArray(o.days) ? o.days : [], from: String(o.from || ""), to: String(o.to || ""), until: String(o.until || ""), ongoing: o.ongoing === true,
     dealKind: DEAL_FILTERS.includes(p.__dealKind) ? p.__dealKind : "", booking: String(p.__booking || ""), pin: pinColour(p.__pin), photo: String(p.photo || ""), category: dealCategory({ ...p, type: row?.type }),
+    lt: tr?.lt || "", da: tr?.da || "", de: tr?.de || "", trFor: tr ? tr.src : "",
   };
 };
 
@@ -84,7 +87,45 @@ export const dealProblems = (f) => {
   return out;
 };
 
-export const offerOf = (f) => cleanOffer({ text: f?.text, until: f?.until, days: f?.days, from: f?.from, to: f?.to, ongoing: f?.ongoing === true });
+export const offerOf = (f) => cleanOffer({
+  text: f?.text, until: f?.until, days: f?.days, from: f?.from, to: f?.to, ongoing: f?.ongoing === true,
+  tr: { src: f?.trFor || "", lt: f?.lt, da: f?.da, de: f?.de },
+});
+
+// ── THE OFFER IN LITHUANIAN, DANISH AND GERMAN ──────────────────────
+// Oliver, 14 Oct 2026: "some things are stuck in English." The offer is the
+// one line on a tile a visitor has to understand, so the Studio writes it in
+// the three other languages of the site when the deal is saved, and shows the
+// three boxes so a wrong word can be put right by hand.
+//
+// `trFor` is the English text the translations were written for. Changing the
+// offer leaves them standing in the boxes but no longer current, and the next
+// save writes them again (offer.js keeps only translations of the text as it
+// is now).
+export const OFFER_LANG_NAMES = { lt: "Lietuvių", da: "Dansk", de: "Deutsch" };
+const squash = (v) => String(v ?? "").replace(/\s+/g, " ").trim();
+export const translationsCurrent = (f) => !!squash(f?.text) && squash(f?.trFor) === squash(f?.text) && ["lt", "da", "de"].some(l => squash(f?.[l]));
+// The words "Danish" and "Denmark" are left out of the prompt on purpose:
+// aiClient's localisePrompt swaps them for the country the Studio is working on.
+export const offerTranslatePrompt = (text) => `Translate one short offer from a small business in Klaipėda, Lithuania. Visitors read it on a phone, on a tile with the place's photo.
+
+The offer: "${squash(text)}"
+
+Write it in lt (Lietuvių), da (Dansk) and de (Deutsch). Keep every price, number, clock time and name exactly as written. Plain and short, the way the person at the counter would say it. No dashes of any kind. Keep each one under ${OFFER_TEXT_MAX} characters.
+
+Reply with only this JSON and nothing else: {"lt": "", "da": "", "de": ""}`;
+// The reply, read. Null when it is not the JSON asked for.
+export const readOfferTranslation = (raw) => {
+  const t = String(raw || "");
+  const a = t.indexOf("{"), b = t.lastIndexOf("}");
+  if (a < 0 || b <= a) return null;
+  let j;
+  try { j = JSON.parse(t.slice(a, b + 1)); } catch { return null; }
+  if (!j || typeof j !== "object") return null;
+  const out = {};
+  ["lt", "da", "de"].forEach(l => { const v = squash(typeof j[l] === "string" ? j[l] : "").replace(/\s*[\u2010-\u2015\u2212]\s*/g, ", ").slice(0, OFFER_TEXT_MAX); if (v) out[l] = v; });
+  return Object.keys(out).length ? out : null;
+};
 
 // The row's payload, from the form. Kept on top of what the row already holds,
 // so a place first written in the full Studio keeps its description, photo and
