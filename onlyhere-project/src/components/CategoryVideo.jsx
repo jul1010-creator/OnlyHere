@@ -31,8 +31,33 @@ export const CATEGORY_VIDEO = {
   },
 };
 
-// Upright and narrow gets the tall film.
-export const TALL_QUERY = "(orientation: portrait) and (max-width: 820px)";
+// The tall film where the banner is nearer square than wide: a phone held
+// upright. Below 720px the banner takes its phone shape (ExploreBanner.jsx),
+// at most 470px tall, so it stays nearer square until about 588px. Until
+// 15 Oct 2026 the rule was "portrait and at most 820px", which gave an iPad
+// held upright the tall film in a banner 2.6 times as wide as it is tall.
+export const TALL_QUERY = "(max-width: 587px)";
+
+// ── THE WHOLE SHOT ON A COMPUTER ──────────────────────────────────────
+// Oliver, 15 Oct 2026, on his laptop (1280 by 529 in the browser): "The frame
+// is so akward of the video.. it's like zoomed in and in poor quality.." The
+// banner there is 3.3 times as wide as it is tall and the film is 16:9, so a
+// film filling the banner showed only the middle half of every shot: the
+// glass without its rim or its pour, the dancer from the nose down, the sip
+// as an orange blur. From 720px up the film now keeps its own shape at the
+// full height of the banner, on the right, and fades into the dark on its
+// left, where the name of the place sits. Every shot is whole, and the film is
+// drawn smaller than it was made, so it is as sharp as the footage allows.
+// Its width is the banner's height (clamp(300px, 30vw, 520px) in
+// ExploreBanner.jsx) times 16/9; if one changes, so must the other.
+const FRAME_CSS = `
+.gx-film-frame { position: absolute; inset: 0; }
+.gx-film-fade { display: none; }
+@media (min-width: 720px) {
+  .gx-film-frame { left: auto; width: min(100%, clamp(533.33px, 53.333vw, 924.44px)); }
+  .gx-film-fade { display: block; }
+}
+`;
 export const filmFor = (k, tall) => {
   const v = CATEGORY_VIDEO[k];
   if (!v) return null;
@@ -76,19 +101,26 @@ export const CategoryVideo = ({ k = null, playing = true }) => {
   const film = shown ? filmFor(shown, tall) : null;
   if (!film) return null;
   const media = { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" };
-  // It fills the box it is put in: the banner at the top of Explore
-  // (ExploreBanner.jsx), which it replaces while its kind of place is shown.
+  // The box is the banner at the top of Explore (ExploreBanner.jsx), which it
+  // replaces while its kind of place is shown. On a phone the film fills it;
+  // on a computer it fills the frame on the right (FRAME_CSS above).
   return (
     <div ref={box} aria-hidden="true" data-testid="category-video" data-cat={shown}
       style={{ position: "absolute", inset: 0, zIndex: 2, pointerEvents: "none", overflow: "hidden", background: "#0B0A08", opacity: on ? 1 : 0, transition: "opacity 600ms ease" }}>
-      {still || failed ? (
-        <img src={film.still} alt="" style={media} />
-      ) : (
-        <video key={film.src} ref={vid} poster={film.still} autoPlay muted defaultMuted loop playsInline webkit-playsinline="true" preload="metadata" style={media}>
-          {/* Its error is the one that means nothing played. */}
-          <source src={`${film.src}.mp4`} type="video/mp4" onError={() => setFailed(true)} />
-        </video>
-      )}
+      <style>{FRAME_CSS}</style>
+      <div className="gx-film-frame" data-testid="category-video-frame">
+        {still || failed ? (
+          <img src={film.still} alt="" style={media} />
+        ) : (
+          <video key={film.src} ref={vid} poster={film.still} autoPlay muted defaultMuted loop playsInline webkit-playsinline="true" preload="metadata" style={media}>
+            {/* Its error is the one that means nothing played. */}
+            <source src={`${film.src}.mp4`} type="video/mp4" onError={() => setFailed(true)} />
+          </video>
+        )}
+        {/* The film's left edge melts into the banner's own dark, so it reads
+            as a window on the right rather than a box. Only on a computer. */}
+        <div className="gx-film-fade" style={{ position: "absolute", inset: 0, background: "linear-gradient(to right, #0B0A08 0%, rgba(11,10,8,0.82) 10%, rgba(11,10,8,0.35) 27%, rgba(11,10,8,0) 45%)" }} />
+      </div>
       {/* Only the bottom is darkened, for the name over it, as Lidl's own
           category film does. "Can it be a little less faded?" (14 Oct 2026).
           Design review, 15 Oct 2026: hivecph.dk's film reads as one block with
