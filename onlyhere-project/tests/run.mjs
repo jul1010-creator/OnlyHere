@@ -80845,6 +80845,10 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("and Explore is never one of them", !/\bhome: /.test(app.slice(app.indexOf("const emptyHere = {"), app.indexOf("const hideAbroad"))));
   ok("and the front page's dates and planner button go with the planner", /\{TAB_ORDER\.includes\("ai"\) && <div style=\{\{ display: "flex", gap: 10/.test(app) && /\{TAB_ORDER\.includes\("ai"\) && <button onClick=\{\(\) => \{ setDetourTab\("sightseeing"\)/.test(app));
   ok("the gold button goes with its page", /\{NAV_ITEMS\.some\(item => item\.id === featuredTab\) && <button className="gx-topnav-ai" data-testid="nav-featured"/.test(app));
+  // Oliver, 16 Oct 2026: "Just remove the navigations at the very top as well.
+  // Have them saved, but remove them visually." Not drawn on /lithuania; the
+  // strip and the gold button are kept whole inside the switch.
+  ok("no bar of pages along the top on /lithuania, its code kept", /const TOP_NAV_SHOWN = PAGE_COUNTRY !== "LT";/.test(app) && /\{TOP_NAV_SHOWN && \(<>\s*\n\s*<NavStrip C=\{C\}>/.test(app) && /<\/button>\}\s*\n\s*<\/>\)\}/.test(app));
 }
 
 // ── Batch 172: security, after Fable's audit ──
@@ -82925,6 +82929,9 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   // 14 Oct 2026: "In cooperation with Klaipėda Tourism Center", the name the
   // link. The old "More about Klaipėda from the tourism centre" key is gone.
   ok("the deals end on the cooperation line, the centre's name linking to its site", ["en", "da", "de", "lt"].every(l => M.t("explore.coop", l).split("{name}").length === 2) && M.t("explore.coop", "en") === "In cooperation with {name}" && M.t("explore.coopName", "en") === "Klaipėda Tourism Center" && /uiT\("explore\.coop", lang\)\.split\("\{name\}"\)/.test(dny) && /\{uiT\("explore\.coopName", lang\)\}\s*<\/a>/.test(dny));
+  // Oliver, 16 Oct 2026: "remove the 'cooporation with Klaipeda Tourism
+  // Center'.. I'll ask them first". Kept, words and all, but not drawn.
+  ok("the cooperation line waits for the centre's yes", /export const CENTRE_LINE_SHOWN = false;/.test(dny) && /country === "LT" && CENTRE_LINE_SHOWN && \(\(\) => \{/.test(dny));
   ok("Explore on /lithuania is the deals, not the Danish front page", /\{tab === "home" && PAGE_ABROAD && \(/.test(app) && /<KlaipedaExplore lang=\{uiLang\} version=\{liveContentVersion\}/.test(app) && /\{tab === "home" && !PAGE_ABROAD && \(/.test(app) && /useKlaipedaDeals\(null, version\)/.test(ex));
   ok("Studio sets the filter by hand and saves it with the row", /data-testid="studio-deal-kind"/.test(app) && /if \(DEAL_CATEGORIES\.includes\(studioDealKind\)\) shaped\.__category = studioDealKind;/.test(app) && /setStudioDealKind\(DEAL_CATEGORIES\.includes\(row\.payload\?\.__category\)/.test(app));
   // The rework switch.
