@@ -83347,7 +83347,23 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   const eb = read("src/components/ExploreBanner.jsx");
   ok("the film replaces the banner, only for a kind of place that has one", /<CategoryVideo k=\{cat\} playing=\{!filmPaused\} \/>/.test(eb) && /CATEGORY_VIDEO = \{\s*nightlife:/.test(cv) && /const film = !!\(cat && CATEGORY_VIDEO\[cat\]\);/.test(eb));
   ok("the film fills its box, over the slides", /position: "absolute", inset: 0, zIndex: 2, pointerEvents: "none"/.test(cv));
-  ok("upright phones get the tall film, everything else the wide one", /TALL_QUERY = "\(orientation: portrait\) and \(max-width: 820px\)"/.test(cv));
+  // 15 Oct 2026: the tall film follows the banner's shape, not the screen's
+  // orientation, so an iPad held upright no longer gets it in a wide banner.
+  ok("phones get the tall film, everything wider the wide one", /TALL_QUERY = "\(max-width: 587px\)"/.test(cv) && !/orientation: portrait/.test(cv));
+  // Oliver, 15 Oct 2026: "it's like zoomed in and in poor quality". On a
+  // computer the film keeps its 16:9 at the banner's full height, on the
+  // right, its width the banner's height (clamp(300px, 30vw, 520px)) times
+  // 16/9, and its left edge fades into the dark under the name.
+  ok("on a computer the whole shot shows, on the right, fading in from the left", /@media \(min-width: 720px\) \{\s*\.gx-film-frame \{ left: auto; width: min\(100%, clamp\(533\.33px, 53\.333vw, 924\.44px\)\); \}/.test(cv) && /\.gx-banner \{ height: clamp\(300px, 30vw, 520px\); \}/.test(eb) && /className="gx-film-fade"/.test(cv) && /linear-gradient\(to right, #0B0A08 0%/.test(cv));
+  ok("on a phone the film still fills the banner", /\.gx-film-frame \{ position: absolute; inset: 0; \}/.test(cv) && /\.gx-film-fade \{ display: none; \}/.test(cv) && /const media = \{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" \};/.test(cv));
+  // The frame's 533.33 to 924.44 is the banner's 300 to 520 times 16/9: the
+  // two must move together.
+  {
+    const fm = cv.match(/\.gx-film-frame \{ left: auto; width: min\(100%, clamp\(([\d.]+)px, ([\d.]+)vw, ([\d.]+)px\)\); \}/);
+    const bm = eb.match(/\.gx-banner \{ height: clamp\((\d+)px, (\d+)vw, (\d+)px\); \}/);
+    const near = (a, b, e) => Math.abs(Number(a) * 16 / 9 - Number(b)) < e;
+    ok("the frame's width is the banner's height times 16/9", !!(fm && bm && near(bm[1], fm[1], 0.01) && near(bm[2], fm[2], 0.001) && near(bm[3], fm[3], 0.01)));
+  }
   // MP4 only since 14 Oct 2026: WebM smoothed the grain away ("far inferior").
   ok("no sound, inline, looping, MP4 only", /autoPlay muted defaultMuted loop playsInline/.test(cv) && /type="video\/mp4"/.test(cv) && !/<source[^>]*webm/.test(cv));
   ok("less motion or saving data shows the still, and so does a film that will not play", /prefers-reduced-motion: reduce/.test(cv) && /saveData/.test(cv) && /still \|\| failed \?/.test(cv));
