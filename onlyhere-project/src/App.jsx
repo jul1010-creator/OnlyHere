@@ -429,6 +429,14 @@ const PAGE_COUNTRY = activeCountry();
 const PAGE_LAND = countryProfile(PAGE_COUNTRY);
 const PAGE_ABROAD = PAGE_COUNTRY !== DEFAULT_COUNTRY;
 const HOME_PATH = homePath(PAGE_COUNTRY);
+// ── NO BAR OF PAGES ALONG THE TOP IN LITHUANIA ──────────────────────────
+// Oliver, 16 Oct 2026: "Just remove the navigations at the very top as well.
+// Have them saved, but remove them visually. No need for them anymore." On
+// /lithuania, Explore with its deals is the site, so the pages along the top
+// of the header (Explore, Special deals, Attractions, Plan my trip) are not
+// drawn. Their code is untouched: drop the LT test here to bring them back.
+// Denmark keeps its bar.
+const TOP_NAV_SHOWN = PAGE_COUNTRY !== "LT";
 // What is not built for another country yet stays off its pages rather than
 // answering in Danish. Nothing, since Phase 3 put the planner on them without
 // its chat (PlanAbroadForm). Tips came back 29 Sep 2026. Oliver: "Where is the tips? That navigation
@@ -34068,6 +34076,9 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               first casualty: his screenshot reads "✦ Gemlyx Det". Rendering it
               outside the strip is what makes always-visible true by
               construction rather than by guessing a breakpoint. */}
+          {/* Not on /lithuania since 16 Oct 2026 (TOP_NAV_SHOWN, at the top
+              of this file): the logo, the search and the menu are the bar there. */}
+          {TOP_NAV_SHOWN && (<>
           <NavStrip C={C}>
             <NavGroupButtons groups={navGroups} active={active} eventTab={eventTab} onPick={pickNav} C={C} />
           </NavStrip>
@@ -34083,6 +34094,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             style={{ gap: 6, background: `linear-gradient(135deg, ${C.gold}, ${C.accent})`, color: "#fff", border: "none", borderRadius: 100, padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginLeft: 8, marginRight: 4, whiteSpace: "nowrap", flexShrink: 0, boxShadow: `0 2px 10px ${C.gold}33` }}>
             {NAV_ITEMS.find(item => item.id === featuredTab)?.label}
           </button>}
+          </>)}
 
           {/* Right: the small persistent search pill (always visible, not a
               toggle) + menu. The language flags were here for a day and cost the
