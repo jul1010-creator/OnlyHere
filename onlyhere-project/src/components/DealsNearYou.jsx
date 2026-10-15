@@ -149,6 +149,11 @@ export const dealKind = (d) => {
 // "Less competitive to the page": Gemlyx shows the deals and sends people
 // there for the rest.
 export const centreSite = (lang) => (lang === "lt" ? "https://klaipedatravel.lt/" : "https://klaipedatravel.lt/en/");
+// ── THE COOPERATION LINE WAITS FOR THE CENTRE'S YES ───────────────────
+// Oliver, 16 Oct 2026: "remove the 'cooporation with Klaipeda Tourism
+// Center'.. I'll ask them first, if I can write that." The line and its words
+// in four languages stay as they were; true draws it again under the deals.
+export const CENTRE_LINE_SHOWN = false;
 
 export const SORTS = ["closest", "az"];
 
@@ -588,7 +593,7 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
         );
       })()}
       </div>
-      {country === "LT" && (() => {
+      {country === "LT" && CENTRE_LINE_SHOWN && (() => {
         // "In cooperation with Klaipėda Tourism Center" (Oliver, 14 Oct 2026),
         // the centre's name the link to their own site.
         const [before, after = ""] = uiT("explore.coop", lang).split("{name}");
