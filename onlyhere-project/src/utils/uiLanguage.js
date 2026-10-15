@@ -771,7 +771,11 @@ export const UI_STRINGS = {
   "explore.az":            { en: "A to Z", da: "A til Å", de: "A bis Z", lt: "Nuo A iki Ž" },
   "explore.needLocation":  { en: "Allow your location to see what is closest.", da: "Tillad din placering for at se, hvad der er tættest på.", de: "Erlaube deinen Standort, um zu sehen, was am nächsten ist.", lt: "Leiskite naudoti jūsų vietą, kad matytumėte, kas arčiausiai." },
   "explore.noneHere":      { en: "Nothing in these right now. Tap Show all to see everything.", da: "Intet her lige nu. Tryk Vis alle for at se alt.", de: "Gerade nichts hier. Tippe auf Alle zeigen, um alles zu sehen.", lt: "Šiuo metu čia nieko nėra. Paspauskite Rodyti viską, kad pamatytumėte viską." },
-  "explore.more":          { en: "More about Klaipėda from the tourism centre", da: "Mere om Klaipėda fra turistkontoret", de: "Mehr über Klaipėda von der Touristeninformation", lt: "Daugiau apie Klaipėdą iš turizmo informacijos centro" },
+  // Oliver, 14 Oct 2026: the line under the deals reads "In cooperation with
+  // Klaipėda Tourism Center", the centre's name linking to their site. {name}
+  // is where the link sits, so each language keeps its own word order and case.
+  "explore.coop":          { en: "In cooperation with {name}", da: "I samarbejde med {name}", de: "In Zusammenarbeit mit dem {name}", lt: "Bendradarbiaujant su {name}" },
+  "explore.coopName":      { en: "Klaipėda Tourism Center", da: "Klaipėdas turistcenter", de: "Tourismuszentrum Klaipėda", lt: "Klaipėdos turizmo centru" },
   "ride.far":        { en: "Too far to walk? {app} works here. Order a car in the app and see the price first.", da: "For langt at gå? {app} findes her. Bestil en bil i appen og se prisen først.", de: "Zu weit zu Fuß? {app} gibt es hier. Bestell ein Auto in der App und sieh den Preis vorher.", lt: "Per toli eiti pėsčiomis? Čia veikia {app}. Užsisakykite automobilį programėlėje ir pirmiausia pamatysite kainą." },
   "trips.intro":       { en: "Walks for the time you have, on foot from the ship. Gemlyx is opening Lithuania, starting here.", da: "Gåture til den tid, du har, til fods fra skibet. Gemlyx åbner i Litauen og begynder her.", de: "Spaziergänge für die Zeit, die du hast, zu Fuß vom Schiff. Gemlyx startet in Litauen, und zwar hier.", lt: "Pasivaikščiojimai pagal turimą laiką, pėsčiomis nuo laivo. Gemlyx pradeda Lietuvoje būtent čia." },
   // The list controls and the Events page's own words, 1 Oct 2026, when the
@@ -927,6 +931,44 @@ export const UI_STRINGS = {
   "banner.next":  { en: "Next", da: "Næste", de: "Weiter", lt: "Kitas" },
   "banner.pause": { en: "Pause", da: "Pause", de: "Pause", lt: "Pristabdyti" },
   "banner.play":  { en: "Play", da: "Afspil", de: "Abspielen", lt: "Paleisti" },
+  // Deal alerts, 15 Oct 2026 (utils/dealAlerts.js). Oliver: "make it so people
+  // can tick off what notifications they want". The bell and its panel, the
+  // settings, the mails and the page an unsubscribe link opens. {n}, {name},
+  // {time} and {date} are filled in by the caller.
+  "alerts.bell":        { en: "Deal alerts", da: "Tilbudsbeskeder", de: "Angebotsmeldungen", lt: "Pasiūlymų pranešimai" },
+  "alerts.newCount":    { en: "New: {n}", da: "Nye: {n}", de: "Neu: {n}", lt: "Nauji: {n}" },
+  "alerts.title":       { en: "New deals", da: "Nye tilbud", de: "Neue Angebote", lt: "Nauji pasiūlymai" },
+  "alerts.settings":    { en: "Alert settings", da: "Indstillinger for beskeder", de: "Einstellungen für Meldungen", lt: "Pranešimų nustatymai" },
+  "alerts.back":        { en: "Back", da: "Tilbage", de: "Zurück", lt: "Atgal" },
+  "alerts.close":       { en: "Close", da: "Luk", de: "Schließen", lt: "Uždaryti" },
+  "alerts.empty":       { en: "No new deals right now.", da: "Ingen nye tilbud lige nu.", de: "Gerade keine neuen Angebote.", lt: "Šiuo metu naujų pasiūlymų nėra." },
+  "alerts.noneTicked":  { en: "No kinds of place are ticked.", da: "Der er ikke valgt nogen slags steder.", de: "Keine Art von Ort ausgewählt.", lt: "Nepažymėtas nė vienas vietos tipas." },
+  "alerts.kinds":       { en: "Kinds of place", da: "Slags steder", de: "Arten von Orten", lt: "Vietų tipai" },
+  "alerts.email":       { en: "Email me new deals", da: "Send mig nye tilbud på mail", de: "Neue Angebote per E-Mail", lt: "Siųsti naujus pasiūlymus el. paštu" },
+  "alerts.saved":       { en: "Saved", da: "Gemt", de: "Gespeichert", lt: "Išsaugota" },
+  "alerts.unavailable": { en: "Not available just now", da: "Ikke tilgængeligt lige nu", de: "Gerade nicht verfügbar", lt: "Šiuo metu nepasiekiama" },
+  "alerts.failed":      { en: "Not saved. Try again.", da: "Ikke gemt. Prøv igen.", de: "Nicht gespeichert. Versuch es noch einmal.", lt: "Neišsaugota. Bandykite dar kartą." },
+  "alerts.justNow":     { en: "Just now", da: "Lige nu", de: "Gerade eben", lt: "Ką tik" },
+  "alerts.blurb":       { en: "New deals in the app and by email.", da: "Nye tilbud i appen og på mail.", de: "Neue Angebote in der App und per E-Mail.", lt: "Nauji pasiūlymai programėlėje ir el. paštu." },
+  "mail.newAt":         { en: "New deal at {name}", da: "Nyt tilbud hos {name}", de: "Neues Angebot bei {name}", lt: "Naujas pasiūlymas: {name}" },
+  "mail.shortTime":     { en: "For a short time", da: "Kun kort tid", de: "Nur kurze Zeit", lt: "Tik trumpą laiką" },
+  "mail.endsToday":     { en: "Ends today at {time}", da: "Slutter i dag kl. {time}", de: "Endet heute um {time}", lt: "Baigiasi šiandien {time}" },
+  "mail.endsTomorrow":  { en: "Ends tomorrow at {time}", da: "Slutter i morgen kl. {time}", de: "Endet morgen um {time}", lt: "Baigiasi rytoj {time}" },
+  "mail.todayOnly":     { en: "Today only", da: "Kun i dag", de: "Nur heute", lt: "Tik šiandien" },
+  "mail.untilTomorrow": { en: "Until the end of tomorrow", da: "Til og med i morgen", de: "Bis einschließlich morgen", lt: "Iki rytojaus pabaigos" },
+  "mail.until":         { en: "Until {date}", da: "Til og med {date}", de: "Bis {date}", lt: "Iki {date}" },
+  "mail.digestSubject": { en: "New deals in Klaipėda", da: "Nye tilbud i Klaipėda", de: "Neue Angebote in Klaipėda", lt: "Nauji pasiūlymai Klaipėdoje" },
+  "mail.digestLead":    { en: "What is new in the kinds of place you picked.", da: "Det nye inden for de slags steder, du har valgt.", de: "Neues bei den Arten von Orten, die du gewählt hast.", lt: "Kas nauja jūsų pasirinktose vietose." },
+  "mail.seeAll":        { en: "See all deals", da: "Se alle tilbud", de: "Alle Angebote ansehen", lt: "Visi pasiūlymai" },
+  "mail.counter":       { en: "Show it on your phone at the counter.", da: "Vis det på din telefon ved disken.", de: "Zeig es an der Kasse auf deinem Handy.", lt: "Parodykite jį telefone prie kasos." },
+  "mail.why":           { en: "You get this because deal emails are on in your Gemlyx account.", da: "Du får denne mail, fordi tilbud på mail er slået til i din konto hos Gemlyx.", de: "Du bekommst diese E-Mail, weil Angebote per E-Mail in deinem Gemlyx-Konto eingeschaltet sind.", lt: "Gaunate šį laišką, nes savo Gemlyx paskyroje įjungėte pasiūlymus el. paštu." },
+  "mail.off":           { en: "Turn off deal emails", da: "Slå tilbud på mail fra", de: "Angebote per E-Mail abschalten", lt: "Išjungti pasiūlymus el. paštu" },
+  "unsub.title":        { en: "Deal emails are off", da: "Tilbud på mail er slået fra", de: "Angebote per E-Mail sind aus", lt: "Pasiūlymai el. paštu išjungti" },
+  "unsub.body":         { en: "You will get no more deal emails from Gemlyx. To turn them on again, sign in at gemlyxtravel.com and open Deal alerts.", da: "Du får ikke flere tilbud på mail fra Gemlyx. Vil du have dem igen, så log ind på gemlyxtravel.com og åbn Tilbudsbeskeder.", de: "Du bekommst keine Angebote mehr per E-Mail von Gemlyx. Um sie wieder einzuschalten, melde dich auf gemlyxtravel.com an und öffne Angebotsmeldungen.", lt: "Daugiau negausite pasiūlymų el. paštu iš Gemlyx. Norėdami juos vėl įjungti, prisijunkite gemlyxtravel.com ir atidarykite „Pasiūlymų pranešimai“." },
+  "unsub.unknown":      { en: "This link is no longer valid", da: "Linket virker ikke længere", de: "Dieser Link gilt nicht mehr", lt: "Ši nuoroda nebegalioja" },
+  "unsub.failedTitle":  { en: "Not turned off yet", da: "Ikke slået fra endnu", de: "Noch nicht abgeschaltet", lt: "Dar neišjungta" },
+  "unsub.failed":       { en: "Deal emails could not be turned off just now. Try the link again in a moment.", da: "Tilbud på mail kunne ikke slås fra lige nu. Prøv linket igen om lidt.", de: "Angebote per E-Mail konnten gerade nicht abgeschaltet werden. Versuch den Link gleich noch einmal.", lt: "Šiuo metu nepavyko išjungti pasiūlymų el. paštu. Netrukus pabandykite nuorodą dar kartą." },
+  "unsub.back":         { en: "Go to Gemlyx", da: "Gå til Gemlyx", de: "Zu Gemlyx", lt: "Eiti į Gemlyx" },
 };
 
 export const UI_KEYS = Object.keys(UI_STRINGS);

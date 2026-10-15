@@ -109,6 +109,11 @@ export const readAiLimits = (env = {}) => ({
   // a crowd of throwaway accounts each under their own 120 is still a ceiling
   // the site sets, not the crowd.
   membersOpusPerDay: limitOf(env.GEMLYX_AI_MEMBERS_OPUS_PER_DAY, 1000),
+  // OpenAI's one allowed model costs more per token than Opus (apiCost.js),
+  // and was counted like a Sonnet call (security review, 12 Oct 2026). A guide
+  // makes at most about nine OpenAI calls, retries included.
+  openaiPerUser: limitOf(env.GEMLYX_AI_OPENAI_PER_USER, 60),
+  membersOpenaiPerDay: limitOf(env.GEMLYX_AI_MEMBERS_OPENAI_PER_DAY, 600),
 });
 export const AI_OFF = "Gemlyx's AI is switched off just now.";
 
@@ -164,7 +169,7 @@ const whoIs = async (token, { supabaseUrl, apiKey, fetchImpl }) => {
   } catch { return null; }
 };
 
-const takeCalls = ({ day, userId = "", visitor = "", opus = false, limits, supabaseUrl, serviceKey, fetchImpl }) => takeDaily({
+const takeCalls = ({ day, userId = "", visitor = "", network = "", openai = false, opus = false, limits, supabaseUrl, serviceKey, fetchImpl }) => takeDaily({
   day, supabaseUrl, serviceKey, fetchImpl,
   keys: visitor
     ? [
@@ -174,6 +179,7 @@ const takeCalls = ({ day, userId = "", visitor = "", opus = false, limits, supab
     : [
       { key: `ai:u:${userId.toLowerCase()}`, limit: limits.perUser }, { key: "ai:site", limit: limits.perDay },
       ...(opus ? [{ key: `ai:u:${userId.toLowerCase()}:opus`, limit: limits.opusPerUser }, { key: "ai:members:opus", limit: limits.membersOpusPerDay }] : []),
+      ...(openai ? [{ key: `ai:u:${userId.toLowerCase()}:openai`, limit: limits.openaiPerUser }, { key: "ai:members:openai", limit: limits.membersOpenaiPerDay }] : []),
     ],
 });
 // The model a visitor's Anthropic call will run on, after shapeAnthropic.
@@ -226,9 +232,9 @@ export const gateAi = async ({ headers, body, endpoint, env = {}, fetchImpl = fe
     if (who.confirmed) {
       if (limits.perUser === 0 || limits.perDay === 0) return { ok: false, status: 503, error: AI_OFF };
       if (!serviceKey) return { ok: false, status: 503, error: "This is not available just now." };
-      const got = await takeCalls({ day, userId: who.id, opus: asksForOpus(endpoint, body), limits, supabaseUrl, serviceKey, fetchImpl });
+      const got = await takeCalls({ day, userId: who.id, openai: endpoint === "openai", opus: asksForOpus(endpoint, body), limits, supabaseUrl, serviceKey, fetchImpl });
       if (got.closed) return { ok: false, status: 503, error: "This is not available just now. Try again in a moment." };
-      if (!got.ok) return { ok: false, status: 429, error: ["ai:site", "ai:members:opus"].includes(got.over) ? "Gemlyx has used its AI for today. Try again tomorrow." : "You have used today's allowance. It resets at midnight, Danish time." };
+      if (!got.ok) return { ok: false, status: 429, error: ["ai:site", "ai:members:opus", "ai:members:openai"].includes(got.over) ? "Gemlyx has used its AI for today. Try again tomorrow." : "You have used today's allowance. It resets at midnight, Danish time." };
       return { ok: true, founder: false, anon: false, userId: who.id, endpoint };
     }
   }
