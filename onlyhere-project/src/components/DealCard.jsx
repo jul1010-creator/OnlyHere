@@ -79,20 +79,37 @@ export const DealPicture = ({ photo = "", at = null, name = "", sign = "📍", p
     </div>
   );
 };
+// DESIGN REVIEW, 15 OCT 2026. The tile's type follows the tile: at 171px
+// (a phone, two across) the name is 14.5px and the offer 12.5px; from 960px
+// up, where DealsNearYou puts four 260px tiles across, they are 16px and
+// 13.5px with a little more room round them, as lidl.dk's tiles carry 16px
+// names. On a pointer the picture eases to 1.04 inside its own box, the way
+// every photo tile on a 2026 page answers a hover; the box is clipped so the
+// name and badge stay put. The CSS rides with the page in DealsNearYou.jsx.
+export const TILE_CSS = `
+.gx-tile { --gx-tile-name: 14.5px; --gx-tile-offer: 12.5px; --gx-tile-pad: 10px; --gx-tile-ratio: 4 / 5; }
+@media (min-width: 960px) { .gx-tile { --gx-tile-name: 16px; --gx-tile-offer: 13.5px; --gx-tile-pad: 12px; --gx-tile-ratio: 1 / 1; } }
+.gx-tile-pic { overflow: hidden; }
+.gx-tile-pic > img, .gx-tile-pic > [data-testid="deal-picture-blank"] { transition: transform 500ms cubic-bezier(0.2, 0.7, 0.2, 1); }
+@media (hover: hover) { .gx-tile:hover .gx-tile-pic > img, .gx-tile:hover .gx-tile-pic > [data-testid="deal-picture-blank"] { transform: scale(1.04); } }
+@media (prefers-reduced-motion: reduce) { .gx-tile:hover .gx-tile-pic > img, .gx-tile:hover .gx-tile-pic > [data-testid="deal-picture-blank"] { transform: none; } }
+`;
 export const DealTile = ({ name = "", offer = "", badge = "", distance = "", photo = "", at = null, sign = "📍", pin = "", upcoming = false, onOpen = null, testid = "deal-tile" }) => (
-  <button type="button" onClick={onOpen || undefined} data-testid={testid}
+  <button type="button" onClick={onOpen || undefined} data-testid={testid} className="gx-tile"
     style={{ display: "flex", flexDirection: "column", justifyContent: "flex-start", alignItems: "stretch", width: "100%", height: "100%", padding: 0, textAlign: "left", background: C.surface, border: "none", borderRadius: 16, overflow: "hidden", cursor: onOpen ? "pointer" : "default", fontFamily: "'Inter', sans-serif", color: C.text, filter: upcoming ? "brightness(0.62) saturate(0.6)" : "none" }}>
-    <div style={{ position: "relative", pointerEvents: "none" }}>
-      <DealPicture photo={photo} at={at} name={name} sign={sign} pin={pin} />
+    <div className="gx-tile-pic" style={{ position: "relative", pointerEvents: "none" }}>
+      {/* Upright on a phone (4:5, two across); square on a computer, where
+          four 260px tiles across at 4:5 stood 325px tall (lidl.dk's are square). */}
+      <DealPicture photo={photo} at={at} name={name} sign={sign} pin={pin} ratio="var(--gx-tile-ratio, 4 / 5)" />
       {badge && (
         <span data-testid="deal-tile-badge" style={{ position: "absolute", top: 8, left: 8, background: "#FFFFFF", color: "#16161A", borderRadius: 7, padding: "4px 8px", fontSize: 11, fontWeight: 700, lineHeight: 1.2, boxShadow: "0 1px 4px rgba(0,0,0,0.25)", maxWidth: "calc(100% - 16px)" }}>{badge}</span>
       )}
-      <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "34px 10px 9px", background: "linear-gradient(to top, rgba(10,10,12,0.88), rgba(10,10,12,0))" }}>
-        <div data-testid="deal-tile-name" style={{ fontSize: 14.5, fontWeight: 700, color: "#FFFFFF", lineHeight: 1.2, overflowWrap: "anywhere", textShadow: "0 1px 2px rgba(0,0,0,0.5)" }}>{name}</div>
+      <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "34px var(--gx-tile-pad, 10px) 9px", background: "linear-gradient(to top, rgba(10,10,12,0.88), rgba(10,10,12,0))" }}>
+        <div data-testid="deal-tile-name" style={{ fontSize: "var(--gx-tile-name, 14.5px)", fontWeight: 700, color: "#FFFFFF", lineHeight: 1.2, overflowWrap: "anywhere", textShadow: "0 1px 2px rgba(0,0,0,0.5)" }}>{name}</div>
       </div>
     </div>
-    <div style={{ padding: "9px 10px 11px" }}>
-      {offer && <div data-testid="deal-tile-offer" style={{ fontSize: 12.5, fontWeight: 600, color: upcoming ? C.light : C.text, lineHeight: 1.35, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{offer}</div>}
+    <div style={{ padding: "9px var(--gx-tile-pad, 10px) 11px" }}>
+      {offer && <div data-testid="deal-tile-offer" style={{ fontSize: "var(--gx-tile-offer, 12.5px)", fontWeight: 600, color: upcoming ? C.light : C.text, lineHeight: 1.35, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{offer}</div>}
       {distance && <div style={{ fontSize: 11, color: C.muted, marginTop: 5 }}>{distance}</div>}
     </div>
   </button>

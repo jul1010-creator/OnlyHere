@@ -383,6 +383,16 @@ export const DealStudio = ({ supaFetch, studioFetch, onChanged, upload = null, t
     return j.found ? j : { candidates: [] };
   };
 
+  // ── A DEAL SHOWN TELLS THE MEMBERS WHO WANT IT ─────────────────────
+  // 15 Oct 2026 (api/deal-alerts.js): once a deal is saved and showing, the
+  // server writes its news and mails a short promotion at once, rather than
+  // waiting up to ten minutes for the next cron run. Best effort and not
+  // awaited: it never holds the save up and never shows an error, because the
+  // cron does the same job a few minutes later anyway.
+  const tellMembers = () => {
+    try { Promise.resolve(studioFetch("/api/deal-alerts", { method: "POST" })).catch(() => {}); } catch { /* never in the way of a save */ }
+  };
+
   const save = async (f) => {
     setBusy(true); setError("");
     try {
@@ -402,6 +412,7 @@ export const DealStudio = ({ supaFetch, studioFetch, onChanged, upload = null, t
         const made = (await r.json().catch(() => []))?.[0] || { id: null, type: f.type, payload, published: !!f.published };
         setRows(xs => [made, ...(xs || [])]);
         await onChanged?.({ before: null, after: made });
+        if (made.published) tellMembers();
       } else {
         const r = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${f.id}`, {
           method: "PATCH", headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
@@ -411,6 +422,7 @@ export const DealStudio = ({ supaFetch, studioFetch, onChanged, upload = null, t
         const after = { ...before, payload, published: !!f.published };
         setRows(xs => (xs || []).map(x => (x.id === f.id ? after : x)));
         await onChanged?.({ before, after });
+        if (after.published) tellMembers();
       }
       setEditing(null);
     } catch (e) { setError(e.message || "Not saved."); }
@@ -428,6 +440,7 @@ export const DealStudio = ({ supaFetch, studioFetch, onChanged, upload = null, t
       if (!r.ok) throw new Error(`Not changed (${r.status}).`);
       setRows(xs => xs.map(x => (x.id === row.id ? after : x)));
       await onChanged?.({ before: row, after });
+      if (after.published) tellMembers();
     } catch (e) { setNote(e.message || "Not changed."); }
   };
 

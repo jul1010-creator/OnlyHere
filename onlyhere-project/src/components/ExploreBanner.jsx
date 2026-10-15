@@ -26,6 +26,14 @@ import { CATEGORY_ICON } from "./CategoryFilter";
 export const SLIDE_SECONDS = 7;
 export const MAX_DEAL_SLIDES = 3;
 
+// ── DESIGN REVIEW, 15 OCT 2026 ──────────────────────────────────────
+// Set beside hivecph.dk and lidl.dk. What both do that reads as current: the
+// controls are drawn, not typed (no "‹" or "❚❚" glyphs, which render in
+// whatever font the phone has); the film's name comes in with a short rise
+// rather than appearing; and nothing over the film competes with it. So the
+// arrows and the pause button are small SVGs, and the name over the film
+// rises 14px and fades in over 650ms, which stops for anybody who asked for
+// less motion.
 const CSS = `
 .gx-banner { height: clamp(300px, 30vw, 520px); }
 .gx-banner-arrow { display: none; }
@@ -38,15 +46,34 @@ const CSS = `
 }
 @keyframes gx-banner-spin { to { transform: rotate(360deg); } }
 .gx-banner-spin { animation: gx-banner-spin 120s linear infinite; }
-@media (prefers-reduced-motion: reduce) { .gx-banner-spin { animation: none; } }
+.gx-banner-btn { transition: background 180ms ease, transform 180ms ease; }
+@media (hover: hover) { .gx-banner-btn:hover { background: rgba(14,14,17,0.85) !important; transform: translateY(-50%) scale(1.06); } .gx-banner-btn.gx-banner-pause:hover { transform: scale(1.06); } }
+@keyframes gx-film-title { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+.gx-film-title { animation: gx-film-title 650ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+@media (prefers-reduced-motion: reduce) { .gx-banner-spin { animation: none; } .gx-film-title { animation: none; } .gx-banner-btn:hover { transform: none; } }
 `;
+
+// The three controls, drawn on a 24 grid with the same 2px round stroke as
+// the nav's icons (Icon.jsx), so they are one hand with the rest of the page.
+const Chevron = ({ dir = 1 }) => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <polyline points={dir < 0 ? "15 5 8 12 15 19" : "9 5 16 12 9 19"} />
+  </svg>
+);
+const PlayPause = ({ paused = false }) => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    {paused ? <path d="M7 4.5v15l12-7.5z" /> : <><rect x="5.5" y="4" width="4.5" height="16" rx="1" /><rect x="14" y="4" width="4.5" height="16" rx="1" /></>}
+  </svg>
+);
 
 const safePhoto = (p) => { const s = String(p || ""); return /^https:\/\//i.test(s) || /^\/[A-Za-z0-9_\-./]+$/.test(s) ? s : ""; };
 
+// Dark glass with a hairline light edge, the way the page's own pager pill is
+// drawn, so every floating control on Explore is the same object.
 const roundBtn = () => ({
-  width: 44, height: 44, borderRadius: "50%", border: "none", cursor: "pointer",
-  background: "rgba(14,14,17,0.62)", color: "#FFFFFF", backdropFilter: "blur(6px)",
-  alignItems: "center", justifyContent: "center", fontSize: 18, lineHeight: 1, padding: 0,
+  width: 44, height: 44, borderRadius: "50%", border: "1px solid rgba(255,255,255,0.14)", cursor: "pointer",
+  background: "rgba(14,14,17,0.62)", color: "#FFFFFF", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
+  alignItems: "center", justifyContent: "center", lineHeight: 1, padding: 0,
 });
 
 // Gemlyx's own slide: the headline on the left, the mark turning on the right.
@@ -95,7 +122,10 @@ const DealSlide = ({ s, lang, onOpen }) => {
             {s.badge && <span style={{ background: "#FFFFFF", color: "#111111", borderRadius: 100, padding: "4px 11px", fontSize: 12, fontWeight: 700 }}>{s.badge}</span>}
             <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: 1.6, textTransform: "uppercase", color: "rgba(244,239,230,0.75)" }}>{[s.tag, s.name].filter(Boolean).join(" · ")}</span>
           </div>
-          <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 500, fontSize: "clamp(28px, 4.2vw, 58px)", lineHeight: 1.08, letterSpacing: -0.4, color: "#F4EFE6", maxWidth: 760, display: "-webkit-box", WebkitLineClamp: 4, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{s.offer}</div>
+          {/* A size under the brand slide's: this is a sentence (the offer as
+              the partner wrote it), not a two word headline, and at 58px three
+              lines of it filled the banner (design review, 15 Oct 2026). */}
+          <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 500, fontSize: "clamp(27px, 3.7vw, 50px)", lineHeight: 1.1, letterSpacing: -0.4, color: "#F4EFE6", maxWidth: 760, display: "-webkit-box", WebkitLineClamp: 4, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{s.offer}</div>
           <button type="button" onClick={() => onOpen?.(s.key)} data-testid="banner-deal-open"
             style={{ marginTop: 22, background: C.gold, color: C.onGold || "#111", border: "none", borderRadius: 100, padding: "12px 24px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
             {uiT("banner.see", lang)}
@@ -134,6 +164,10 @@ export const ExploreBanner = ({ slides = [], cat = null, catLabel = "", lang = "
   };
   const pauseLabel = film ? (filmPaused ? uiT("banner.play", lang) : uiT("banner.pause", lang)) : (paused ? uiT("banner.play", lang) : uiT("banner.pause", lang));
   const isPaused = film ? filmPaused : paused;
+  // The name stays in its box while the film fades out, so leaving Nightlife
+  // fades "Nightlife" away with its film rather than cutting the word first.
+  const lastLabel = useRef("");
+  if (film) lastLabel.current = catLabel;
 
   return (
     <div data-testid="explore-banner" data-film={film ? cat : ""}>
@@ -150,8 +184,12 @@ export const ExploreBanner = ({ slides = [], cat = null, catLabel = "", lang = "
         <CategoryVideo k={cat} playing={!filmPaused} />
         {/* The kind of place, over its film, as Lidl names its own. */}
         <div aria-hidden={!film} style={{ position: "absolute", left: 0, right: 0, bottom: 0, zIndex: 3, pointerEvents: "none", opacity: film ? 1 : 0, transition: "opacity 450ms ease" }}>
-          <div style={{ maxWidth: 1120, margin: "0 auto", padding: "0 clamp(20px, 5vw, 64px) clamp(18px, 3vw, 36px)" }}>
-            <h1 data-testid="banner-film-title" style={{ margin: 0, fontFamily: "'Fraunces', serif", fontWeight: 500, fontSize: "clamp(36px, 5.5vw, 76px)", lineHeight: 1, letterSpacing: -0.6, color: "#FFFFFF", textShadow: "0 2px 24px rgba(0,0,0,0.45)" }}>{film ? catLabel : ""}</h1>
+          {/* Keyed on the kind of place, so each film's name makes its own
+              entrance. The small line over it is the same eyebrow the brand
+              slide carries, so the two states of the banner share one lockup. */}
+          <div key={film ? cat : "none"} className={film ? "gx-film-title" : undefined} style={{ maxWidth: 1120, margin: "0 auto", padding: "0 clamp(20px, 5vw, 64px) clamp(18px, 3vw, 36px)" }}>
+            <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 2.2, textTransform: "uppercase", color: C.gold, marginBottom: 10, textShadow: "0 1px 12px rgba(0,0,0,0.6)" }}>{film || lastLabel.current ? "Klaipėda" : ""}</div>
+            <h1 data-testid="banner-film-title" style={{ margin: 0, fontFamily: "'Fraunces', serif", fontWeight: 500, fontSize: "clamp(36px, 5.5vw, 76px)", lineHeight: 1, letterSpacing: -0.6, color: "#FFFFFF", textShadow: "0 2px 24px rgba(0,0,0,0.45)" }}>{film ? catLabel : lastLabel.current}</h1>
           </div>
         </div>
         {examples && (
@@ -159,16 +197,16 @@ export const ExploreBanner = ({ slides = [], cat = null, catLabel = "", lang = "
         )}
         {!film && n > 1 && (
           <>
-            <button type="button" className="gx-banner-arrow" onClick={() => step(-1)} aria-label={uiT("banner.prev", lang)} data-testid="banner-prev"
-              style={{ ...roundBtn(), position: "absolute", left: 16, top: "50%", transform: "translateY(-50%)", zIndex: 4 }}>‹</button>
-            <button type="button" className="gx-banner-arrow" onClick={() => step(1)} aria-label={uiT("banner.next", lang)} data-testid="banner-next"
-              style={{ ...roundBtn(), position: "absolute", right: 16, top: "50%", transform: "translateY(-50%)", zIndex: 4 }}>›</button>
+            <button type="button" className="gx-banner-arrow gx-banner-btn" onClick={() => step(-1)} aria-label={uiT("banner.prev", lang)} data-testid="banner-prev"
+              style={{ ...roundBtn(), position: "absolute", left: "clamp(14px, 2vw, 28px)", top: "50%", transform: "translateY(-50%)", zIndex: 4 }}><Chevron dir={-1} /></button>
+            <button type="button" className="gx-banner-arrow gx-banner-btn" onClick={() => step(1)} aria-label={uiT("banner.next", lang)} data-testid="banner-next"
+              style={{ ...roundBtn(), position: "absolute", right: "clamp(14px, 2vw, 28px)", top: "50%", transform: "translateY(-50%)", zIndex: 4 }}><Chevron dir={1} /></button>
           </>
         )}
         {(film || n > 1) && (
-          <button type="button" onClick={() => (film ? setFilmPaused(v => !v) : setPaused(v => !v))} aria-label={pauseLabel} aria-pressed={isPaused} data-testid="banner-pause"
-            style={{ ...roundBtn(), display: "flex", position: "absolute", right: 16, bottom: 16, zIndex: 4, width: 40, height: 40, fontSize: 13 }}>
-            {isPaused ? "▶" : "❚❚"}
+          <button type="button" className="gx-banner-btn gx-banner-pause" onClick={() => (film ? setFilmPaused(v => !v) : setPaused(v => !v))} aria-label={pauseLabel} aria-pressed={isPaused} data-testid="banner-pause"
+            style={{ ...roundBtn(), display: "flex", position: "absolute", right: "clamp(14px, 2vw, 28px)", bottom: "clamp(14px, 2vw, 28px)", zIndex: 4, width: 40, height: 40 }}>
+            <PlayPause paused={isPaused} />
           </button>
         )}
       </div>

@@ -3,6 +3,9 @@ import L from "leaflet";
 import { addTileLayer } from "../utils/mapTiles";
 import { C } from "../utils/theme";
 import { departureParam } from "../utils/helpers";
+// Stop names come from saved guides anyone can make, and Leaflet writes a
+// string label as HTML (security review, 9 Oct 2026, section 1).
+import { htmlText as esc } from "../utils/htmlText";
 import { clusterPins, clusterBounds, clusterLabel, clusterHint } from "../utils/mapStops";
 // Oliver, 22 Sep 2026: "We need the same 'pointers' as on the chat map." One
 // pin, drawn by both maps. See utils/mapPins.js.
@@ -259,7 +262,7 @@ export const GuideRouteMap = ({ points, legs, nearby = [], onSelect = null, sele
               // label says WHAT it is in two words and the hint says what
               // clicking does, and a map with two tooltips on one pin is a map
               // with a tooltip covering the next pin.
-              html: `<div title="${clusterHint(n)}" style="width:30px;height:30px;border-radius:50%;background:${C.surface};color:${C.gold};`
+              html: `<div title="${esc(clusterHint(n))}" style="width:30px;height:30px;border-radius:50%;background:${C.surface};color:${C.gold};`
                   + `font:800 12px 'Inter',sans-serif;display:flex;align-items:center;justify-content:center;`
                   + `border:2px solid ${C.gold};box-shadow:0 0 0 4px rgba(212,175,55,.18),0 2px 8px rgba(0,0,0,.6)">${n}</div>`,
               iconSize: [30, 30],
@@ -339,7 +342,7 @@ export const GuideRouteMap = ({ points, legs, nearby = [], onSelect = null, sele
         // numbers carry the order (they match the stop list below) and a name
         // appears on hover or tap.
         const marker = L.marker([p.lat, p.lon], { icon, riseOnHover: true })
-          .bindTooltip(p.name, {
+          .bindTooltip(esc(p.name), {
             permanent: points.length <= LABEL_LIMIT,
             direction: "top",
             // Above the pin's HEAD rather than above its centre: the tip is
@@ -478,7 +481,7 @@ export const GuideRouteMap = ({ points, legs, nearby = [], onSelect = null, sele
         // Escaped, because this is built as HTML rather than as elements. The
         // values are the founder's own published rows, so this is not a
         // sanitiser so much as the habit that keeps one from being needed.
-        const esc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+        // esc is the shared htmlText imported at the top since 9 Oct 2026.
         const name = esc(shot.town || shot.name || "");
         const credit = esc(shot.credit || "");
         const tall = cardHeight(!!credit);
@@ -577,7 +580,7 @@ export const GuideRouteMap = ({ points, legs, nearby = [], onSelect = null, sele
             interactive: false,
             keyboard: false,
           })
-            .bindTooltip(r.name, { permanent: true, direction: "right", offset: [6, 0], className: "gemlyx-near-label" })
+            .bindTooltip(esc(r.name), { permanent: true, direction: "right", offset: [6, 0], className: "gemlyx-near-label" })
             .addTo(near);
         });
       near.addTo(map);

@@ -6,6 +6,8 @@ import { addTileLayer } from "../utils/mapTiles";
 // pointers on the guide's route map: "We need the same 'pointers' as on the
 // chat map." Two maps, one pin. See utils/mapPins.js.
 import { pushPin, pinId, PIN_RED, PIN_HEAD_PX } from "../utils/mapPins";
+// Leaflet writes a string label as HTML (security review, 9 Oct 2026, section 1).
+import { htmlText } from "../utils/htmlText";
 import { ChatPlaceCards, showablePhoto } from "./ChatPlaceCards";
 import { POPUP_CLASS, RAIL_BREAKPOINT_PX, LABEL_CLASS, CORNER_CLASS, DOT_GREEN, labelSides, isSpotPin, spotsShowAt, phoneMapOpen, placesAround } from "../utils/chatRail";
 import { distinctThemes, THEME_LABEL } from "../utils/placeThemes";
@@ -1147,7 +1149,7 @@ export const ChatMiniMap = ({ pins = [], dropped = 0, C, onOpen, lang = null, he
       const group = L.layerGroup();
       near.forEach(p => {
         L.circleMarker([p.lat, p.lon], { radius: 4.5, color: "#0A0F1E", weight: 1.5, fillColor: "#C9A84C", fillOpacity: 0.85 })
-          .bindTooltip(String(p.name), { direction: "top", offset: [0, -4] })
+          .bindTooltip(htmlText(p.name), { direction: "top", offset: [0, -4] })
           .on("click", () => openRef.current?.(p.place || p))
           .addTo(group);
       });

@@ -33,12 +33,13 @@ import { DealCornerMap } from "./DealCornerMap";
 import { DealPlaceView } from "./DealPlaceView";
 import { placeClock, cleanClock, windowOf } from "../utils/offerClock";
 import { RedeemSheet } from "./RedeemSheet";
-import { DealTile, eyebrow } from "./DealCard";
+import { DealTile, TILE_CSS, eyebrow } from "./DealCard";
 import { DealDetail } from "./DealDetail";
 import { CategoryNav } from "./CategoryFilter";
 import { ExploreBanner, MAX_DEAL_SLIDES } from "./ExploreBanner";
 import { dealCategory, byCategories, CATEGORY_SIGN, DEAL_CATEGORIES } from "../utils/dealCategories";
 import { dayKey, dayPlus } from "../utils/calendarDay";
+import { DEAL_OPEN_EVENT, pendingDeal, clearPendingDeal } from "../utils/dealOpen";
 
 const fill = (t, v) => String(t).replace(/\{(\w+)\}/g, (_, k) => (v[k] ?? ""));
 
@@ -71,7 +72,17 @@ export const pointOf = (d) => {
 const RANK = { now: 0, always: 0, later: 1 };
 export const MAX_DEALS = 12;
 // Two to a row on a phone, like Lidl Plus; three or four on a wider screen.
-const GRID = { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 12 };
+// DESIGN REVIEW, 15 OCT 2026: on a computer the auto-fill grid cut the 1088px
+// column into six 171px tiles, each with a 214px picture, while lidl.dk puts
+// four 290px tiles across the same width. So from 960px up it is four to a
+// row with a wider gap, and the tile's own type grows a size with it
+// (DealCard.jsx, TILE_CSS). The phone keeps the auto-fill: two across at
+// 390px, three from about 520px.
+const GRID = { display: "grid", gap: 12 };
+const GRID_CSS = `
+.gx-deal-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+@media (min-width: 960px) { .gx-deal-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; } }
+`;
 // ORDER, 13 Oct 2026: "Make alphabetic and closest filter. And only calculate
 // from you." So two orders a visitor picks, and distance only ever from where
 // the phone is. "default" is the order the page used before he chose these,
@@ -435,6 +446,28 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
   };
   const walkStart = going?._from ? { id: "here", name: uiT("now.whereYouAre", lang), lat: going._from.lat, lon: going._from.lon, ship: false } : start;
 
+  // ── A DEAL ASKED FOR BY AN ALERT OR A MAIL ─────────────────────────
+  // 15 Oct 2026 (utils/dealOpen.js): the bell's list and a deal mail's link
+  // open one deal here, as its tile would, once the list has it. A deal of
+  // another kind than the one shown brings back all of them first; one that
+  // is no longer on Explore opens nothing.
+  const [asked, setAsked] = useState(() => pendingDeal());
+  useEffect(() => {
+    const on = () => setAsked(pendingDeal());
+    window.addEventListener(DEAL_OPEN_EVENT, on);
+    return () => window.removeEventListener(DEAL_OPEN_EVENT, on);
+  }, []);
+  useEffect(() => {
+    if (!asked || !ready) return;
+    const keyOf = (x) => x.id || x.d.name;
+    const done = (k) => { clearPendingDeal(); setAsked(null); if (k) { pushSheet(1); setOpened(k); } };
+    if (all.some(x => keyOf(x) === asked) && (!cat || list.some(x => keyOf(x) === asked))) return done(asked);
+    if (soon.some(x => keyOf(x) === asked)) return done(`soon:${asked}`);
+    const anyKind = all.some(x => keyOf(x) === asked) || upcomingDeals(deals, null, { now: new Date(), lang, limit: Infinity }).some(x => keyOf(x) === asked);
+    if (anyKind && cat) { leaveCat(); return; }
+    done(null);
+  }, [asked, ready, all, list, soon, cat]);
+
   // Counted once per visit, for the places listed: what a partner sees as
   // "times your offer was shown".
   const counted = useRef(false);
@@ -457,13 +490,16 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
 
   return (
     <section ref={sectionRef} data-testid="deals-near" style={{ marginBottom: 30, position: "relative" }}>
+      <style>{GRID_CSS}{TILE_CSS}</style>
       {banner && (
         <ExploreBanner slides={slides} cat={cat} catLabel={cat ? uiT(`explore.cat.${cat}`, lang) : ""} lang={lang} examples={examples}
           onOpen={(key) => { pushSheet(1); setOpened(key); }} />
       )}
       <div style={banner ? { maxWidth: 1120, margin: "0 auto", padding: "8px 16px 0" } : undefined}>
       {banner ? (
-        <div style={{ maxWidth: 640, margin: "0 auto 18px" }}>
+        // A little more air under the circles on a computer, where they are
+        // 80px (design review, 15 Oct 2026); 18px on a phone as before.
+        <div style={{ maxWidth: 640, margin: "0 auto clamp(18px, 2.4vw, 30px)" }}>
           <CategoryNav active={cat} onPick={pickCat} label={(k) => uiT(`explore.cat.${k}`, lang)} />
         </div>
       ) : (
@@ -493,11 +529,11 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
       {!ready ? (
         <div data-testid="deals-near-loading" style={{ height: 120 }} />
       ) : list.length === 0 ? (
-        <div data-testid="deals-near-none" style={{ fontSize: 13.5, color: C.light, lineHeight: 1.6, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "13px 15px" }}>
+        <div data-testid="deals-near-none" style={{ fontSize: 13.5, color: C.light, lineHeight: 1.6, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "13px 16px" }}>
           {uiT(soon.length ? "explore.noneNowSoon" : cat ? "explore.noneCat" : "trips.noDeals", lang)}
         </div>
       ) : (
-        <div data-testid="deals-grid" style={GRID}>
+        <div data-testid="deals-grid" className="gx-deal-grid" style={GRID}>
           {list.map(x => {
             const offer = offerTextIn(x.d.__offer, lang);
             const when = offerWhen(x.d.__offer, x.card.timing, { now: new Date(), lang });
@@ -514,7 +550,7 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
       {soon.length > 0 && (
         <div data-testid="deals-upcoming" style={{ marginTop: 30 }}>
           <h3 style={{ ...eyebrow(), margin: "0 0 12px" }}>{uiT("explore.upcoming", lang)}</h3>
-          <div style={GRID}>
+          <div className="gx-deal-grid" style={GRID}>
             {soon.map(x => (
               <DealTile key={x.id || x.d.name} testid="deal-upcoming" upcoming name={x.d.name}
                 offer={offerTextIn(x.d.__offer, lang)} badge={upcomingBadge(x.next, lang)}
@@ -531,7 +567,9 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
         if (!opened) return null;
         const isSoon = String(opened).startsWith("soon:");
         const key = isSoon ? String(opened).slice(5) : opened;
-        const x = (isSoon ? soon : list).find(y => (y.id || y.d.name) === key);
+        // `all` as well, for a deal opened by an alert that sits past the
+        // first twelve (15 Oct 2026).
+        const x = (isSoon ? soon : list).find(y => (y.id || y.d.name) === key) || (isSoon ? null : all.find(y => (y.id || y.d.name) === key));
         if (!x) return null;
         const offer = offerTextIn(x.d.__offer, lang);
         const when = isSoon ? { kind: "starts", text: startsWords(x.next, lang) } : offerWhen(x.d.__offer, x.card.timing, { now: new Date(), lang });
@@ -550,12 +588,21 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
         );
       })()}
       </div>
-      {country === "LT" && (
-        <a href={centreSite(lang)} target="_blank" rel="noopener noreferrer" data-testid="deals-centre-link"
-          style={{ display: "block", marginTop: 14, fontSize: 12.5, fontWeight: 700, color: C.muted, textDecoration: "none", textAlign: "center" }}>
-          {uiT("explore.more", lang)} ↗
-        </a>
-      )}
+      {country === "LT" && (() => {
+        // "In cooperation with Klaipėda Tourism Center" (Oliver, 14 Oct 2026),
+        // the centre's name the link to their own site.
+        const [before, after = ""] = uiT("explore.coop", lang).split("{name}");
+        return (
+          <div data-testid="deals-centre" style={{ marginTop: 18, fontSize: 12.5, color: C.muted, textAlign: "center", letterSpacing: 0.2 }}>
+            {before}
+            <a href={centreSite(lang)} target="_blank" rel="noopener noreferrer" data-testid="deals-centre-link"
+              style={{ color: C.light, fontWeight: 700, textDecoration: "underline", textDecorationColor: `${C.gold}88`, textUnderlineOffset: 3 }}>
+              {uiT("explore.coopName", lang)}
+            </a>
+            {after}
+          </div>
+        );
+      })()}
 
       {redeem && (
         <RedeemSheet name={redeem.x.d.name} offer={offerTextIn(redeem.x.d.__offer, lang)} when={redeem.when} lang={lang}

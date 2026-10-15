@@ -80,7 +80,7 @@ export const CategoryVideo = ({ k = null, playing = true }) => {
   // (ExploreBanner.jsx), which it replaces while its kind of place is shown.
   return (
     <div ref={box} aria-hidden="true" data-testid="category-video" data-cat={shown}
-      style={{ position: "absolute", inset: 0, zIndex: 2, pointerEvents: "none", overflow: "hidden", background: "#0B0A08", opacity: on ? 1 : 0, transition: "opacity 450ms ease" }}>
+      style={{ position: "absolute", inset: 0, zIndex: 2, pointerEvents: "none", overflow: "hidden", background: "#0B0A08", opacity: on ? 1 : 0, transition: "opacity 600ms ease" }}>
       {still || failed ? (
         <img src={film.still} alt="" style={media} />
       ) : (
@@ -90,8 +90,13 @@ export const CategoryVideo = ({ k = null, playing = true }) => {
         </video>
       )}
       {/* Only the bottom is darkened, for the name over it, as Lidl's own
-          category film does. "Can it be a little less faded?" (14 Oct 2026). */}
-      <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(0,0,0,0) 45%, rgba(0,0,0,0.55) 100%)" }} />
+          category film does. "Can it be a little less faded?" (14 Oct 2026).
+          Design review, 15 Oct 2026: hivecph.dk's film reads as one block with
+          the black bar over it because the two meet dark on dark. So the top
+          fifth carries a faint shade too, enough for the film to sit under the
+          header and for the Example mark to read, and nothing a viewer would
+          call a fade. The bottom is as it was. */}
+      <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0) 20%, rgba(0,0,0,0) 45%, rgba(0,0,0,0.55) 100%)" }} />
     </div>
   );
 };

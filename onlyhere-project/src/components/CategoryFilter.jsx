@@ -49,32 +49,51 @@ export const CATEGORY_ICON = {
 // circles are the dark of the page with a fine gold edge and the drawing in
 // gold, and the one shown is filled with gold, the drawing dark on it. The
 // four colours stay for the map pins (pinColours.js) and the banner slides.
+// DESIGN REVIEW, 15 OCT 2026. Lidl's circles are 128px under a banner about
+// 360px tall; ours were 64px under one of 432px, so on a computer the row read
+// as four small coins with wide gaps. The size now follows the screen: 64px on
+// a phone (four across 358px), 80px from 720px up, with the label a size
+// larger to match. Done in CSS so one drawing serves both. On a pointer the
+// circle lifts 2px and brightens, the small answer a 2026 page gives a hover.
+const NAV_CSS = `
+.gx-cat-nav { --gx-circle: 64px; --gx-cat-label: 12.5px; }
+@media (min-width: 720px) { .gx-cat-nav { --gx-circle: 80px; --gx-cat-label: 13.5px; } }
+.gx-cat-circle { transition: background .25s ease, box-shadow .25s ease, transform .25s ease, filter .25s ease; }
+@media (hover: hover) { .gx-cat:hover .gx-cat-circle { transform: translateY(-2px); filter: brightness(1.12); } }
+@media (prefers-reduced-motion: reduce) { .gx-cat:hover .gx-cat-circle { transform: none; } }
+`;
+
 export const CategoryNav = ({ active = null, onPick, label = (k) => k }) => (
-  <nav aria-label="Kinds of place" data-testid="deals-categories"
+  <nav aria-label="Kinds of place" data-testid="deals-categories" className="gx-cat-nav"
     style={{ display: "grid", gridTemplateColumns: `repeat(${DEAL_CATEGORIES.length}, minmax(0, 1fr))`, gap: 8 }}>
+    <style>{NAV_CSS}</style>
     {DEAL_CATEGORIES.map(k => {
       const on = active === k;
       return (
-        <button key={k} type="button" onClick={() => onPick(k)} aria-current={on ? "page" : undefined} data-testid={`deals-cat-${k}`}
-          style={{ background: "none", border: "none", padding: "4px 0", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, fontFamily: "'Inter', sans-serif" }}>
-          <CategoryCircle k={k} size={64} on={on} />
-          <span style={{ fontSize: 12.5, fontWeight: on ? 700 : 600, color: on ? C.gold : C.light, textAlign: "center", lineHeight: 1.25, letterSpacing: 0.2, textShadow: `0 1px 6px ${C.bg}, 0 0 2px ${C.bg}`, transition: "color .2s ease" }}>{label(k)}</span>
+        <button key={k} type="button" className="gx-cat" onClick={() => onPick(k)} aria-current={on ? "page" : undefined} data-testid={`deals-cat-${k}`}
+          style={{ background: "none", border: "none", padding: "4px 0", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 10, fontFamily: "'Inter', sans-serif" }}>
+          <CategoryCircle k={k} size="var(--gx-circle, 64px)" on={on} />
+          <span style={{ fontSize: "var(--gx-cat-label, 12.5px)", fontWeight: on ? 700 : 600, color: on ? C.gold : C.light, textAlign: "center", lineHeight: 1.25, letterSpacing: 0.2, textShadow: `0 1px 6px ${C.bg}, 0 0 2px ${C.bg}`, transition: "color .2s ease" }}>{label(k)}</span>
         </button>
       );
     })}
   </nav>
 );
 
-export const CategoryCircle = ({ k, size = 64, on = false }) => (
-  <span aria-hidden="true" data-on={on ? "1" : undefined}
-    style={{
-      width: size, height: size, flex: "0 0 auto", borderRadius: "50%", display: "inline-flex", alignItems: "center", justifyContent: "center",
-      background: on ? `linear-gradient(145deg, #F1D594 0%, ${C.gold} 55%, #A8813F 100%)` : `radial-gradient(circle at 35% 30%, ${C.surface} 0%, ${C.bg} 100%)`,
-      boxShadow: on ? `0 0 0 3px ${C.bg}, 0 0 0 4px ${C.gold}88, 0 6px 22px ${C.gold}33` : `inset 0 0 0 1px ${C.gold}66, 0 4px 14px rgba(0,0,0,0.35)`,
-      transition: "background .25s ease, box-shadow .25s ease",
-    }}>
-    <svg width={Math.round(size * 0.44)} height={Math.round(size * 0.44)} viewBox="0 0 24 24">{CATEGORY_ICON[k](on ? "#16130E" : C.gold, 1.6)}</svg>
-  </span>
-);
+// `size` is a number of pixels or a CSS length (the nav hands it a variable).
+export const CategoryCircle = ({ k, size = 64, on = false }) => {
+  const px = typeof size === "number" ? `${size}px` : size;
+  return (
+    <span aria-hidden="true" data-on={on ? "1" : undefined} className="gx-cat-circle"
+      style={{
+        width: px, height: px, flex: "0 0 auto", borderRadius: "50%", display: "inline-flex", alignItems: "center", justifyContent: "center",
+        background: on ? `linear-gradient(145deg, #F1D594 0%, ${C.gold} 55%, #A8813F 100%)` : `radial-gradient(circle at 35% 30%, ${C.surface} 0%, ${C.bg} 100%)`,
+        boxShadow: on ? `0 0 0 3px ${C.bg}, 0 0 0 4px ${C.gold}88, 0 6px 22px ${C.gold}33` : `inset 0 0 0 1px ${C.gold}66, 0 4px 14px rgba(0,0,0,0.35)`,
+        transition: "background .25s ease, box-shadow .25s ease",
+      }}>
+      <svg viewBox="0 0 24 24" style={{ width: `calc(${px} * 0.44)`, height: `calc(${px} * 0.44)` }}>{CATEGORY_ICON[k](on ? "#16130E" : C.gold, 1.6)}</svg>
+    </span>
+  );
+};
 
 export default CategoryNav;
