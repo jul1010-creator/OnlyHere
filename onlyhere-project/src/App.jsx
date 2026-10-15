@@ -87,6 +87,8 @@ import { KlaipedaBusiness } from "./pages/KlaipedaBusiness";
 import { KlaipedaPartner } from "./pages/KlaipedaPartner";
 import { ReworkPage } from "./pages/ReworkPage";
 import { KlaipedaExplore } from "./components/KlaipedaExplore";
+import { DealAlertsBell } from "./components/DealAlerts";
+import { requestOpenDeal, dealFromSearch } from "./utils/dealOpen";
 import { DealStudio } from "./components/DealStudio";
 import { offerTranslatePrompt, readOfferTranslation } from "./utils/dealStudio";
 import { DEAL_CATEGORIES } from "./utils/dealCategories";
@@ -3445,7 +3447,7 @@ function GemlyxApp() {
   const addReelToRow = async (row) => {
     const url = mediaReelInput.trim();
     if (!url || mediaBusy) return;
-    if (!/instagram\.com\//i.test(url)) { setMediaError("Paste a full Instagram link (instagram.com/reel/...)"); return; }
+    if (!isEmbeddablePost(url)) { setMediaError("Paste a full Instagram link (instagram.com/reel/...)"); return; }
     setMediaBusy(true); setMediaError(null);
     try {
       const p = row.payload || {};
@@ -21946,6 +21948,24 @@ If the conversation only covers a single day or a few stops with no explicit day
   //
   // ONCE, on arrival. Pressing Explore later must not re-open anything, and the
   // ref is what keeps this an arrival rule rather than a standing one.
+  // ── A DEAL MAIL'S LINK OPENS ITS DEAL ─────────────────────────────
+  // 15 Oct 2026. A deal alert mail links to /lithuania?deal=food:12. Explore
+  // is the page, and the deal opens on it as its tile would (utils/dealOpen.js,
+  // DealsNearYou). The address is cleaned at once so a reload or a shared link
+  // does not open it again.
+  const dealLinkDone = useRef(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || dealLinkDone.current || PAGE_COUNTRY !== "LT") return;
+    dealLinkDone.current = true;
+    const id = dealFromSearch(window.location.search);
+    if (!id) return;
+    const q = new URLSearchParams(window.location.search);
+    q.delete("deal");
+    const rest = q.toString();
+    window.history.replaceState(window.history.state, "", `${window.location.pathname}${rest ? `?${rest}` : ""}${window.location.hash}`);
+    setActive("home");
+    requestOpenDeal(id);
+  }, []);
   const tabLinkDone = useRef(false);
   useEffect(() => {
     if (typeof window === "undefined" || tabLinkDone.current) return;
@@ -25182,7 +25202,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           <div key={row.id} style={{ display: "flex", alignItems: "center", gap: 8, background: C.bg, borderRadius: 8, padding: "7px 10px" }}>
                             <input type="checkbox" checked={row.enabled !== false} disabled={feedBusy}
                               onChange={e => setFeedEnabled(row, e.target.checked)} style={{ accentColor: C.gold, cursor: "pointer", flexShrink: 0 }} />
-                            <a href={row.url} target="_blank" rel="noreferrer"
+                            <a href={externalHref(row.url) || undefined} target="_blank" rel="noreferrer"
                               style={{ fontSize: 12, color: C.text, fontWeight: 600, textDecoration: "none", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                               {row.name} ↗
                             </a>
@@ -25416,7 +25436,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                 </button>
                               </>
                             )}
-                            {dirSource && <a href={dirSource} target="_blank" rel="noreferrer" style={{ fontSize: 10.5, color: C.muted }}>the page ↗</a>}
+                            {dirSource && <a href={externalHref(dirSource) || undefined} target="_blank" rel="noreferrer" style={{ fontSize: 10.5, color: C.muted }}>the page ↗</a>}
                             {dirAdded && <span style={{ fontSize: 10.5, color: C.gold }}>{dirAdded}</span>}
                             {dirError && <span style={{ fontSize: 10.5, color: "#FFB347" }}>{dirError}</span>}
                           </div>
@@ -25526,7 +25546,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                   {noticeSending === (c.postId || c.postUrl || c.date) ? "…" : "Send as a notice"}
                                 </button>
                                 {c.postUrl && (
-                                  <a href={c.postUrl} target="_blank" rel="noreferrer"
+                                  <a href={externalHref(c.postUrl) || undefined} target="_blank" rel="noreferrer"
                                     style={{ fontSize: 11, fontWeight: 700, color: C.muted, textDecoration: "none" }}>
                                     The post ↗
                                   </a>
@@ -26261,10 +26281,10 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                             <button onClick={() => switchLang("en")} style={pill(photoMail.lang === "en")}>English</button>
                                             <div style={{ flex: 1 }} />
                                             {p.website && (
-                                              <a href={p.website} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: C.light, textDecoration: "underline" }}>Their site ↗</a>
+                                              <a href={externalHref(p.website) || undefined} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: C.light, textDecoration: "underline" }}>Their site ↗</a>
                                             )}
                                             {press && (
-                                              <a href={press} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: C.light, textDecoration: "underline", marginLeft: 10 }}>Press photos? ↗</a>
+                                              <a href={externalHref(press) || undefined} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: C.light, textDecoration: "underline", marginLeft: 10 }}>Press photos? ↗</a>
                                             )}
                                           </div>
                                           <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
@@ -26807,7 +26827,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                 <span style={{ fontSize: 9.5, color: C.muted }}>{d.credit.photographer} · {d.credit.license}</span>
                               )}
                               {d.sourceUrl ? (
-                                <a href={d.sourceUrl} target="_blank" rel="noreferrer" style={{ fontSize: 10.5, color: C.muted, textDecoration: "underline" }}>source</a>
+                                <a href={externalHref(d.sourceUrl) || undefined} target="_blank" rel="noreferrer" style={{ fontSize: 10.5, color: C.muted, textDecoration: "underline" }}>source</a>
                               ) : (
                                 <span style={{ fontSize: 10.5, color: "#FFB347" }}>no source URL</span>
                               )}
@@ -27323,7 +27343,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                   </div>
                                   <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.55, marginTop: 2 }}>{pr.why}</div>
                                   {pr.url && (
-                                    <a href={pr.url} target="_blank" rel="noreferrer"
+                                    <a href={externalHref(pr.url) || undefined} target="_blank" rel="noreferrer"
                                       style={{ fontSize: 10.5, color: C.gold, textDecoration: "underline", wordBreak: "break-all" }}>
                                       {pr.url}
                                     </a>
@@ -27799,7 +27819,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                       <div style={{ fontSize: 10.5, color: C.muted, marginTop: 4, display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
                                         <span>Read off:</span>
                                         {c.evidence.slice(0, 3).map((u, k) => (
-                                          <a key={k} href={u} target="_blank" rel="noreferrer" style={{ color: C.gold, textDecoration: "underline" }}>{domainOf(u) || u}</a>
+                                          <a key={k} href={externalHref(u) || undefined} target="_blank" rel="noreferrer" style={{ color: C.gold, textDecoration: "underline" }}>{domainOf(u) || u}</a>
                                         ))}
                                       </div>
                                     )}
@@ -28317,7 +28337,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                               <span style={{ color: "#8BC34A" }}>{String(d.value)}</span>
                                             </div>
                                             {d.evidence && <div style={{ fontSize: 10.5, color: C.muted, marginTop: 2, lineHeight: 1.5, paddingLeft: 18 }}>{d.evidence}</div>}
-                                            {d.sourceUrl && <div style={{ fontSize: 10.5, marginTop: 2, paddingLeft: 18 }}><a href={d.sourceUrl} target="_blank" rel="noreferrer" style={{ color: C.gold }}>{d.sourceUrl.slice(0, 70)}</a></div>}
+                                            {d.sourceUrl && <div style={{ fontSize: 10.5, marginTop: 2, paddingLeft: 18 }}><a href={externalHref(d.sourceUrl) || undefined} target="_blank" rel="noreferrer" style={{ color: C.gold }}>{d.sourceUrl.slice(0, 70)}</a></div>}
                                           </div>
                                         )) : (
                                           <div style={{ fontSize: 11.5, color: C.muted, marginTop: 3 }}>Nothing settled it, so nothing changes here.</div>
@@ -29250,7 +29270,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                             {googleCheckResult.citations.length > 0 && (
                               <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
                                 {googleCheckResult.citations.map((c, i) => (
-                                  <a key={i} href={c.url} target="_blank" rel="noreferrer" style={{ fontSize: 10, color: "#8AB4F8", background: "#4285F418", border: "1px solid #4285F444", borderRadius: 100, padding: "3px 9px", textDecoration: "none" }}>{c.title.slice(0, 30)} ↗</a>
+                                  <a key={i} href={externalHref(c.url) || undefined} target="_blank" rel="noreferrer" style={{ fontSize: 10, color: "#8AB4F8", background: "#4285F418", border: "1px solid #4285F444", borderRadius: 100, padding: "3px 9px", textDecoration: "none" }}>{c.title.slice(0, 30)} ↗</a>
                                 ))}
                               </div>
                             )}
@@ -29300,7 +29320,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                         {c.verdict === "confirmed" ? "Checked against a source and it holds. " : c.verdict === "rejected" ? "Checked, and the draft was already right. " : c.verdict === "asserted" ? "Applied on your word, still unconfirmed. " : "Nothing settled it, so the draft is left alone. "}
                                         {c.evidence}
                                       </div>
-                                      {c.sourceUrl && <div style={{ paddingLeft: 18 }}><a href={c.sourceUrl} target="_blank" rel="noreferrer" style={{ color: C.gold, fontSize: 10.5 }}>{String(c.sourceUrl).slice(0, 70)}</a></div>}
+                                      {c.sourceUrl && <div style={{ paddingLeft: 18 }}><a href={externalHref(c.sourceUrl) || undefined} target="_blank" rel="noreferrer" style={{ color: C.gold, fontSize: 10.5 }}>{String(c.sourceUrl).slice(0, 70)}</a></div>}
                                     </div>
                                   );
                                 })}
@@ -29341,7 +29361,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                             {verifyResults.map((r, i) => (
                               <div key={i} style={{ marginBottom: i < verifyResults.length - 1 ? 10 : 0, paddingBottom: i < verifyResults.length - 1 ? 10 : 0, borderBottom: i < verifyResults.length - 1 ? `1px solid ${C.border}` : "none" }}>
                                 {r.url ? (
-                                  <a href={r.url} target="_blank" rel="noreferrer" style={{ fontSize: 11.5, fontWeight: 700, color: C.gold, textDecoration: "none" }}>{r.title} ↗</a>
+                                  <a href={externalHref(r.url) || undefined} target="_blank" rel="noreferrer" style={{ fontSize: 11.5, fontWeight: 700, color: C.gold, textDecoration: "none" }}>{r.title} ↗</a>
                                 ) : (
                                   <div style={{ fontSize: 11.5, fontWeight: 700, color: C.text }}>{r.title}</div>
                                 )}
@@ -33390,6 +33410,13 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           .gx-topnav { display: flex; }
           .gx-topnav-ai { display: inline-flex; }
           .gx-nav-in-menu { display: none !important; }
+          /* The page pill at the foot of the pager says what the bar above
+             already underlines (design review, 15 Oct 2026). */
+          .gx-pager-pill { display: none !important; }
+          /* The lockup a step larger where there is room for it: 22px reads
+             as a favicon next to a 34px search pill. Scaled, not resized, so
+             the drawing is the same one a phone shows. */
+          .gx-lockup { transform: scale(1.18); transform-origin: left center; margin-right: 24px; }
         }
         /* ── ARRIVING IN DENMARK ─────────────────────────────────
            The white the wash left behind, handed over to the app side so the
@@ -34023,7 +34050,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               nothing to a screen reader, and this is the one control on the
               header that every other site has trained people to press. His
               father is the accessibility test for this product. */}
-          <button onClick={backToFrontPage} aria-label={uiT("header.back", uiLang)}
+          <button onClick={backToFrontPage} aria-label={uiT("header.back", uiLang)} className="gx-lockup"
             style={{ display: "flex", alignItems: "center", background: "none", border: "none", padding: 0, cursor: "pointer", flexShrink: 0 }}>
             <GemlyxLogo size={22} color={C.text} />
           </button>
@@ -34110,6 +34137,17 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 and the width of the header do not move when somebody signs in.
                 See components/AccountAvatar.jsx for why the person is drawn
                 underneath the picture rather than instead of it. */}
+            {/* ── THE BELL, FOR NEW DEALS ──────────────────────────
+                Oliver, 14 Oct 2026: "make a notification system for users, so
+                they can see whenever a new discount has popped up." For members
+                who are signed in, on the Lithuanian site, beside the account
+                picture and in the same row, never fixed on top of it (the bell
+                of 5 Sep was, and took the menu with it). It draws nothing until
+                its tables exist. See components/DealAlerts.jsx. */}
+            {PAGE_COUNTRY === "LT" && userSession?.userId && (
+              <DealAlertsBell session={userSession} lang={uiLang} version={liveContentVersion}
+                onOpenDeal={(id) => { setShowMenu(false); goTab("home"); requestOpenDeal(id); }} />
+            )}
             <button className="gemlyx-account" onClick={() => setShowMenu(!showMenu)}
               aria-label={[uiT("header.menu", uiLang), userSession ? accountLabel() : "", unreadTripChanges > 0 ? alertCountLine(unreadTripChanges) : "", noticesWaiting > 0 ? `${noticesWaiting} thing${noticesWaiting === 1 ? "" : "s"} on near you` : ""].filter(Boolean).join(". ")}
               title={unreadTripChanges > 0 ? alertCountLine(unreadTripChanges) : uiT("header.menu", uiLang)}
@@ -34439,7 +34477,15 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             you are on now sits in the same pill, which answers the question the
             dots were raising, and the active dot is a bar rather than a circle
             so position is readable at a glance. */}
-        <div style={{ position: "absolute", bottom: 12, left: "50%", transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: 9, zIndex: 60, background: "rgba(14,14,17,0.62)", padding: "6px 12px 6px 14px", borderRadius: 100, backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.08)", maxWidth: "calc(100vw - 32px)" }}>
+        {/* ── NOT ON A COMPUTER ──────────────────────────────────────
+            Design review, 15 Oct 2026, with Explore on /lithuania at 1440px:
+            this pill floated over the names under the category circles and
+            over the last line of the deals (design_before_desktop_explore.png).
+            From 1024px up the pages are in the bar at the top, with the one
+            you are on underlined, so the pill was saying it twice and covering
+            content to do it. .gx-pager-pill hides it there; a phone and a
+            tablet keep it, since the burger holds their pages. */}
+        <div className="gx-pager-pill" style={{ position: "absolute", bottom: 12, left: "50%", transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: 9, zIndex: 60, background: "rgba(14,14,17,0.62)", padding: "6px 12px 6px 14px", borderRadius: 100, backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.08)", maxWidth: "calc(100vw - 32px)" }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: "#fff", whiteSpace: "nowrap", letterSpacing: 0.2 }}>
             {(NAV_ITEMS.find(n => n.id === active)?.label || "").replace("✦ ", "")}
           </span>
@@ -35255,6 +35301,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
       <AboutMePage
         open={aboutMeOpen && !!userSession}
         session={userSession}
+        lang={uiLang}
         profile={userProfile}
         savedGuides={savedGuides}
         savedPlaces={savedPlaces}
@@ -35619,7 +35666,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
 
             {craftDetail.bookingType === "online" ? (
               <>
-                <a href={craftDetail.bookingUrl} target="_blank" rel="noreferrer"
+                <a href={externalHref(craftDetail.bookingUrl) || undefined} target="_blank" rel="noreferrer"
                   style={{ display: "block", textAlign: "center", width: "100%", background: C.accent, borderRadius: 12, padding: "15px", fontSize: 15, fontWeight: 700, color: C.onAccent, textDecoration: "none", fontFamily: "'Inter', sans-serif" }}>
                   Book Online ↗
                 </a>
