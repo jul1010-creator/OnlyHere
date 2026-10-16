@@ -785,6 +785,7 @@ export const UI_STRINGS = {
   "about.placesBody": { en: "Run a café, a bar, a workshop or anything a visitor would enjoy? Write to us about putting an offer on Gemlyx:", da: "Driver du en café, en bar, et værksted eller noget andet, en besøgende ville nyde? Skriv til os om at få et tilbud på Gemlyx:", de: "Du führst ein Café, eine Bar, eine Werkstatt oder etwas anderes, das Besuchern gefallen würde? Schreib uns, wenn du ein Angebot auf Gemlyx stellen möchtest:", lt: "Turite kavinę, barą, dirbtuvę ar kitą vietą, kuri patiktų lankytojams? Parašykite mums dėl pasiūlymo Gemlyx:" },
   "about.ruleAlcohol": { en: "No alcohol promotions", da: "Ingen alkoholtilbud", de: "Keine Alkoholwerbung", lt: "Jokių alkoholio akcijų" },
   "about.ruleAdult":   { en: "No 18+ promotions", da: "Ingen tilbud kun for 18+", de: "Keine Angebote ab 18", lt: "Jokių 18+ akcijų" },
+  "about.ruleBreach":  { en: "Breaking either rule means immediate suspension.", da: "Brud på en af reglerne betyder øjeblikkelig suspendering.", de: "Ein Verstoß gegen eine der Regeln führt zur sofortigen Sperrung.", lt: "Pažeidus bet kurią taisyklę, dalyvavimas nedelsiant sustabdomas." },
   "about.made":       { en: "Made in Denmark, starting in Klaipėda.", da: "Lavet i Danmark, med start i Klaipėda.", de: "Gemacht in Dänemark, mit dem Start in Klaipėda.", lt: "Sukurta Danijoje, pradedama Klaipėdoje." },
   // Show directions in a deal, 16 Oct 2026 (DealsNearYou goFromDeal).
   "dir.finding":  { en: "Finding you", da: "Finder dig", de: "Standort wird gesucht", lt: "Ieškome jūsų" },

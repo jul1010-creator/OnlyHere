@@ -79,6 +79,9 @@ const num = (v) => (v === "" || v === null || v === undefined ? NaN : Number(v))
 // depends on buying alcohol. The word lists catch the plain cases in the four
 // languages of the site; anything they miss is still against the terms.
 export const DEAL_RULES = ["No alcohol promotions", "No 18+ promotions"];
+// Oliver, same night: "It also needs to be clear that doing any of these
+// promotions will lead to a immediate suspension." Terms clause 14.8.
+export const DEAL_RULES_BREACH = "Breaking either rule means immediate suspension.";
 const ALCOHOL = /(?:^|[^\p{L}])(beers?|lagers?|ales?|stouts?|ipa|ciders?|wines?|prosecco|champagne|cocktails?|vodka|gin|rum|whisk(?:e)?y|brandy|cognac|liqueurs?|tequila|mead|spritz|aperol|mojitos?|happy hour|alus|alaus|vynas|vyno|degtinė|degtinės|kokteili\p{L}*|sidras|midus|øl|vin|vinen|snaps|bier|biere|wein|sekt|schnaps)(?![\p{L}])/iu;
 const ALCOHOL_FREE = /(alcohol[ -]?free|non[ -]?alcoholic|0[.,]0\s*%?|nealkoholin\p{L}*|be alkoholio|alkoholfri\p{L}*|alkoholfrei\p{L}*)/iu;
 const ADULT = /(?:^|[^\p{L}\d])(18\+|tobacco|cigarettes?|cigars?|vape|vapes|vaping|e-?cig\p{L}*|hookah|shisha|casino|gambling|betting|poker|erotic|strip ?club|adults? only|tabak\p{L}*|cigaret\p{L}*|kaljan\p{L}*|lošim\p{L}*|kazino|glücksspiel|spillested)(?![\p{L}])/iu;
