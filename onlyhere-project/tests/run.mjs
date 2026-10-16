@@ -429,6 +429,7 @@ writeFileSync(entry, `
   export * as DNY from ${JSON.stringify(join(root, "src/components/DealsNearYou.jsx"))};
   export * as DST from ${JSON.stringify(join(root, "src/utils/dealStudio.js"))};
   export * as DCAT from ${JSON.stringify(join(root, "src/utils/dealCategories.js"))};
+  export * as CMS from ${JSON.stringify(join(root, "src/utils/cardMapStyle.js"))};
   export * as DAL from ${JSON.stringify(join(root, "src/utils/dealAlerts.js"))};
   export * as DALR from ${JSON.stringify(join(root, "api/deal-alerts.js"))};
   export * as DOPEN from ${JSON.stringify(join(root, "src/utils/dealOpen.js"))};
@@ -82894,12 +82895,13 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
 {
   const read = (f) => readFileSync(join(root, f), "utf8");
   const cm = read("src/components/DealCornerMap.jsx"), dny = read("src/components/DealsNearYou.jsx");
-  ok("the guide's own Google map, in the guide's style, fixed on the street", /mapId: GOOGLE_MAP_ID,/.test(cm) && /zoom: CLOSE_ZOOM,/.test(cm) && /CLOSE_ZOOM = 15;/.test(cm) && !/leaflet|addTileLayer|flyTo/i.test(cm.replace(/\/\/.*$/gm, "")));
+  // 16 Oct 2026: drawn dark rather than in the guide's style (Batch 248).
+  ok("Google's own map, fixed on the street", /styles: CARD_MAP_STYLE,/.test(cm) && /zoom: CLOSE_ZOOM,/.test(cm) && /CLOSE_ZOOM = 15;/.test(cm) && !/leaflet|addTileLayer|flyTo/i.test(cm.replace(/\/\/.*$/gm, "")));
   ok("a picture, not a control: nothing on it moves", /disableDefaultUI: true, gestureHandling: "none", keyboardShortcuts: false, clickableIcons: false/.test(cm));
   ok("raster, so a dozen do not need a dozen WebGL canvases", /RenderingType\?\.RASTER \|\| "RASTER"/.test(cm));
   ok("made when the card first comes near the screen, then kept", /new IntersectionObserver\(/.test(cm) && /\{ seen\.disconnect\(\); setNear\(true\); \}/.test(cm) && /made\.current = true;/.test(cm));
   // Batch 237: Google's picture first, the live map only if the key refuses it.
-  ok("a Static Maps picture first, in the guide's style, never saved into the site", /maps\/api\/staticmap\?center=/.test(cm) && /&map_id=\$\{encodeURIComponent\(GOOGLE_MAP_ID\)\}/.test(cm) && /&scale=2/.test(cm) && /\{near && !live && \(/.test(cm));
+  ok("a Static Maps picture first, never saved into the site", /maps\/api\/staticmap\?center=/.test(cm) && /&scale=2&\$\{staticStyleParams\(\)\}&key=/.test(cm) && /\{near && !live && \(/.test(cm));
   ok("and the live map only when Google refuses, asked once a visit", /onError=\{\(\) => \{ staticRefused = true; setLive\(true\); \}\}/.test(cm) && /useState\(staticRefused\)/.test(cm) && /if \(!ok \|\| !near \|\| !live \|\| made\.current/.test(cm));
   ok("no key, no map, rather than a worse one", /googleMapsReady\(\)/.test(cm) && /if \(!ok\) return null;/.test(cm));
   ok("every deal with a place gets one, and tapping it walks there", /<DealCornerMap fill ratio=\{ratio\} radius=\{radius\} lat=\{at\.lat\} lon=\{at\.lon\} name=\{name\}/.test(read("src/components/DealCard.jsx")) && /onOpen=\{\(\) => \{ pushSheet\(1\); setOpened\(key\); \}\}/.test(dny) && /onTap=\{\(\) => setAbove\(true\)\}/.test(read("src/components/DealDetail.jsx")));
@@ -83577,6 +83579,42 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("the privacy policy names deal emails, Resend, consent and the 90 days", /<h3 id="deal-alerts">Deal alerts and deal emails<\/h3>/.test(pv) && /Deal emails are delivered by <strong>Resend<\/strong>/.test(pv) && /consent, Article 6\(1\)\(a\)/.test(pv) && /removed after 90 days/.test(pv) && /Neither is available without an account/.test(pv));
   const ds = read("src/components/DealStudio.jsx");
   ok("a deal saved and shown tells the server, never in the way of the save", /Promise\.resolve\(studioFetch\("\/api\/deal-alerts", \{ method: "POST" \}\)\)\.catch\(\(\) => \{\}\)/.test(ds) && (ds.match(/if \((made|after)\.published\) tellMembers\(\);/g) || []).length === 3);
+}
+
+// ── Batch 248: the deal tiles' maps, dark like the page ──
+// Oliver, 16 Oct 2026, of a design review of the Lithuanian page: "try out
+// the ideas that google and you agreed on". The tiles were bright light
+// Google maps on a dark page; they are now drawn in the page's own browns.
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const cm = read("src/components/DealCornerMap.jsx");
+  const { CARD_MAP_STYLE: S, staticStyleParams: P } = M.CMS;
+  const q = P();
+  const params = q.split("&").map(x => decodeURIComponent(x.replace(/^style=/, "")));
+  ok("one style= per rule, in the same order", q.split("&").every(x => x.startsWith("style=")) && params.length === S.length);
+  ok("land in the page's surface brown, water a deep blue, colours spelled 0xRRGGBB", params[0] === "element:geometry|color:0x1C1912" && params.includes("feature:water|element:geometry|color:0x10232F") && !/#/.test(params.join("")));
+  ok("every place of interest off, then parks and sights back on, in that order", params.indexOf("feature:poi|visibility:off") > -1 && params.indexOf("feature:poi|visibility:off") < params.indexOf("feature:poi.park|element:geometry|visibility:on") && params.indexOf("feature:poi|visibility:off") < params.indexOf("feature:poi.attraction|element:labels.text|visibility:on"));
+  ok("so no shop or bar next door shows on a partner's tile", !S.some(r => /^poi\.business/.test(r.featureType || "") && r.stylers.some(s => s.visibility === "on")));
+  ok("the | and : travel encoded", /%7C/.test(q) && /%3A/.test(q) && !/\|/.test(q));
+  ok("the picture and the live map take the same rules", /from "\.\.\/utils\/cardMapStyle"/.test(cm) && /&scale=2&\$\{staticStyleParams\(\)\}&key=/.test(cm) && /styles: CARD_MAP_STYLE,/.test(cm));
+  ok("and no Map ID on the tile map, which Google asks not to mix with style rules", !/GOOGLE_MAP_ID|map_id=|mapId:/.test(stripComments(cm)));
+  ok("the walk map and the place view keep the guide's style", /mapId: GOOGLE_MAP_ID, center: bounds\.getCenter\(\)/.test(read("src/components/GoogleWalkMap.jsx")) && /mapId: GOOGLE_MAP_ID,/.test(read("src/components/DealPlaceView.jsx")));
+  ok("still raster, still a picture and not a control", /RenderingType\?\.RASTER \|\| "RASTER"/.test(cm) && /disableDefaultUI: true, gestureHandling: "none", keyboardShortcuts: false, clickableIcons: false/.test(cm));
+}
+
+// ── Batch 249: example pictures on some of the deals ──
+// Oliver, 16 Oct 2026: "the map will be in a different area when we have
+// actual pictures. Can we have examples of pictures on some? Just examples."
+{
+  const { examplePromotionPools: pools, EXAMPLE_DEAL_PHOTO: PH, EXAMPLE_PARTNERS: EP, pageFor } = M.KEX;
+  const items = Object.values(pools()).flat();
+  const keyOf = (it) => String(it._exampleId || "").split(":")[1];
+  const withPhoto = items.filter(it => it.photo).map(keyOf).sort();
+  ok("five of the made-up deals carry a picture", withPhoto.join(",") === "amber,bakery,bike,jazz,tea");
+  ok("the rest keep the map, so both looks show side by side", items.filter(it => !it.photo).length >= 4);
+  ok("no picture on the beer bar's deal", !items.find(it => keyOf(it) === "beer")?.photo && !PH.beer);
+  ok("each is a free Unsplash photo over https, sized for the banner too", Object.values(PH).every(u => /^https:\/\/images\.unsplash\.com\/photo-[0-9a-f-]+\?auto=format&fit=crop&w=1200&q=65$/.test(u)));
+  ok("only on the deals: the examples page and the walk keep the partners' signs", EP.every(p => !pageFor(`${p.type}:${p.key}`)?.item?.photo));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
