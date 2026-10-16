@@ -437,6 +437,13 @@ const HOME_PATH = homePath(PAGE_COUNTRY);
 // drawn. Their code is untouched: drop the LT test here to bring them back.
 // Denmark keeps its bar.
 const TOP_NAV_SHOWN = PAGE_COUNTRY !== "LT";
+// ── AND NO PAGES OR SAVED TRIPS IN ITS MENU ────────────────────────────
+// Oliver, 16 Oct 2026: "The saved trips and tours and all that gotta be
+// temporarily removed. Not sure if we keep it at all." So on /lithuania the
+// menu leaves out the Saved trips row (and the saved and kept counts under the
+// name) and the list of pages a phone used to get there. The code is kept:
+// drop the LT test here to bring them back. Denmark keeps both.
+const MENU_PAGES_SHOWN = PAGE_COUNTRY !== "LT";
 // What is not built for another country yet stays off its pages rather than
 // answering in Danish. Nothing, since Phase 3 put the planner on them without
 // its chat (PlanAbroadForm). Tips came back 29 Sep 2026. Oliver: "Where is the tips? That navigation
@@ -21615,6 +21622,15 @@ If the conversation only covers a single day or a few stops with no explicit day
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [guideModal]);
   const [showMenu, setShowMenu] = useState(false);
+  // The menu panel starts under the header, so the burger stays in sight and
+  // its X closes what it opened (16 Oct 2026).
+  const headerRef = useRef(null);
+  useEffect(() => {
+    if (!showMenu) return undefined;
+    const esc = (e) => { if (e.key === "Escape") setShowMenu(false); };
+    window.addEventListener("keydown", esc);
+    return () => window.removeEventListener("keydown", esc);
+  }, [showMenu]);
   const [showSearch, setShowSearch] = useState(false);
   const [videoError, setVideoError] = useState(false);
   const [videoReady, setVideoReady] = useState(false);
@@ -33339,6 +33355,34 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
         .gemlyx-msg-in { animation: gemlyxMsgIn 0.28s ease both; }
         ${railCss()}
         ${railMapCss(C)}
+        /* ── THE MENU, 16 OCT 2026 ─────────────────────────────────
+           Oliver, with a UI guide for the burger and its menu: "We need the
+           menu and burger menu fixed. Modernised." Three gold bars that turn
+           into an X while the menu is open, a gold ring on hover like the
+           search field's, and a panel that slides in from the right over a
+           dimmed page, frosted, with a hairline of gold at its edge. */
+        .gemlyx-account { width: 40px; height: 40px; border: 1px solid transparent !important; transition: border-color .2s ease, box-shadow .2s ease; }
+        @media (hover: hover) { .gemlyx-account:hover { border-color: ${C.gold}88 !important; box-shadow: 0 0 0 3px ${C.gold}1F; } }
+        .gemlyx-account:focus-visible { outline: none; border-color: ${C.gold} !important; box-shadow: 0 0 0 3px ${C.gold}33; }
+        .gx-burger-bars { position: relative; display: block; width: 20px; height: 14px; }
+        .gx-burger-bars > i { position: absolute; left: 0; width: 20px; height: 2.25px; border-radius: 2px; background: ${C.gold}; transition: transform .28s cubic-bezier(.2,.7,.2,1), top .28s cubic-bezier(.2,.7,.2,1), opacity .18s ease; }
+        .gx-burger-bars > i:nth-child(1) { top: 0; }
+        .gx-burger-bars > i:nth-child(2) { top: 6px; }
+        .gx-burger-bars > i:nth-child(3) { top: 12px; }
+        .gemlyx-account[aria-expanded="true"] .gx-burger-bars > i:nth-child(1) { top: 6px; transform: rotate(45deg); }
+        .gemlyx-account[aria-expanded="true"] .gx-burger-bars > i:nth-child(2) { opacity: 0; transform: scaleX(.2); }
+        .gemlyx-account[aria-expanded="true"] .gx-burger-bars > i:nth-child(3) { top: 6px; transform: rotate(-45deg); }
+        @keyframes gxDrawerIn { from { transform: translateX(100%); } to { transform: none; } }
+        @keyframes gxDimIn { from { opacity: 0; } to { opacity: 1; } }
+        .gx-drawer { animation: gxDrawerIn .34s cubic-bezier(.2,.7,.2,1) both; }
+        .gx-drawer-dim { animation: gxDimIn .25s ease both; }
+        @media (hover: hover) { .gx-menu-row:hover { background: ${C.gold}14 !important; } }
+        .gx-swatch-dot, .gx-flag-dot { transition: box-shadow .18s ease; }
+        @media (hover: hover) { .gx-swatch:hover .gx-swatch-dot, .gx-flag:hover .gx-flag-dot { box-shadow: 0 0 0 2px ${C.bg}, 0 0 0 3px ${C.gold}66; } }
+        .gx-flag-dot svg { filter: grayscale(.9) brightness(.78); transition: filter .2s ease; }
+        .gx-flag[aria-pressed="true"] .gx-flag-dot svg { filter: none; }
+        @media (hover: hover) { .gx-flag:hover .gx-flag-dot svg { filter: none; } }
+        @media (prefers-reduced-motion: reduce) { .gx-drawer, .gx-drawer-dim { animation: none; } .gx-burger-bars > i { transition: none; } }
         .gemlyx-thinking-dot { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: ${C.gold}; margin: 0 2px; animation: gemlyxDotPulse 1.1s ease infinite; }
         @media (min-width: 900px) { .mobile-only { display: none !important; } }
         @media (max-width: 899px) { .desktop-only { display: none !important; } }
@@ -34050,7 +34094,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
         </div>
       )}
 
-      <div style={{ background: C.bg, borderBottom: `1px solid ${C.border}`, padding: "calc(14px + env(safe-area-inset-top)) 16px 10px", position: "relative" }}>
+      <div ref={headerRef} style={{ background: C.bg, borderBottom: `1px solid ${C.border}`, padding: "calc(14px + env(safe-area-inset-top)) 16px 10px", position: "relative", zIndex: showMenu ? 310 : "auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           {/* ── THE LOGO IS THE WAY BACK TO THE FRONT PAGE ──────────
               His words, 23 Aug. A <button> rather than a <div onClick>, which
@@ -34160,15 +34204,15 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               <DealAlertsBell session={userSession} lang={uiLang} version={liveContentVersion}
                 onOpenDeal={(id) => { setShowMenu(false); goTab("home"); requestOpenDeal(id); }} />
             )}
-            <button className="gemlyx-account" onClick={() => setShowMenu(!showMenu)}
+            <button className="gemlyx-account" onClick={() => setShowMenu(!showMenu)} aria-expanded={showMenu}
               aria-label={[uiT("header.menu", uiLang), userSession ? accountLabel() : "", unreadTripChanges > 0 ? alertCountLine(unreadTripChanges) : "", noticesWaiting > 0 ? `${noticesWaiting} thing${noticesWaiting === 1 ? "" : "s"} on near you` : ""].filter(Boolean).join(". ")}
               title={unreadTripChanges > 0 ? alertCountLine(unreadTripChanges) : uiT("header.menu", uiLang)}
-              style={{ position: "relative", background: "none", border: "none", padding: 0, cursor: "pointer", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              style={{ position: "relative", background: "none", padding: 0, cursor: "pointer", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               {userSession ? (
                 <AccountAvatar url={avatarUrl(userSession, userProfile)} size={32} alt="" />
               ) : (
                 <span style={{ width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <Ico name="menu" size={21} color={C.text} />
+                  <span className="gx-burger-bars" aria-hidden="true"><i /><i /><i /></span>
                 </span>
               )}
               {/* Gold rather than red, and a dot rather than a number. Red on
@@ -34226,8 +34270,8 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
 
       {/* ── DROPDOWN MENU ──────────────────────────────────── */}
       {showMenu && (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 300 }} onClick={() => setShowMenu(false)}>
-          <div style={{ position: "absolute", top: 70, right: 16, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "8px", minWidth: 220, boxShadow: "0 8px 32px rgba(0,0,0,0.6)", maxHeight: "70vh", overflowY: "auto" }} onClick={e => e.stopPropagation()}>
+        <div className="gx-drawer-dim" style={{ position: "fixed", top: headerRef.current ? Math.round(headerRef.current.getBoundingClientRect().bottom) : 0, left: 0, right: 0, bottom: 0, zIndex: 300, background: "rgba(6,6,8,0.5)", backdropFilter: "blur(2px)", WebkitBackdropFilter: "blur(2px)" }} onClick={() => setShowMenu(false)}>
+          <nav className="gx-drawer" aria-label={uiT("header.menu", uiLang)} style={{ position: "absolute", top: 0, right: 0, bottom: 0, width: "min(360px, 88vw)", background: `${C.surface}E6`, backdropFilter: "blur(14px) saturate(140%)", WebkitBackdropFilter: "blur(14px) saturate(140%)", borderLeft: `1px solid ${C.gold}33`, boxShadow: "-18px 0 48px rgba(0,0,0,0.45)", padding: "14px 14px calc(24px + env(safe-area-inset-bottom))", overflowY: "auto", overscrollBehavior: "contain" }} onClick={e => e.stopPropagation()}>
             <style>{`@keyframes fadeSlideIn { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: translateX(0); } }
               @keyframes gxPulse { 0%,100% { opacity: 1 } 50% { opacity: .45 } }
               @media (prefers-reduced-motion: reduce) { .gx-pulse { animation: none !important } }`}</style>
@@ -34260,7 +34304,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     <div style={{ fontSize: 13, fontWeight: 700, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {accountLabel()}
                     </div>
-                    <div style={{ fontSize: 10.5, color: C.muted }}>{savedGuides.length} saved · {savedPlaces.length} kept</div>
+                    {MENU_PAGES_SHOWN && <div style={{ fontSize: 10.5, color: C.muted }}>{savedGuides.length} saved · {savedPlaces.length} kept</div>}
                   </div>
                 </div>
                 {/* ── SAVED TRIPS, WITH THE COUNT ON IT ──────────────
@@ -34277,7 +34321,8 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     which also means the address bar names where you are and the
                     back button works. readTripChanges still runs here, because
                     the count on this row is the thing being marked as read. */}
-                <button onClick={() => { setShowMenu(false); readTripChanges(); navigate(`${ABOUT_ME_PATH}/trips`); }}
+                {MENU_PAGES_SHOWN && (<>
+                <button className="gx-menu-row" onClick={() => { setShowMenu(false); readTripChanges(); navigate(`${ABOUT_ME_PATH}/trips`); }}
                   style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", background: "none", border: "none", color: C.text, padding: "10px 12px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", textAlign: "left", borderRadius: 10 }}>
                   <Ico name="book" size={15} color={C.gold} />
                   <span style={{ flex: 1 }}>{uiT("menu.saved", uiLang)}</span>
@@ -34287,26 +34332,28 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     </span>
                   )}
                 </button>
-                <div style={{ height: 1, background: C.border, margin: "6px 8px 8px" }} />
+                </>)}
+                <div style={{ height: 1, background: `${C.gold}1A`, margin: "8px 8px 10px" }} />
               </>
             )}
             {/* Three swatches rather than a dropdown: the choice is entirely
                 about how something looks, so showing the colour is the whole
                 control. Warm is first because it is the default. */}
             <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", padding: "8px 16px 6px" }}>{uiT("header.theme", uiLang)}</div>
-            <div style={{ display: "flex", gap: 6, padding: "0 12px 10px" }}>
+            {/* Circles since 16 Oct 2026, like the category circles: the
+                theme's own ground with its gold in the middle, and a gold ring
+                round the one in use. */}
+            <div style={{ display: "flex", gap: 4, padding: "2px 8px 12px" }}>
               {THEME_ORDER.map(key => {
                 const t = THEMES[key];
                 const on = themeName === key;
                 return (
-                  <button key={key} onClick={() => setThemeName(key)} title={t.hint}
-                    style={{ flex: 1, background: "transparent", border: `1px solid ${on ? C.gold : C.border}`, borderRadius: 10, padding: "7px 6px 6px", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                    <span style={{ display: "flex", gap: 3, justifyContent: "center", marginBottom: 5 }}>
-                      {[t.bg, t.surface, t.gold].map((col, ci) => (
-                        <span key={ci} style={{ width: 11, height: 11, borderRadius: "50%", background: col, border: `1px solid ${t.border}`, display: "inline-block" }} />
-                      ))}
+                  <button key={key} className="gx-swatch" onClick={() => setThemeName(key)} title={t.hint} aria-pressed={on}
+                    style={{ flex: 1, background: "transparent", border: "none", padding: "6px 2px", cursor: "pointer", fontFamily: "'Inter', sans-serif", display: "flex", flexDirection: "column", alignItems: "center", gap: 7 }}>
+                    <span className="gx-swatch-dot" style={{ width: 30, height: 30, borderRadius: "50%", background: t.bg, border: `1px solid ${t.border}`, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: on ? `0 0 0 2px ${C.bg}, 0 0 0 3.5px ${C.gold}` : "none" }}>
+                      <span style={{ width: 10, height: 10, borderRadius: "50%", background: t.gold }} />
                     </span>
-                    <span style={{ fontSize: 10.5, fontWeight: 700, color: on ? C.gold : C.muted }}>{t.name}</span>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: on ? C.gold : C.muted }}>{t.name}</span>
                   </button>
                 );
               })}
@@ -34319,7 +34366,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             {/* gx-nav-in-menu: at 1080px and up these same pages are in the bar
                 along the top, so repeating them here would be two controls for
                 one thing. Everything BELOW this block stays at every width. */}
-            <div className="gx-nav-in-menu">
+            {MENU_PAGES_SHOWN && (<div className="gx-nav-in-menu">
             <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", padding: "8px 16px 6px" }}>{uiT("menu.navigate", uiLang)}</div>
             {/* The same groups as the bar along the top (utils/navGroups.js),
                 as an accordion: a group opens under itself, and the one holding
@@ -34330,7 +34377,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 const c = g.children[0];
                 const on = childActive(c, active, eventTab);
                 return (
-                  <button key={g.id} onClick={() => { setShowMenu(false); pickNav(c); }} style={rowStyle(on, false)}>
+                  <button key={g.id} className="gx-menu-row" onClick={() => { setShowMenu(false); pickNav(c); }} style={rowStyle(on, false)}>
                     {c.ico && <Ico name={c.ico} size={15} color={on ? C.text : C.muted} />}
                     {c.label}
                   </button>
@@ -34340,7 +34387,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               const open = menuGroupOpen === g.id || (menuGroupOpen === null && holds);
               return (
                 <div key={g.id}>
-                  <button data-testid={`menu-group-${g.id}`} aria-expanded={open} onClick={() => setMenuGroupOpen(open ? "" : g.id)} style={rowStyle(holds && !open, false)}>
+                  <button className="gx-menu-row" data-testid={`menu-group-${g.id}`} aria-expanded={open} onClick={() => setMenuGroupOpen(open ? "" : g.id)} style={rowStyle(holds && !open, false)}>
                     {g.ico && <Ico name={g.ico} size={15} color={holds ? C.text : C.muted} />}
                     <span style={{ flex: 1 }}>{g.label}</span>
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={C.muted} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform .15s ease" }} aria-hidden="true"><polyline points="6 9 12 15 18 9" /></svg>
@@ -34348,7 +34395,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   {open && g.children.map(c => {
                     const on = childActive(c, active, eventTab);
                     return (
-                      <button key={c.key} onClick={() => { setShowMenu(false); pickNav(c); }} style={rowStyle(on, true)}>
+                      <button key={c.key} className="gx-menu-row" onClick={() => { setShowMenu(false); pickNav(c); }} style={rowStyle(on, true)}>
                         {c.label}
                       </button>
                     );
@@ -34362,8 +34409,8 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 {item.label}
               </button>
             ))}
-            </div>
-            <div style={{ borderTop: `1px solid ${C.border}`, margin: "6px 0" }} />
+            </div>)}
+            <div style={{ height: 1, background: `${C.gold}1A`, margin: "10px 8px" }} />
             {/* ── WHAT CAME OUT OF THIS LIST, 14 SEP 2026 ──────────────
                 Oliver read it back to himself with the menu open and took three
                 rows off it, each for its own reason.
@@ -34436,7 +34483,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               ...(userSession || OPEN_ABROAD ? [{ id: "problem", label: uiT("menu.problem", uiLang), ico: "bulb", action: "problem" }] : []),
               { id: "support", label: uiT("menu.support", uiLang), ico: "mail", action: "mail" },
             ].map((item, i) => (
-              <button key={item.id}
+              <button key={item.id} className="gx-menu-row"
                 onClick={() => {
                   setShowMenu(false);
                   if (item.action === "problem") navigate(`${SUPPORT_PATH}?topic=${PROBLEM_TOPIC}${countryParam(PAGE_COUNTRY)}`);
@@ -34456,12 +34503,16 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   // to the sheet when there is not. One decision, in openAccount.
                   else if (item.action === "login") openAccount();
                 }}
-                style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: "transparent", color: C.light, border: "none", borderRadius: 10, padding: "13px 16px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 2, animation: `fadeSlideIn 0.2s ease ${(i + 11) * 0.04}s both` }}>
-                <Ico name={item.ico} size={15} color={C.muted} />
+                style={{ display: "flex", alignItems: "center", gap: 14, width: "100%", textAlign: "left", background: "transparent", color: C.text, border: "none", borderRadius: 12, padding: "10px 10px", fontSize: 19, fontWeight: 500, letterSpacing: -0.1, cursor: "pointer", fontFamily: "'Fraunces', serif", marginBottom: 2, animation: `fadeSlideIn 0.2s ease ${(i + 4) * 0.04}s both` }}>
+                {/* A gold sign on a soft gold disc, the way the category
+                    circles carry theirs (16 Oct 2026). */}
+                <span aria-hidden="true" style={{ width: 34, height: 34, borderRadius: "50%", background: `${C.gold}1F`, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <Ico name={item.ico} size={16} color={C.gold} strokeWidth={2.2} />
+                </span>
                 {item.label}
               </button>
             ))}
-          </div>
+          </nav>
         </div>
       )}
 
