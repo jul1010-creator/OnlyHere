@@ -92,7 +92,7 @@ export const EXAMPLE_WALKS = [
     order: [
       { id: "free:theatre", stay: 15, why: "The square as the Old Town lights come on." },
       { id: "free:ghost", stay: 15, why: "He is at his best after dark." },
-      { id: "food:beer", stay: 60, why: "Three local breweries in one sitting." },
+      { id: "food:beer", stay: 60, why: "Darts and a board game before the music." },
       { id: "booking:jazz", stay: 120, why: "A brick cellar, and the band starts at 20:00." },
     ],
   },
@@ -870,7 +870,7 @@ const PARTNER_PAGE = {
   bakery: { kind: "food", emoji: "🥐", category: "Bakery café", price: "Pastries from €2", desc: "A small bakery café round the corner from the tourist centre. Rye bread, cinnamon buns and filter coffee.", tip: "The afternoon is quiet, which is when the refill runs." },
   amber: { kind: "shop", emoji: "🟠", desc: "A workshop where Baltic amber is cut and polished by hand. Visitors can try it at the bench.", tip: "" },
   tea: { kind: "food", emoji: "🫖", category: "Tea room", price: "Tea from €3", desc: "A tea room with low tables and a long list of herbal teas.", tip: "Weekend mornings are the quiet ones." },
-  beer: { kind: "nightlife", emoji: "🍺", category: "Beer bar", priceNote: "Beer from €4", crowd: "Locals after work, visitors later", desc: "Lithuanian beer on tap from small breweries around the country." },
+  beer: { kind: "nightlife", emoji: "🎯", category: "Games bar", priceNote: "Snacks from €3", crowd: "Locals after work, visitors later", desc: "Darts, board games and long tables, where locals meet after work." },
   post: { kind: "shop", emoji: "✉️", desc: "Postcards of Klaipėda old and new, and a table to write them at." },
   jazz: { kind: "nightlife", emoji: "🎷", category: "Jazz cellar", priceNote: "Cover €8 after 21:00", crowd: "Mixed, quiet until the band starts", desc: "A brick cellar with live jazz from Wednesday to Saturday." },
   bike: { kind: "shop", emoji: "🚲", desc: "Bikes, helmets and locks for the day. A bike can be handed back at the cruise terminal." },

@@ -83,14 +83,19 @@ export const EXAMPLE_PARTNERS = [
     de: { offer: "Eine Kanne Kräutertee für zwei zum Preis einer Tasse" },
   },
   {
-    key: "beer", category: "nightlife", dealKind: "entertainment", stay: 40, type: "food", name: "Alaus baras Inkaras", what: "Beer bar", street: "Daržų g.",
+    // A games bar since 17 Oct 2026. It was a beer bar with "three beers for
+    // the price of a large one", which is an alcohol price cut, and Lithuania's
+    // Alcohol Control Law bans announcing those (Article 28). Oliver: "No
+    // alcohol promotions" is now a rule for every deal (utils/dealStudio.js).
+    // The key stays "beer" so links and the example page keep their address.
+    key: "beer", category: "nightlife", dealKind: "entertainment", stay: 40, type: "food", name: "Baras Inkaras", what: "Games bar", street: "Daržų g.",
     lat: 55.70640, lon: 21.13900,
     hours: lines({ 1: ["16:00", "00:00"], 2: ["16:00", "00:00"], 3: ["16:00", "00:00"], 4: ["16:00", "00:00"], 5: ["14:00", "02:00"], 6: ["14:00", "02:00"], 0: ["14:00", "22:00"] }),
-    offer: { text: "Three Lithuanian beers, 0.1 l each, for the price of a large one", days: [1, 2, 3, 4, 5], from: "16:00", to: "19:00" },
-    idea: "A tasting, so a visitor tries three local breweries instead of one.",
-    lt: { what: "Alaus baras", offer: "Trys lietuviško alaus po 0,1 l už didelio bokalo kainą", idea: "Degustacija: lankytojas paragauja trijų vietinių bravorų, o ne vieno." },
-    da: { offer: "Tre litauiske øl à 0,1 l til prisen for en stor" },
-    de: { offer: "Drei litauische Biere zu je 0,1 l zum Preis eines großen" },
+    offer: { text: "Free darts and board games for your table, with any order", days: [1, 2, 3, 4, 5], from: "16:00", to: "19:00" },
+    idea: "Something to do in the quiet early evening, so a group stays longer.",
+    lt: { what: "Žaidimų baras", offer: "Nemokamas smiginis ir stalo žaidimai jūsų stalui, užsisakius bet ką", idea: "Užsiėmimas ramiu ankstyvu vakaru, kad kompanija pasiliktų ilgiau." },
+    da: { offer: "Gratis dart og brætspil til jeres bord ved enhver bestilling" },
+    de: { offer: "Darts und Brettspiele gratis für euren Tisch, bei jeder Bestellung" },
   },
   {
     key: "post", category: "attractions", dealKind: "activities", stay: 15, type: "free", name: "Atvirukų krautuvėlė", what: "Postcard shop", street: "Tomo g.",
