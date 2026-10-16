@@ -72,6 +72,7 @@ import { changeToApply, onlyRefusals, liveRowIdOf } from "./utils/eventCheckAppl
 import { dueForCheck, lastCheckOf, checkRecord, checkKey, LOCAL_CHECKS_KEY } from "./utils/eventCheckDue";
 const LAST_CHECK_RESULTS_KEY = "gemlyx_event_check_results";
 import { SupportPage } from "./components/SupportPage";
+import { AboutPage, ABOUT_PATH } from "./components/AboutPage";
 // ── THE PAGE THAT SAYS HOW THIS IS PAID FOR ─────────────────────────
 // Oliver, 9 Sep 2026: "make an 'affiliate' in the burgermenu where we list all
 // our affiliates and why we use them." A route rather than a file in public/,
@@ -35980,6 +35981,9 @@ export default function Gemlyx() {
           session, which is the right shape for a standalone page anyway. It
           already reads its own search params for the same reason. */}
       <Route path={SUPPORT_PATH} element={<SupportPage />} />
+      {/* About Gemlyx, 16 Oct 2026: a page of its own, linked from the foot of
+          /lithuania. See components/AboutPage.jsx. */}
+      <Route path={ABOUT_PATH} element={<AboutPage />} />
       <Route path={AFFILIATES_PATH} element={<AffiliatesPage />} />
       {/* ── KLAIPĖDA, A DEMO FOR THE TOURISM CENTRE ──────────────
           Oliver, 29 Sep 2026. Two hand-written trips, linked from nowhere and
