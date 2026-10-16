@@ -26,6 +26,7 @@ import { t as uiT } from "../utils/uiLanguage";
 import { promoCard } from "../utils/promotions";
 import { offerHoursLabel, offerLive, cleanOffer, offerTextIn } from "../utils/offer";
 import { NOW_AREAS, inNowArea, walkMinutes } from "../utils/nowPlanner";
+import { kmApart } from "../utils/walkable";
 import { cleanBooking, busyAt } from "../utils/dealExtras";
 import { dealsSeen, placeReached, dealRedeemOpened } from "../utils/partnerStats";
 import { WalkMode, askForCompass } from "./WalkMode";
@@ -33,7 +34,7 @@ import { DealCornerMap } from "./DealCornerMap";
 import { DealPlaceView } from "./DealPlaceView";
 import { placeClock, cleanClock, windowOf } from "../utils/offerClock";
 import { RedeemSheet } from "./RedeemSheet";
-import { DealTile, TILE_CSS, eyebrow } from "./DealCard";
+import { DealTile, TILE_CSS, eyebrow, distanceWords } from "./DealCard";
 import { DealDetail } from "./DealDetail";
 import { CategoryNav } from "./CategoryFilter";
 import { ExploreBanner, MAX_DEAL_SLIDES } from "./ExploreBanner";
@@ -93,7 +94,7 @@ export const nearbyDeals = (deals, start, { now = new Date(), lang = "en", limit
     .map(d => {
       const card = promoCard(d, { today: now, lang });
       const at = pointOf(d);
-      return { d, card, at, id: dealPlaceId(d), minutes: at && start ? walkMinutes(start, at) : null };
+      return { d, card, at, id: dealPlaceId(d), minutes: at && start ? walkMinutes(start, at) : null, metres: at && start ? Math.round(kmApart(start, at) * 1000) : null };
     })
     .filter(x => x.card.timing in RANK)
     .sort(order === "az" ? nameOrder
@@ -309,7 +310,7 @@ export const upcomingDeals = (deals, start, { now = new Date(), lang = "en", lim
       const next = nextStart(d.__offer, now);
       if (!next) return null;
       const at = pointOf(d);
-      return { d, card, at, next, id: dealPlaceId(d), minutes: at && start ? walkMinutes(start, at) : null };
+      return { d, card, at, next, id: dealPlaceId(d), minutes: at && start ? walkMinutes(start, at) : null, metres: at && start ? Math.round(kmApart(start, at) * 1000) : null };
     })
     .filter(Boolean)
     .sort((a, b) => a.next.at - b.next.at || nameOrder(a, b))
@@ -546,6 +547,7 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
             return (
               <DealTile key={key} testid="deal-near" name={x.d.name} offer={offer} badge={liveBadge(x.d.__offer, when, lang)}
                 distance={x.minutes != null ? fill(uiT("trips.walkMin", lang), { n: x.minutes }) : ""}
+                away={x.metres != null ? distanceWords(x.metres, lang) : ""}
                 photo={x.d.photo || ""} at={x.at} sign={signFor(x.d)} pin={x.d.__pin || ""}
                 onOpen={() => { pushSheet(1); setOpened(key); }} />
             );
@@ -560,6 +562,7 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
               <DealTile key={x.id || x.d.name} testid="deal-upcoming" upcoming name={x.d.name}
                 offer={offerTextIn(x.d.__offer, lang)} badge={upcomingBadge(x.next, lang)}
                 distance={x.minutes != null ? fill(uiT("trips.walkMin", lang), { n: x.minutes }) : ""}
+                away={x.metres != null ? distanceWords(x.metres, lang) : ""}
                 photo={x.d.photo || ""} at={x.at} sign={signFor(x.d)} pin={x.d.__pin || ""}
                 onOpen={() => { pushSheet(1); setOpened(`soon:${x.id || x.d.name}`); }} />
             ))}

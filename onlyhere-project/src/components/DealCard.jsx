@@ -87,25 +87,49 @@ export const DealPicture = ({ photo = "", at = null, name = "", sign = "📍", p
 // every photo tile on a 2026 page answers a hover; the box is clipped so the
 // name and badge stay put. The CSS rides with the page in DealsNearYou.jsx.
 export const TILE_CSS = `
-.gx-tile { --gx-tile-name: 14.5px; --gx-tile-offer: 12.5px; --gx-tile-pad: 10px; --gx-tile-ratio: 4 / 5; }
-@media (min-width: 960px) { .gx-tile { --gx-tile-name: 16px; --gx-tile-offer: 13.5px; --gx-tile-pad: 12px; --gx-tile-ratio: 1 / 1; } }
+.gx-tile { --gx-tile-name: 14.5px; --gx-tile-offer: 12.5px; --gx-tile-pad: 10px; --gx-tile-ratio: 4 / 5; --gx-tile-inset: 60px; }
+@media (min-width: 960px) { .gx-tile { --gx-tile-name: 16px; --gx-tile-offer: 13.5px; --gx-tile-pad: 12px; --gx-tile-ratio: 1 / 1; --gx-tile-inset: 72px; } }
 .gx-tile-pic { overflow: hidden; }
 .gx-tile-pic > img, .gx-tile-pic > [data-testid="deal-picture-blank"] { transition: transform 500ms cubic-bezier(0.2, 0.7, 0.2, 1); }
 @media (hover: hover) { .gx-tile:hover .gx-tile-pic > img, .gx-tile:hover .gx-tile-pic > [data-testid="deal-picture-blank"] { transform: scale(1.04); } }
 @media (prefers-reduced-motion: reduce) { .gx-tile:hover .gx-tile-pic > img, .gx-tile:hover .gx-tile-pic > [data-testid="deal-picture-blank"] { transform: none; } }
 `;
-export const DealTile = ({ name = "", offer = "", badge = "", distance = "", photo = "", at = null, sign = "📍", pin = "", upcoming = false, onOpen = null, testid = "deal-tile" }) => (
+// ── A MAP IN THE PHOTO, AND HOW FAR IT IS ─────────────────────────
+// Oliver, 16 Oct 2026: "in the pictures, we want to input maps somehow as
+// well.. and obviously distance meter." So a tile with a photo carries the
+// place's dark map as a small square in its top right corner, and every tile
+// says how far the place is, in metres, beside its name. The distance is the
+// straight line from the visitor, so it shows only once the phone has said
+// where it is (13 Oct 2026: distance only ever from you).
+export const distanceWords = (m, lang = "en") => {
+  const n = m == null || m === "" ? NaN : Number(m);
+  if (!Number.isFinite(n) || n < 0) return "";
+  const r = Math.round(n / 10) * 10;
+  if (r < 1000) return `${Math.max(10, r)} m`;
+  const tenths = Math.round(n / 100) / 10;
+  const km = tenths < 10 ? tenths.toFixed(1) : String(Math.round(n / 1000));
+  return `${lang === "en" ? km : km.replace(".", ",")} km`;
+};
+export const DealTile = ({ name = "", offer = "", badge = "", distance = "", away = "", photo = "", at = null, sign = "📍", pin = "", upcoming = false, onOpen = null, testid = "deal-tile" }) => {
+  const inset = !!safePhoto(photo) && !!at && googleMapsReady();
+  return (
   <button type="button" onClick={onOpen || undefined} data-testid={testid} className="gx-tile"
     style={{ display: "flex", flexDirection: "column", justifyContent: "flex-start", alignItems: "stretch", width: "100%", height: "100%", padding: 0, textAlign: "left", background: C.surface, border: "none", borderRadius: 16, overflow: "hidden", cursor: onOpen ? "pointer" : "default", fontFamily: "'Inter', sans-serif", color: C.text, filter: upcoming ? "brightness(0.62) saturate(0.6)" : "none" }}>
     <div className="gx-tile-pic" style={{ position: "relative", pointerEvents: "none" }}>
       {/* Upright on a phone (4:5, two across); square on a computer, where
           four 260px tiles across at 4:5 stood 325px tall (lidl.dk's are square). */}
       <DealPicture photo={photo} at={at} name={name} sign={sign} pin={pin} ratio="var(--gx-tile-ratio, 4 / 5)" />
-      {badge && (
-        <span data-testid="deal-tile-badge" style={{ position: "absolute", top: 8, left: 8, background: "#FFFFFF", color: "#16161A", borderRadius: 7, padding: "4px 8px", fontSize: 11, fontWeight: 700, lineHeight: 1.2, boxShadow: "0 1px 4px rgba(0,0,0,0.25)", maxWidth: "calc(100% - 16px)" }}>{badge}</span>
+      {inset && (
+        <div data-testid="deal-tile-inset" style={{ position: "absolute", top: 8, right: 8, width: "var(--gx-tile-inset, 60px)", borderRadius: 10, overflow: "hidden", border: "1.5px solid rgba(255,255,255,0.9)", boxShadow: "0 2px 8px rgba(0,0,0,0.45)" }}>
+          <DealCornerMap fill ratio="1 / 1" radius={0} ask={180} pinScale={0.42} zoom={16} lat={at.lat} lon={at.lon} name={name} sign={sign} pin={pin} />
+        </div>
       )}
-      <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "34px var(--gx-tile-pad, 10px) 9px", background: "linear-gradient(to top, rgba(10,10,12,0.88), rgba(10,10,12,0))" }}>
-        <div data-testid="deal-tile-name" style={{ fontSize: "var(--gx-tile-name, 14.5px)", fontWeight: 700, color: "#FFFFFF", lineHeight: 1.2, overflowWrap: "anywhere", textShadow: "0 1px 2px rgba(0,0,0,0.5)" }}>{name}</div>
+      {badge && (
+        <span data-testid="deal-tile-badge" style={{ position: "absolute", top: 8, left: 8, background: "#FFFFFF", color: "#16161A", borderRadius: 7, padding: "4px 8px", fontSize: 11, fontWeight: 700, lineHeight: 1.2, boxShadow: "0 1px 4px rgba(0,0,0,0.25)", maxWidth: inset ? "calc(100% - 22px - var(--gx-tile-inset, 60px))" : "calc(100% - 16px)" }}>{badge}</span>
+      )}
+      <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "34px var(--gx-tile-pad, 10px) 9px", background: "linear-gradient(to top, rgba(10,10,12,0.88), rgba(10,10,12,0))", display: "flex", alignItems: "flex-end", gap: 6 }}>
+        <div data-testid="deal-tile-name" style={{ flex: "1 1 auto", minWidth: 0, fontSize: "var(--gx-tile-name, 14.5px)", fontWeight: 700, color: "#FFFFFF", lineHeight: 1.2, overflowWrap: "anywhere", textShadow: "0 1px 2px rgba(0,0,0,0.5)" }}>{name}</div>
+        {away && <span data-testid="deal-tile-away" style={{ flex: "0 0 auto", background: "rgba(255,255,255,0.18)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", color: "#FFFFFF", borderRadius: 100, padding: "3px 7px", fontSize: 11, fontWeight: 700, lineHeight: 1.2, whiteSpace: "nowrap" }}>{away}</span>}
       </div>
     </div>
     <div style={{ padding: "9px var(--gx-tile-pad, 10px) 11px" }}>
@@ -113,7 +137,8 @@ export const DealTile = ({ name = "", offer = "", badge = "", distance = "", pho
       {distance && <div style={{ fontSize: 11, color: C.muted, marginTop: 5 }}>{distance}</div>}
     </div>
   </button>
-);
+  );
+};
 
 // The two buttons a card can carry: the one thing to do, and a quiet second.
 export const primaryBtn = () => ({ background: C.gold, color: C.onGold, border: "none", borderRadius: 100, padding: "9px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", letterSpacing: 0.2 });

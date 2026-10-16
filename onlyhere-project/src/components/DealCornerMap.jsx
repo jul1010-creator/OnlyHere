@@ -42,16 +42,20 @@ export const CLOSE_ZOOM = 15;
 // pointers on the maps", same day). Its tip is on the place.
 export const PIN_SCALE = 0.78;
 
-export const staticMapUrl = ({ lat, lon, size }) =>
-  `https://maps.googleapis.com/maps/api/staticmap?center=${Number(lat).toFixed(5)},${Number(lon).toFixed(5)}&zoom=${CLOSE_ZOOM}&size=${size}x${size}&scale=2&${staticStyleParams()}&key=${encodeURIComponent(GOOGLE_MAPS_BROWSER_KEY)}`;
+export const staticMapUrl = ({ lat, lon, size, zoom = CLOSE_ZOOM }) =>
+  `https://maps.googleapis.com/maps/api/staticmap?center=${Number(lat).toFixed(5)},${Number(lon).toFixed(5)}&zoom=${zoom}&size=${size}x${size}&scale=2&${staticStyleParams()}&key=${encodeURIComponent(GOOGLE_MAPS_BROWSER_KEY)}`;
 
 // Set on the first refusal, for this visit.
 let staticRefused = false;
 
 // `fill` makes it the picture of a deal tile (13 Oct 2026, Lidl Plus style):
 // as wide as the tile, at `ratio`, asking Google for a picture big enough.
-export const DealCornerMap = ({ lat, lon, name = "", size = 104, onTap = null, sign = "📍", photo = "", pin = "", fill = false, ratio = "1 / 1", radius = 14 }) => {
-  const px = fill ? 360 : size;
+// `ask` is how big a picture to ask Google for when it fills a smaller box,
+// and `pinScale` shrinks the pointer to suit it: the map in a photo tile's
+// corner (16 Oct 2026) is a thumbnail, not a tile, so it also comes in one
+// step closer (`zoom`), where 15 left a small square nearly empty.
+export const DealCornerMap = ({ lat, lon, name = "", size = 104, onTap = null, sign = "📍", photo = "", pin = "", fill = false, ratio = "1 / 1", radius = 14, ask = 0, pinScale = PIN_SCALE, zoom = CLOSE_ZOOM }) => {
+  const px = fill ? (ask || 360) : size;
   const holder = useRef(null);
   const made = useRef(false);
   const [live, setLive] = useState(staticRefused);
@@ -81,14 +85,14 @@ export const DealCornerMap = ({ lat, lon, name = "", size = 104, onTap = null, s
         new Map(holder.current, {
           styles: CARD_MAP_STYLE,
           center: { lat: Number(lat), lng: Number(lon) },
-          zoom: CLOSE_ZOOM,
+          zoom,
           renderingType: maps.RenderingType?.RASTER || "RASTER",
           disableDefaultUI: true, gestureHandling: "none", keyboardShortcuts: false, clickableIcons: false,
         });
       } catch { /* no map rather than a broken one */ }
     })();
     return () => { gone = true; };
-  }, [ok, near, live, lat, lon]);
+  }, [ok, near, live, lat, lon, zoom]);
 
   if (!ok) return null;
   return (
@@ -97,7 +101,7 @@ export const DealCornerMap = ({ lat, lon, name = "", size = 104, onTap = null, s
       style={{ position: "relative", ...(fill ? { width: "100%", aspectRatio: ratio } : { width: size, height: size, flex: "0 0 auto" }), borderRadius: radius, overflow: "hidden", border: fill ? "none" : `1px solid ${C.border}`, background: C.bg, cursor: onTap ? "pointer" : "default" }}>
       <div ref={holder} style={{ position: "absolute", inset: 0 }}>
         {near && !live && (
-          <img src={staticMapUrl({ lat, lon, size: px })} alt="" width={px} height={px} data-testid="deal-corner-static"
+          <img src={staticMapUrl({ lat, lon, size: px, zoom })} alt="" width={px} height={px} data-testid="deal-corner-static"
             onError={() => { staticRefused = true; setLive(true); }}
             style={{ display: "block", width: "100%", height: "100%", objectFit: "cover" }} />
         )}
@@ -105,7 +109,7 @@ export const DealCornerMap = ({ lat, lon, name = "", size = 104, onTap = null, s
       {/* The walk map's own pointer, with the place's sign or photo in its
           window, its tip on the place at the middle of the map. */}
       <div aria-hidden="true" data-testid="deal-corner-pin"
-        style={{ position: "absolute", left: "50%", top: "50%", width: PLACE_PIN.w, height: PLACE_PIN.h, marginLeft: -PLACE_PIN.w / 2, marginTop: -PLACE_PIN.h, transform: `scale(${PIN_SCALE})`, transformOrigin: "50% 100%", filter: "drop-shadow(0 3px 5px rgba(0,0,0,.45))", pointerEvents: "none" }}
+        style={{ position: "absolute", left: "50%", top: "50%", width: PLACE_PIN.w, height: PLACE_PIN.h, marginLeft: -PLACE_PIN.w / 2, marginTop: -PLACE_PIN.h, transform: `scale(${pinScale})`, transformOrigin: "50% 100%", filter: "drop-shadow(0 3px 5px rgba(0,0,0,.45))", pointerEvents: "none" }}
         dangerouslySetInnerHTML={{ __html: placePinHtml({ sign, photo, color: pin }) }} />
     </div>
   );
