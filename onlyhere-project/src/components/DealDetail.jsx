@@ -18,11 +18,19 @@ export const DealDetail = ({
   name = "", offer = "", tag = "", distance = "", when = null, hours = "", note = "",
   photo = "", at = null, sign = "📍", pin = "", upcoming = false, lang = "en", labels = {},
   onRedeem = null, onDirections = null, book = null, onClose = null, startOnMap = false,
+  finding = false, dirNote = "",
 }) => {
   // Opened from the small map in a photo tile's corner (16 Oct 2026): the
   // sheet starts on the view from above and brings it into sight.
   const [above, setAbove] = useState(!!startOnMap && !!at);
   const mapBox = useRef(null);
+  // The answer to Show directions, brought into sight: the button may have
+  // been the one under the view from above, further down.
+  const dirBox = useRef(null);
+  useEffect(() => {
+    if (!dirNote || !dirBox.current) return;
+    try { dirBox.current.scrollIntoView({ block: "nearest", behavior: "smooth" }); } catch { /* old browser */ }
+  }, [dirNote]);
   useEffect(() => {
     if (!startOnMap || !at || !mapBox.current) return undefined;
     const t = setTimeout(() => { try { mapBox.current?.scrollIntoView({ block: "center", behavior: "smooth" }); } catch { /* old browser */ } }, 120);
@@ -57,9 +65,10 @@ export const DealDetail = ({
 
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 20 }}>
               {onRedeem && !upcoming && <button onClick={onRedeem} data-testid="deal-near-redeem" style={{ ...primaryBtn(), padding: "12px 22px", fontSize: 14 }}>{labels.redeem || "Redeem offer"}</button>}
-              {onDirections && at && <button onClick={onDirections} data-testid="deal-detail-directions" style={{ ...quietBtn(), padding: "11px 18px", fontSize: 14 }}>▶ {labels.directions || "Show directions"}</button>}
+              {onDirections && at && <button onClick={finding ? undefined : onDirections} aria-busy={finding || undefined} data-testid="deal-detail-directions" style={{ ...quietBtn(), padding: "11px 18px", fontSize: 14, opacity: finding ? 0.7 : 1 }}>▶ {finding ? (labels.finding || "Finding you") : (labels.directions || "Show directions")}</button>}
               {book && <a href={book.href} target={book.kind === "web" ? "_blank" : undefined} rel="noopener noreferrer" style={{ ...quietBtn(), padding: "11px 18px", fontSize: 14 }}>{labels.book || "Book a table"}</a>}
             </div>
+            {dirNote && <div ref={dirBox} role="status" data-testid="deal-detail-dir-note" style={{ fontSize: 13.5, color: C.light, lineHeight: 1.5, marginTop: 12 }}>{dirNote}</div>}
 
             {at && (
               <div ref={mapBox} data-testid="deal-detail-map" style={{ marginTop: 24 }}>

@@ -467,6 +467,38 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
     setRedeem({ x, when: when?.text || "" });
     dealRedeemOpened(x.id, country);
   };
+  // ── SHOW DIRECTIONS ASKS WHERE YOU ARE, AND ANSWERS IN THE DEAL ────
+  // Oliver, 16 Oct 2026: "When people click 'Show directions' have the
+  // website give them the 'access to location' question." The browser's own
+  // question comes from getCurrentPosition, but only until it has been
+  // answered once; after that a tap used to close the deal and leave a line
+  // out of sight at the top of the page, so from outside Klaipėda nothing
+  // seemed to happen. Now the deal stays open while the phone is found, and
+  // a refusal, a blocked browser or a visitor elsewhere is said under the
+  // buttons. The walk starts only from a phone in Klaipėda.
+  const [dirNote, setDirNote] = useState("");
+  const [finding, setFinding] = useState(false);
+  useEffect(() => { setDirNote(""); setFinding(false); }, [opened]);
+  const goFromDeal = (x) => {
+    setDirNote("");
+    if (start) { dropSheets(); setOpened(null); go(x); return; }
+    if (!canLocate) { setDirNote(uiT("dir.cannot", lang)); return; }
+    askForCompass();
+    setFinding(true);
+    try {
+      navigator.geolocation.getCurrentPosition((p) => {
+        setFinding(false);
+        const at = { lat: p.coords.latitude, lon: p.coords.longitude };
+        if (!inNowArea(country, at)) { setDirNote(uiT("dir.notHere", lang)); return; }
+        setHere(at);
+        dropSheets(); setOpened(null);
+        setGoing({ ...x, minutes: walkMinutes(at, x.at), _from: at });
+      }, (err) => {
+        setFinding(false);
+        setDirNote(err?.code === 1 ? fill(uiT("dir.blocked", lang), { btn: uiT("explore.directions", lang) }) : uiT("dir.noFix", lang));
+      }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
+    } catch { setFinding(false); setDirNote(uiT("dir.cannot", lang)); }
+  };
   const walkStart = going?._from ? { id: "here", name: uiT("now.whereYouAre", lang), lat: going._from.lat, lon: going._from.lon, ship: false } : start;
 
   // ── A DEAL ASKED FOR BY AN ALERT OR A MAIL ─────────────────────────
@@ -608,9 +640,9 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
             note={busy ? uiT(`busy.${busy.level}`, lang) : ""}
             photo={x.d.photo || ""} at={x.at} sign={signFor(x.d)} pin={x.d.__pin || ""}
             book={cleanBooking(x.d.__booking)}
-            labels={{ redeem: uiT("offer.redeem", lang), directions: uiT("explore.directions", lang), close: uiT("explore.closeMap", lang), book: uiT("deal.book", lang) }}
+            labels={{ redeem: uiT("offer.redeem", lang), directions: uiT("explore.directions", lang), finding: uiT("dir.finding", lang), close: uiT("explore.closeMap", lang), book: uiT("deal.book", lang) }}
             onRedeem={!isSoon && offer ? () => openRedeem(x, when) : null}
-            onDirections={() => { dropSheets(); setOpened(null); go(x); }}
+            onDirections={() => goFromDeal(x)} finding={finding} dirNote={dirNote}
             onClose={() => closeSheet(() => setOpened(null))} />
         );
       })()}
