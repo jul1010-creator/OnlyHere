@@ -78,7 +78,11 @@ const num = (v) => (v === "" || v === null || v === undefined ? NaN : Number(v))
 // so a bar's deal is about food, games, entry or soft drinks, and never
 // depends on buying alcohol. The word lists catch the plain cases in the four
 // languages of the site; anything they miss is still against the terms.
-export const DEAL_RULES = ["No alcohol promotions", "No 18+ promotions"];
+// "alcoholic drinks. Remember. Because you can have non-alcoholic drinks or
+// sodas.." (Oliver, 17 Oct 2026), so the rule names alcoholic drinks and the
+// line under it says what is allowed.
+export const DEAL_RULES = ["No alcoholic drink promotions", "No 18+ promotions"];
+export const DEAL_RULES_ALLOWED = "Soft drinks and alcohol-free drinks are fine.";
 // Oliver, same night: "It also needs to be clear that doing any of these
 // promotions will lead to a immediate suspension." Terms clause 14.8.
 export const DEAL_RULES_BREACH = "Breaking either rule means immediate suspension.";
@@ -89,7 +93,7 @@ const offerWords = (f) => [f?.text, f?.lt, f?.da, f?.de].map(v => String(v || ""
 export const promotesAlcohol = (f) => { const w = offerWords(f); return ALCOHOL.test(w) && !ALCOHOL_FREE.test(w); };
 export const promotesAdult = (f) => ADULT.test(offerWords(f));
 export const ruleProblems = (f) => [
-  ...(promotesAlcohol(f) ? ["No alcohol promotions. Make the offer about food, games, entry or soft drinks, and not depend on buying alcohol."] : []),
+  ...(promotesAlcohol(f) ? ["No alcoholic drink promotions. Soft drinks and alcohol-free drinks are fine, and the offer must not depend on buying alcohol."] : []),
   ...(promotesAdult(f) ? ["No 18+ promotions. Nothing about tobacco, vaping, gambling or anything only for adults."] : []),
 ];
 
