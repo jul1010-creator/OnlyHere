@@ -65,6 +65,16 @@ export const AboutPage = () => {
         <Section testid="about-places" title={say("about.placesH")}>
           {say("about.placesBody")}{" "}
           <a href={`mailto:${ABOUT_EMAIL}`} style={{ color: C.gold, fontWeight: 600, textDecoration: "none", borderBottom: `1px solid ${C.gold}66` }}>{ABOUT_EMAIL}</a>
+          {/* What a deal may not promote, in red (Oliver, 17 Oct 2026). The
+              same two rules as the deal editor and clause 14.6 of the terms. */}
+          <div data-testid="about-rules" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 14 }}>
+            {["about.ruleAlcohol", "about.ruleAdult"].map(k => (
+              <span key={k} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#E5484D", border: "1px solid #E5484D66", background: "#E5484D14", borderRadius: 100, padding: "5px 12px", fontSize: 13, fontWeight: 700 }}>
+                <span aria-hidden="true">⊘</span>{say(k)}
+              </span>
+            ))}
+            <div data-testid="about-rules-breach" style={{ flexBasis: "100%", color: "#E5484D", fontSize: 13, fontWeight: 700 }}>{say("about.ruleBreach")}</div>
+          </div>
         </Section>
 
         <div style={{ borderTop: `1px solid ${C.gold}1A`, marginTop: 26, paddingTop: 18, fontSize: 12.5, color: C.muted }}>{say("about.made")}</div>

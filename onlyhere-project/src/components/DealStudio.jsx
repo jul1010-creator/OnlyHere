@@ -12,7 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { C } from "../utils/theme";
 import { SUPABASE_URL } from "../config";
-import { DEAL_PLACE_TYPES, DEAL_FILTERS, DEAL_CATEGORIES, typeForCategory, DAY_SHORT, WEEK_ORDER, isDealRow, emptyDeal, dealFromRow, dealProblems, payloadFromDeal, dealWhenShort, offerOf, OFFER_LANG_NAMES, translationsCurrent } from "../utils/dealStudio";
+import { DEAL_PLACE_TYPES, DEAL_FILTERS, DEAL_CATEGORIES, typeForCategory, DAY_SHORT, WEEK_ORDER, isDealRow, emptyDeal, dealFromRow, dealProblems, payloadFromDeal, dealWhenShort, offerOf, OFFER_LANG_NAMES, translationsCurrent, DEAL_RULES, DEAL_RULES_BREACH } from "../utils/dealStudio";
 import { offerWhen, signFor, nextStart, liveBadge, upcomingBadge } from "./DealsNearYou";
 import { DealTile, DealPicture, eyebrow } from "./DealCard";
 import { PIN_COLOURS, PIN_NAMES } from "../utils/pinColours";
@@ -264,6 +264,16 @@ const Editor = ({ start, onSave, onClose, busy, error, upload = null, translate 
 
           <section style={panel()}>
             <h3 style={sectionTitle()}>The offer</h3>
+            {/* The two rules, in red (Oliver, 17 Oct 2026). Terms clause 14.6;
+                dealProblems refuses a deal that breaks them. */}
+            <div data-testid="deal-studio-rules" style={{ display: "flex", flexWrap: "wrap", gap: 8, margin: "0 0 12px" }}>
+              {DEAL_RULES.map(r => (
+                <span key={r} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#E5484D", border: "1px solid #E5484D66", background: "#E5484D14", borderRadius: 100, padding: "5px 11px", fontSize: 12.5, fontWeight: 700 }}>
+                  <span aria-hidden="true">⊘</span>{r}
+                </span>
+              ))}
+              <div data-testid="deal-studio-rules-breach" style={{ flexBasis: "100%", color: "#E5484D", fontSize: 12.5, fontWeight: 700 }}>{DEAL_RULES_BREACH}</div>
+            </div>
             <label style={label()}>What a visitor gets</label>
             <textarea value={f.text} onChange={e => set("text", e.target.value)} rows={2} placeholder="Free refill of filter coffee with any pastry" style={{ ...field(), resize: "vertical", lineHeight: 1.5 }} data-testid="deal-studio-text" />
             <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
