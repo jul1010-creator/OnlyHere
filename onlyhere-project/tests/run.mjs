@@ -67995,8 +67995,10 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     // carries the navigation on a phone.
     ok("the header button is the face once somebody is signed in",
        /userSession \? \(\s*<AccountAvatar url=\{avatarUrl\(userSession, userProfile\)\} size=\{32\}/.test(appA));
+    // Since 16 Oct 2026 the three lines are drawn as three gold bars, so they
+    // can turn into an X while the menu is open.
     ok("and three lines before that",
-       /<Ico name="menu" size=\{21\}/.test(appA)
+       /<span className="gx-burger-bars" aria-hidden="true"><i \/><i \/><i \/><\/span>/.test(appA)
        && /^  menu: P\(/m.test(readFileSync(join(root, "src/components/Icon.jsx"), "utf8")));
     // THE BOX IS 32 EITHER WAY, so the badge on its corner and the width of the
     // header do not move at the moment somebody signs in.
@@ -83002,7 +83004,9 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("made only when the corner map is tapped, one at a time", /const key = x\.id \|\| x\.d\.name;/.test(dny) && /\{above \? \(\s*<DealPlaceView/.test(read("src/components/DealDetail.jsx")) && /const \[above, setAbove\] = useState\(!!startOnMap && !!at\);/.test(read("src/components/DealDetail.jsx")));
   // Since 16 Oct 2026 the view from above also opens when the deal was opened
   // from the small map in a photo tile's corner (startOnMap).
-  ok("Show directions under it walks there from where the phone is", /onDirections=\{\(\) => \{ dropSheets\(\); setOpened\(null\); go\(x\); \}\}/.test(dny) && /onDirections=\{onDirections\}/.test(read("src/components/DealDetail.jsx")) && /data-testid="place-view-directions"/.test(pv) && /locate\(\(at\) => setGoing\(/.test(dny));
+  // Since 16 Oct 2026 the deal's directions go through goFromDeal, which keeps
+  // the deal open while the phone is found (batch 252).
+  ok("Show directions under it walks there from where the phone is", /onDirections=\{\(\) => goFromDeal\(x\)\}/.test(dny) && /onDirections=\{onDirections\}/.test(read("src/components/DealDetail.jsx")) && /data-testid="place-view-directions"/.test(pv) && /locate\(\(at\) => setGoing\(/.test(dny));
   ok("the words read in all four languages", ["explore.directions", "explore.closeMap", "explore.mapFailed"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
 }
 
@@ -83659,6 +83663,52 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("and opens the deal on the view from above, brought into sight", (dny.match(/onMap=\{\(\) => \{ pushSheet\(1\); setAtMap\(true\);/g) || []).length === 2 && /startOnMap=\{atMap\}/.test(dny) && /key=\{opened\}/.test(dny) && /scrollIntoView\(\{ block: "center", behavior: "smooth" \}\)/.test(det));
   ok("a deal opened any other way starts at the top", /useEffect\(\(\) => \{ if \(!opened\) setAtMap\(false\); \}, \[opened\]\);/.test(dny));
   ok("the words read in all four languages, no dashes", ["explore.byFerry", "explore.ferryMin"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
+}
+
+// ── Batch 252: Show directions asks where you are, and answers in the deal ──
+// Oliver, 16 Oct 2026: "When people click 'Show directions' have the website
+// give them the 'access to location' question."
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const dny = read("src/components/DealsNearYou.jsx"), det = read("src/components/DealDetail.jsx");
+  const body = dny.slice(dny.indexOf("const goFromDeal = (x) => {"), dny.indexOf("const walkStart = going"));
+  ok("a tap asks the browser for the phone's place", /navigator\.geolocation\.getCurrentPosition\(/.test(body) && /askForCompass\(\);\s*setFinding\(true\);/.test(body));
+  ok("the deal stays open until the walk can start", body.indexOf("dropSheets(); setOpened(null);\n        setGoing(") > body.indexOf("if (!inNowArea(country, at)) { setDirNote(uiT(\"dir.notHere\", lang)); return; }") && body.indexOf("if (!inNowArea") > 0);
+  ok("a phone already found walks straight away", /if \(start\) \{ dropSheets\(\); setOpened\(null\); go\(x\); return; \}/.test(body));
+  ok("a refusal, a miss and a browser without location each say so", /err\?\.code === 1 \? fill\(uiT\("dir\.blocked", lang\), \{ btn: uiT\("explore\.directions", lang\) \}\) : uiT\("dir\.noFix", lang\)/.test(body) && (body.match(/uiT\("dir\.cannot", lang\)/g) || []).length === 2);
+  ok("under the buttons, read aloud, brought into sight", /\{dirNote && <div ref=\{dirBox\} role="status" data-testid="deal-detail-dir-note"/.test(det) && /dirBox\.current\.scrollIntoView\(\{ block: "nearest"/.test(det));
+  ok("the button says it is looking and takes no second tap", /onClick=\{finding \? undefined : onDirections\}/.test(det) && /labels\.finding \|\| "Finding you"/.test(det) && /finding: uiT\("dir\.finding", lang\)/.test(dny));
+  ok("a new deal starts with no old answer", /useEffect\(\(\) => \{ setDirNote\(""\); setFinding\(false\); \}, \[opened\]\);/.test(dny));
+  ok("the words read in all four languages, no dashes, the button's own name in each", ["dir.finding", "dir.notHere", "dir.blocked", "dir.noFix", "dir.cannot"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))) && ["en", "da", "de", "lt"].every(l => M.t("dir.blocked", l).includes("{btn}")));
+}
+
+// ── Batch 253: the menu and the burger, modernised ──
+// Oliver, 16 Oct 2026, with a UI guide: "We need the menu and burger menu
+// fixed. Modernised."
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const app = read("src/App.jsx"), lp = read("src/components/LanguagePicker.jsx");
+  ok("three gold bars that cross into an X while the menu is open", /\.gx-burger-bars > i \{[^}]*background: \$\{C\.gold\}/.test(app) && /\.gemlyx-account\[aria-expanded="true"\] \.gx-burger-bars > i:nth-child\(1\) \{ top: 6px; transform: rotate\(45deg\); \}/.test(app) && /\.gemlyx-account\[aria-expanded="true"\] \.gx-burger-bars > i:nth-child\(3\) \{ top: 6px; transform: rotate\(-45deg\); \}/.test(app) && /onClick=\{\(\) => setShowMenu\(!showMenu\)\} aria-expanded=\{showMenu\}/.test(app));
+  ok("a gold ring on hover and on keyboard focus", /\.gemlyx-account:hover \{ border-color: \$\{C\.gold\}88 !important;/.test(app) && /\.gemlyx-account:focus-visible \{/.test(app));
+  ok("the panel slides in from the right, frosted, with a gold edge", /className="gx-drawer" aria-label=\{uiT\("header\.menu", uiLang\)\}/.test(app) && /backdropFilter: "blur\(14px\) saturate\(140%\)"/.test(app) && /borderLeft: `1px solid \$\{C\.gold\}33`/.test(app) && /@keyframes gxDrawerIn \{ from \{ transform: translateX\(100%\); \}/.test(app));
+  ok("under the header, which stays on top so its X closes the menu", /<div ref=\{headerRef\} style=\{\{.*zIndex: showMenu \? 310 : "auto" \}\}>/.test(app) && /top: headerRef\.current \? Math\.round\(headerRef\.current\.getBoundingClientRect\(\)\.bottom\) : 0/.test(app));
+  ok("Escape closes it", /if \(e\.key === "Escape"\) setShowMenu\(false\);/.test(app));
+  ok("no motion for those who ask for none", /@media \(prefers-reduced-motion: reduce\) \{ \.gx-drawer, \.gx-drawer-dim \{ animation: none; \}/.test(app));
+  ok("the main rows in the headline serif, each sign on a gold disc", /fontSize: 19, fontWeight: 500, letterSpacing: -0\.1, cursor: "pointer", fontFamily: "'Fraunces', serif"/.test(app) && /<Ico name=\{item\.ico\} size=\{16\} color=\{C\.gold\} strokeWidth=\{2\.2\} \/>/.test(app));
+  ok("hairline gold dividers", (app.match(/background: `\$\{C\.gold\}1A`/g) || []).length >= 2);
+  ok("themes and languages as circles with a gold ring on the one in use", /className="gx-swatch-dot"/.test(app) && /className="gx-flag-dot"/.test(lp) && (app + lp).split("0 0 0 3.5px ${C.gold}").length - 1 === 2);
+  ok("flags grey until pointed at or chosen", /\.gx-flag-dot svg \{ filter: grayscale\(\.9\) brightness\(\.78\);/.test(app) && /\.gx-flag\[aria-pressed="true"\] \.gx-flag-dot svg \{ filter: none; \}/.test(app));
+}
+
+// ── Batch 254: no pages or saved trips in the Lithuanian menu ──
+// Oliver, 16 Oct 2026: "The saved trips and tours and all that gotta be
+// temporarily removed. Not sure if we keep it at all."
+{
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("off on /lithuania, kept for Denmark", /const MENU_PAGES_SHOWN = PAGE_COUNTRY !== "LT";/.test(app));
+  ok("the Saved trips row and the counts under the name wait behind it", /\{MENU_PAGES_SHOWN && \(<>\s*<button className="gx-menu-row" onClick=\{\(\) => \{ setShowMenu\(false\); readTripChanges\(\);/.test(app) && /\{MENU_PAGES_SHOWN && <div style=\{\{ fontSize: 10\.5, color: C\.muted \}\}>\{savedGuides\.length\} saved/.test(app));
+  ok("and so do the pages", /\{MENU_PAGES_SHOWN && \(<div className="gx-nav-in-menu">/.test(app));
+  ok("the code is kept, not deleted", /uiT\("menu\.saved", uiLang\)/.test(app) && /navGroups\.map\(\(g, i\) =>/.test(app));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
