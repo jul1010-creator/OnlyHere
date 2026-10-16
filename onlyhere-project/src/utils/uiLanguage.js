@@ -769,6 +769,12 @@ export const UI_STRINGS = {
   "redeem.via":            { en: "Offer from Gemlyx", da: "Tilbud fra Gemlyx", de: "Angebot von Gemlyx", lt: "Pasiūlymas iš Gemlyx" },
   "explore.directions":    { en: "Show directions", da: "Vis vejen", de: "Route anzeigen", lt: "Rodyti kelią" },
   "explore.closeMap":      { en: "Close", da: "Luk", de: "Schließen", lt: "Uždaryti" },
+  // Show directions in a deal, 16 Oct 2026 (DealsNearYou goFromDeal).
+  "dir.finding":  { en: "Finding you", da: "Finder dig", de: "Standort wird gesucht", lt: "Ieškome jūsų" },
+  "dir.notHere":  { en: "You are not in Klaipėda right now. Directions start from where you are once you are here.", da: "Du er ikke i Klaipėda lige nu. Vejen starter, hvor du er, når du er her.", de: "Du bist gerade nicht in Klaipėda. Die Route beginnt dort, wo du bist, sobald du hier bist.", lt: "Šiuo metu esate ne Klaipėdoje. Kelias prasidės nuo jūsų vietos, kai būsite čia." },
+  "dir.blocked":  { en: "Your browser is blocking your location for Gemlyx. Allow it in the site settings, then tap {btn} again.", da: "Din browser blokerer din placering for Gemlyx. Tillad den i sidens indstillinger, og tryk så på {btn} igen.", de: "Dein Browser blockiert deinen Standort für Gemlyx. Erlaube ihn in den Website-Einstellungen und tippe dann erneut auf {btn}.", lt: "Jūsų naršyklė blokuoja jūsų vietą Gemlyx. Leiskite ją svetainės nustatymuose ir vėl paspauskite {btn}." },
+  "dir.noFix":    { en: "We could not find where you are. Try again in a moment.", da: "Vi kunne ikke finde, hvor du er. Prøv igen om lidt.", de: "Wir konnten deinen Standort nicht finden. Versuch es gleich noch einmal.", lt: "Nepavyko nustatyti jūsų vietos. Bandykite dar kartą po akimirkos." },
+  "dir.cannot":   { en: "This browser cannot share your location.", da: "Denne browser kan ikke dele din placering.", de: "Dieser Browser kann deinen Standort nicht teilen.", lt: "Ši naršyklė negali bendrinti jūsų vietos." },
   "explore.mapFailed":     { en: "The map could not load just now.", da: "Kortet kunne ikke indlæses lige nu.", de: "Die Karte konnte gerade nicht geladen werden.", lt: "Šiuo metu žemėlapio įkelti nepavyko." },
   "explore.closest":       { en: "Closest", da: "Tættest på", de: "Am nächsten", lt: "Arčiausiai" },
   "explore.az":            { en: "A to Z", da: "A til Å", de: "A bis Z", lt: "Nuo A iki Ž" },
