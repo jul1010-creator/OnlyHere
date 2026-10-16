@@ -427,6 +427,7 @@ writeFileSync(entry, `
   export { placePinHtml, PLACE_PIN, turnSign, JOIN_ON_M, CARD_WALKING_MS, walkLegs, bearingOf, kmBetween as mapKm, glideAt, GLIDE_MS, FOCUS, SPARKS } from ${JSON.stringify(join(root, "src/components/GoogleWalkMap.jsx"))};
   export { guideTo, compassOf, distanceWords as walkDistanceWords, ARRIVE_M, COMPASS, FAR_M } from ${JSON.stringify(join(root, "src/components/WalkMode.jsx"))};
   export * as DNY from ${JSON.stringify(join(root, "src/components/DealsNearYou.jsx"))};
+  export * as DCARD from ${JSON.stringify(join(root, "src/components/DealCard.jsx"))};
   export * as DST from ${JSON.stringify(join(root, "src/utils/dealStudio.js"))};
   export * as DCAT from ${JSON.stringify(join(root, "src/utils/dealCategories.js"))};
   export * as CMS from ${JSON.stringify(join(root, "src/utils/cardMapStyle.js"))};
@@ -82896,7 +82897,7 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   const read = (f) => readFileSync(join(root, f), "utf8");
   const cm = read("src/components/DealCornerMap.jsx"), dny = read("src/components/DealsNearYou.jsx");
   // 16 Oct 2026: drawn dark rather than in the guide's style (Batch 248).
-  ok("Google's own map, fixed on the street", /styles: CARD_MAP_STYLE,/.test(cm) && /zoom: CLOSE_ZOOM,/.test(cm) && /CLOSE_ZOOM = 15;/.test(cm) && !/leaflet|addTileLayer|flyTo/i.test(cm.replace(/\/\/.*$/gm, "")));
+  ok("Google's own map, fixed on the street", /styles: CARD_MAP_STYLE,/.test(cm) && /zoom = CLOSE_ZOOM \}\) => \{/.test(cm) && /^          zoom,$/m.test(cm) && /CLOSE_ZOOM = 15;/.test(cm) && !/leaflet|addTileLayer|flyTo/i.test(cm.replace(/\/\/.*$/gm, "")));
   ok("a picture, not a control: nothing on it moves", /disableDefaultUI: true, gestureHandling: "none", keyboardShortcuts: false, clickableIcons: false/.test(cm));
   ok("raster, so a dozen do not need a dozen WebGL canvases", /RenderingType\?\.RASTER \|\| "RASTER"/.test(cm));
   ok("made when the card first comes near the screen, then kept", /new IntersectionObserver\(/.test(cm) && /\{ seen\.disconnect\(\); setNear\(true\); \}/.test(cm) && /made\.current = true;/.test(cm));
@@ -82979,7 +82980,9 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
 {
   const read = (f) => readFileSync(join(root, f), "utf8");
   const cm = read("src/components/DealCornerMap.jsx"), dny = read("src/components/DealsNearYou.jsx"), app = read("src/App.jsx");
-  ok("a step further out", /export const CLOSE_ZOOM = 15;/.test(cm) && /zoom=\$\{CLOSE_ZOOM\}/.test(cm));
+  // Since 16 Oct 2026 the zoom is a setting that starts at CLOSE_ZOOM: a tile
+  // map keeps 15, the small map in a photo tile's corner asks for 16.
+  ok("a step further out", /export const CLOSE_ZOOM = 15;/.test(cm) && /size, zoom = CLOSE_ZOOM \}\) =>/.test(cm) && /&zoom=\$\{zoom\}&size=/.test(cm));
   ok("the walk map's own pointer, tip on the place", /import \{ PLACE_PIN, placePinHtml \} from "\.\/GoogleWalkMap";/.test(cm) && /marginTop: -PLACE_PIN\.h/.test(cm) && /transformOrigin: "50% 100%"/.test(cm) && /placePinHtml\(\{ sign, photo, color: pin \}\)/.test(cm));
   ok("with the place's sign or its filter's in the window", M.DNY.signFor({ emoji: "🐟" }) === "🐟" && M.DNY.signFor({ _src: "nightlife" }) === "🍸" && M.DNY.signFor({ __category: "rentals" }) === "🔑" && M.DNY.signFor({}) === "🏛️" && /photo=\{x\.d\.photo \|\| ""\} at=\{x\.at\} sign=\{signFor\(x\.d\)\}/.test(dny));
   ok("abroad, arriving at the planner by its address opens Explore", /if \(PAGE_ABROAD && asked === "ai"\) return "home";/.test(app) && /return asked \|\| "home";/.test(app));
@@ -83615,6 +83618,22 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("no picture on the beer bar's deal", !items.find(it => keyOf(it) === "beer")?.photo && !PH.beer);
   ok("each is a free Unsplash photo over https, sized for the banner too", Object.values(PH).every(u => /^https:\/\/images\.unsplash\.com\/photo-[0-9a-f-]+\?auto=format&fit=crop&w=1200&q=65$/.test(u)));
   ok("only on the deals: the examples page and the walk keep the partners' signs", EP.every(p => !pageFor(`${p.type}:${p.key}`)?.item?.photo));
+}
+
+// ── Batch 250: a map in the photo, and how far it is ──
+// Oliver, 16 Oct 2026: "in the pictures, we want to input maps somehow as
+// well.. and obviously distance meter."
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const W = M.DCARD.distanceWords;
+  is("metres to the nearest ten, km with one decimal under ten", [W(4), W(347), W(995), W(1234), W(9960), W(12400)], ["10 m", "350 m", "1.0 km", "1.2 km", "10 km", "12 km"]);
+  is("a decimal comma in Danish, German and Lithuanian", [W(1234, "da"), W(1234, "de"), W(1234, "lt"), W(350, "lt")], ["1,2 km", "1,2 km", "1,2 km", "350 m"]);
+  is("nothing for no distance", [W(null), W(undefined), W(-5), W("x")], ["", "", "", ""]);
+  const card = read("src/components/DealCard.jsx"), dny = read("src/components/DealsNearYou.jsx"), cm = read("src/components/DealCornerMap.jsx");
+  ok("a photo tile carries the dark map in its top right corner", /const inset = !!safePhoto\(photo\) && !!at && googleMapsReady\(\);/.test(card) && /data-testid="deal-tile-inset" style=\{\{ position: "absolute", top: 8, right: 8/.test(card) && /<DealCornerMap fill ratio="1 \/ 1" radius=\{0\} ask=\{180\} pinScale=\{0\.42\} zoom=\{16\}/.test(card));
+  ok("the badge leaves room for it", /maxWidth: inset \? "calc\(100% - 22px - var\(--gx-tile-inset, 60px\)\)" : "calc\(100% - 16px\)"/.test(card));
+  ok("the corner map asks Google for a small picture and a small pointer", /const px = fill \? \(ask \|\| 360\) : size;/.test(cm) && /transform: `scale\(\$\{pinScale\}\)`/.test(cm));
+  ok("the distance sits beside the name, from the visitor only", /data-testid="deal-tile-away"/.test(card) && (dny.match(/metres: at && start \? Math\.round\(kmApart\(start, at\) \* 1000\) : null/g) || []).length === 2 && (dny.match(/away=\{x\.metres != null \? distanceWords\(x\.metres, lang\) : ""\}/g) || []).length === 2);
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
