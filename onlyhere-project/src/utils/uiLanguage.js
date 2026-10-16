@@ -727,6 +727,9 @@ export const UI_STRINGS = {
   "trips.dealsH":    { en: "Deals near you", da: "Tilbud tæt på dig", de: "Angebote in deiner Nähe", lt: "Pasiūlymai šalia jūsų" },
   "trips.introDeals": { en: "Local places with something extra for you today, and how far each one is on foot. More time? Make a walk further down.", da: "Lokale steder med lidt ekstra til dig i dag, og hvor langt der er til fods. Mere tid? Lav en gåtur længere nede.", de: "Lokale Orte mit einem kleinen Extra für dich heute, und wie weit sie zu Fuß sind. Mehr Zeit? Plane weiter unten einen Spaziergang.", lt: "Vietos, kurios šiandien turi jums kažką ypatingo, ir kiek iki kiekvienos eiti pėsčiomis. Daugiau laiko? Žemiau susidarykite maršrutą." },
   "trips.walkMin":   { en: "{n} min walk", da: "{n} min. gang", de: "{n} Min. zu Fuß", lt: "{n} min. pėsčiomis" },
+  // A deal across the strait, 16 Oct 2026 (DealsNearYou distanceFrom).
+  "explore.byFerry":  { en: "By ferry", da: "Med færge", de: "Mit der Fähre", lt: "Keltu" },
+  "explore.ferryMin": { en: "{n} min with the ferry", da: "{n} min. med færgen", de: "{n} Min. mit der Fähre", lt: "{n} min. su keltu" },
   "trips.go":        { en: "Walk there", da: "Gå derhen", de: "Hinlaufen", lt: "Eiti ten" },
   "trips.onNow":     { en: "On now", da: "Lige nu", de: "Jetzt", lt: "Dabar" },
   "trips.noDeals":   { en: "No deals are on right now. Make a walk below instead.", da: "Ingen tilbud lige nu. Lav en gåtur nedenfor i stedet.", de: "Gerade gibt es keine Angebote. Plane stattdessen unten einen Spaziergang.", lt: "Šiuo metu pasiūlymų nėra. Vietoj to susidarykite maršrutą žemiau." },
