@@ -12,7 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { C } from "../utils/theme";
 import { SUPABASE_URL } from "../config";
-import { DEAL_PLACE_TYPES, DEAL_FILTERS, DEAL_CATEGORIES, typeForCategory, DAY_SHORT, WEEK_ORDER, isDealRow, emptyDeal, dealFromRow, dealProblems, payloadFromDeal, dealWhenShort, offerOf, OFFER_LANG_NAMES, translationsCurrent, DEAL_RULES, DEAL_RULES_BREACH } from "../utils/dealStudio";
+import { DEAL_PLACE_TYPES, DEAL_FILTERS, DEAL_CATEGORIES, typeForCategory, DAY_SHORT, WEEK_ORDER, isDealRow, emptyDeal, dealFromRow, dealProblems, payloadFromDeal, dealWhenShort, offerOf, OFFER_LANG_NAMES, translationsCurrent, DEAL_RULES, DEAL_RULES_BREACH, DEAL_RULES_ALLOWED } from "../utils/dealStudio";
 import { offerWhen, signFor, nextStart, liveBadge, upcomingBadge } from "./DealsNearYou";
 import { DealTile, DealPicture, eyebrow } from "./DealCard";
 import { PIN_COLOURS, PIN_NAMES } from "../utils/pinColours";
@@ -272,6 +272,7 @@ const Editor = ({ start, onSave, onClose, busy, error, upload = null, translate 
                   <span aria-hidden="true">⊘</span>{r}
                 </span>
               ))}
+              <div data-testid="deal-studio-rules-allowed" style={{ flexBasis: "100%", color: C.muted, fontSize: 12.5 }}>{DEAL_RULES_ALLOWED}</div>
               <div data-testid="deal-studio-rules-breach" style={{ flexBasis: "100%", color: "#E5484D", fontSize: 12.5, fontWeight: 700 }}>{DEAL_RULES_BREACH}</div>
             </div>
             <label style={label()}>What a visitor gets</label>

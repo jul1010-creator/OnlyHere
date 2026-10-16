@@ -73,6 +73,7 @@ export const AboutPage = () => {
                 <span aria-hidden="true">⊘</span>{say(k)}
               </span>
             ))}
+            <div data-testid="about-rules-allowed" style={{ flexBasis: "100%", color: C.muted, fontSize: 13 }}>{say("about.ruleAllowed")}</div>
             <div data-testid="about-rules-breach" style={{ flexBasis: "100%", color: "#E5484D", fontSize: 13, fontWeight: 700 }}>{say("about.ruleBreach")}</div>
           </div>
         </Section>
