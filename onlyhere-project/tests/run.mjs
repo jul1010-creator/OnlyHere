@@ -83711,5 +83711,21 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("the code is kept, not deleted", /uiT\("menu\.saved", uiLang\)/.test(app) && /navGroups\.map\(\(g, i\) =>/.test(app));
 }
 
+// ── Batch 255: About Gemlyx, a page of its own, linked from the foot ──
+// Oliver, 16 Oct 2026: About as its own page ("I mean at the end of the page,
+// not the menu"), and "About Gemlyx, I want to stay as little part of it as
+// possible."
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const ab = read("src/components/AboutPage.jsx"), app = read("src/App.jsx"), dny = read("src/components/DealsNearYou.jsx");
+  ok("its own address", /export const ABOUT_PATH = "\/about";/.test(ab) && /<Route path=\{ABOUT_PATH\} element=\{<AboutPage \/>\} \/>/.test(app));
+  ok("linked at the foot of /lithuania, not from the menu", /<a href=\{ABOUT_PATH\} data-testid="deals-foot-about"/.test(dny) && !/ABOUT_PATH/.test(app.slice(app.indexOf("{showMenu && ("), app.indexOf("── PAGER"))));
+  ok("about the app, with no founder on it", !/Oliver|Verhein|Hoffmann|founder|founded by/i.test(stripComments(ab)) && !/Oliver|Verhein|founder/i.test(["about.lead", "about.whatBody", "about.howBody", "about.freeBody", "about.placesBody", "about.made"].map(k => ["en", "da", "de", "lt"].map(l => M.t(k, l)).join(" ")).join(" ")));
+  ok("no ads claim and no partner money terms", !/\bads?\b|advertis|commission|%/i.test(["about.lead", "about.whatBody", "about.howBody", "about.freeBody", "about.placesBody"].map(k => M.t(k, "en")).join(" ")));
+  ok("the redeem button is named by its own label", /say\("about\.howBody"\)\.split\("\{redeem\}"\)/.test(ab) && /\{say\("offer\.redeem"\)\}/.test(ab) && ["en", "da", "de", "lt"].every(l => M.t("about.howBody", l).split("{redeem}").length === 2));
+  ok("the words read in four languages, no dashes, none of his banned words", Object.keys({ "about.link": 1, "about.title": 1, "about.back": 1, "about.lead": 1, "about.whatH": 1, "about.whatBody": 1, "about.howH": 1, "about.howBody": 1, "about.freeH": 1, "about.freeBody": 1, "about.placesH": 1, "about.placesBody": 1, "about.made": 1 }).every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)) && !/ - /.test(M.t(k, l)))) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(Object.keys(M).length ? ["about.lead", "about.whatBody", "about.howBody", "about.freeBody", "about.placesBody", "about.made"].map(k => M.t(k, "en")).join(" ") : ""));
+  ok("a way to write, and a way back", /mailto:\$\{ABOUT_EMAIL\}/.test(ab) && /export const ABOUT_EMAIL = "hello@gemlyxtravel\.com";/.test(ab) && /navigate\("\/lithuania"\)/.test(ab));
+}
+
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
 if (failed) { fails.forEach(f => console.log("  FAIL " + f + "\n")); process.exit(1); }
