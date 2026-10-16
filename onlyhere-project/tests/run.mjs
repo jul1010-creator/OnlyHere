@@ -82905,7 +82905,7 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("a Static Maps picture first, never saved into the site", /maps\/api\/staticmap\?center=/.test(cm) && /&scale=2&\$\{staticStyleParams\(\)\}&key=/.test(cm) && /\{near && !live && \(/.test(cm));
   ok("and the live map only when Google refuses, asked once a visit", /onError=\{\(\) => \{ staticRefused = true; setLive\(true\); \}\}/.test(cm) && /useState\(staticRefused\)/.test(cm) && /if \(!ok \|\| !near \|\| !live \|\| made\.current/.test(cm));
   ok("no key, no map, rather than a worse one", /googleMapsReady\(\)/.test(cm) && /if \(!ok\) return null;/.test(cm));
-  ok("every deal with a place gets one, and tapping it walks there", /<DealCornerMap fill ratio=\{ratio\} radius=\{radius\} lat=\{at\.lat\} lon=\{at\.lon\} name=\{name\}/.test(read("src/components/DealCard.jsx")) && /onOpen=\{\(\) => \{ pushSheet\(1\); setOpened\(key\); \}\}/.test(dny) && /onTap=\{\(\) => setAbove\(true\)\}/.test(read("src/components/DealDetail.jsx")));
+  ok("every deal with a place gets one, and tapping it walks there", /<DealCornerMap fill ratio=\{ratio\} radius=\{radius\} lat=\{at\.lat\} lon=\{at\.lon\} name=\{name\}/.test(read("src/components/DealCard.jsx")) && /onOpen=\{\(\) => \{ pushSheet\(1\); setAtMap\(false\); setOpened\(key\); \}\}/.test(dny) && /onTap=\{\(\) => setAbove\(true\)\}/.test(read("src/components/DealDetail.jsx")));
 }
 
 // ── Batch 235: Explore is the deals on the Lithuanian site, and the Danish
@@ -82999,7 +82999,9 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("satellite, glided down and tilted over the building, like the walk map's arrival", /mapTypeId: "satellite"/.test(pv) && /RenderingType\?\.VECTOR/.test(pv) && /put\(glideAt\(start, end, t\)\)/.test(pv) && /to: \{ zoom: 18\.5, tilt: 55, heading: 35 \}/.test(pv));
   ok("then turns slowly round it until touched, and not at all for less motion", /heading: \(end\.heading \+ \(ms \/ 1000\) \* TURN_DEG_PER_S\) % 360/.test(pv) && /\["pointerdown", "wheel", "touchstart"\]\.forEach\(e => el\.addEventListener\(e, stop/.test(pv) && /if \(reducedMotion\(\)\) \{ put\(end\); return; \}/.test(pv));
   ok("the walk map's own pointer on the building", /pin\.innerHTML = placePinHtml\(\{ sign, photo, color: pinColor \}\);/.test(pv) && /new AdvancedMarkerElement\(/.test(pv));
-  ok("made only when the corner map is tapped, one at a time", /const key = x\.id \|\| x\.d\.name;/.test(dny) && /\{above \? \(\s*<DealPlaceView/.test(read("src/components/DealDetail.jsx")) && /const \[above, setAbove\] = useState\(false\);/.test(read("src/components/DealDetail.jsx")));
+  ok("made only when the corner map is tapped, one at a time", /const key = x\.id \|\| x\.d\.name;/.test(dny) && /\{above \? \(\s*<DealPlaceView/.test(read("src/components/DealDetail.jsx")) && /const \[above, setAbove\] = useState\(!!startOnMap && !!at\);/.test(read("src/components/DealDetail.jsx")));
+  // Since 16 Oct 2026 the view from above also opens when the deal was opened
+  // from the small map in a photo tile's corner (startOnMap).
   ok("Show directions under it walks there from where the phone is", /onDirections=\{\(\) => \{ dropSheets\(\); setOpened\(null\); go\(x\); \}\}/.test(dny) && /onDirections=\{onDirections\}/.test(read("src/components/DealDetail.jsx")) && /data-testid="place-view-directions"/.test(pv) && /locate\(\(at\) => setGoing\(/.test(dny));
   ok("the words read in all four languages", ["explore.directions", "explore.closeMap", "explore.mapFailed"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
 }
@@ -83161,7 +83163,7 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("the picture is the photo, else the map, else the sign", /if \(src\) return <img/.test(card) && /if \(at && googleMapsReady\(\)\) return <DealCornerMap fill/.test(card) && /deal-picture-blank/.test(card));
   ok("a photo is a web address or one deployed with the site", card.includes("export const safePhoto") && /\/\^https:/.test(card));
   ok("the badge sits in the picture's corner, the name over its foot", /data-testid="deal-tile-badge" style=\{\{ position: "absolute", top: 8, left: 8/.test(card) && /linear-gradient\(to top, rgba\(10,10,12,0\.88\)/.test(card));
-  ok("tapping a tile opens the whole deal, where Redeem is", /<DealDetail name=\{x\.d\.name\}/.test(dny) && /onOpen=\{\(\) => \{ pushSheet\(1\); setOpened\(`soon:\$\{x\.id \|\| x\.d\.name\}`\); \}\}/.test(dny));
+  ok("tapping a tile opens the whole deal, where Redeem is", /<DealDetail name=\{x\.d\.name\}/.test(dny) && /onOpen=\{\(\) => \{ pushSheet\(1\); setAtMap\(false\); setOpened\(`soon:\$\{x\.id \|\| x\.d\.name\}`\); \}\}/.test(dny));
   const tue2130 = new Date("2026-10-13T18:30:00Z");
   is("live badges", [D.liveBadge({ to: "18:00" }, { kind: "ends", left: 20 }), D.liveBadge({ to: "18:00" }, { kind: "expires" }), D.liveBadge({ until: "2026-12-31" }, { kind: "until" }), D.liveBadge({}, { kind: "ongoing", text: "Fridays" })], ["Ends in 20 min", "Until 18:00", "Until 31 Dec", "Fridays"]);
   is("upcoming badges", [D.upcomingBadge({ inDays: 0, day: 2, from: "16:00" }), D.upcomingBadge({ inDays: 1, day: 3, from: "14:00" }), D.upcomingBadge({ inDays: 3, day: 5, from: "18:00" }), D.upcomingBadge({ inDays: 3, day: 5, from: "" })], ["From 16:00", "Tomorrow 14:00", "From Friday 18:00", "From Friday"]);
@@ -83630,10 +83632,33 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   is("a decimal comma in Danish, German and Lithuanian", [W(1234, "da"), W(1234, "de"), W(1234, "lt"), W(350, "lt")], ["1,2 km", "1,2 km", "1,2 km", "350 m"]);
   is("nothing for no distance", [W(null), W(undefined), W(-5), W("x")], ["", "", "", ""]);
   const card = read("src/components/DealCard.jsx"), dny = read("src/components/DealsNearYou.jsx"), cm = read("src/components/DealCornerMap.jsx");
-  ok("a photo tile carries the dark map in its top right corner", /const inset = !!safePhoto\(photo\) && !!at && googleMapsReady\(\);/.test(card) && /data-testid="deal-tile-inset" style=\{\{ position: "absolute", top: 8, right: 8/.test(card) && /<DealCornerMap fill ratio="1 \/ 1" radius=\{0\} ask=\{180\} pinScale=\{0\.42\} zoom=\{16\}/.test(card));
+  ok("a photo tile carries the dark map in its top right corner", /const inset = !!safePhoto\(photo\) && !!at && googleMapsReady\(\);/.test(card) && /data-testid="deal-tile-inset" style=\{\{ pointerEvents: onMap \? "auto" : "none", position: "absolute", top: 8, right: 8/.test(card) && /<DealCornerMap fill ratio="1 \/ 1" radius=\{0\} ask=\{180\} pinScale=\{0\.42\} zoom=\{16\}/.test(card));
   ok("the badge leaves room for it", /maxWidth: inset \? "calc\(100% - 22px - var\(--gx-tile-inset, 60px\)\)" : "calc\(100% - 16px\)"/.test(card));
   ok("the corner map asks Google for a small picture and a small pointer", /const px = fill \? \(ask \|\| 360\) : size;/.test(cm) && /transform: `scale\(\$\{pinScale\}\)`/.test(cm));
-  ok("the distance sits beside the name, from the visitor only", /data-testid="deal-tile-away"/.test(card) && (dny.match(/metres: at && start \? Math\.round\(kmApart\(start, at\) \* 1000\) : null/g) || []).length === 2 && (dny.match(/away=\{x\.metres != null \? distanceWords\(x\.metres, lang\) : ""\}/g) || []).length === 2);
+  ok("the distance sits beside the name, from the visitor only", /data-testid="deal-tile-away"/.test(card) && (dny.match(/id: dealPlaceId\(d\), \.\.\.distanceFrom\(start, at, country, now\) \}/g) || []).length === 2 && (dny.match(/away=\{awayOf\(x\)\}/g) || []).length === 2 && /const metres = Math\.round\(kmApart\(start, at\) \* 1000\);/.test(dny));
+}
+
+// ── Batch 251: the corner map as its own tap, and the ferry ──
+// Oliver, 16 Oct 2026, "Sure. Try these out", of two suggestions: tapping the
+// small map in a photo tile opens the deal on its map, and a place across the
+// strait says "By ferry" instead of metres that make it look close.
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const D = M.DNY;
+  const theatre = { lat: 55.7106, lon: 21.1318 }, castle = { lat: 55.7076, lon: 21.1339 }, seaMuseum = { lat: 55.7175, lon: 21.0995 };
+  const july = new Date("2026-07-10T10:00:00Z"), nov = new Date("2026-11-10T10:00:00Z");
+  const near = D.distanceFrom(theatre, castle, "LT", july);
+  ok("on this side, metres and the plain walk", !near.ferry && near.metres > 300 && near.metres < 450 && near.minutes === M.NP.walkMinutes(theatre, castle));
+  const sm = D.distanceFrom(theatre, seaMuseum, "LT", july), smNov = D.distanceFrom(theatre, seaMuseum, "LT", nov);
+  ok("across the strait, the ferry and its wait", sm.ferry && sm.minutes > M.NP.walkMinutes(theatre, seaMuseum) && smNov.minutes - sm.minutes === 30);
+  is("nothing without the visitor", D.distanceFrom(null, castle), { minutes: null, metres: null, ferry: false });
+  const dny = read("src/components/DealsNearYou.jsx"), card = read("src/components/DealCard.jsx"), det = read("src/components/DealDetail.jsx");
+  ok("the tile says By ferry, and the walk line counts the ferry", /x\.ferry \? uiT\("explore\.byFerry", lang\)/.test(dny) && /uiT\(x\.ferry \? "explore\.ferryMin" : "trips\.walkMin", lang\)/.test(dny) && (dny.match(/distance=\{howFar\(x\)\}/g) || []).length === 3);
+  ok("closest sorts by the minutes, ferry included", /order === "closest" \? \(a, b\) => \(a\.minutes \?\? 9999\) - \(b\.minutes \?\? 9999\)/.test(dny) && /country \}\)\.filter\(x => x\.card\.timing !== "later"\)/.test(dny));
+  ok("the corner map is told apart by where the tap landed, in one button", /e\?\.target\?\.closest\?\.\('\[data-testid="deal-tile-inset"\]'\)\) onMap\(\);/.test(card) && (card.match(/<button /g) || []).length >= 1 && !/<button[^>]*deal-tile-inset/.test(card));
+  ok("and opens the deal on the view from above, brought into sight", (dny.match(/onMap=\{\(\) => \{ pushSheet\(1\); setAtMap\(true\);/g) || []).length === 2 && /startOnMap=\{atMap\}/.test(dny) && /key=\{opened\}/.test(dny) && /scrollIntoView\(\{ block: "center", behavior: "smooth" \}\)/.test(det));
+  ok("a deal opened any other way starts at the top", /useEffect\(\(\) => \{ if \(!opened\) setAtMap\(false\); \}, \[opened\]\);/.test(dny));
+  ok("the words read in all four languages, no dashes", ["explore.byFerry", "explore.ferryMin"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
