@@ -36,6 +36,8 @@ import { placeClock, cleanClock, windowOf } from "../utils/offerClock";
 import { RedeemSheet } from "./RedeemSheet";
 import { DealTile, TILE_CSS, eyebrow, distanceWords } from "./DealCard";
 import { DealDetail } from "./DealDetail";
+import { ABOUT_PATH } from "./AboutPage";
+import { GemlyxLogo } from "./GemlyxLogo";
 import { CategoryNav } from "./CategoryFilter";
 import { ExploreBanner, MAX_DEAL_SLIDES } from "./ExploreBanner";
 import { dealCategory, byCategories, CATEGORY_SIGN, DEAL_CATEGORIES } from "../utils/dealCategories";
@@ -662,6 +664,22 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
           </div>
         );
       })()}
+
+      {/* ── THE FOOT OF THE PAGE ─────────────────────────────────
+          Oliver, 16 Oct 2026: About Gemlyx "at the end of the page, not the
+          menu". Quiet, under everything, with the two documents a reader
+          looks for in the same place. A link, so it opens as its own page
+          with its own address. */}
+      <footer data-testid="deals-foot" style={{ marginTop: 56, padding: "26px 0 8px", borderTop: `1px solid ${C.gold}1A`, display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+        <GemlyxLogo size={15} color={C.light} />
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flexWrap: "wrap", gap: "6px 12px", fontSize: 12.5 }}>
+          <a href={ABOUT_PATH} data-testid="deals-foot-about" style={{ color: C.light, fontWeight: 600, textDecoration: "none" }}>{uiT("about.link", lang)}</a>
+          <span aria-hidden="true" style={{ color: C.muted, opacity: 0.5 }}>·</span>
+          <a href="/terms.html" style={{ color: C.muted, textDecoration: "none" }}>Terms of Service</a>
+          <span aria-hidden="true" style={{ color: C.muted, opacity: 0.5 }}>·</span>
+          <a href="/privacy.html" style={{ color: C.muted, textDecoration: "none" }}>Privacy Policy</a>
+        </div>
+      </footer>
 
       {redeem && (
         <RedeemSheet name={redeem.x.d.name} offer={offerTextIn(redeem.x.d.__offer, lang)} when={redeem.when} lang={lang}
