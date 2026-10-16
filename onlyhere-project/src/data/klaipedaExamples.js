@@ -901,6 +901,33 @@ export const pageFor = (id) => EXAMPLE_PAGES[id] || null;
 // so a card opens the same page the examples page opens.
 // Which list each kind of page opens from, as utils/promotions.js names them.
 const PROMO_SRC = { food: "food", nightlife: "nightlife", shop: "shop", free: "free", craft: "craft" };
+
+// ── EXAMPLE PICTURES ON SOME OF THE DEALS ───────────────────────────
+// Oliver, 16 Oct 2026, of the dark maps on the tiles: "the map will be in a
+// different area when we have actual pictures. Can we have examples of
+// pictures on some? Just examples." So five of the made-up partners carry a
+// photo on their deal: the tile, the banner slide and the top of the deal
+// sheet, with the map moving down the sheet as it will for a real partner.
+// The other four keep the map, so both looks can be shown side by side. The
+// beer bar is one of the four, so no picture of beer goes on the page.
+//
+// Free photos from Unsplash (unsplash.com/license: free to use, no permission
+// needed), loaded from Unsplash's own image server at a size the banner can
+// use as well. Only on the deals: the examples page and the walk keep the
+// partners' signs, as before.
+export const EXAMPLE_DEAL_PHOTO = {
+  // "coffee surrounded by four baked breads"
+  bakery: "https://images.unsplash.com/photo-1515823662972-da6a2e4d3002?auto=format&fit=crop&w=1200&q=65",
+  // "white and brown ceramic teapot on wooden tray"
+  tea: "https://images.unsplash.com/photo-1564890369478-c89ca6d9cde9?auto=format&fit=crop&w=1200&q=65",
+  // "a close up of some very pretty yellow rocks", amber to the eye
+  amber: "https://images.unsplash.com/photo-1686043626878-9e391a70632d?auto=format&fit=crop&w=1200&q=65",
+  // "lined red, blue, and black bicycles on display"
+  bike: "https://images.unsplash.com/photo-1561840884-9dda41ed54e4?auto=format&fit=crop&w=1200&q=65",
+  // "person playing saxophone"
+  jazz: "https://images.unsplash.com/photo-1415201364774-f6f0bb35f28f?auto=format&fit=crop&w=1200&q=65",
+};
+
 export const examplePromotionPools = () => {
   const pools = {};
   EXAMPLE_PARTNERS.forEach(p => {
@@ -910,7 +937,7 @@ export const examplePromotionPools = () => {
     if (!src) return;
     // country, so the offer's hours are read on Klaipėda's clock and not
     // Copenhagen's, an hour behind (found 7 Oct 2026).
-    (pools[src] = pools[src] || []).push({ ...pg.item, country: "LT", _exampleId: id, _kind: pg.kind, ...(p.dealKind ? { __dealKind: p.dealKind } : {}), ...(p.category ? { __category: p.category } : {}) });
+    (pools[src] = pools[src] || []).push({ ...pg.item, country: "LT", _exampleId: id, _kind: pg.kind, ...(p.dealKind ? { __dealKind: p.dealKind } : {}), ...(p.category ? { __category: p.category } : {}), ...(EXAMPLE_DEAL_PHOTO[p.key] ? { photo: EXAMPLE_DEAL_PHOTO[p.key] } : {}) });
   });
   return pools;
 };
