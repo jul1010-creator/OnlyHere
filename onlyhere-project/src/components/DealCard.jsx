@@ -110,17 +110,24 @@ export const distanceWords = (m, lang = "en") => {
   const km = tenths < 10 ? tenths.toFixed(1) : String(Math.round(n / 1000));
   return `${lang === "en" ? km : km.replace(".", ",")} km`;
 };
-export const DealTile = ({ name = "", offer = "", badge = "", distance = "", away = "", photo = "", at = null, sign = "📍", pin = "", upcoming = false, onOpen = null, testid = "deal-tile" }) => {
+export const DealTile = ({ name = "", offer = "", badge = "", distance = "", away = "", photo = "", at = null, sign = "📍", pin = "", upcoming = false, onOpen = null, onMap = null, testid = "deal-tile" }) => {
   const inset = !!safePhoto(photo) && !!at && googleMapsReady();
+  // The corner map is its own tap (16 Oct 2026): it opens the deal on its map.
+  // One button still, so a screen reader hears one tile; the tap is told apart
+  // by where it landed.
+  const tap = (e) => {
+    if (inset && onMap && e?.target?.closest?.('[data-testid="deal-tile-inset"]')) onMap();
+    else if (onOpen) onOpen();
+  };
   return (
-  <button type="button" onClick={onOpen || undefined} data-testid={testid} className="gx-tile"
+  <button type="button" onClick={onOpen || onMap ? tap : undefined} data-testid={testid} className="gx-tile"
     style={{ display: "flex", flexDirection: "column", justifyContent: "flex-start", alignItems: "stretch", width: "100%", height: "100%", padding: 0, textAlign: "left", background: C.surface, border: "none", borderRadius: 16, overflow: "hidden", cursor: onOpen ? "pointer" : "default", fontFamily: "'Inter', sans-serif", color: C.text, filter: upcoming ? "brightness(0.62) saturate(0.6)" : "none" }}>
     <div className="gx-tile-pic" style={{ position: "relative", pointerEvents: "none" }}>
       {/* Upright on a phone (4:5, two across); square on a computer, where
           four 260px tiles across at 4:5 stood 325px tall (lidl.dk's are square). */}
       <DealPicture photo={photo} at={at} name={name} sign={sign} pin={pin} ratio="var(--gx-tile-ratio, 4 / 5)" />
       {inset && (
-        <div data-testid="deal-tile-inset" style={{ position: "absolute", top: 8, right: 8, width: "var(--gx-tile-inset, 60px)", borderRadius: 10, overflow: "hidden", border: "1.5px solid rgba(255,255,255,0.9)", boxShadow: "0 2px 8px rgba(0,0,0,0.45)" }}>
+        <div data-testid="deal-tile-inset" style={{ pointerEvents: onMap ? "auto" : "none", position: "absolute", top: 8, right: 8, width: "var(--gx-tile-inset, 60px)", borderRadius: 10, overflow: "hidden", border: "1.5px solid rgba(255,255,255,0.9)", boxShadow: "0 2px 8px rgba(0,0,0,0.45)" }}>
           <DealCornerMap fill ratio="1 / 1" radius={0} ask={180} pinScale={0.42} zoom={16} lat={at.lat} lon={at.lon} name={name} sign={sign} pin={pin} />
         </div>
       )}

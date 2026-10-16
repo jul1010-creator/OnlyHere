@@ -25,8 +25,8 @@ import { C } from "../utils/theme";
 import { t as uiT } from "../utils/uiLanguage";
 import { promoCard } from "../utils/promotions";
 import { offerHoursLabel, offerLive, cleanOffer, offerTextIn } from "../utils/offer";
-import { NOW_AREAS, inNowArea, walkMinutes } from "../utils/nowPlanner";
-import { kmApart } from "../utils/walkable";
+import { NOW_AREAS, inNowArea, walkMinutes, crossesWater, legBetween } from "../utils/nowPlanner";
+import { kmApart, ferryWait } from "../utils/walkable";
 import { cleanBooking, busyAt } from "../utils/dealExtras";
 import { dealsSeen, placeReached, dealRedeemOpened } from "../utils/partnerStats";
 import { WalkMode, askForCompass } from "./WalkMode";
@@ -84,17 +84,29 @@ const GRID_CSS = `
 .gx-deal-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
 @media (min-width: 960px) { .gx-deal-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; } }
 `;
+// HOW FAR, 16 Oct 2026. Metres as the crow flies for the tile, and minutes on
+// foot. A place across the strait (Smiltynė) is never a straight line: the
+// minutes are the walk planner's own leg with the old ferry in it (the walk to
+// the landing, the longest wait this month, the crossing, the walk on), and
+// the tile says "By ferry" instead of metres that would make it look close.
+export const distanceFrom = (start, at, country = "LT", now = new Date()) => {
+  if (!at || !start) return { minutes: null, metres: null, ferry: false };
+  const metres = Math.round(kmApart(start, at) * 1000);
+  if (!crossesWater(country, start, at)) return { minutes: walkMinutes(start, at), metres, ferry: false };
+  const leg = legBetween(start, at, { country, ferryWait: ferryWait(country, now.getMonth() + 1) });
+  return { minutes: leg.minutes < 9999 ? leg.minutes : null, metres, ferry: true };
+};
 // ORDER, 13 Oct 2026: "Make alphabetic and closest filter. And only calculate
 // from you." So two orders a visitor picks, and distance only ever from where
 // the phone is. "default" is the order the page used before he chose these,
 // kept for the walk-free callers and the suite.
 const nameOrder = (a, b) => String(a.d.name).localeCompare(String(b.d.name), "lt", { sensitivity: "base" });
-export const nearbyDeals = (deals, start, { now = new Date(), lang = "en", limit = MAX_DEALS, order = "default" } = {}) =>
+export const nearbyDeals = (deals, start, { now = new Date(), lang = "en", limit = MAX_DEALS, order = "default", country = "LT" } = {}) =>
   (Array.isArray(deals) ? deals : [])
     .map(d => {
       const card = promoCard(d, { today: now, lang });
       const at = pointOf(d);
-      return { d, card, at, id: dealPlaceId(d), minutes: at && start ? walkMinutes(start, at) : null, metres: at && start ? Math.round(kmApart(start, at) * 1000) : null };
+      return { d, card, at, id: dealPlaceId(d), ...distanceFrom(start, at, country, now) };
     })
     .filter(x => x.card.timing in RANK)
     .sort(order === "az" ? nameOrder
@@ -302,7 +314,7 @@ export const upcomingBadge = (ns, lang = "en") => {
   const day = lang === "lt" ? LT_DAY_OF[ns.day] : dayWord(ns.day, lang);
   return time ? say("badge.fromDayAt", { day, time }) : say("badge.fromDay", { day });
 };
-export const upcomingDeals = (deals, start, { now = new Date(), lang = "en", limit = MAX_DEALS } = {}) =>
+export const upcomingDeals = (deals, start, { now = new Date(), lang = "en", limit = MAX_DEALS, country = "LT" } = {}) =>
   (Array.isArray(deals) ? deals : [])
     .map(d => {
       const card = promoCard(d, { today: now, lang });
@@ -310,7 +322,7 @@ export const upcomingDeals = (deals, start, { now = new Date(), lang = "en", lim
       const next = nextStart(d.__offer, now);
       if (!next) return null;
       const at = pointOf(d);
-      return { d, card, at, next, id: dealPlaceId(d), minutes: at && start ? walkMinutes(start, at) : null, metres: at && start ? Math.round(kmApart(start, at) * 1000) : null };
+      return { d, card, at, next, id: dealPlaceId(d), ...distanceFrom(start, at, country, now) };
     })
     .filter(Boolean)
     .sort((a, b) => a.next.at - b.next.at || nameOrder(a, b))
@@ -330,6 +342,11 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
   // The card whose map was tapped open: the place from above, with Show
   // directions under it (DealPlaceView.jsx, 13 Oct 2026). One at a time.
   const [opened, setOpened] = useState(null);
+  // A tap on the small map in a photo's corner opens the deal on its map.
+  const [atMap, setAtMap] = useState(false);
+  useEffect(() => { if (!opened) setAtMap(false); }, [opened]);
+  const howFar = (x) => (x.minutes == null ? "" : fill(uiT(x.ferry ? "explore.ferryMin" : "trips.walkMin", lang), { n: x.minutes }));
+  const awayOf = (x) => (x.ferry ? uiT("explore.byFerry", lang) : x.metres != null ? distanceWords(x.metres, lang) : "");
   // The offer opened to redeem: the screen shown at the counter
   // (RedeemSheet.jsx, 13 Oct 2026), with Gemlyx on it.
   const [redeem, setRedeem] = useState(null);
@@ -431,9 +448,9 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
   };
   // Only what can be used now; what starts later waits in Upcoming (13 Oct
   // 2026). The tick moves an offer from one to the other as its hour comes.
-  const all = useMemo(() => nearbyDeals(deals, start, { now: new Date(), lang, limit: Infinity, order: sort === "closest" && start ? "closest" : "az" }).filter(x => x.card.timing !== "later"), [deals, start?.lat, start?.lon, lang, sort, tick]);
+  const all = useMemo(() => nearbyDeals(deals, start, { now: new Date(), lang, limit: Infinity, order: sort === "closest" && start ? "closest" : "az", country }).filter(x => x.card.timing !== "later"), [deals, start?.lat, start?.lon, lang, sort, tick]);
   const list = useMemo(() => byCategories(all, only, x => x.d).slice(0, MAX_DEALS), [all, only]);
-  const soon = useMemo(() => byCategories(upcomingDeals(deals, start, { now: new Date(), lang, limit: Infinity }), only, x => x.d).slice(0, MAX_DEALS), [deals, start?.lat, start?.lon, lang, only, tick]);
+  const soon = useMemo(() => byCategories(upcomingDeals(deals, start, { now: new Date(), lang, limit: Infinity, country }), only, x => x.d).slice(0, MAX_DEALS), [deals, start?.lat, start?.lon, lang, only, tick]);
   // The banner's slides (ExploreBanner.jsx): Gemlyx's own, then deals that
   // are on now, whatever kind of place is chosen.
   const slides = useMemo(() => [{ kind: "brand", key: "brand" }, ...all.slice(0, MAX_DEAL_SLIDES).map(x => {
@@ -546,10 +563,11 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
             const key = x.id || x.d.name;
             return (
               <DealTile key={key} testid="deal-near" name={x.d.name} offer={offer} badge={liveBadge(x.d.__offer, when, lang)}
-                distance={x.minutes != null ? fill(uiT("trips.walkMin", lang), { n: x.minutes }) : ""}
-                away={x.metres != null ? distanceWords(x.metres, lang) : ""}
+                distance={howFar(x)}
+                away={awayOf(x)}
                 photo={x.d.photo || ""} at={x.at} sign={signFor(x.d)} pin={x.d.__pin || ""}
-                onOpen={() => { pushSheet(1); setOpened(key); }} />
+                onOpen={() => { pushSheet(1); setAtMap(false); setOpened(key); }}
+                onMap={() => { pushSheet(1); setAtMap(true); setOpened(key); }} />
             );
           })}
         </div>
@@ -561,10 +579,11 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
             {soon.map(x => (
               <DealTile key={x.id || x.d.name} testid="deal-upcoming" upcoming name={x.d.name}
                 offer={offerTextIn(x.d.__offer, lang)} badge={upcomingBadge(x.next, lang)}
-                distance={x.minutes != null ? fill(uiT("trips.walkMin", lang), { n: x.minutes }) : ""}
-                away={x.metres != null ? distanceWords(x.metres, lang) : ""}
+                distance={howFar(x)}
+                away={awayOf(x)}
                 photo={x.d.photo || ""} at={x.at} sign={signFor(x.d)} pin={x.d.__pin || ""}
-                onOpen={() => { pushSheet(1); setOpened(`soon:${x.id || x.d.name}`); }} />
+                onOpen={() => { pushSheet(1); setAtMap(false); setOpened(`soon:${x.id || x.d.name}`); }}
+                onMap={() => { pushSheet(1); setAtMap(true); setOpened(`soon:${x.id || x.d.name}`); }} />
             ))}
           </div>
         </div>
@@ -583,8 +602,8 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
         const when = isSoon ? { kind: "starts", text: startsWords(x.next, lang) } : offerWhen(x.d.__offer, x.card.timing, { now: new Date(), lang });
         const busy = busyAt(x.d.__busy, new Date(), "Europe/Vilnius");
         return (
-          <DealDetail name={x.d.name} offer={offer} tag={tagFor(x.d, lang)} upcoming={isSoon} lang={lang}
-            distance={x.minutes != null ? fill(uiT("trips.walkMin", lang), { n: x.minutes }) : ""}
+          <DealDetail name={x.d.name} key={opened} startOnMap={atMap} offer={offer} tag={tagFor(x.d, lang)} upcoming={isSoon} lang={lang}
+            distance={howFar(x)}
             when={when} hours={when?.kind !== "ongoing" ? hoursOf(x.d.__offer, lang) : ""}
             note={busy ? uiT(`busy.${busy.level}`, lang) : ""}
             photo={x.d.photo || ""} at={x.at} sign={signFor(x.d)} pin={x.d.__pin || ""}

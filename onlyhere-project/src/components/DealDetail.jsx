@@ -7,7 +7,7 @@
 //
 // The map is here too. Tapping it glides down onto the building as it did on
 // the card (DealPlaceView.jsx, "like the google earth frame from earlier").
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { C } from "../utils/theme";
 import { DealPicture, eyebrow, primaryBtn, quietBtn } from "./DealCard";
@@ -17,9 +17,17 @@ import { DealPlaceView } from "./DealPlaceView";
 export const DealDetail = ({
   name = "", offer = "", tag = "", distance = "", when = null, hours = "", note = "",
   photo = "", at = null, sign = "📍", pin = "", upcoming = false, lang = "en", labels = {},
-  onRedeem = null, onDirections = null, book = null, onClose = null,
+  onRedeem = null, onDirections = null, book = null, onClose = null, startOnMap = false,
 }) => {
-  const [above, setAbove] = useState(false);
+  // Opened from the small map in a photo tile's corner (16 Oct 2026): the
+  // sheet starts on the view from above and brings it into sight.
+  const [above, setAbove] = useState(!!startOnMap && !!at);
+  const mapBox = useRef(null);
+  useEffect(() => {
+    if (!startOnMap || !at || !mapBox.current) return undefined;
+    const t = setTimeout(() => { try { mapBox.current?.scrollIntoView({ block: "center", behavior: "smooth" }); } catch { /* old browser */ } }, 120);
+    return () => clearTimeout(t);
+  }, [startOnMap]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const esc = (e) => { if (e.key === "Escape") onClose?.(); };
     window.addEventListener("keydown", esc);
@@ -54,7 +62,7 @@ export const DealDetail = ({
             </div>
 
             {at && (
-              <div style={{ marginTop: 24 }}>
+              <div ref={mapBox} data-testid="deal-detail-map" style={{ marginTop: 24 }}>
                 {above ? (
                   <DealPlaceView lat={at.lat} lon={at.lon} name={name} sign={sign} photo={photo} pin={pin} lang={lang}
                     onDirections={onDirections} onClose={() => setAbove(false)} />
