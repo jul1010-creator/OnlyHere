@@ -83736,8 +83736,10 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   const read = (f) => readFileSync(join(root, f), "utf8");
   const D = M.DST;
   const deal = (text, x = {}) => ({ ...D.emptyDeal(), name: "x", lat: 55.7087, lon: 21.1339, ongoing: true, text, ...x });
-  ok("the two rules, as he named them", JSON.stringify(D.DEAL_RULES) === JSON.stringify(["No alcohol promotions", "No 18+ promotions"]));
-  ok("an alcohol deal does not save, in any of the four languages", ["Three beers for the price of one", "Happy hour cocktails 2 for 1", "Free glass of wine with lunch"].every(t => D.dealProblems(deal(t)).some(p => /^No alcohol promotions/.test(p)))
+  // "alcoholic drinks. Remember. Because you can have non-alcoholic drinks or sodas.."
+  ok("the two rules, as he named them", JSON.stringify(D.DEAL_RULES) === JSON.stringify(["No alcoholic drink promotions", "No 18+ promotions"]) && D.DEAL_RULES_ALLOWED === "Soft drinks and alcohol-free drinks are fine.");
+  ok("and what is allowed is said beside them", /data-testid="deal-studio-rules-allowed"/.test(read("src/components/DealStudio.jsx")) && /data-testid="about-rules-allowed"/.test(read("src/components/AboutPage.jsx")) && ["en", "da", "de", "lt"].every(l => M.t("about.ruleAllowed", l) !== "about.ruleAllowed" && /alcohol|alkohol/i.test(M.t("about.ruleAlcohol", l))));
+  ok("an alcohol deal does not save, in any of the four languages", ["Three beers for the price of one", "Happy hour cocktails 2 for 1", "Free glass of wine with lunch"].every(t => D.dealProblems(deal(t)).some(p => /^No alcoholic drink promotions/.test(p)))
     && D.dealProblems(deal("x", { lt: "Trys alaus bokalai" })).some(p => /^No alcohol/.test(p)) && D.dealProblems(deal("x", { da: "Gratis øl" })).some(p => /^No alcohol/.test(p)) && D.dealProblems(deal("x", { de: "Ein Glas Wein gratis" })).some(p => /^No alcohol/.test(p)));
   ok("alcohol free drinks are fine", !D.dealProblems(deal("Alcohol-free beer for €2")).some(p => /^No alcohol/.test(p)));
   ok("an 18+ deal does not save", ["Shisha lounge 20% off", "Poker night entry free", "Casino chips for €5", "18+ party"].every(t => D.dealProblems(deal(t)).some(p => /^No 18\+ promotions/.test(p))));
@@ -83752,7 +83754,7 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("no dashes in the new terms text", !/[–—]/.test(terms.slice(terms.indexOf("14.6</span>"), terms.indexOf("14.7</span>") + 600)));
   ok("and breaking one means immediate suspension, said in red and in the terms", /<span class="n">14\.8<\/span> A business which publishes, or seeks to publish, a Special deal in breach of clause 14\.6 or clause 14\.7 shall be suspended from offering Special deals with immediate effect/.test(terms)
     && D.DEAL_RULES_BREACH === "Breaking either rule means immediate suspension." && /data-testid="deal-studio-rules-breach" style=\{\{[^}]*color: "#E5484D"/.test(ds) && /data-testid="about-rules-breach" style=\{\{[^}]*color: "#E5484D"/.test(ab));
-  ok("the rule words read in four languages", ["about.ruleAlcohol", "about.ruleAdult", "about.ruleBreach"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
+  ok("the rule words read in four languages", ["about.ruleAlcohol", "about.ruleAdult", "about.ruleBreach", "about.ruleAllowed"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
