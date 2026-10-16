@@ -79743,7 +79743,8 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("clause 12.6 extends the accuracy clauses to all other content", /<span class="n">12\.6<\/span> Clauses 12\.2 to 12\.4 apply equally to all other Gemlyx Content[\s\S]{0,400}any answer given through the conversation interface[\s\S]{0,200}accepts no responsibility for any such information being incorrect, incomplete or out of date, save as provided in clause 19\.1\./.test(terms));
   ok("and reliance on it is excluded like a Guide's", /19\.2\.1<\/span> reliance upon a price, timetable, opening hour, event date, availability or other item of information contained in a Guide or in any other Gemlyx Content, or given in an answer/.test(terms));
   ok("still never beyond what the law allows", /19\.1<\/span> Nothing in these Terms shall exclude or limit the liability of Gemlyx for death or personal injury/.test(terms));
-  ok("the version moved and says why", M.TERMS_VERSION === "2.3" && /Version 2\.3 · In force from/.test(terms) && /Version 2\.2, in force from 27 September 2026, adds clause 12\.6/.test(terms) && /Version 2\.3, in force from 1 November 2026, extends the Service to Lithuania/.test(terms));
+  // Version 2.4 since 17 Oct 2026 (clauses 14.6 and 14.7, batch 256).
+  ok("the version moved and says why", M.TERMS_VERSION === "2.4" && /Version 2\.4 · In force from/.test(terms) && /Version 2\.2, in force from 27 September 2026, adds clause 12\.6/.test(terms) && /Version 2\.3, in force from 1 November 2026, extends the Service to Lithuania/.test(terms));
 }
 
 // ── BATCH 147: ONE GUIDE A DAY, AND A CEILING ON THE DAY ─────────────
@@ -83725,6 +83726,31 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("the redeem button is named by its own label", /say\("about\.howBody"\)\.split\("\{redeem\}"\)/.test(ab) && /\{say\("offer\.redeem"\)\}/.test(ab) && ["en", "da", "de", "lt"].every(l => M.t("about.howBody", l).split("{redeem}").length === 2));
   ok("the words read in four languages, no dashes, none of his banned words", Object.keys({ "about.link": 1, "about.title": 1, "about.back": 1, "about.lead": 1, "about.whatH": 1, "about.whatBody": 1, "about.howH": 1, "about.howBody": 1, "about.freeH": 1, "about.freeBody": 1, "about.placesH": 1, "about.placesBody": 1, "about.made": 1 }).every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)) && !/ - /.test(M.t(k, l)))) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(Object.keys(M).length ? ["about.lead", "about.whatBody", "about.howBody", "about.freeBody", "about.placesBody", "about.made"].map(k => M.t(k, "en")).join(" ") : ""));
   ok("a way to write, and a way back", /mailto:\$\{ABOUT_EMAIL\}/.test(ab) && /export const ABOUT_EMAIL = "hello@gemlyxtravel\.com";/.test(ab) && /navigate\("\/lithuania"\)/.test(ab));
+}
+
+// ── Batch 256: what a deal may not promote, and the beer bar's new deal ──
+// Oliver, 17 Oct 2026: "make rules for people what they're allowed to
+// promote. Like 'no alcohol promotions' and 'No 18+ promotions' written in
+// red. And obviously it has to be put into terms of use."
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const D = M.DST;
+  const deal = (text, x = {}) => ({ ...D.emptyDeal(), name: "x", lat: 55.7087, lon: 21.1339, ongoing: true, text, ...x });
+  ok("the two rules, as he named them", JSON.stringify(D.DEAL_RULES) === JSON.stringify(["No alcohol promotions", "No 18+ promotions"]));
+  ok("an alcohol deal does not save, in any of the four languages", ["Three beers for the price of one", "Happy hour cocktails 2 for 1", "Free glass of wine with lunch"].every(t => D.dealProblems(deal(t)).some(p => /^No alcohol promotions/.test(p)))
+    && D.dealProblems(deal("x", { lt: "Trys alaus bokalai" })).some(p => /^No alcohol/.test(p)) && D.dealProblems(deal("x", { da: "Gratis øl" })).some(p => /^No alcohol/.test(p)) && D.dealProblems(deal("x", { de: "Ein Glas Wein gratis" })).some(p => /^No alcohol/.test(p)));
+  ok("alcohol free drinks are fine", !D.dealProblems(deal("Alcohol-free beer for €2")).some(p => /^No alcohol/.test(p)));
+  ok("an 18+ deal does not save", ["Shisha lounge 20% off", "Poker night entry free", "Casino chips for €5", "18+ party"].every(t => D.dealProblems(deal(t)).some(p => /^No 18\+ promotions/.test(p))));
+  ok("ordinary words are not caught", ["Polish a raw piece of Baltic amber yourself", "Gintaro dirbtuvė", "Lunch of the day with a glass of kvass, €9", "Time slots for pottery", "Free darts and board games for your table, with any order"].every(t => D.ruleProblems({ text: t }).length === 0));
+  ok("none of the made-up partners breaks a rule", M.KXR.EXAMPLE_PARTNERS.every(p => D.ruleProblems({ text: p.offer.text, lt: p.lt?.offer, da: p.da?.offer, de: p.de?.offer }).length === 0));
+  const beer = M.KXR.EXAMPLE_PARTNERS.find(p => p.key === "beer");
+  ok("the bar's deal is darts and board games now, not beer", beer.name === "Baras Inkaras" && beer.what === "Games bar" && /darts and board games/i.test(beer.offer.text) && !/beer|alus|øl|bier/i.test([beer.offer.text, beer.lt.offer, beer.da.offer, beer.de.offer, beer.idea].join(" ")));
+  const ds = read("src/components/DealStudio.jsx"), ab = read("src/components/AboutPage.jsx");
+  ok("in red in the deal editor and on the About page", /data-testid="deal-studio-rules"/.test(ds) && /color: "#E5484D"/.test(ds.slice(ds.indexOf("deal-studio-rules"))) && /data-testid="about-rules"/.test(ab) && /color: "#E5484D"/.test(ab.slice(ab.indexOf("about-rules"))));
+  const terms = read("public/terms.html");
+  ok("and in the terms, clauses 14.6 and 14.7", /<span class="n">14\.6<\/span> No Special deal shall consist of, include, promote or be conditional upon the purchase of:/.test(terms) && /14\.6\.1<\/span> any alcoholic beverage/.test(terms) && /14\.6\.2<\/span> any product, service or activity which by law may be offered or supplied only to persons who have attained the age of 18 years/.test(terms) && /<span class="n">14\.7<\/span>/.test(terms) && /Version 2\.4, in force from 1 November 2026, was published on 17 October 2026/.test(terms));
+  ok("no dashes in the new terms text", !/[–—]/.test(terms.slice(terms.indexOf("14.6</span>"), terms.indexOf("14.7</span>") + 600)));
+  ok("the rule words read in four languages", ["about.ruleAlcohol", "about.ruleAdult"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
