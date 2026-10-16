@@ -5,10 +5,17 @@
 // with: "The openstreetmaps is very poorly designed. We need a static 'map' of
 // the area in Klaipeda. Look at our map in the tourism guide.. use that."
 //
-// So it is the walk's own map: Google's, in the guide's style (the Map ID in
-// utils/googleMapsLoader.js), fixed on the street the place is on, with the
-// same gold pin. A picture and not a control: nothing on it moves, so the page
-// scrolls under a thumb, and tapping it does what "Walk there" does.
+// So it is the walk's own map: Google's, fixed on the street the place is on,
+// with the same gold pin. A picture and not a control: nothing on it moves, so
+// the page scrolls under a thumb, and tapping it does what "Walk there" does.
+//
+// ── DARK SINCE 16 OCT 2026 ─────────────────────────────────────────
+// It was drawn in the guide's light style (the Map ID in
+// utils/googleMapsLoader.js) until a design review of the page called the
+// bright maps the one thing breaking its dark look, and Oliver said "try out
+// the ideas that google and you agreed on". It now takes the dark style in
+// utils/cardMapStyle.js, the picture and the live map alike. The walk map and
+// the place view keep the guide's style.
 //
 // ── A PICTURE FIRST, A LIVE MAP IF GOOGLE SAYS NO ──────────────────
 // Google's Static Maps is the cheap way: one picture per card, in the same
@@ -24,7 +31,8 @@
 // would break Google's terms.
 import { useEffect, useRef, useState } from "react";
 import { C } from "../utils/theme";
-import { GOOGLE_MAP_ID, GOOGLE_MAPS_BROWSER_KEY, googleMapsReady, loadGoogleMaps } from "../utils/googleMapsLoader";
+import { GOOGLE_MAPS_BROWSER_KEY, googleMapsReady, loadGoogleMaps } from "../utils/googleMapsLoader";
+import { CARD_MAP_STYLE, staticStyleParams } from "../utils/cardMapStyle";
 import { PLACE_PIN, placePinHtml } from "./GoogleWalkMap";
 
 // The street and the few around it: "zoom a bit out of the maps" (Oliver,
@@ -35,7 +43,7 @@ export const CLOSE_ZOOM = 15;
 export const PIN_SCALE = 0.78;
 
 export const staticMapUrl = ({ lat, lon, size }) =>
-  `https://maps.googleapis.com/maps/api/staticmap?center=${Number(lat).toFixed(5)},${Number(lon).toFixed(5)}&zoom=${CLOSE_ZOOM}&size=${size}x${size}&scale=2&map_id=${encodeURIComponent(GOOGLE_MAP_ID)}&key=${encodeURIComponent(GOOGLE_MAPS_BROWSER_KEY)}`;
+  `https://maps.googleapis.com/maps/api/staticmap?center=${Number(lat).toFixed(5)},${Number(lon).toFixed(5)}&zoom=${CLOSE_ZOOM}&size=${size}x${size}&scale=2&${staticStyleParams()}&key=${encodeURIComponent(GOOGLE_MAPS_BROWSER_KEY)}`;
 
 // Set on the first refusal, for this visit.
 let staticRefused = false;
@@ -71,7 +79,7 @@ export const DealCornerMap = ({ lat, lon, name = "", size = 104, onTap = null, s
         if (gone || made.current || !holder.current) return;
         made.current = true;
         new Map(holder.current, {
-          mapId: GOOGLE_MAP_ID,
+          styles: CARD_MAP_STYLE,
           center: { lat: Number(lat), lng: Number(lon) },
           zoom: CLOSE_ZOOM,
           renderingType: maps.RenderingType?.RASTER || "RASTER",
