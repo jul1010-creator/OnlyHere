@@ -83750,7 +83750,9 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   const terms = read("public/terms.html");
   ok("and in the terms, clauses 14.6 and 14.7", /<span class="n">14\.6<\/span> No Special deal shall consist of, include, promote or be conditional upon the purchase of:/.test(terms) && /14\.6\.1<\/span> any alcoholic beverage/.test(terms) && /14\.6\.2<\/span> any product, service or activity which by law may be offered or supplied only to persons who have attained the age of 18 years/.test(terms) && /<span class="n">14\.7<\/span>/.test(terms) && /Version 2\.4, in force from 1 November 2026, was published on 17 October 2026/.test(terms));
   ok("no dashes in the new terms text", !/[–—]/.test(terms.slice(terms.indexOf("14.6</span>"), terms.indexOf("14.7</span>") + 600)));
-  ok("the rule words read in four languages", ["about.ruleAlcohol", "about.ruleAdult"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
+  ok("and breaking one means immediate suspension, said in red and in the terms", /<span class="n">14\.8<\/span> A business which publishes, or seeks to publish, a Special deal in breach of clause 14\.6 or clause 14\.7 shall be suspended from offering Special deals with immediate effect/.test(terms)
+    && D.DEAL_RULES_BREACH === "Breaking either rule means immediate suspension." && /data-testid="deal-studio-rules-breach" style=\{\{[^}]*color: "#E5484D"/.test(ds) && /data-testid="about-rules-breach" style=\{\{[^}]*color: "#E5484D"/.test(ab));
+  ok("the rule words read in four languages", ["about.ruleAlcohol", "about.ruleAdult", "about.ruleBreach"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
