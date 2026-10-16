@@ -69,6 +69,27 @@ export const dealFromRow = (row) => {
 
 const num = (v) => (v === "" || v === null || v === undefined ? NaN : Number(v));
 
+// ── WHAT A DEAL MAY NOT PROMOTE ─────────────────────────────────────
+// Oliver, 17 Oct 2026: "make rules for people what they're allowed to
+// promote. Like 'no alcohol promotions' and 'No 18+ promotions' written in
+// red. And obviously it has to be put into terms of use." The rules are
+// clause 14.6 of public/terms.html. Lithuania's Alcohol Control Law bans
+// alcohol advertising and announcing alcohol price cuts (Articles 28 and 29),
+// so a bar's deal is about food, games, entry or soft drinks, and never
+// depends on buying alcohol. The word lists catch the plain cases in the four
+// languages of the site; anything they miss is still against the terms.
+export const DEAL_RULES = ["No alcohol promotions", "No 18+ promotions"];
+const ALCOHOL = /(?:^|[^\p{L}])(beers?|lagers?|ales?|stouts?|ipa|ciders?|wines?|prosecco|champagne|cocktails?|vodka|gin|rum|whisk(?:e)?y|brandy|cognac|liqueurs?|tequila|mead|spritz|aperol|mojitos?|happy hour|alus|alaus|vynas|vyno|degtinė|degtinės|kokteili\p{L}*|sidras|midus|øl|vin|vinen|snaps|bier|biere|wein|sekt|schnaps)(?![\p{L}])/iu;
+const ALCOHOL_FREE = /(alcohol[ -]?free|non[ -]?alcoholic|0[.,]0\s*%?|nealkoholin\p{L}*|be alkoholio|alkoholfri\p{L}*|alkoholfrei\p{L}*)/iu;
+const ADULT = /(?:^|[^\p{L}\d])(18\+|tobacco|cigarettes?|cigars?|vape|vapes|vaping|e-?cig\p{L}*|hookah|shisha|casino|gambling|betting|poker|erotic|strip ?club|adults? only|tabak\p{L}*|cigaret\p{L}*|kaljan\p{L}*|lošim\p{L}*|kazino|glücksspiel|spillested)(?![\p{L}])/iu;
+const offerWords = (f) => [f?.text, f?.lt, f?.da, f?.de].map(v => String(v || "")).join(" \n ");
+export const promotesAlcohol = (f) => { const w = offerWords(f); return ALCOHOL.test(w) && !ALCOHOL_FREE.test(w); };
+export const promotesAdult = (f) => ADULT.test(offerWords(f));
+export const ruleProblems = (f) => [
+  ...(promotesAlcohol(f) ? ["No alcohol promotions. Make the offer about food, games, entry or soft drinks, and not depend on buying alcohol."] : []),
+  ...(promotesAdult(f) ? ["No 18+ promotions. Nothing about tobacco, vaping, gambling or anything only for adults."] : []),
+];
+
 // What stops it saving, in words, one thing to do each.
 export const dealProblems = (f) => {
   const out = [];
@@ -78,6 +99,7 @@ export const dealProblems = (f) => {
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) out.push("Put the place on the map: find it on Google, or tap the map where its door is.");
   else if (!inNowArea("LT", { lat, lon })) out.push("That spot is outside Klaipėda. Find the place again, or tap the map where its door is.");
   if (!String(f?.text || "").trim()) out.push("Write the offer: what a visitor gets.");
+  out.push(...ruleProblems(f));
   if (!f?.ongoing && !String(f?.until || "").trim()) out.push("Give the offer a last day, or set it to No last day.");
   out.push(...offerProblems(offerOf(f)).filter(p => !/no end date|no text/.test(p)));
   const ph = String(f?.photo || "").trim();
