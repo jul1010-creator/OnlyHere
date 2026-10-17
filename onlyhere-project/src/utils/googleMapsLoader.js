@@ -13,8 +13,11 @@
 // ── THE KEY IS A BROWSER KEY, AND THAT IS HOW GOOGLE BUILT IT ──────
 // A Google map in a web page loads with a key the visitor's browser can see,
 // whichever way it is delivered. Google's protection is not hiding it: it is a
-// key that only works on gemlyxtravel.com and only for the Maps JavaScript API,
-// both set on the key in Google Cloud. So this is a SEPARATE key from
+// key that only works on gemlyxtravel.com and only for the Maps JavaScript API
+// and, since 16 Oct 2026, the Maps Static API (the deal tiles' map pictures),
+// both set on the key in Google Cloud. The Referer check that limits it to the
+// site can be faked by a script, so each of the two APIs wants a daily quota on
+// this key in Google Cloud (security review, 17 Oct 2026). So this is a SEPARATE key from
 // GOOGLE_MAPS_KEY, which stays on the server and is never sent anywhere.
 //
 // Without the key and a Map ID nothing loads and the map is simply left out,

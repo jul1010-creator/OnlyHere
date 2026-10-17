@@ -90,7 +90,7 @@ export const SUPPORT_TOPICS = [
   { id: "problem", label: "Feedback" },
   { id: "question", label: "A question about a trip or a place" },
   { id: "wrong", label: "Something on a page is wrong or out of date" },
-  { id: "account", label: "Account, sign-in or a saved guide" },
+  { id: "account", label: "Account or sign-in" },
   { id: "privacy", label: "Privacy, my data, or deleting my account" },
   { id: "report", label: "Report content as illegal or harmful" },
   { id: "business", label: "A business or partnership enquiry" },
