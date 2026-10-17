@@ -16727,9 +16727,11 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     is("no unnamed opener sets Create", (appA.match(/setAuthMode\("up"\)/g) || []).length, 1);
   }
   // His words changed on 21 Aug from "or create an account" to this.
+  // His words until 17 Oct 2026, when the brief he brought made it "New to
+  // Gemlyx? Create an account": still the small line, still one tap away.
   ok("and the secondary line offers creating one, in his words",
-     /uiT\("auth\.newUser", lang\)/.test(sheet)
-     && M.UI_STRINGS["auth.newUser"].en === "New User? Sign up here!");
+     /uiT\("auth\.newToGemlyx", lang\)[\s\S]{0,260}uiT\("auth\.createAnAccount", lang\)/.test(sheet)
+     && M.UI_STRINGS["auth.newToGemlyx"].en === "New to Gemlyx?" && M.UI_STRINGS["auth.createAnAccount"].en === "Create an account");
   // The big button reads off `mode`, so flipping the default flips the label
   // rather than needing a second edit that could be forgotten.
   // A fourth mode joined on 22 Aug: "newpass", the screen a password reset link
@@ -16894,7 +16896,9 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // see the difference between a string and the comment quoting it.
   ok("it says what is actually stored",
      // Chosen by utils/features.js since 17 Oct 2026 (batch 259).
-     /uiT\(AI_GUIDES_SHOWN \? "auth\.storeLead" : "auth\.storeLeadNoGuides", lang\)/.test(asheet)
+     // And with the guides hidden, the brief's line that points to the policy
+     // rather than repeating promises from it (17 Oct 2026).
+     /\{uiT\("auth\.storeLead", lang\)\}/.test(asheet) && /\{uiT\("auth\.privacyNoteLead", lang\)\}/.test(asheet)
      && /We store your email, what you fill in here, and your saved list/.test(M.UI_STRINGS["auth.storeLead"].en));
   // In every language, because this is the sentence that says what is kept
   // about somebody, and a reader who cannot read it has not been told.
@@ -34034,7 +34038,9 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 
   // A refusal is the EXPECTED answer to an impatient third press. Somebody told
   // nothing will simply press it again.
-  ok("a refused resend reaches the screen", /catch \(e\) \{[\s\S]{0,420}setError\(String\(e\.message \|\| e\)\);\s*\}\s*setBusy\(false\);\s*\};/.test(sheetS));
+  // In our words since 17 Oct 2026, never Supabase's: too many tries, or the
+  // network, and nothing is swallowed.
+  ok("a refused resend reaches the screen", /catch \(e\) \{[\s\S]{0,420}setError\(uiT\(authProblem\(e\?\.message \|\| e, "resend"\) \|\| "auth\.networkAny", lang\)\);\s*\}\s*setBusy\(false\);\s*\};/.test(sheetS));
   ok("and the screen can show an error at all", /\{error && <div style=\{\{ fontSize: 12, color: "#FF8A80", lineHeight: 1\.5, marginBottom: 12 \}\}>/.test(sheetS));
 
   // ── DRAWN, NOT AN ILLUSTRATION ──────────────────────────────────
@@ -35581,18 +35587,22 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
        (bareE.match(/signUpWithPassword\(/g) || []).length, 1);
     ok("and that place is behind the up mode",
        codeE.indexOf('mode === "up"') < codeE.indexOf("signUpWithPassword("));
+    // Through authProblem since 17 Oct 2026, with the two ways on right under
+    // the button ("New to Gemlyx? Create an account", "Forgot password?").
     ok("a refused sign in says what is wrong and what to do",
-       /invalid login credentials\/i\.test\(said\) \? uiT\("auth\.badLogin", lang\)/.test(codeE));
+       /if \(\/invalid login credentials\/i\.test\(s\)\) return "auth\.badLogin";/.test(codeE)
+       && /uiT\("auth\.forgotQ", lang\)/.test(codeE) && /uiT\("auth\.createAnAccount", lang\)/.test(codeE));
     // BOTH POSSIBILITIES, because naming only one either guesses or gives away
     // who has an account here.
     ok("and names both, rather than guessing which",
-       /do not match an account/.test(M.UI_STRINGS["auth.badLogin"].en)
-       && /Forgot password/.test(M.UI_STRINGS["auth.badLogin"].en)
-       && /sign up/i.test(M.UI_STRINGS["auth.badLogin"].en));
+       M.UI_STRINGS["auth.badLogin"].en === "Email or password is incorrect.");
     // Matched on the wording rather than the status, because the same 400
     // carries messages worth passing through as they are.
+    // Not on the sign-in screen any more (the brief: no raw provider errors),
+    // but a signup or reset message with no sentence of ours still shows.
     ok("and every other message still reaches the screen as itself",
-       /setError\(\/invalid login credentials\/i\.test\(said\) \? uiT\("auth\.badLogin", lang\) : said\)/.test(codeE));
+       /const ours = authProblem\(said, mode\);\s*setError\(ours \? uiT\(ours, lang\) : said\);/.test(codeE)
+       && /if \(mode === "in"\) return "auth\.signInFailed";\s*return null;/.test(codeE));
 
     // ── AN ADDRESS THAT IS ALREADY TAKEN ANSWERS 200 ──────────────
     // Supabase does not error on a repeat signup, for the same anti-enumeration
@@ -35640,7 +35650,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("and the mail is actually sent, not merely offered",
        /await resendConfirmation\(to\);/.test(codeE));
     ok("with the refusal reported rather than swallowed",
-       /catch \(again\) \{\s*setError\(String\(again\?\.message \|\| again\)\);/.test(codeE));
+       /catch \(again\) \{\s*setError\(uiT\(authProblem\(again\?\.message \|\| again, "resend"\) \|\| "auth\.networkAny", lang\)\);/.test(codeE));
   }
 
   // ── A REPORT BUTTON THAT ARRIVES SOMEWHERE, 15 SEP 2026 ─────────
@@ -36151,7 +36161,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       // one and passes for the wrong reason.
       {
         const at = sheetR.indexOf("autoSentRef.current !== to");
-        const branch = sheetR.slice(at, at + 900);
+        const branch = sheetR.slice(at, at + 1000);
         ok("the cooldown is armed whether or not one went",
            branch.includes("setResendAt(Date.now() + RESEND_COOLDOWN_MS)")
            && branch.indexOf("autoSentRef.current = to") < branch.indexOf("setResendAt(Date.now() + RESEND_COOLDOWN_MS)"));
@@ -36291,12 +36301,13 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
        /await updatePassword\(recoverySession, password\);[\s\S]{0,1400}onSignedIn\(recoverySession, \{ done: true \}\);\s*return;/.test(sheetR));
     // No email field: they arrived holding a token, so who they are is settled
     // and asking again is asking them to prove what they just proved.
-    ok("which does not ask who they are again", /\{mode !== "newpass" && \(\s*<input type="email"/.test(sheetR));
+    ok("which does not ask who they are again", /\{mode !== "newpass" && \(\s*<input id="gx-auth-email" ref=\{emailRef\} type="email"/.test(sheetR)
+       && /\{mode !== "newpass" && fieldLabel\("gx-auth-email"/.test(sheetR));
     ok("but does ask twice, like signup does", /\{\(mode === "up" \|\| mode === "newpass"\) && \(/.test(sheetR));
     ok("and does not reopen the whole profile form", /\{mode === "up" && <>\s*<div style=\{\{ height: 1[\s\S]{0,220}<ProfileQuestions/.test(sheetR));
     // Mid-recovery there is nothing to switch to: the token expires and every
     // other screen throws it away.
-    ok("the screen switchers step aside", (sheetR.match(/mode !== "newpass" && <button style=\{linkBtn\}/g) || []).length === 2);
+    ok("the screen switchers step aside", /\{mode !== "up" && mode !== "newpass" && \(/.test(sheetR) && /\{mode !== "in" && mode !== "newpass" && \(/.test(sheetR));
   }
   {
     const appR = readFileSync(join(root, "src/App.jsx"), "utf8");
@@ -36324,10 +36335,11 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("and the old handler is gone", !/<div onClick=\{onClose\} style=\{overlay\}>/.test(stripNonCode(sheetB)));
     // The cross still does, or there is no way out at all.
     ok("the cross still closes it",
-       /<button onClick=\{onClose\} aria-label=\{uiT\("auth\.close", lang\)\}/.test(sheetB));
+       /<button type="button" onClick=\{onClose\} aria-label=\{uiT\("auth\.close", lang\)\}/.test(sheetB));
     // And so does Escape, which is the other deliberate act. Bound only while
     // open, so it cannot swallow Escape from anything else on the page.
-    ok("so does Escape", /if \(e\.key === "Escape"\) onClose\(\);/.test(sheetB));
+    // Unless the language list is open: then Escape closes the list first.
+    ok("so does Escape", /if \(e\.key !== "Escape"\) return;\s*if \(langOpen\) \{ setLangOpen\(false\);[^}]*\}\s*onClose\(\);/.test(sheetB));
     ok("only while the sheet is open", /if \(!open\) return;\s*const onKey/.test(sheetB));
     ok("and the listener is removed again", /return \(\) => window\.removeEventListener\("keydown", onKey\);/.test(sheetB));
   }
@@ -47699,12 +47711,15 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // ── THE MANDATORY MARKS ─────────────────────────────────────────
   // "Remember to have '*' on parts that is mandatory to answer."
   ok("required fields are starred", /required showGaps=\{showGaps\}/.test(auth));
-  ok("email carries one", /\{uiT\("auth\.email", lang\)\}<span style=\{\{ color: showGaps && !email\.trim\(\)/.test(auth));
+  // The mark lives in fieldLabel since 17 Oct 2026, which every field's label
+  // goes through, and is drawn on the signup form only.
+  ok("email carries one", /fieldLabel\("gx-auth-email", uiT\("auth\.emailAddress", lang\), showGaps && !email\.trim\(\)\)/.test(auth)
+     && /<span aria-hidden="true" style=\{\{ color: gap \? "#FF8A80" : C\.gold, marginLeft: 3 \}\}>\*<\/span>/.test(auth));
   // The label became conditional on 22 Aug, because a reset link lands on a
   // screen where "Password" is the wrong word for a box you are choosing a NEW
   // value in. The mark still has to be on it either way.
   ok("password carries one",
-     /\{uiT\(mode === "newpass" \? "auth\.newPassword" : "auth\.password", lang\)\}<span style=\{\{ color: showGaps && password\.length < 6/.test(auth));
+     /\{uiT\(mode === "newpass" \? "auth\.newPassword" : "auth\.password", lang\)\}<span aria-hidden="true" style=\{\{ color: showGaps && password\.length < 6/.test(auth));
   ok("and the gaps only show after a press", /const \[showGaps, setShowGaps\] = useState\(false\);/.test(auth)
      && /setShowGaps\(true\);/.test(auth));
   ok("the missing ones are named rather than counted",
@@ -64842,11 +64857,11 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   is("every auth key is rendered by the sheet or by the app around it",
      AUTH_KEYS.filter(k => !authSrc.includes(`"${k}"`) && !authApp.includes(`"${k}"`) && !authDel.includes(`"${k}"`)), []);
   ok("and the sheet imports the reader",
-     /import \{ t as uiT, DEFAULT_UI_LANGUAGE \} from "\.\.\/utils\/uiLanguage";/.test(authSrc));
+     /import \{ t as uiT, DEFAULT_UI_LANGUAGE, UI_LANGUAGES, uiLanguageMeta \} from "\.\.\/utils\/uiLanguage";/.test(authSrc));
   // A default of English rather than "", so a caller that passes nothing gets
   // the screen it got before instead of a sheet full of blanks.
   ok("and defaults to English when nobody passes one",
-     /lang = DEFAULT_UI_LANGUAGE \}\) => \{/.test(authSrc));
+     /lang = DEFAULT_UI_LANGUAGE, onLang \}\) => \{/.test(authSrc));
   // And the app hands it the reader's language, or the default above is the
   // only thing anybody ever sees, which is this repo's signature failure.
   ok("and the app passes the reader's language into it",
@@ -64866,8 +64881,10 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // Supabase's own error text is NOT in this catalogue and cannot be: it comes
   // back from their API in English. Written down so the gap is a known one
   // rather than something the next pass reports as a miss.
+  // Where we have no sentence of our own for it (17 Oct 2026: sign in always
+  // has one now, so this is the signup, reset and new-password screens).
   ok("the sheet still shows what the server said, whatever language it is in",
-     /setError\(String\(e\.message \|\| e\)\)/.test(authSrc));
+     /setError\(ours \? uiT\(ours, lang\) : String\(e\.message \|\| e\)\)/.test(authSrc));
 
   // ── AND NO SURFACE ASKS FOR A KEY THAT IS NOT THERE ──────────────
   //
@@ -83836,7 +83853,8 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   const mw = read("middleware.js");
   ok("the sitemap and card reads are capped, a query is redirected, a miss remembered", (mw.match(/&limit=\$\{READ_LIMIT\}/g) || []).length === 2 && /if \(url\.search\) return Response\.redirect\(`\$\{url\.origin\}\/sitemap\.xml`, 301\);/.test(mw) && /if \(missed\(missKey\)\) return null;/.test(mw) && /if \(!found\) rememberMiss\(missKey\);/.test(mw));
   ok("the AI guides are out of sight, nothing deleted", /export const AI_GUIDES_SHOWN = false;/.test(read("src/utils/features.js")) && /AI_GUIDES_SHOWN && localSaveCount > 0/.test(read("src/components/AuthSheet.jsx")) && /\{AI_GUIDES_SHOWN && mode !== "newpass"/.test(read("src/components/AuthSheet.jsx")));
-  ok("the sign-in sheet says nothing about guides or saving", !/guide|saved/i.test(M.t("auth.whyNoGuides", "en") + M.t("auth.storeLeadNoGuides", "en")) && ["en", "da", "de", "lt"].every(l => M.t("auth.whyNoGuides", l) !== "auth.whyNoGuides" && M.t("auth.storeLeadNoGuides", l) !== "auth.storeLeadNoGuides"));
+  // The lines it speaks since 17 Oct 2026 (Oliver's sign-in brief).
+  ok("the sign-in sheet says nothing about guides or saving", ["auth.signInLead", "auth.upLead", "auth.resetLead", "auth.privacyNoteLead", "auth.privacyNoteTail"].every(k => !/guide|saved/i.test(M.UI_STRINGS[k].en) && ["en", "da", "de", "lt"].every(l => typeof M.UI_STRINGS[k][l] === "string" && M.UI_STRINGS[k][l].length > 0)));
   ok("the account page leaves out Saved trips, About me and Plan", /export const GUIDE_SECTIONS = \["trips", "about", "plan"\];/.test(read("src/components/AboutMePage.jsx")) && /\{SHOWN_ME_SECTIONS\.map\(railItem\)\}/.test(read("src/components/AboutMePage.jsx")));
   ok("no saved guide in the support topics", !/guide/i.test(read("src/utils/support.js").match(/\{ id: "account", label: "[^"]*" \}/)?.[0] || "guide"));
   ok("the footer links all read alike", /data-testid="deals-foot-about" style=\{\{ color: C\.muted, textDecoration: "none" \}\}/.test(read("src/components/DealsNearYou.jsx")));
@@ -83855,6 +83873,53 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("no Saved trips row anywhere while the guides are out of sight", /\{MENU_PAGES_SHOWN && AI_GUIDES_SHOWN && \(<>/.test(read("src/App.jsx")) && /\{MENU_PAGES_SHOWN && AI_GUIDES_SHOWN && <div style=\{\{ fontSize: 10\.5, color: C\.muted \}\}>\{savedGuides\.length\} saved/.test(read("src/App.jsx")));
   ok("the scan count is described as approximate, not as proof", /not proof somebody stood at the\s*\/\/ till/.test(read("src/utils/scanCode.js")) && /not proof of a visit/.test(read("src/utils/partnerStats.js")));
   ok("the sign-up form asks nothing that only shaped a guide", /\{show === "all" && AI_GUIDES_SHOWN && \(/.test(read("src/components/ProfileQuestions.jsx")) && /show === "all" && moreOpen && AI_GUIDES_SHOWN/.test(read("src/components/ProfileQuestions.jsx")));
+}
+
+// ── Batch 262: the sign-in sheet against Oliver's brief, and its language picker ──
+// Oliver, 17 Oct 2026, with a brief for the sign-in sheet: "This is a document
+// from ChatGPT I think you should look at. At the sign in, I also want you to
+// make people able to change language at the top right."
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const a = read("src/components/AuthSheet.jsx"), app = read("src/App.jsx"), U = M.UI_STRINGS;
+  ok("a language picker sits at the top right, beside the cross", /data-testid="auth-lang"/.test(a) && a.indexOf('data-testid="auth-lang"') < a.indexOf('data-testid="auth-close"') && /<div style=\{\{ flex: 1 \}\} \/>\s*\{onLang && \(/.test(a));
+  ok("it offers every interface language and changes the app's", /\{UI_LANGUAGES\.map\(l => \{/.test(a) && /onClick=\{\(\) => \{ onLang\(l\.code\); setLangOpen\(false\);/.test(a) && /lang=\{uiLang\} onLang=\{changeUiLanguage\}/.test(app));
+  ok("Escape closes the language list before the sheet", /if \(langOpen\) \{ setLangOpen\(false\);/.test(a));
+  ok("the sheet is a dialog named by its heading", /role="dialog" aria-modal="true" aria-labelledby="gx-auth-title"/.test(a) && /<h2 id="gx-auth-title"/.test(a));
+  ok("focus goes in on opening and back out on closing", /openerRef\.current = document\.activeElement/.test(a) && /back\.focus\(\{ preventScroll: true \}\)/.test(a) && /\(first \|\| cardRef\.current\)\?\.focus/.test(a));
+  ok("Tab stays inside while it is open", /if \(e\.key !== "Tab" \|\| !cardRef\.current\) return;/.test(a) && /last\.focus\(\)/.test(a) && /first\.focus\(\)/.test(a));
+  ok("every field has a label tied to it", /<label htmlFor=\{htmlFor\}/.test(a) && /id="gx-auth-email"/.test(a) && /id="gx-auth-pass"/.test(a));
+  ok("the password can be shown, and the button says which way it goes", /type=\{showPass \? "text" : "password"\} value=\{password\}/.test(a) && /aria-label=\{uiT\(showPass \? "auth\.hidePassword" : "auth\.showPassword", lang\)\}/.test(a) && /width: 40, height: 40/.test(a));
+  ok("the button says it is signing in, and cannot be pressed twice", /\{busy \? uiT\(mode === "in" \? "auth\.signingIn" : "auth\.working", lang\) : label\}/.test(a) && /onClick=\{submit\} disabled=\{busy\} aria-busy/.test(a));
+  ok("an error is read out and tied to its field", /id=\{errId\} role="alert"/.test(a) && /aria-describedby=\{emailErr \? errId : undefined\}/.test(a) && /aria-describedby=\{passErr \? errId : undefined\}/.test(a));
+  ok("a field with a problem turns red over the global field rule", /\.gx-auth input\.gx-bad:not\(#gx-none\) \{ border-color: #FF8A80 !important; \}/.test(a) && !/borderColor: "#FF8A80"/.test(a));
+  ok("nothing on the page floats above it", /zIndex: 3100,/.test(a));
+  const brief = { "auth.emailAddress": "Email address", "auth.passwordPh": "Enter your password", "auth.showPassword": "Show password", "auth.hidePassword": "Hide password",
+    "auth.signingIn": "Signing in…", "auth.newToGemlyx": "New to Gemlyx?", "auth.createAnAccount": "Create an account", "auth.forgotQ": "Forgot password?",
+    "auth.enterEmailAddress": "Enter your email address.", "auth.validEmail": "Enter a valid email address.", "auth.enterPassword": "Enter your password.",
+    "auth.badLogin": "Email or password is incorrect.", "auth.network": "We couldn’t sign you in. Check your connection and try again.",
+    "auth.tooMany": "Too many attempts. Please wait a moment before trying again.",
+    "auth.resetSent": "If an account exists for that email address, you’ll receive instructions to reset your password." };
+  ok("the brief's wording, word for word", Object.entries(brief).every(([k, v]) => U[k]?.en === v));
+  ok("the lead says only what is true: no redeeming, no settings across devices", U["auth.signInLead"].en === "Sign in to access and manage your Gemlyx account." && !/redeem|preferences|device/i.test(U["auth.signInLead"].en + U["auth.upLead"].en));
+  ok("the privacy note promises nothing the policy has to back", /^Your information is used to provide and manage your Gemlyx account\. Read our$/.test(U["auth.privacyNoteLead"].en) && U["auth.privacyNoteTail"].en === " to learn what data we collect and how it is handled." && !/tracking|sold|delete|marketing/i.test(Object.values(U["auth.privacyNoteLead"]).join(" ") + Object.values(U["auth.privacyNoteTail"]).join(" ")));
+  const fresh = ["auth.signInLead", "auth.upLead", "auth.resetLead", "auth.emailAddress", "auth.passwordPh", "auth.showPassword", "auth.hidePassword", "auth.signingIn", "auth.newToGemlyx", "auth.haveAccountQ", "auth.forgotQ", "auth.enterEmailAddress", "auth.validEmail", "auth.enterPassword", "auth.network", "auth.networkAny", "auth.tooMany", "auth.signInFailed", "auth.privacyNoteLead", "auth.privacyNoteTail", "auth.language", "auth.badLogin", "auth.resetSent"];
+  ok("in all four languages, and no dash in any of them", fresh.every(k => ["en", "da", "de", "lt"].every(l => typeof U[k]?.[l] === "string" && U[k][l].length > 0 && !/[–—]| - /.test(U[k][l]))));
+  ok("and no actually, genuinely, truly or simply", fresh.every(k => !/\b(actually|genuine(ly)?|truly|simply)\b/i.test(U[k].en)));
+  // The mapping itself, run on what Supabase and the browser send.
+  const src = a.match(/export const authProblem = \(said, mode\) => \{[\s\S]*?\n\};/)?.[0] || "";
+  let authProblem = null;
+  try { authProblem = new Function(`${src.replace("export const authProblem", "const authProblem")}; return authProblem;`)(); } catch { authProblem = null; }
+  ok("a provider's words become ours", !!authProblem
+    && authProblem("Invalid login credentials", "in") === "auth.badLogin"
+    && authProblem("TypeError: Failed to fetch", "in") === "auth.network"
+    && authProblem("Failed to fetch", "up") === "auth.networkAny"
+    && authProblem("email rate limit exceeded", "resend") === "auth.tooMany"
+    && authProblem("Request rate limit reached", "in") === "auth.tooMany"
+    && authProblem("Database error querying schema", "in") === "auth.signInFailed"
+    && authProblem("Password should be at least 6 characters", "up") === null);
+  ok("an address is checked before anything is sent", /if \(!EMAIL_SHAPE\.test\(email\.trim\(\)\)\) \{ setError\(uiT\("auth\.validEmail", lang\)\); return; \}/.test(a) && /const EMAIL_SHAPE = \/\^\[\^\\s@\]\+@\[\^\\s@\]\+\\\.\[\^\\s@\]\+\$\/;/.test(a));
+  ok("the saved password is still not put in on its own (his 14 Sep rule)", (a.match(/autoComplete="new-password"/g) || []).length === 2 && !/current-password"/.test(a.replace(/\/\/.*$/gm, "").replace(/\{\/\*[\s\S]*?\*\/\}/g, "")));
 }
 
 // ── Batch 261: no secret key can reach GitHub or the browser ──

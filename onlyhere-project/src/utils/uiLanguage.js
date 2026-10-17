@@ -541,7 +541,6 @@ export const UI_STRINGS = {
   "auth.wrongAddress":  { en: "Wrong address? Go back", da: "Forkert adresse? Gå tilbage", de: "Falsche Adresse? Zurück", lt: "Neteisingas adresas? Grįžti atgal" },
   "auth.sentAgain":     { en: "Sent again. Check your spam folder too.", da: "Sendt igen. Tjek også din spammappe.", de: "Nochmal gesendet. Sieh auch im Spam nach.", lt: "Išsiųsta dar kartą. Patikrinkite ir šlamšto aplanką." },
   // ── THE FORM ──────────────────────────────────────────────────────
-  "auth.email":         { en: "Email",              da: "Mail",                 de: "E-Mail", lt: "El. paštas" },
   "auth.password":      { en: "Password",           da: "Adgangskode",          de: "Passwort", lt: "Slaptažodis" },
   "auth.newPassword":   { en: "New password",       da: "Ny adgangskode",       de: "Neues Passwort", lt: "Naujas slaptažodis" },
   "auth.atLeastSix":    { en: "at least 6 characters", da: "mindst 6 tegn",     de: "mindestens 6 Zeichen", lt: "bent 6 simboliai" },
@@ -553,9 +552,8 @@ export const UI_STRINGS = {
   // ── WHAT IT SAYS WHEN SOMETHING IS WRONG ──────────────────────────
   "auth.needSix":       { en: "Passwords need at least 6 characters.", da: "Adgangskoden skal være på mindst 6 tegn.", de: "Das Passwort braucht mindestens 6 Zeichen.", lt: "Slaptažodį turi sudaryti bent 6 simboliai." },
   "auth.noMatch":       { en: "The two passwords do not match.", da: "De to adgangskoder er ikke ens.", de: "Die beiden Passwörter stimmen nicht überein.", lt: "Slaptažodžiai nesutampa." },
-  "auth.enterEmail":    { en: "Enter your email.",  da: "Skriv din mail.",      de: "Gib deine E-Mail ein.", lt: "Įveskite el. pašto adresą." },
   "auth.passChanged":   { en: "Password changed. You are signed in.", da: "Adgangskoden er skiftet. Du er logget ind.", de: "Passwort geändert. Du bist angemeldet.", lt: "Slaptažodis pakeistas. Esate prisijungę." },
-  "auth.resetSent":     { en: "If that email has an account, a reset link is on its way.", da: "Hvis der er en konto på den mail, er et nulstillingslink på vej.", de: "Wenn es zu dieser Adresse ein Konto gibt, ist ein Link unterwegs.", lt: "Jei šiuo adresu yra paskyra, atkūrimo nuoroda jau siunčiama." },
+  "auth.resetSent": { en: "If an account exists for that email address, you’ll receive instructions to reset your password.", da: "Hvis der findes en konto med den mailadresse, modtager du en vejledning til at nulstille din adgangskode.", de: "Wenn es zu dieser E-Mail-Adresse ein Konto gibt, erhältst du eine Anleitung zum Zurücksetzen deines Passworts.", lt: "Jei šiuo el. pašto adresu yra paskyra, gausite slaptažodžio atkūrimo instrukcijas." },
   "auth.noSession":     { en: "That sign in did not come back with a session. Try again in a moment.", da: "Det login kom ikke tilbage med en session. Prøv igen om et øjeblik.", de: "Diese Anmeldung kam ohne Sitzung zurück. Versuch es gleich noch einmal.", lt: "Prisijungiant nepavyko sukurti sesijos. Bandykite po akimirkos." },
   // ── WHAT A FAILED SIGN IN ACTUALLY SAYS ───────────────────────────
   //
@@ -573,7 +571,12 @@ export const UI_STRINGS = {
   // the form to find out who has an account here. Naming only the first would
   // be a guess; naming only the second would give that away. So it says both,
   // and points at the two doors out.
-  "auth.badLogin":      { en: "That email and password do not match an account. Check the password, or use Forgot password. If you have not made an account yet, sign up below.", da: "Den mail og adgangskode passer ikke til en konto. Tjek adgangskoden, eller brug Glemt adgangskode. Har du ikke oprettet en konto endnu, så opret dig nedenfor.", de: "Diese E-Mail und dieses Passwort gehören zu keinem Konto. Prüf das Passwort oder nutze Passwort vergessen. Wenn du noch kein Konto hast, registrier dich unten.", lt: "Šis el. paštas ir slaptažodis neatitinka jokios paskyros. Patikrinkite slaptažodį arba spauskite „Pamiršau slaptažodį“. Jei paskyros dar neturite, užsiregistruokite žemiau." },
+  //
+  // Shortened 17 Oct 2026 to the brief's "Email or password is incorrect."
+  // Still both possibilities, still no hint which. The two doors out now sit
+  // right under the button as "New to Gemlyx? Create an account" and "Forgot
+  // password?", so the sentence no longer has to name them.
+  "auth.badLogin": { en: "Email or password is incorrect.", da: "Mail eller adgangskode er forkert.", de: "E-Mail oder Passwort ist falsch.", lt: "Neteisingas el. paštas arba slaptažodis." },
   // ── AND WHAT LOGGING OUT ASKS FIRST ───────────────────────────────
   //
   // "Log out needs a 'Are you sure you want to log out?'" It does, and the
@@ -628,15 +631,33 @@ export const UI_STRINGS = {
   "auth.terms":         { en: "Terms of Service",   da: "Servicevilkår",        de: "Nutzungsbedingungen", lt: "Paslaugų teikimo sąlygos" },
   "auth.andThe":        { en: "and the",            da: "og vores",             de: "und unsere", lt: "ir" },
   "auth.privacy":       { en: "Privacy Policy",     da: "Privatlivspolitik",    de: "Datenschutzerklärung", lt: "Privatumo politika" },
-  "auth.newUser":       { en: "New User? Sign up here!", da: "Ny bruger? Opret dig her!", de: "Neu hier? Registrier dich!", lt: "Naujas naudotojas? Užsiregistruokite čia!" },
-  "auth.haveOne":       { en: "I already have one", da: "Jeg har allerede en",  de: "Ich habe schon eins", lt: "Aš jau turiu paskyrą" },
-  "auth.forgot":        { en: "Forgot password",    da: "Glemt adgangskode",    de: "Passwort vergessen", lt: "Pamiršau slaptažodį" },
   "auth.freeAccount":   { en: "A free account saves your guide and nothing more. Keeping it live as your trip approaches, new events worth rerouting for, help while you are there, that is the paid side, and it is not switched on yet.", da: "En gratis konto gemmer din guide og ikke mere end det. At holde den opdateret frem mod turen, nye begivenheder det er værd at lægge om for, hjælp mens du er her, det er den betalte del, og den er ikke tændt endnu.", de: "Ein kostenloses Konto speichert deinen Reiseführer und sonst nichts. Ihn aktuell zu halten, während die Reise näher rückt, neue Veranstaltungen, für die sich ein Umweg lohnt, Hilfe vor Ort, das ist der bezahlte Teil, und der ist noch nicht eingeschaltet.", lt: "Nemokama paskyra išsaugo jūsų gidą ir nieko daugiau. Gido atnaujinimas artėjant kelionei, nauji renginiai, dėl kurių verta pakeisti maršrutą, pagalba vietoje: tai mokama dalis, ir ji dar neįjungta." },
   "auth.storeLead":     { en: "We store your email, what you fill in here, and your saved list. Gemlyx also notices which kinds of trip you build, so the next guide lands closer. No tracking, no marketing email, nothing sold. You can delete your account and everything in it from this menu at any time, and the", da: "Vi gemmer din mail, det du udfylder her, og din liste over gemte steder. Gemlyx lægger også mærke til, hvilke slags ture du bygger, så den næste guide rammer tættere på. Ingen sporing, ingen reklamemails, intet bliver solgt. Du kan slette din konto og alt i den fra denne menu når som helst, og", de: "Wir speichern deine E-Mail, was du hier ausfüllst, und deine gespeicherte Liste. Gemlyx merkt sich auch, welche Art von Reisen du planst, damit der nächste Reiseführer näher trifft. Kein Tracking, keine Werbemails, nichts wird verkauft. Du kannst dein Konto und alles darin jederzeit aus diesem Menü löschen, und die", lt: "Saugome jūsų el. paštą, tai, ką čia įvedate, ir jūsų išsaugotų vietų sąrašą. Gemlyx taip pat pastebi, kokias keliones kuriate, kad kitas gidas būtų taiklesnis. Jokio sekimo, jokių reklaminių laiškų, niekas neparduodama. Paskyrą ir viską joje galite bet kada ištrinti per šį meniu, o" },
   // While the AI guides are out of sight (utils/features.js, 17 Oct 2026).
-  "auth.whyNoGuides":   { en: "An account lets you redeem Gemlyx deals and keeps your settings on every device.", da: "En konto giver dig adgang til at indløse Gemlyx-tilbud og gemmer dine indstillinger på alle dine enheder.", de: "Mit einem Konto kannst du Gemlyx-Angebote einlösen, und deine Einstellungen gelten auf jedem Gerät.", lt: "Su paskyra galite pasinaudoti Gemlyx pasiūlymais, o jūsų nustatymai išlieka visuose įrenginiuose." },
-  "auth.storeLeadNoGuides": { en: "We store your email and what you fill in here. No tracking, no marketing email, nothing sold. You can delete your account and everything in it from this menu at any time, and the", da: "Vi gemmer din mail og det, du udfylder her. Ingen sporing, ingen reklamemails, intet bliver solgt. Du kan slette din konto og alt i den fra denne menu når som helst, og", de: "Wir speichern deine E-Mail und was du hier ausfüllst. Kein Tracking, keine Werbemails, nichts wird verkauft. Du kannst dein Konto und alles darin jederzeit aus diesem Menü löschen, und die", lt: "Saugome jūsų el. paštą ir tai, ką čia įvedate. Jokio sekimo, jokių reklaminių laiškų, niekas neparduodama. Paskyrą ir viską joje galite bet kada ištrinti šiame meniu, o" },
   "auth.storeTail":     { en: "is the long version.", da: "er den lange udgave.", de: "ist die lange Fassung.", lt: "pateikia išsamią versiją." },
+  // The sign-in sheet as read against Oliver's brief of 17 Oct 2026, and the
+  // language picker at its top right. See the note at the top of AuthSheet.jsx.
+  "auth.signInLead": { en: "Sign in to access and manage your Gemlyx account.", da: "Log ind for at få adgang til og administrere din Gemlyx-konto.", de: "Melde dich an, um auf dein Gemlyx-Konto zuzugreifen und es zu verwalten.", lt: "Prisijunkite, kad galėtumėte pasiekti ir tvarkyti savo Gemlyx paskyrą." },
+  "auth.upLead": { en: "Create a free Gemlyx account with your email address.", da: "Opret en gratis Gemlyx-konto med din mailadresse.", de: "Erstelle ein kostenloses Gemlyx-Konto mit deiner E-Mail-Adresse.", lt: "Susikurkite nemokamą Gemlyx paskyrą su savo el. pašto adresu." },
+  "auth.resetLead": { en: "Enter your email address and we’ll send you a link to reset your password.", da: "Skriv din mailadresse, så sender vi dig et link til at nulstille din adgangskode.", de: "Gib deine E-Mail-Adresse ein, dann schicken wir dir einen Link zum Zurücksetzen deines Passworts.", lt: "Įveskite el. pašto adresą ir atsiųsime nuorodą slaptažodžiui atkurti." },
+  "auth.emailAddress": { en: "Email address", da: "Mailadresse", de: "E-Mail-Adresse", lt: "El. pašto adresas" },
+  "auth.passwordPh": { en: "Enter your password", da: "Skriv din adgangskode", de: "Gib dein Passwort ein", lt: "Įveskite slaptažodį" },
+  "auth.showPassword": { en: "Show password", da: "Vis adgangskode", de: "Passwort anzeigen", lt: "Rodyti slaptažodį" },
+  "auth.hidePassword": { en: "Hide password", da: "Skjul adgangskode", de: "Passwort verbergen", lt: "Slėpti slaptažodį" },
+  "auth.signingIn": { en: "Signing in…", da: "Logger ind…", de: "Anmeldung läuft…", lt: "Jungiamasi…" },
+  "auth.newToGemlyx": { en: "New to Gemlyx?", da: "Ny hos Gemlyx?", de: "Neu bei Gemlyx?", lt: "Pirmą kartą Gemlyx?" },
+  "auth.haveAccountQ": { en: "Already have an account?", da: "Har du allerede en konto?", de: "Hast du schon ein Konto?", lt: "Jau turite paskyrą?" },
+  "auth.forgotQ": { en: "Forgot password?", da: "Glemt adgangskode?", de: "Passwort vergessen?", lt: "Pamiršote slaptažodį?" },
+  "auth.enterEmailAddress": { en: "Enter your email address.", da: "Skriv din mailadresse.", de: "Gib deine E-Mail-Adresse ein.", lt: "Įveskite el. pašto adresą." },
+  "auth.validEmail": { en: "Enter a valid email address.", da: "Skriv en gyldig mailadresse.", de: "Gib eine gültige E-Mail-Adresse ein.", lt: "Įveskite tinkamą el. pašto adresą." },
+  "auth.enterPassword": { en: "Enter your password.", da: "Skriv din adgangskode.", de: "Gib dein Passwort ein.", lt: "Įveskite slaptažodį." },
+  "auth.network": { en: "We couldn’t sign you in. Check your connection and try again.", da: "Vi kunne ikke logge dig ind. Tjek din forbindelse, og prøv igen.", de: "Wir konnten dich nicht anmelden. Prüf deine Verbindung und versuch es noch einmal.", lt: "Nepavyko jūsų prijungti. Patikrinkite ryšį ir bandykite dar kartą." },
+  "auth.networkAny": { en: "Something went wrong. Check your connection and try again.", da: "Noget gik galt. Tjek din forbindelse, og prøv igen.", de: "Etwas ist schiefgelaufen. Prüf deine Verbindung und versuch es noch einmal.", lt: "Kažkas nepavyko. Patikrinkite ryšį ir bandykite dar kartą." },
+  "auth.tooMany": { en: "Too many attempts. Please wait a moment before trying again.", da: "For mange forsøg. Vent et øjeblik, før du prøver igen.", de: "Zu viele Versuche. Bitte warte einen Moment, bevor du es noch einmal versuchst.", lt: "Per daug bandymų. Palaukite akimirką ir bandykite dar kartą." },
+  "auth.signInFailed": { en: "We couldn’t sign you in. Please try again.", da: "Vi kunne ikke logge dig ind. Prøv igen.", de: "Wir konnten dich nicht anmelden. Bitte versuch es noch einmal.", lt: "Nepavyko jūsų prijungti. Bandykite dar kartą." },
+  "auth.privacyNoteLead": { en: "Your information is used to provide and manage your Gemlyx account. Read our", da: "Dine oplysninger bruges til at levere og administrere din Gemlyx-konto. Læs vores", de: "Deine Angaben werden verwendet, um dein Gemlyx-Konto bereitzustellen und zu verwalten. Lies unsere", lt: "Jūsų informacija naudojama Gemlyx paskyrai teikti ir tvarkyti. Kokius duomenis renkame ir kaip juos tvarkome, aprašyta dokumente" },
+  "auth.privacyNoteTail": { en: " to learn what data we collect and how it is handled.", da: " for at se, hvilke data vi indsamler, og hvordan de behandles.", de: ", um zu erfahren, welche Daten wir erheben und wie sie verarbeitet werden.", lt: "." },
+  "auth.language": { en: "Language", da: "Sprog", de: "Sprache", lt: "Kalba" },
 
   // ── WHAT A PIN ON THE MAP IS BEST FOR ─────────────────────────────
   //
