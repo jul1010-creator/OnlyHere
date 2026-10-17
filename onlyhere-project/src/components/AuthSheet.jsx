@@ -4,7 +4,8 @@ import { ProfileQuestions } from "./ProfileQuestions";
 import { AI_GUIDES_SHOWN } from "../utils/features";
 import { EMPTY_PROFILE, saveProfile, holdProfile, signupCarry, missingRequired, REQUIRED_LABEL, underMinimumAge, MIN_ACCOUNT_AGE, TERMS_VERSION } from "../utils/profile";
 import { C } from "../utils/theme";
-import { t as uiT, DEFAULT_UI_LANGUAGE } from "../utils/uiLanguage";
+import { t as uiT, DEFAULT_UI_LANGUAGE, UI_LANGUAGES, uiLanguageMeta } from "../utils/uiLanguage";
+import { Flag } from "./LanguagePicker";
 import { signInWithPassword, signUpWithPassword, sendPasswordReset, startGoogleSignIn, updatePassword, resendConfirmation } from "../utils/auth";
 import { GOOGLE_SIGN_IN } from "../config";
 
@@ -64,7 +65,47 @@ import { GOOGLE_SIGN_IN } from "../config";
 // just mysteriously dead.
 const RESEND_COOLDOWN_MS = 60000;
 
-export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, initialMode, recoverySession = null, lang = DEFAULT_UI_LANGUAGE }) => {
+// ── THE SHEET READ AGAINST A BRIEF, 17 OCT 2026 ─────────────────────
+//
+// Oliver brought a brief for this sheet ("a document from ChatGPT I think you
+// should look at") and asked for one thing of his own: "At the sign in, I also
+// want you to make people able to change language at the top right."
+//
+// What came of it, and what was checked before a sentence was kept:
+//   * The language picker sits beside the cross. The sheet is often the first
+//     thing a visitor reads closely, so it is the place to fix the language.
+//   * Labels stay above every field, not only on the signup form. A
+//     placeholder disappears the moment somebody types.
+//   * The password can be shown, and the button's name says which way it goes.
+//   * The brief offered "redeem offers and access your saved preferences across
+//     devices". Redeeming on /lithuania needs no account, and no setting is
+//     kept in the account, so the line is the shorter true one:
+//     "Sign in to access and manage your Gemlyx account."
+//   * The old privacy line promised no tracking, no marketing mail, nothing
+//     sold and a delete "from this menu". The brief's plainer line replaces it
+//     and points to the policy, which is where those details belong.
+//   * A provider's raw message is no longer printed. Wrong password, network
+//     trouble and too many attempts each have a short sentence of their own.
+//   * NOT TAKEN: autocomplete "current-password". Oliver asked on 14 Sep that a
+//     saved password is not put in on its own (see the note on the field), and
+//     that stands. NOR the softer resting border: the field border is his
+//     father's readability fix (utils/theme.js), held at 3:1 on purpose.
+//   * It is a dialog now in the sense a screen reader means: named by its
+//     heading, focus moved in on opening, kept inside while it is open, and
+//     handed back to whatever opened it.
+const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// A provider's message mapped to one of ours. Kept out of the component so the
+// suite can feed it the strings Supabase and the browser really send.
+export const authProblem = (said, mode) => {
+  const s = String(said || "");
+  if (/invalid login credentials/i.test(s)) return "auth.badLogin";
+  if (/rate limit|too many|429/i.test(s)) return "auth.tooMany";
+  if (/failed to fetch|networkerror|network request failed|load failed|timed? ?out|aborted/i.test(s)) return mode === "in" ? "auth.network" : "auth.networkAny";
+  if (mode === "in") return "auth.signInFailed";
+  return null;
+};
+
+export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, initialMode, recoverySession = null, lang = DEFAULT_UI_LANGUAGE, onLang }) => {
   // ── AND NOW IT DEFAULTS TO SIGNING IN ─────────────────────────────
   //
   // Oliver, 21 Aug 2026, point 9: "The create account gotta change… the big
@@ -110,12 +151,45 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
   const [now, setNow] = useState(() => Date.now());
   // The other deliberate way out, since the backdrop is no longer one. Bound
   // only while the sheet is open, so it cannot swallow Escape from anything else.
+  // With the language list open, Escape closes the list and not the sheet.
+  const [langOpen, setLangOpen] = useState(false);
+  const langBtnRef = useRef(null);
   useEffect(() => {
     if (!open) return;
-    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    const onKey = (e) => {
+      if (e.key !== "Escape") return;
+      if (langOpen) { setLangOpen(false); langBtnRef.current?.focus?.(); return; }
+      onClose();
+    };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [open, onClose, langOpen]);
+  const [showPass, setShowPass] = useState(false);
+  const cardRef = useRef(null);
+  const emailRef = useRef(null);
+  const passRef = useRef(null);
+  // Whatever had focus when the sheet opened gets it back when it closes.
+  const openerRef = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    try { openerRef.current = document.activeElement; } catch { openerRef.current = null; }
+    const t = setTimeout(() => {
+      const first = emailRef.current || passRef.current;
+      try { (first || cardRef.current)?.focus?.({ preventScroll: true }); } catch { /* nothing to focus */ }
+    }, 30);
+    return () => {
+      clearTimeout(t);
+      // Opened from the menu, the opener is a row of a drawer that has closed
+      // since (focus is on the page itself by then), so focus goes to the menu
+      // button that opened the drawer.
+      let back = openerRef.current;
+      try { if (!back || !back.isConnected || back === document.body) back = document.querySelector("button.gemlyx-account"); } catch { back = null; }
+      try { if (back && back.isConnected && typeof back.focus === "function") back.focus({ preventScroll: true }); } catch { /* it has gone */ }
+    };
+  }, [open]);
+  // Switching between sign in, create and reset swaps the form under the
+  // link that was pressed, so focus goes to the first field rather than to
+  // nowhere. Declared after `mode` below, so it reads it once it exists.
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -149,6 +223,13 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
   // route in (email or Google).
   const [termsTicked, setTermsTicked] = useState(false);
   const [wide, setWide] = useState(() => typeof window !== "undefined" && window.innerWidth >= 720);
+  const modeSeen = useRef(mode);
+  useEffect(() => {
+    if (!open) { modeSeen.current = mode; return; }
+    if (modeSeen.current === mode) return;
+    modeSeen.current = mode;
+    try { (emailRef.current || passRef.current)?.focus?.({ preventScroll: true }); } catch { /* nothing to focus */ }
+  }, [open, mode]);
 
   // The sheet is hidden with an early return rather than unmounted, so its
   // state SURVIVES a close. Without this, somebody who opened it once, switched
@@ -181,6 +262,7 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
     setEmail(""); setPassword(""); setConfirm(""); setTermsTicked(false);
     setAnswers(EMPTY_PROFILE);
     setSentTo(""); setResendAt(0);
+    setShowPass(false); setLangOpen(false);
     // busy was the one flag this reset forgot, and the sheet is hidden rather
     // than unmounted, so nothing else cleared it: close the sheet mid-request
     // and reopen it, and the button sat disabled reading "Working…" over a
@@ -254,7 +336,7 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
       // SURFACED, not swallowed. "email rate limit exceeded" is the expected
       // answer to an impatient third press, since the built-in sender allows two
       // an hour, and a person told nothing will simply press it again.
-      setError(String(e.message || e));
+      setError(uiT(authProblem(e?.message || e, "resend") || "auth.networkAny", lang));
     }
     setBusy(false);
   };
@@ -288,10 +370,14 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
         // act on. See handleSignedIn in App.jsx.
         onSignedIn(recoverySession, { done: true });
         return;
-      } catch (e) { setError(String(e.message || e)); setBusy(false); return; }
+      } catch (e) { const ours = authProblem(e?.message || e, mode); setError(ours ? uiT(ours, lang) : String(e.message || e)); setBusy(false); return; }
     }
-    if (!email.trim()) { setError(uiT("auth.enterEmail", lang)); return; }
-    if (mode !== "reset" && password.length < 6) { setError(uiT("auth.needSix", lang)); return; }
+    if (!email.trim()) { setError(uiT("auth.enterEmailAddress", lang)); return; }
+    if (!EMAIL_SHAPE.test(email.trim())) { setError(uiT("auth.validEmail", lang)); return; }
+    // Signing in only needs a password typed. Its length is the account's
+    // business, and a short one is answered as a wrong one.
+    if (mode === "in" && !password) { setError(uiT("auth.enterPassword", lang)); return; }
+    if (mode === "up" && password.length < 6) { setError(uiT("auth.needSix", lang)); return; }
     if (mode === "up") {
       // ── AND A CONFIRM FIELD THAT MEANS SOMETHING ────────────────
       // "And make a confirm password section too." Checked before the account
@@ -447,7 +533,7 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
             autoSentRef.current = to;
             setError(null);
           } catch (again) {
-            setError(String(again?.message || again));
+            setError(uiT(authProblem(again?.message || again, "resend") || "auth.networkAny", lang));
           }
         }
         // The cooldown is armed either way. The button below is then the only
@@ -458,7 +544,10 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
         setBusy(false);
         return;
       }
-      setError(/invalid login credentials/i.test(said) ? uiT("auth.badLogin", lang) : said);
+      // A provider's own words are not shown. Signup keeps the few that say
+      // something useful ("Password should be at least 6 characters").
+      const ours = authProblem(said, mode);
+      setError(ours ? uiT(ours, lang) : said);
     }
     if (!stale()) setBusy(false);
   };
@@ -478,6 +567,21 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
 
   const field = { width: "100%", boxSizing: "border-box", background: C.bg, border: `1px solid ${C.border}`, color: C.text, borderRadius: 10, padding: "12px 13px", fontSize: 14, fontFamily: "'Inter', sans-serif", marginBottom: 9 };
   const linkBtn = { background: "none", border: "none", color: C.light, fontSize: 12, cursor: "pointer", textDecoration: "underline", fontFamily: "'Inter', sans-serif", padding: 0 };
+  // The secondary actions: gold words on the quiet line, so they read as links
+  // and not as switched off. Padded for a thumb, the padding taken back by the
+  // margin so the line does not grow.
+  const actLink = { background: "none", border: "none", color: C.gold, fontSize: 13, fontWeight: 600, cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 3, textDecorationColor: `${C.gold}66`, fontFamily: "'Inter', sans-serif", padding: "6px 2px", margin: "-6px -2px" };
+  // A label above every field, in every mode. On the signup form it keeps the
+  // small capitals and the mandatory mark the profile questions under it use.
+  const fieldLabel = (htmlFor, text, gap) => (mode === "up"
+    ? <label htmlFor={htmlFor} style={{ display: "block", fontSize: 10.5, letterSpacing: 1.4, textTransform: "uppercase", color: C.muted, fontWeight: 700, marginBottom: 8 }}>{text}<span aria-hidden="true" style={{ color: gap ? "#FF8A80" : C.gold, marginLeft: 3 }}>*</span></label>
+    : <label htmlFor={htmlFor} style={{ display: "block", fontSize: 13, color: C.light, fontWeight: 600, marginBottom: 7 }}>{text}</label>);
+  const errId = "gx-auth-error";
+  const said = (k) => error && error === uiT(k, lang);
+  const emailErr = !!(said("auth.enterEmailAddress") || said("auth.validEmail"));
+  const passErr = !!(said("auth.enterPassword") || said("auth.badLogin") || said("auth.needSix"));
+  const lead = mode === "up" ? "auth.upLead" : mode === "reset" ? "auth.resetLead" : "auth.signInLead";
+  const here = uiLanguageMeta(lang);
 
   // ── THE ONE STRUCTURAL DIFFERENCE BETWEEN PHONE AND DESKTOP ────────
   // A bottom sheet is the right shape on a phone: it comes from the thumb, it
@@ -485,7 +589,9 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
   // to the bottom of a 1080px window, so it becomes a centred card and the
   // photograph stays visible all the way around it.
   const overlay = {
-    position: "fixed", inset: 0, background: "rgba(0,0,0,0.72)", zIndex: 980,
+    // Above every layer of the page, the founder's assistant button (3000)
+    // included, so nothing floats over the form.
+    position: "fixed", inset: 0, background: "rgba(0,0,0,0.72)", zIndex: 3100,
     display: "flex", justifyContent: "center",
     alignItems: wide ? "center" : "flex-end",
     padding: wide ? 24 : 0, boxSizing: "border-box",
@@ -493,7 +599,9 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
   };
   const card = {
     background: C.surface, width: "100%", maxWidth: wide ? 430 : 460,
-    maxHeight: wide ? "92vh" : "88vh", overflowY: "auto",
+    // dvh where the browser knows it: the height left once a phone's keyboard
+    // is up, so the field being typed in stays on screen and the card scrolls.
+    maxHeight: wide ? "min(92vh, 92dvh)" : "min(88vh, 88dvh)", overflowY: "auto", overscrollBehavior: "contain",
     border: `1px solid ${C.border}`,
     borderRadius: wide ? 20 : "20px 20px 0 0",
     borderBottom: wide ? `1px solid ${C.border}` : "none",
@@ -519,16 +627,70 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
     // which are both deliberate acts. Nothing here is destructive enough to need
     // a confirm on the way out; it just needs to not happen by accident.
     <div style={overlay}>
-      <div onClick={e => e.stopPropagation()} style={card}>
-        {/* A plain dismiss, not a form control. The old "Close" pill was the
-            same weight as the buttons that do something. */}
-        <button onClick={onClose} aria-label={uiT("auth.close", lang)}
-          style={{ position: "absolute", top: wide ? 18 : 14, right: wide ? 18 : 16, background: "none", border: "none", color: C.muted, fontSize: 22, lineHeight: 1, cursor: "pointer", padding: 4, fontFamily: "'Inter', sans-serif" }}>×</button>
-
-        {/* Whose account this is. The sheet had no Gemlyx in it at all. */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: wide ? 18 : 14 }}>
-          <span style={{ color: C.gold, fontSize: 15 }}>✦</span>
+      {/* Focus rings for the controls that are not fields (the fields have
+          theirs from utils/theme.js), and no movement for those who asked
+          their system for none. The red border of a field with a problem is
+          a class, not an inline colour: the field rule in utils/theme.js is
+          !important, so an inline red never showed. :not(#gx-none) lifts this
+          rule above it. */}
+      <style>{`.gx-auth button:focus-visible, .gx-auth a:focus-visible { outline: 2px solid ${C.gold}; outline-offset: 2px; border-radius: 6px; }
+        .gx-auth input.gx-bad:not(#gx-none) { border-color: #FF8A80 !important; }
+        .gx-auth .gx-auth-lang:hover { border-color: ${C.gold}88 !important; }
+        @media (prefers-reduced-motion: reduce) { .gx-auth * { transition: none !important; animation: none !important; } }`}</style>
+      <div ref={cardRef} className="gx-auth" role="dialog" aria-modal="true" aria-labelledby="gx-auth-title" tabIndex={-1}
+        data-testid="auth-sheet"
+        onClick={e => { e.stopPropagation(); if (langOpen && !e.target.closest?.("[data-auth-lang]")) setLangOpen(false); }}
+        onKeyDown={e => {
+          // Tab stays inside the sheet while it is open.
+          if (e.key !== "Tab" || !cardRef.current) return;
+          const all = [...cardRef.current.querySelectorAll('button:not([disabled]), a[href], input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])')].filter(el => el.offsetParent !== null);
+          if (!all.length) return;
+          const first = all[0], last = all[all.length - 1];
+          if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+          else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+        }}
+        style={{ ...card, outline: "none" }}>
+        {/* ── THE TOP ROW: WHOSE SHEET, WHICH LANGUAGE, AND THE WAY OUT ─
+            The mark on the left. On the right the language, which Oliver
+            asked for at the top right on 17 Oct 2026, and the cross beside it,
+            both with a hit area a thumb can find. */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: wide ? 18 : 14, marginTop: -6 }}>
+          <span aria-hidden="true" style={{ color: C.gold, fontSize: 15 }}>✦</span>
           <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 11, letterSpacing: 3, color: C.light, fontWeight: 600 }}>GEMLYX</span>
+          <div style={{ flex: 1 }} />
+          {onLang && (
+            <div data-auth-lang="" style={{ position: "relative" }}>
+              <button ref={langBtnRef} type="button" className="gx-auth-lang" data-testid="auth-lang"
+                onClick={() => setLangOpen(v => !v)} aria-haspopup="true" aria-expanded={langOpen}
+                aria-label={`${uiT("auth.language", lang)}: ${here.name}`}
+                style={{ display: "flex", alignItems: "center", gap: 7, minHeight: 36, padding: "0 10px", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 100, color: C.light, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                <span style={{ width: 16, height: 16, borderRadius: "50%", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}><Flag code={here.code} size={24} /></span>
+                {here.code.toUpperCase()}
+                <svg width="9" height="9" viewBox="0 0 10 10" aria-hidden="true" style={{ transform: langOpen ? "rotate(180deg)" : "none", transition: "transform 160ms ease" }}><path d="M1.5 3.5 L5 7 L8.5 3.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              </button>
+              {langOpen && (
+                <div data-testid="auth-lang-list" role="group" aria-label={uiT("auth.language", lang)}
+                  style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", zIndex: 2, minWidth: 168, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 5, boxShadow: "0 14px 40px rgba(0,0,0,0.45)" }}>
+                  {UI_LANGUAGES.map(l => {
+                    const on = l.code === here.code;
+                    return (
+                      <button key={l.code} type="button" aria-pressed={on} lang={l.code}
+                        onClick={() => { onLang(l.code); setLangOpen(false); langBtnRef.current?.focus?.(); }}
+                        style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, minHeight: 40, padding: "0 10px", background: on ? `${C.gold}14` : "transparent", border: "none", borderRadius: 8, color: on ? C.gold : C.text, fontSize: 13.5, fontWeight: on ? 700 : 500, cursor: "pointer", fontFamily: "'Inter', sans-serif", textAlign: "left" }}>
+                        <span style={{ width: 20, height: 20, borderRadius: "50%", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", border: `1px solid ${C.border}`, flexShrink: 0 }}><Flag code={l.code} size={30} /></span>
+                        <span style={{ flex: 1 }}>{l.name}</span>
+                        {on && <span aria-hidden="true">✓</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+          {/* A plain dismiss, not a form control. The old "Close" pill was the
+              same weight as the buttons that do something. */}
+          <button type="button" onClick={onClose} aria-label={uiT("auth.close", lang)} data-testid="auth-close"
+            style={{ width: 40, height: 40, marginRight: -10, display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: "none", color: C.muted, fontSize: 24, lineHeight: 1, cursor: "pointer", padding: 0, fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>×</button>
         </div>
 
         {/* ── THE STEP THAT ENDS ────────────────────────────────────
@@ -599,9 +761,9 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
           </div>
         ) : (<>
 
-        <div style={{ fontSize: wide ? 27 : 24, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.15, marginBottom: 8 }}>
+        <h2 id="gx-auth-title" style={{ fontSize: wide ? 27 : 24, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.15, margin: "0 0 8px" }}>
           {heading}
-        </div>
+        </h2>
 
         {/* ── WHAT IT BUYS, AND WHAT IT DOES NOT ──────────────────── */}
         {/* ── WHAT SOMEBODY LOCKED OUT NEEDS TO READ ────────────────
@@ -615,14 +777,14 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
             {uiT("auth.newpassLead", lang)}
           </div>
         ) : (
-        <div style={{ fontSize: 13, color: C.light, lineHeight: 1.62, marginBottom: 14 }}>
+        <div style={{ fontSize: 13.5, color: C.light, lineHeight: 1.6, marginBottom: 18 }}>
           {reason === "guide"
             ? <>{uiT("auth.whyGuide", lang)}</>
             : reason === "review"
               ? <>{uiT("auth.whyReview", lang)}</>
               : reason === "plan" ? <>{uiT("auth.whyPlan", lang)}</>
               : reason === "deal" ? <>{uiT("auth.whyDeal", lang)}</>
-              : <>{uiT(AI_GUIDES_SHOWN ? "auth.whyDefault" : "auth.whyNoGuides", lang)}</>}
+              : <>{uiT(AI_GUIDES_SHOWN ? "auth.whyDefault" : lead, lang)}</>}
           {/* No count of saved things while the guides are out of sight
               (utils/features.js, 17 Oct 2026). */}
           {AI_GUIDES_SHOWN && localSaveCount > 0 && (
@@ -704,11 +866,7 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
             until somebody presses the button with one empty, then red on the
             ones missing, so the same mark that says "this is needed"
             also says "this one". */}
-        {mode === "up" && (
-          <div style={{ fontSize: 10.5, letterSpacing: 1.4, textTransform: "uppercase", color: C.muted, fontWeight: 700, marginBottom: 8 }}>
-            {uiT("auth.email", lang)}<span style={{ color: showGaps && !email.trim() ? "#FF8A80" : C.gold, marginLeft: 3 }}>*</span>
-          </div>
-        )}
+        {mode !== "newpass" && fieldLabel("gx-auth-email", uiT("auth.emailAddress", lang), showGaps && !email.trim())}
         {/* ── username, NOT email ──────────────────────────────────
             These two attributes are a pair and were set as if they were
             independent, which is what produced the state Oliver photographed on
@@ -718,20 +876,24 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
             could recognise and left the half it could not. The mismatch looked
             like a bug in the sheet and was a bug in these two words. */}
         {mode !== "newpass" && (
-          <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com"
-            autoComplete="username" style={{ ...field, ...(mode === "up" && showGaps && !email.trim() ? { borderColor: "#FF8A80" } : null) }} />
+          <input id="gx-auth-email" ref={emailRef} type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com"
+            autoComplete="username" inputMode="email" autoCapitalize="none" spellCheck={false}
+            aria-invalid={emailErr || undefined} aria-describedby={emailErr ? errId : undefined}
+            onKeyDown={e => { if (e.key === "Enter" && mode === "reset") submit(); }}
+            className={(mode === "up" && showGaps && !email.trim()) || emailErr ? "gx-bad" : undefined}
+            style={{ ...field, marginBottom: 14 }} />
         )}
         {mode !== "reset" && (
           <>
             {/* newpass too, or the new-password box is the one field on the
                 screen with no label and no asterisk while the confirm box
                 underneath it has both. */}
-            {(mode === "up" || mode === "newpass") && (
-              <div style={{ fontSize: 10.5, letterSpacing: 1.4, textTransform: "uppercase", color: C.muted, fontWeight: 700, marginBottom: 8 }}>
-                {uiT(mode === "newpass" ? "auth.newPassword" : "auth.password", lang)}<span style={{ color: showGaps && password.length < 6 ? "#FF8A80" : C.gold, marginLeft: 3 }}>*</span>
+            {(mode === "up" || mode === "newpass") ? (
+              <label htmlFor="gx-auth-pass" style={{ display: "block", fontSize: 10.5, letterSpacing: 1.4, textTransform: "uppercase", color: C.muted, fontWeight: 700, marginBottom: 8 }}>
+                {uiT(mode === "newpass" ? "auth.newPassword" : "auth.password", lang)}<span aria-hidden="true" style={{ color: showGaps && password.length < 6 ? "#FF8A80" : C.gold, marginLeft: 3 }}>*</span>
                 <span style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, color: C.muted }}> · {uiT("auth.atLeastSix", lang)}</span>
-              </div>
-            )}
+              </label>
+            ) : fieldLabel("gx-auth-pass", uiT("auth.password", lang))}
             {/* ── AND THE PASSWORD IS NOT PREFILLED, IN ANY MODE ───────
                 Oliver, 14 Sep 2026: "password is for some reason always on as
                 default.. having your mail is fine.. but not password.."
@@ -751,10 +913,29 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
                 Worth a look on the first deploy. Suppressing this is a request
                 to the browser rather than a setting, and Chrome has changed its
                 mind about how much notice to take of it before. */}
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder={uiT(mode === "newpass" ? "auth.newPassword" : "auth.password", lang)}
+            {/* ── SHOWN OR HIDDEN, AND SAID WHICH ──────────────────────
+                The eye sits inside the field with a 40px target. Its name
+                says what pressing it will do, and it changes when it is
+                pressed, so a screen reader hears the same thing a sighted
+                person sees. One switch for both boxes on the signup form. */}
+            <div style={{ position: "relative", marginBottom: 9 }}>
+            <input type={showPass ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)} placeholder={uiT(mode === "newpass" ? "auth.newPassword" : mode === "in" ? "auth.passwordPh" : "auth.password", lang)}
+              id="gx-auth-pass" ref={passRef}
               autoComplete="new-password"
+              aria-invalid={passErr || undefined} aria-describedby={passErr ? errId : undefined}
               onKeyDown={e => { if (e.key === "Enter") submit(); }}
-              style={{ ...field, ...(mode === "up" && showGaps && password.length < 6 ? { borderColor: "#FF8A80" } : null) }} />
+              className={(mode === "up" && showGaps && password.length < 6) || passErr ? "gx-bad" : undefined}
+              style={{ ...field, marginBottom: 0, paddingRight: 50 }} />
+            <button type="button" data-testid="auth-show-pass" onClick={() => setShowPass(v => !v)}
+              aria-label={uiT(showPass ? "auth.hidePassword" : "auth.showPassword", lang)} aria-controls="gx-auth-pass"
+              style={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: "none", color: showPass ? C.gold : C.muted, cursor: "pointer", padding: 0 }}>
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" />
+                <circle cx="12" cy="12" r="3" />
+                {showPass && <path d="M4 4l16 16" />}
+              </svg>
+            </button>
+            </div>
           </>
         )}
         {/* ── CONFIRM, AND CHECKED BEFORE THE ACCOUNT IS MADE ───────
@@ -765,9 +946,10 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
             <div style={{ fontSize: 10.5, letterSpacing: 1.4, textTransform: "uppercase", color: C.muted, fontWeight: 700, marginBottom: 8 }}>
               {uiT("auth.confirmPassword", lang)}<span style={{ color: showGaps && (!confirm || confirm !== password) ? "#FF8A80" : C.gold, marginLeft: 3 }}>*</span>
             </div>
-            <input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} placeholder={uiT("auth.typeItAgain", lang)}
+            <input type={showPass ? "text" : "password"} value={confirm} onChange={e => setConfirm(e.target.value)} placeholder={uiT("auth.typeItAgain", lang)}
               autoComplete="new-password" onKeyDown={e => { if (e.key === "Enter") submit(); }}
-              style={{ ...field, ...(showGaps && (!confirm || confirm !== password) ? { borderColor: "#FF8A80" } : null) }} />
+              className={showGaps && (!confirm || confirm !== password) ? "gx-bad" : undefined}
+              style={field} />
             {confirm && confirm !== password && (
               <div style={{ fontSize: 11.5, color: "#FF8A80", marginTop: -3, marginBottom: 10 }}>{uiT("auth.noMatchYet", lang)}</div>
             )}
@@ -782,8 +964,11 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
           </>
         )}
 
-        {error && <div style={{ fontSize: 12, color: "#FF8A80", lineHeight: 1.5, marginBottom: 10 }}>{error}</div>}
-        {notice && <div style={{ fontSize: 12, color: C.gold, lineHeight: 1.5, marginBottom: 10 }}>{notice}</div>}
+        {/* Read out when it appears, and tied to the field it is about. */}
+        <div aria-live="polite">
+          {error && <div id={errId} role="alert" style={{ fontSize: 12.5, color: "#FF8A80", lineHeight: 1.5, marginBottom: 10 }}>{error}</div>}
+          {notice && <div role="status" style={{ fontSize: 12.5, color: C.gold, lineHeight: 1.5, marginBottom: 10 }}>{notice}</div>}
+        </div>
 
         {/* ── ACCEPTANCE, AT THE MOMENT OF ACCEPTANCE ──────────────
             A tick box now, above the button that creates the account. It was a
@@ -806,20 +991,31 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
           </label>
         )}
 
-        <button onClick={submit} disabled={busy}
-          style={{ width: "100%", background: C.gold, border: "none", color: C.onGold, borderRadius: 11, padding: "13px", fontSize: 15, fontWeight: 700, cursor: busy ? "default" : "pointer", fontFamily: "'Inter', sans-serif", opacity: busy ? 0.6 : 1, marginBottom: 12 }}>
-          {busy ? uiT("auth.working", lang) : label}
+        {/* disabled while a request is out, so a second press sends nothing. */}
+        <button type="button" onClick={submit} disabled={busy} aria-busy={busy || undefined} data-testid="auth-submit"
+          style={{ width: "100%", background: C.gold, border: "none", color: C.onGold, borderRadius: 11, padding: "13px", fontSize: 15, fontWeight: 700, cursor: busy ? "default" : "pointer", fontFamily: "'Inter', sans-serif", opacity: busy ? 0.7 : 1, marginTop: 4, marginBottom: 16 }}>
+          {busy ? uiT(mode === "in" ? "auth.signingIn" : "auth.working", lang) : label}
         </button>
 
-
-
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-          {/* Nothing to switch to mid-recovery: they are here holding a token
-              that expires, and every other screen throws it away. */}
-          {/* His words: "The small part should be 'New User? Sign up here!'" */}
-          {mode !== "up" && mode !== "newpass" && <button style={linkBtn} onClick={() => { setMode("up"); setError(null); setNotice(null); setShowGaps(false); }}>{uiT("auth.newUser", lang)}</button>}
-          {mode !== "in" && mode !== "newpass" && <button style={linkBtn} onClick={() => { setMode("in"); setError(null); setNotice(null); setShowGaps(false); }}>{uiT("auth.haveOne", lang)}</button>}
-          {mode === "in" && <button style={linkBtn} onClick={() => { setMode("reset"); setError(null); setNotice(null); }}>{uiT("auth.forgot", lang)}</button>}
+        {/* ── THE TWO WAYS ON ──────────────────────────────────────
+            "New to Gemlyx? Create an account" and "Forgot password?", from
+            the brief of 17 Oct 2026. The question is quiet and the action is
+            gold, so it reads as a link rather than as something switched off.
+            They wrap onto two lines on a narrow phone. Nothing to switch to
+            mid-recovery: they are here holding a token that expires, and every
+            other screen throws it away. */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "10px 16px", flexWrap: "wrap", fontSize: 13, color: C.light }}>
+          {mode !== "up" && mode !== "newpass" && (
+            <span>{uiT("auth.newToGemlyx", lang)}{" "}
+              <button type="button" style={actLink} data-testid="auth-to-up" onClick={() => { setMode("up"); setError(null); setNotice(null); setShowGaps(false); }}>{uiT("auth.createAnAccount", lang)}</button>
+            </span>
+          )}
+          {mode !== "in" && mode !== "newpass" && (
+            <span>{uiT("auth.haveAccountQ", lang)}{" "}
+              <button type="button" style={actLink} data-testid="auth-to-in" onClick={() => { setMode("in"); setError(null); setNotice(null); setShowGaps(false); }}>{uiT("auth.signIn", lang)}</button>
+            </span>
+          )}
+          {mode === "in" && <button type="button" style={actLink} data-testid="auth-to-reset" onClick={() => { setMode("reset"); setError(null); setNotice(null); }}>{uiT("auth.forgotQ", lang)}</button>}
         </div>
 
         {/* ── SAID AT SIGNUP, NOT DISCOVERED LATER ─────────────────
@@ -840,9 +1036,19 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
             for entries forbids, and it applies to his own signup form.
             Anything added to what an account holds gets added here in the same
             change, and to public/privacy.html on the same day. */}
-        <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.55, marginTop: 12 }}>
-          {uiT(AI_GUIDES_SHOWN ? "auth.storeLead" : "auth.storeLeadNoGuides", lang)} <a href="/privacy.html" target="_blank" rel="noopener noreferrer" style={{ color: C.muted, textDecoration: "underline" }}>{uiT("auth.privacy", lang)}</a> {uiT("auth.storeTail", lang)}
-        </div>
+        {/* And since 17 Oct 2026, while the guides are out of sight, the
+            brief's plainer line: what the information is for, and where the
+            whole of it is written down. No promise here that the policy does
+            not make. */}
+        {AI_GUIDES_SHOWN ? (
+          <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.55, marginTop: 12 }}>
+            {uiT("auth.storeLead", lang)} <a href="/privacy.html" target="_blank" rel="noopener noreferrer" style={{ color: C.muted, textDecoration: "underline" }}>{uiT("auth.privacy", lang)}</a> {uiT("auth.storeTail", lang)}
+          </div>
+        ) : (
+          <div data-testid="auth-privacy-note" style={{ fontSize: 12, color: C.muted, lineHeight: 1.6, marginTop: 18, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
+            {uiT("auth.privacyNoteLead", lang)}{" "}<a href="/privacy.html" target="_blank" rel="noopener noreferrer" style={{ color: C.light, fontWeight: 600, textDecoration: "underline", textUnderlineOffset: 2 }}>{uiT("auth.privacy", lang)}</a>{uiT("auth.privacyNoteTail", lang)}
+          </div>
+        )}
         </>)}
       </div>
     </div>
