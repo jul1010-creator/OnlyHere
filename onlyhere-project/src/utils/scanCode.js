@@ -4,8 +4,12 @@
 // scan the user's QR code?" Turned round, and he said "Sure": the business
 // keeps a small Gemlyx sticker by the till, the visitor scans it with the
 // phone's own camera, and Gemlyx opens on that place's offer marked Redeemed,
-// with the time and a moving mark, so a screenshot cannot pass for it. Staff
-// only look at the phone. Each scan is counted for the partner's own page.
+// with the time and a moving mark, so an old screenshot cannot pass for it.
+// Staff only look at the phone. Each scan is counted for the partner's own
+// page. The code is not secret (it is in each deal's public data), so the
+// count is visits to the sticker's address, not proof somebody stood at the
+// till: approximate, like the other counts (Fable's review, 17 Oct 2026). A
+// signed, short-lived code on the sticker would be the step after this.
 //
 // The sticker holds a plain web address, gemlyxtravel.com/s/<code>, so it
 // opens in the browser today and can open an app later without reprinting.
