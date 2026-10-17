@@ -13,11 +13,11 @@ import { guideHero, heroCaption } from "../utils/guideHero";
 import { lookupRealPlace } from "../utils/guideEnrichment";
 import { currentTrip, tripStatusLine } from "../utils/tripStatus";
 import { ProfileQuestions } from "./ProfileQuestions";
-import { AFFILIATES_PATH } from "../utils/affiliateRoster";
 import { LIBRARY_PATH } from "../utils/tripLibrary";
 import { externalHref } from "../utils/helpers";
 import { t as uiT } from "../utils/uiLanguage";
 import { DealAlertsCard } from "./DealAlerts";
+import { GemlyxLogo } from "./GemlyxLogo";
 
 // ── INFO ABOUT ME ────────────────────────────────────────────────────
 //
@@ -146,6 +146,79 @@ export const NOTICED_LABEL = {
   spend: "Budget",
 };
 
+// ── MY ACCOUNT, 17 OCT 2026 ─────────────────────────────────────────
+//
+// Oliver, with a screenshot of the Legal section: "I want you to redesign the
+// whole thing. 'Info about me' should be 'my account'. Take hold on Fable and
+// you together scout the internet for something that can inspire. The logo
+// also needs to be present."
+//
+// What Fable brought back from account pages that work (SAP Fiori's profile
+// pattern, Vercel, Raycast, Apple Account, Linear on settings), and what was
+// taken from it:
+//   * The real Gemlyx mark and wordmark at the top, not the small ✦ GEMLYX.
+//   * "My account" as the title, and under it whose account this is: initials
+//     in a ring, the name if one is given, the email, how they sign in.
+//   * The rail stays on a desktop and the list stays on a phone, as Oliver
+//     chose on 23 Aug, but both are quieter: a thin gold bar marks the open
+//     section instead of a filled box, and the phone list is one grouped
+//     panel with dividers rather than a stack of separate cards.
+//   * Rows that show the current value (the email, how the password stands)
+//     with the action at the end of the row, so the page reads as facts about
+//     the account rather than as one long form.
+//   * Sign out as a quiet row of its own, and deleting the account last, on a
+//     surface of its own with a red edge. Gold is never used for anything
+//     that cannot be undone.
+//
+// THE PANELS AND ROWS LIVE AT MODULE SCOPE. Card used to be declared inside
+// the component, which made it a new component on every render: React then
+// threw away and rebuilt everything inside it on each keystroke, so a field in
+// General lost focus after every letter typed. Declared once here, they keep
+// their identity and the fields keep their focus.
+export const meInitials = (name, email) => {
+  const words = String(name || "").trim().split(/\s+/).filter(Boolean);
+  if (words.length) return (words[0][0] + (words.length > 1 ? words[words.length - 1][0] : "")).toUpperCase();
+  const e = String(email || "").trim();
+  return e ? e[0].toUpperCase() : "G";
+};
+
+const MeCard = ({ children, testid }) => (
+  <div data-testid={testid} style={{ background: C.surface, border: `1px solid ${C.gold}1F`, borderRadius: 14, padding: "clamp(18px, 3vw, 24px)", marginBottom: 14 }}>{children}</div>
+);
+
+// A titled group: the name above the panel in the serif, an optional line
+// under it, and one surface holding the rows.
+const MeGroup = ({ title, note, danger = false, children, testid, pad = false }) => (
+  <section data-testid={testid} style={{ marginBottom: 26 }}>
+    {title && <h3 style={{ fontFamily: "'Fraunces', serif", fontSize: 19, fontWeight: 500, letterSpacing: -0.1, color: danger ? "#F0A49C" : C.text, margin: "0 0 4px" }}>{title}</h3>}
+    {note && <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.55, margin: "0 0 12px" }}>{note}</div>}
+    {!note && title && <div style={{ height: 8 }} />}
+    <div style={{ background: C.surface, border: `1px solid ${danger ? "#E5737347" : `${C.gold}1F`}`, borderRadius: 14, overflow: "hidden", ...(pad ? { padding: "clamp(18px, 3vw, 24px)" } : null) }}>{children}</div>
+  </section>
+);
+
+// One row: a label (and a line under it on the phone list), the current value
+// in muted text, and what pressing it does at the end: a chevron into a
+// section, ↗ out to a document, or a word of its own.
+const MeRow = ({ label, sub, value, onClick, href, away = false, trail = null, tone = null, first = false, testid, strong = true }) => {
+  const style = { display: "flex", alignItems: "center", gap: 12, width: "100%", minHeight: 56, boxSizing: "border-box", padding: "12px 18px", background: "none", border: "none", borderTop: first ? "none" : `1px solid ${C.border}`, borderRadius: 0, textAlign: "left", textDecoration: "none", cursor: onClick || href ? "pointer" : "default", fontFamily: "'Inter', sans-serif", color: C.text };
+  const body = (
+    <>
+      <span style={{ flex: "1 1 auto", minWidth: 0 }}>
+        <span style={{ display: "block", fontSize: 15, fontWeight: strong ? 600 : 500, color: tone || C.text }}>{label}</span>
+        {sub && <span style={{ display: "block", fontSize: 12.5, color: C.muted, marginTop: 3, lineHeight: 1.45 }}>{sub}</span>}
+      </span>
+      {value != null && value !== "" && <span style={{ fontSize: 13.5, color: C.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "58%", textAlign: "right" }}>{value}</span>}
+      {trail === "chevron" && <span aria-hidden="true" style={{ color: C.gold, opacity: 0.7, fontSize: 19, lineHeight: 1, flexShrink: 0 }}>›</span>}
+      {trail === "away" && <span aria-hidden="true" style={{ color: C.gold, fontSize: 14, flexShrink: 0 }}>↗</span>}
+      {trail && trail !== "chevron" && trail !== "away" && <span style={{ fontSize: 13.5, fontWeight: 700, color: C.gold, flexShrink: 0 }}>{trail}</span>}
+    </>
+  );
+  if (href) return <a className="gx-me-row" href={href} data-testid={testid} {...(away ? { target: "_blank", rel: "noopener noreferrer" } : {})} style={style}>{body}</a>;
+  if (onClick) return <button className="gx-me-row" type="button" data-testid={testid} onClick={onClick} style={style}>{body}</button>;
+  return <div data-testid={testid} style={style}>{body}</div>;
+};
+
 export const AboutMePage = ({
   open, session, profile, savedGuides = [], savedPlaces = [], cloudSyncOk = true,
   setupSql = null, deleting = false, section = null, onSection, onClose, onProfileSaved,
@@ -258,9 +331,8 @@ export const AboutMePage = ({
   // General section do not read as two different forms.
   const legend = { fontSize: 10.5, letterSpacing: 1.4, textTransform: "uppercase", color: C.muted, fontWeight: 700, marginBottom: 8 };
   const boxField = { width: "100%", boxSizing: "border-box", background: C.bg, border: `1px solid ${C.border}`, color: C.text, borderRadius: 10, padding: "12px 13px", fontSize: 14, fontFamily: "'Inter', sans-serif", outline: "none" };
-  const Card = ({ children }) => (
-    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: pad, marginBottom: 14 }}>{children}</div>
-  );
+  // The same component on every render (see MeCard at the top of the file).
+  const Card = MeCard;
 
   // ── WHICH SECTION, AND WHETHER THE RAIL IS EVEN THERE ─────────────
   //
@@ -279,27 +351,29 @@ export const AboutMePage = ({
   const labelOf = (sec) => (sec?.labelKey ? uiT(sec.labelKey, lang) : sec?.label);
   const blurbOf = (sec) => (sec?.blurbKey ? uiT(sec.blurbKey, lang) : sec?.blurb);
 
-  const railItem = (sec, i) => (
-    <button key={sec.id} onClick={() => onSection?.(sec.id)}
-      style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left",
-               background: current === sec.id ? `${C.gold}1F` : "none",
-               border: `1px solid ${current === sec.id ? `${C.gold}55` : "transparent"}`,
-               color: current === sec.id ? C.text : C.light,
-               borderRadius: 11, padding: "11px 13px", fontSize: 13.5,
-               fontWeight: current === sec.id ? 700 : 600, cursor: "pointer",
-               fontFamily: "'Inter', sans-serif", marginBottom: 4 }}>
-      <span style={{ color: current === sec.id ? C.gold : C.muted, fontSize: 11, flexShrink: 0 }}>✦</span>
-      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{labelOf(sec)}</span>
-    </button>
-  );
+  // The rail: the section's name, and a thin gold bar on the open one rather
+  // than a filled box, so the content beside it carries the weight.
+  const railItem = (sec) => {
+    const on = current === sec.id;
+    return (
+      <button key={sec.id} type="button" onClick={() => onSection?.(sec.id)} aria-current={on ? "page" : undefined} data-testid={`me-rail-${sec.id}`}
+        style={{ display: "flex", alignItems: "center", width: "100%", textAlign: "left", position: "relative",
+                 background: on ? `${C.gold}14` : "none", border: "none", borderRadius: 10,
+                 color: on ? C.text : C.light, opacity: on ? 1 : 0.9,
+                 padding: "11px 14px 11px 16px", fontSize: 15, fontWeight: on ? 600 : 500, cursor: "pointer",
+                 fontFamily: "'Inter', sans-serif", marginBottom: 2 }}>
+        <span aria-hidden="true" style={{ position: "absolute", left: 0, top: 9, bottom: 9, width: 2, borderRadius: 2, background: on ? C.gold : "transparent" }} />
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{labelOf(sec)}</span>
+      </button>
+    );
+  };
 
   // ── THE THREE SECTIONS ────────────────────────────────────────────
 
   // ── GENERAL ───────────────────────────────────────────────────────
   const generalSection = (
     <>
-      <Card>
-        <H>Your details</H>
+      <MeGroup title="Your details" pad testid="me-details">
         <ProfileQuestions show="general" value={p} onChange={(v) => { setP(v); setSaved(false); }} />
 
         <div style={{ ...legend }}>Address</div>
@@ -318,44 +392,38 @@ export const AboutMePage = ({
           placeholder="+45 12 34 56 78"
           style={{ ...boxField, marginBottom: 18 }} />
 
-        {error && <div style={{ fontSize: 12, color: "#FF8A80", lineHeight: 1.55, marginBottom: 12 }}>{error}</div>}
-        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
+        {error && <div role="alert" style={{ fontSize: 12.5, color: "#FF8A80", lineHeight: 1.55, marginBottom: 12 }}>{error}</div>}
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12 }}>
+          {/* Off as an outline rather than a faded gold block, which read as
+              mud on the dark panel (Fable's review, 17 Oct 2026). */}
           <button onClick={saveTyped} disabled={busy || isBlank(p)}
-            style={{ background: C.gold, border: "none", color: C.onGold, borderRadius: 11, padding: "12px 22px", fontSize: 14.5, fontWeight: 700, cursor: (busy || isBlank(p)) ? "default" : "pointer", fontFamily: "'Inter', sans-serif", opacity: (busy || isBlank(p)) ? 0.45 : 1, whiteSpace: "nowrap" }}>
+            style={{ ...((busy || isBlank(p)) ? { background: "none", border: `1px solid ${C.gold}66`, color: `${C.gold}99`, cursor: "default" } : { background: C.gold, border: `1px solid ${C.gold}`, color: C.onGold, cursor: "pointer" }), borderRadius: 11, padding: "12px 22px", fontSize: 14.5, fontWeight: 700, fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap" }}>
             {busy ? "Saving…" : "Save changes"}
           </button>
-          {saved && <span style={{ fontSize: 12.5, color: C.light }}>Saved.</span>}
+          {saved && <span role="status" style={{ fontSize: 13, color: C.light }}>Saved.</span>}
         </div>
-      </Card>
+      </MeGroup>
 
-      <Card>
-        <H>Sign-in</H>
-        {/* Read only. Email is the only route back into an account and Confirm
-            email is still off in Supabase, so a change would apply without the
-            new address ever being verified and one typo would lock somebody out
-            permanently. Stated with the way to correct it, not greyed out. */}
-        <div style={{ fontSize: 15, color: C.text, marginBottom: 6, overflowWrap: "anywhere" }}>{session?.email || "Signed in"}</div>
-        <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.6, marginBottom: 18 }}>
-          Contact hello@gemlyxtravel.com to change your email address.
-        </div>
-
-        {setupSql && (
-          <div style={{ fontSize: 11, color: "#FFB347", lineHeight: 1.6, marginBottom: 14, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px" }}>
-            Gemlyx cannot store your details yet: the database has no profile column. Run this once in the Supabase SQL editor.
-            <code style={{ display: "block", marginTop: 7, color: C.light, fontSize: 10.5, wordBreak: "break-all" }}>{setupSql}</code>
-          </div>
-        )}
-
+      {/* ── SIGNING IN ─────────────────────────────────────────────
+          Rows that state the facts, with the action at the end of the row.
+          The email is read only. Email is the only route back into an account
+          and Confirm email is still off in Supabase, so a change would apply
+          without the new address ever being verified and one typo would lock
+          somebody out permanently. Stated with the way to correct it, not
+          greyed out. */}
+      <MeGroup title="Signing in" note="To change your email address, write to hello@gemlyxtravel.com." testid="me-signin">
+        <MeRow first label="Email" value={session?.email || "Signed in"} />
         {/* providers === null means the answer has not arrived. Nothing renders
             while that is true, because a control that might be dead is worse
             than one that arrives a moment later. */}
         {providers !== null && (hasPassword(providers) ? (
           pwOpen ? (
-            <div style={{ marginBottom: 14 }}>
+            <div style={{ borderTop: `1px solid ${C.border}`, padding: "16px 18px" }}>
+              <div style={{ fontSize: 15, fontWeight: 600, color: C.text, marginBottom: 12 }}>Change password</div>
               <input type="password" value={pw1} onChange={e => setPw1(e.target.value)} placeholder="New password" autoComplete="new-password"
                 style={{ ...boxField, fontSize: 16, marginBottom: 8 }} />
               <input type="password" value={pw2} onChange={e => setPw2(e.target.value)} placeholder="Confirm new password" autoComplete="new-password"
-                style={{ ...boxField, fontSize: 16, marginBottom: 10 }} />
+                style={{ ...boxField, fontSize: 16, marginBottom: 12 }} />
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                 <button onClick={changePassword} disabled={pwBusy}
                   style={{ background: C.gold, border: "none", color: C.onGold, borderRadius: 10, padding: "11px 18px", fontSize: 13.5, fontWeight: 700, cursor: pwBusy ? "default" : "pointer", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap" }}>
@@ -368,67 +436,57 @@ export const AboutMePage = ({
               </div>
             </div>
           ) : (
-            <button onClick={() => { setPwOpen(true); setPwNote(null); }}
-              style={{ width: "100%", background: "none", border: `1px solid ${C.border}`, color: C.text, borderRadius: 10, padding: "12px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 10 }}>
-              Change password
-            </button>
+            <MeRow label="Password" value="••••••••" trail="Change" testid="me-change-password" onClick={() => { setPwOpen(true); setPwNote(null); }} />
           )
         ) : (
-          <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.6, marginBottom: 12 }}>
-            You sign in with Google. There is no Gemlyx password on this account.
-          </div>
+          <MeRow label="Password" value="Signed in with Google" />
         ))}
-
         {pwNote && (
-          <div style={{ fontSize: 12, color: pwNote.bad ? "#FF8A80" : C.light, lineHeight: 1.55, marginBottom: 12 }}>{pwNote.text}</div>
+          <div role="status" style={{ borderTop: `1px solid ${C.border}`, padding: "12px 18px", fontSize: 12.5, color: pwNote.bad ? "#FF8A80" : C.light, lineHeight: 1.55 }}>{pwNote.text}</div>
         )}
-
-        <button onClick={onSignOut}
-          style={{ width: "100%", background: "none", border: `1px solid ${C.border}`, color: C.text, borderRadius: 10, padding: "12px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-          Sign out
-        </button>
-      </Card>
+        {setupSql && (
+          <div style={{ borderTop: `1px solid ${C.border}`, padding: "12px 18px", fontSize: 11, color: "#FFB347", lineHeight: 1.6 }}>
+            Gemlyx cannot store your details yet: the database has no profile column. Run this once in the Supabase SQL editor.
+            <code style={{ display: "block", marginTop: 7, color: C.light, fontSize: 10.5, wordBreak: "break-all" }}>{setupSql}</code>
+          </div>
+        )}
+        {/* Sign out as the quiet last row of signing in, never a red button
+            near the top. */}
+        <MeRow label="Sign out" strong={false} onClick={onSignOut} testid="me-signout-row" />
+      </MeGroup>
 
       {/* ── AND DELETING IT SITS WITH SIGNING OUT OF IT ────────────────
           Oliver, 14 Sep 2026: "make a 'delete account' in the account info."
-
-          It existed, and it was under ABOUT ME, which is the page about what
-          Gemlyx knows rather than the page about the account. Nobody looking for
-          a way out of a product reads the section titled "About me", and he did
-          not find it either, which is the only test that matters.
-
           Next to Sign out, because the two are the same question asked with
           different force, and somebody who has just failed to find one is
-          looking for the other.
-
-          AND IT SAYS WHAT IT DOES NOW. The button read "Delete my data" and the
-          line under it read "Contact hello@gemlyxtravel.com to also remove the
-          sign-in record", which was an honest label on a product that could not
-          do the thing the button implied. api/delete-account.js does it, so the
-          words no longer have to apologise for the code. */}
-      {/* ── HIS EDIT: THE LIST WAS STATING THE OBVIOUS ────────────────
-          The first version listed five things, and his answer was "some of these
-          are logical". Right: nobody needs telling that an address you sign in
-          with is stored. What is left is the part somebody would not assume,
-          which is that Gemlyx draws conclusions from behaviour, and the two
-          things that can be removed. */}
-      <Card>
-        <H>Delete your account</H>
-        <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6, marginBottom: 8 }}>
-          {savedPlaces.length} saved {savedPlaces.length === 1 ? "place" : "places"} and {savedGuides.length} saved {savedGuides.length === 1 ? "guide" : "guides"}
-          {cloudSyncOk ? ", synced to this account." : ". Not reaching your account right now, so these are on this device only."}
+          looking for the other. Last, on its own surface with a red edge,
+          since 17 Oct 2026, and it says what goes rather than reassuring.
+          api/delete-account.js does it, so the words do not have to apologise
+          for the code. The old "No tracking, no marketing email, nothing
+          sold" line went the same day the sign-in sheet's did: those are the
+          Privacy Policy's to state, not a button's. */}
+      <MeGroup title="Delete account" danger pad testid="me-delete">
+        <div style={{ fontSize: 13.5, color: C.light, lineHeight: 1.65, marginBottom: 6 }}>
+          {AI_GUIDES_SHOWN
+            ? "Removes your saved places, your guides, your details, everything Gemlyx has learned, and the login itself, on this device and in your account."
+            : "Removes your saved places, your details and the login itself, on this device and in your account."}
         </div>
-        <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6, marginBottom: 18 }}>
-          No tracking, no marketing email, nothing sold. The <a href="/privacy.html" target="_blank" rel="noopener noreferrer" style={{ color: C.gold }}>Privacy Policy</a> lists it in full.
-        </div>
-        <button onClick={onDelete} disabled={deleting}
-          style={{ width: "100%", background: "none", border: "1px solid #E23B4E66", color: "#E57373", borderRadius: 10, padding: "12px", fontSize: 14, fontWeight: 700, cursor: deleting ? "default" : "pointer", fontFamily: "'Inter', sans-serif" }}>
+        {/* The count only when there is something to count: "0 saved places"
+            read as noise above the one sentence that matters. */}
+        {(savedPlaces.length > 0 || (AI_GUIDES_SHOWN && savedGuides.length > 0)) && (
+          <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.6, marginBottom: 6 }}>
+            {AI_GUIDES_SHOWN
+              ? `${savedPlaces.length} saved ${savedPlaces.length === 1 ? "place" : "places"} and ${savedGuides.length} saved ${savedGuides.length === 1 ? "guide" : "guides"}`
+              : `${savedPlaces.length} saved ${savedPlaces.length === 1 ? "place" : "places"}`}
+            {cloudSyncOk ? ", synced to this account." : ". Not reaching your account right now, so these are on this device only."}
+          </div>
+        )}
+        <div style={{ fontSize: 13.5, color: C.light, fontWeight: 600, lineHeight: 1.6, marginBottom: 16 }}>This cannot be undone.</div>
+        <button onClick={onDelete} disabled={deleting} data-testid="me-delete-button"
+          style={{ background: "none", border: "1px solid #E5737399", color: "#F0A49C", borderRadius: 10, padding: "11px 18px", fontSize: 14, fontWeight: 700, cursor: deleting ? "default" : "pointer", fontFamily: "'Inter', sans-serif" }}>
           {deleting ? "Deleting…" : "Delete my account"}
         </button>
-        <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.6, marginTop: 12 }}>
-          Removes your saved places, your guides, your details, everything Gemlyx has learned, and the login itself, on this device and in your account. This cannot be undone.
-        </div>
-      </Card>
+      </MeGroup>
     </>
   );
 
@@ -508,8 +566,10 @@ export const AboutMePage = ({
         <ProfileQuestions show="travel" value={p} onChange={(v) => { setP(v); setSaved(false); }} />
         {error && <div style={{ fontSize: 12, color: "#FF8A80", lineHeight: 1.55, marginBottom: 12 }}>{error}</div>}
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
+          {/* Off as an outline rather than a faded gold block, which read as
+              mud on the dark panel (Fable's review, 17 Oct 2026). */}
           <button onClick={saveTyped} disabled={busy || isBlank(p)}
-            style={{ background: C.gold, border: "none", color: C.onGold, borderRadius: 11, padding: "12px 22px", fontSize: 14.5, fontWeight: 700, cursor: (busy || isBlank(p)) ? "default" : "pointer", fontFamily: "'Inter', sans-serif", opacity: (busy || isBlank(p)) ? 0.45 : 1, whiteSpace: "nowrap" }}>
+            style={{ ...((busy || isBlank(p)) ? { background: "none", border: `1px solid ${C.gold}66`, color: `${C.gold}99`, cursor: "default" } : { background: C.gold, border: `1px solid ${C.gold}`, color: C.onGold, cursor: "pointer" }), borderRadius: 11, padding: "12px 22px", fontSize: 14.5, fontWeight: 700, fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap" }}>
             {busy ? "Saving…" : "Save changes"}
           </button>
           {saved && <span style={{ fontSize: 12.5, color: C.light }}>Saved.</span>}
@@ -614,31 +674,26 @@ export const AboutMePage = ({
   // public/, they are the documents somebody may need to keep or print, and
   // reproducing them here would be a second copy to keep in step with the first.
   const legalSection = (
-    <Card>
-      <H>Legal</H>
-      <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6, marginBottom: 18 }}>
-        The agreement between you and Gemlyx, and what is done with your data.
-      </div>
+    <>
       {/* ── AND HOW THE SITE IS PAID FOR ────────────────────────────
-          Oliver, 9 Sep 2026, asked for the affiliates page in the menu. It sits
-          under Legal rather than in a section of its own because it answers the
-          same kind of question the other two do: what the arrangement between
-          you and Gemlyx is. It opens in this tab rather than a new one,
-          because unlike the other two it is a page of this app.
-          "How we are paid" rather than "Affiliates": a reader asking the
-          question is not asking about our commercial arrangements, they are
-          asking whether the recommendation was bought. */}
-      {[["How we are paid", AFFILIATES_PATH, false], ["Terms of Service", "/terms.html", true], ["Privacy Policy", "/privacy.html", true]].map(([label, href, away]) => (
-        <a key={href} href={href} {...(away ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-          style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, textDecoration: "none", border: `1px solid ${C.border}`, borderRadius: 10, padding: "13px 15px", marginBottom: 10 }}>
-          <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{label}</span>
-          <span style={{ fontSize: 15, color: C.gold, flexShrink: 0 }}>↗</span>
-        </a>
-      ))}
-      <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.6, marginTop: 6 }}>
+          Oliver, 9 Sep 2026, asked for the affiliates page in the menu, and it
+          sat here under Legal as "How we are paid".
+
+          TAKEN OFF THE ACCOUNT PAGE, 17 Oct 2026. Oliver: "Remove 'How we're
+          paid' from the account". The page itself stays, at /affiliates, and
+          so does its link in the site footer beside Terms and Privacy, which
+          is where a reader wondering about a booking link looks. */}
+      {/* No line above the panel: the section's own line already says what
+          is in it, and the two read as a stutter. */}
+      <MeGroup testid="me-legal">
+        {[["Terms of Service", "/terms.html", true], ["Privacy Policy", "/privacy.html", true]].map(([label, href, away], i) => (
+          <MeRow key={href} first={i === 0} label={label} href={href} away={away} trail="away" />
+        ))}
+      </MeGroup>
+      <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.6, marginTop: -12 }}>
         Questions about either: hello@gemlyxtravel.com
       </div>
-    </Card>
+    </>
   );
 
   // ── SAVED TRIPS ──────────────────────────────────────────────────
@@ -758,7 +813,6 @@ export const AboutMePage = ({
   const nearSection = (
     <>
       <Card>
-        <H>Near you</H>
         {!hasLocation ? (
           <>
             <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.75, marginBottom: 12 }}>
@@ -809,75 +863,105 @@ export const AboutMePage = ({
   // and would start the settings over each time this page draws. No heading
   // of its own: the rail, or the phone's title, already says Deal alerts.
   const alertsSection = (
-    <div data-testid="me-alerts-section" style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: pad, marginBottom: 14 }}>
+    <div data-testid="me-alerts-section" style={{ background: C.surface, border: `1px solid ${C.gold}1F`, borderRadius: 14, padding: pad, marginBottom: 14 }}>
       <DealAlertsCard session={session} lang={lang} />
     </div>
   );
 
   const bodyFor = { general: generalSection, trips: tripsSection, near: nearSection, alerts: alertsSection, about: aboutSection, plan: planSection, legal: legalSection };
 
-  return (
-    <div style={{ position: "fixed", inset: 0, background: C.bg, zIndex: 990, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
-      <div style={{ maxWidth: 1000, margin: "0 auto", padding: `${wide ? 26 : 16}px ${wide ? 22 : 14}px calc(48px + env(safe-area-inset-bottom))` }}>
+  // ── THE HEADER: THE MARK, THE TITLE, AND WHOSE ACCOUNT ────────────
+  // The name comes from the stored profile rather than the form being edited,
+  // so the header does not change letter by letter while somebody types.
+  const shownName = String(profile?.name || "").trim();
+  const signInWay = providers === null ? "" : hasPassword(providers) ? "Signs in with email and password" : "Signs in with Google";
+  const identity = (
+    <div data-testid="me-identity" style={{ display: "flex", alignItems: "center", gap: 14, marginTop: wide ? 16 : 12 }}>
+      <div aria-hidden="true" style={{ width: 52, height: 52, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: C.surface, border: `1px solid ${C.gold}66`, boxShadow: `0 0 0 4px ${C.gold}10`, color: C.text, fontFamily: "'Fraunces', serif", fontSize: 19, fontWeight: 500, letterSpacing: 0.5 }}>
+        {meInitials(shownName, session?.email)}
+      </div>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 15.5, fontWeight: 600, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{shownName || session?.email || "Signed in"}</div>
+        {shownName && <div style={{ fontSize: 13, color: C.light, opacity: 0.8, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{session?.email}</div>}
+        {signInWay && <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>{signInWay}</div>}
+      </div>
+    </div>
+  );
+  const title = uiT("me.title", lang);
+  const openSec = ME_SECTIONS.find(x => x.id === current) || {};
 
-        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 18 }}>
-          <div style={{ flex: "1 1 220px", minWidth: 0 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-              <span style={{ color: C.gold, fontSize: 14 }}>✦</span>
-              <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 10, letterSpacing: 3, color: C.light, fontWeight: 600 }}>GEMLYX</span>
-            </div>
-            <div style={{ fontFamily: "'Fraunces', serif", fontSize: wide ? 34 : 27, fontWeight: 600, color: C.text, lineHeight: 1.12 }}>
-              Info about me
-            </div>
-            <div style={{ fontSize: 12.5, color: C.muted, marginTop: 6, overflow: "hidden", textOverflow: "ellipsis" }}>
-              {session?.email || "Signed in"}
-            </div>
-          </div>
-          <button onClick={onClose}
-            style={{ background: "none", border: `1px solid ${C.border}`, color: C.text, borderRadius: 100, padding: "10px 18px", fontSize: 13.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>
+  return (
+    <div data-testid="me-page" style={{ position: "fixed", inset: 0, background: C.bg, zIndex: 990, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
+      <style>{`.gx-me-row:hover { background: ${C.gold}0D !important; }
+        .gx-me-row:focus-visible, [data-testid="me-page"] button:focus-visible, [data-testid="me-page"] a:focus-visible { outline: 2px solid ${C.gold}; outline-offset: -2px; }`}</style>
+      <div style={{ maxWidth: 960, margin: "0 auto", padding: `${wide ? 26 : 16}px ${wide ? 28 : 16}px calc(56px + env(safe-area-inset-bottom))` }}>
+
+        {/* ── THE BAR ─────────────────────────────────────────────────
+            The Gemlyx mark and wordmark, which the page did not carry before
+            ("The logo also needs to be present"), and the way out. */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: wide ? 34 : 24 }}>
+          <span data-testid="me-logo" role="img" aria-label="Gemlyx" style={{ display: "inline-flex" }}>
+            <GemlyxLogo size={wide ? 26 : 22} color={C.text} />
+          </span>
+          <button onClick={onClose} data-testid="me-close"
+            style={{ background: "none", border: `1px solid ${C.border}`, color: C.text, borderRadius: 100, padding: "9px 18px", fontSize: 13.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>
             Close
           </button>
         </div>
+
+        {(wide || showList) ? (
+          <header style={{ marginBottom: wide ? 30 : 24, paddingBottom: wide ? 28 : 0, borderBottom: wide ? `1px solid ${C.border}` : "none" }}>
+            <h1 style={{ fontFamily: "'Fraunces', serif", fontSize: wide ? 38 : 30, fontWeight: 500, letterSpacing: -0.5, color: C.text, lineHeight: 1.08, margin: 0 }}>
+              {title}
+            </h1>
+            {identity}
+          </header>
+        ) : (
+          /* ── THE LABEL GOES WHEREVER THE RAIL IS NOT ──────────────
+             On a phone there is no rail, so the heading and the way back carry
+             the section's name, or somebody is on a screen with no name and no
+             exit but the browser's own. */
+          <div style={{ marginBottom: 20 }}>
+            <button onClick={() => onSection?.(null)} data-testid="me-back"
+              style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: C.gold, padding: "6px 0", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+              <span aria-hidden="true" style={{ fontSize: 18, lineHeight: 1 }}>‹</span> {title}
+            </button>
+            <h1 style={{ fontFamily: "'Fraunces', serif", fontSize: 28, fontWeight: 500, letterSpacing: -0.3, color: C.text, margin: "6px 0 0" }}>
+              {labelOf(openSec)}
+            </h1>
+          </div>
+        )}
 
         {showList ? (
           /* ── THE PHONE LIST ─────────────────────────────────────────
              Every section visible at once, with the line that says what is in
              it, before anything is opened. His father is the accessibility test
-             for this product and a name alone on a row is a guess. */
-          <div>
-            {SHOWN_ME_SECTIONS.map(sec => (
-              <button key={sec.id} onClick={() => onSection?.(sec.id)}
-                style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", textAlign: "left", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "16px 16px", cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 10 }}>
-                <div style={{ flex: "1 1 auto", minWidth: 0 }}>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: C.text, marginBottom: 3 }}>{labelOf(sec)}</div>
-                  <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5 }}>{blurbOf(sec)}</div>
-                </div>
-                <span style={{ color: C.gold, fontSize: 18, flexShrink: 0 }}>›</span>
-              </button>
-            ))}
+             for this product and a name alone on a row is a guess. One grouped
+             panel with dividers, then Sign out as its own quiet row. */
+          <div data-testid="me-list">
+            <MeGroup>
+              {SHOWN_ME_SECTIONS.map((sec, i) => (
+                <MeRow key={sec.id} first={i === 0} label={labelOf(sec)} sub={blurbOf(sec)} trail="chevron" onClick={() => onSection?.(sec.id)} testid={`me-list-${sec.id}`} />
+              ))}
+            </MeGroup>
+            <MeGroup>
+              <MeRow first label="Sign out" strong={false} onClick={onSignOut} />
+            </MeGroup>
           </div>
         ) : (
-          <div style={{ display: "flex", alignItems: "flex-start", gap: wide ? 24 : 0 }}>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: wide ? 40 : 0 }}>
             {wide && (
-              <nav style={{ flex: "0 0 216px", width: 216, position: "sticky", top: 26 }}>
+              <nav aria-label={title} style={{ flex: "0 0 210px", width: 210, position: "sticky", top: 26 }}>
                 {SHOWN_ME_SECTIONS.map(railItem)}
               </nav>
             )}
             <div style={{ flex: "1 1 auto", minWidth: 0 }}>
-              {/* ── THE LABEL GOES WHEREVER THE RAIL IS NOT ──────────
-                  On a desktop the highlighted rail item says which section you
-                  are in. On a phone there is no rail, so the heading and the
-                  way back have to carry it, or somebody is on a screen with no
-                  name and no exit but the browser's own. */}
-              {!wide && (
-                <div style={{ marginBottom: 14 }}>
-                  <button onClick={() => onSection?.(null)}
-                    style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: C.gold, padding: "6px 0", fontSize: 13.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                    <span style={{ fontSize: 17 }}>‹</span> Info about me
-                  </button>
-                  <div style={{ fontFamily: "'Fraunces', serif", fontSize: 22, fontWeight: 600, color: C.text, marginTop: 4 }}>
-                    {labelOf(ME_SECTIONS.find(x => x.id === current) || {})}
-                  </div>
+              {/* The section's name only. Its line lives on the phone list's
+                  rows, and a blurb here stacked a third heading layer above the
+                  first field (Fable's review, 17 Oct 2026). */}
+              {wide && (
+                <div style={{ marginBottom: 20 }}>
+                  <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 26, fontWeight: 500, letterSpacing: -0.3, color: C.text, margin: 0 }}>{labelOf(openSec)}</h2>
                 </div>
               )}
               {bodyFor[current]}
