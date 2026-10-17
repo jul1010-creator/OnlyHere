@@ -83642,7 +83642,7 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
 {
   const read = (f) => readFileSync(join(root, f), "utf8");
   const W = M.DCARD.distanceWords;
-  is("metres to the nearest ten, km with one decimal under ten", [W(4), W(347), W(995), W(1234), W(9960), W(12400)], ["10 m", "350 m", "1.0 km", "1.2 km", "10 km", "12 km"]);
+  is("metres to the nearest ten, km with one decimal under ten", [W(4), W(347), W(995), W(1234), W(9960), W(12400)], ["0 m", "350 m", "1.0 km", "1.2 km", "10 km", "12 km"]);
   is("a decimal comma in Danish, German and Lithuanian", [W(1234, "da"), W(1234, "de"), W(1234, "lt"), W(350, "lt")], ["1,2 km", "1,2 km", "1,2 km", "350 m"]);
   is("nothing for no distance", [W(null), W(undefined), W(-5), W("x")], ["", "", "", ""]);
   const card = read("src/components/DealCard.jsx"), dny = read("src/components/DealsNearYou.jsx"), cm = read("src/components/DealCornerMap.jsx");
@@ -83684,7 +83684,7 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   const body = dny.slice(dny.indexOf("const goFromDeal = (x) => {"), dny.indexOf("const walkStart = going"));
   ok("a tap asks the browser for the phone's place", /navigator\.geolocation\.getCurrentPosition\(/.test(body) && /askForCompass\(\);\s*setFinding\(true\);/.test(body));
   // 17 Oct 2026: outside Klaipėda, a refusal or a miss walks from the centre (batch 258).
-  ok("the deal stays open until the walk can start", /const leave = \(from\) => \{ setFinding\(false\); dropSheets\(\); setOpened\(null\); startWalk\(x, from\); \};/.test(body) && /if \(!inNowArea\(country, at\)\) \{ fallback\(\); return; \}/.test(body));
+  ok("the deal stays open until the walk can start", /const leave = \(from\) => \{ if \(mine !== dirSeq\.current\) return; setFinding\(false\); dropSheets\(\); setOpened\(null\); startWalk\(x, from\); \};/.test(body) && /if \(!inNowArea\(country, at\)\) \{ fallback\(\); return; \}/.test(body));
   ok("a phone already found walks straight away", /if \(here\) \{ leave\(hereAt\(here\)\); return; \}/.test(body));
   ok("a refusal or a miss walks from the centre", /\}, fallback, \{ enableHighAccuracy: true/.test(body) && /if \(centreStart\) leave\(centreStart\); else/.test(body));
   ok("under the buttons, read aloud, brought into sight", /\{dirNote && <div ref=\{dirBox\} role="status" data-testid="deal-detail-dir-note"/.test(det) && /dirBox\.current\.scrollIntoView\(\{ block: "nearest"/.test(det));
@@ -83717,7 +83717,7 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
 {
   const app = readFileSync(join(root, "src/App.jsx"), "utf8");
   ok("off on /lithuania, kept for Denmark", /const MENU_PAGES_SHOWN = PAGE_COUNTRY !== "LT";/.test(app));
-  ok("the Saved trips row and the counts under the name wait behind it", /\{MENU_PAGES_SHOWN && \(<>\s*<button className="gx-menu-row" onClick=\{\(\) => \{ setShowMenu\(false\); readTripChanges\(\);/.test(app) && /\{MENU_PAGES_SHOWN && <div style=\{\{ fontSize: 10\.5, color: C\.muted \}\}>\{savedGuides\.length\} saved/.test(app));
+  ok("the Saved trips row and the counts under the name wait behind it", /\{MENU_PAGES_SHOWN && AI_GUIDES_SHOWN && \(<>\s*<button className="gx-menu-row" onClick=\{\(\) => \{ setShowMenu\(false\); readTripChanges\(\);/.test(app) && /\{MENU_PAGES_SHOWN && AI_GUIDES_SHOWN && <div style=\{\{ fontSize: 10\.5, color: C\.muted \}\}>\{savedGuides\.length\} saved/.test(app));
   ok("and so do the pages", /\{MENU_PAGES_SHOWN && \(<div className="gx-nav-in-menu">/.test(app));
   ok("the code is kept, not deleted", /uiT\("menu\.saved", uiLang\)/.test(app) && /navGroups\.map\(\(g, i\) =>/.test(app));
 }
@@ -83840,6 +83840,21 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("the account page leaves out Saved trips, About me and Plan", /export const GUIDE_SECTIONS = \["trips", "about", "plan"\];/.test(read("src/components/AboutMePage.jsx")) && /\{SHOWN_ME_SECTIONS\.map\(railItem\)\}/.test(read("src/components/AboutMePage.jsx")));
   ok("no saved guide in the support topics", !/guide/i.test(read("src/utils/support.js").match(/\{ id: "account", label: "[^"]*" \}/)?.[0] || "guide"));
   ok("the footer links all read alike", /data-testid="deals-foot-about" style=\{\{ color: C\.muted, textDecoration: "none" \}\}/.test(read("src/components/DealsNearYou.jsx")));
+}
+
+// ── Batch 260: Fable's review of 17 Oct, and the sign-up profile out of sight ──
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const ps = read("api/partner-stats.js"), dny = read("src/components/DealsNearYou.jsx"), D = M.DST;
+  ok("a scan has its own small per-place budget", /export const PER_PLACE_SCAN = 4;/.test(ps) && /scan: \["s", PER_PLACE_SCAN\]/.test(ps));
+  ok("a scan opens the deal under the Redeemed sheet, so Back and Show directions step right", /pushSheet\(1\); setAtMap\(false\); setOpened\(live\.id \|\| live\.d\.name\);\s*pushSheet\(2\);/.test(dny) && /pushSheet\(1\); setAtMap\(false\); setOpened\(`soon:\$\{later\.id \|\| later\.d\.name\}`\);\s*pushSheet\(2\);/.test(dny));
+  ok("a late position for a deal no longer open starts nothing", /const mine = \+\+dirSeq\.current;/.test(dny) && /if \(mine !== dirSeq\.current\) return;/.test(dny) && /useEffect\(\(\) => \{ dirSeq\.current \+= 1; \}, \[opened\]\);/.test(dny));
+  ok("a price with 0,0 in it does not excuse beer", ["2 beers for 10,00 EUR", "Beer at 20.0% off"].every(t => D.ruleProblems({ text: t }).length === 1) && D.ruleProblems({ text: "Alcohol-free beer, 0.0%" }).length === 0);
+  ok("a Danish room is not rum", D.ruleProblems({ text: "A room for 10 people", da: "Et rum til 10 personer" }).length === 0);
+  ok("one Escape is one step back with Redeem open", /if \(level > 1\) return;\s*onClose\?\.\(\);/.test(read("src/components/DealDetail.jsx")));
+  ok("no Saved trips row anywhere while the guides are out of sight", /\{MENU_PAGES_SHOWN && AI_GUIDES_SHOWN && \(<>/.test(read("src/App.jsx")) && /\{MENU_PAGES_SHOWN && AI_GUIDES_SHOWN && <div style=\{\{ fontSize: 10\.5, color: C\.muted \}\}>\{savedGuides\.length\} saved/.test(read("src/App.jsx")));
+  ok("the scan count is described as approximate, not as proof", /not proof somebody stood at the\s*\/\/ till/.test(read("src/utils/scanCode.js")) && /not proof of a visit/.test(read("src/utils/partnerStats.js")));
+  ok("the sign-up form asks nothing that only shaped a guide", /\{show === "all" && AI_GUIDES_SHOWN && \(/.test(read("src/components/ProfileQuestions.jsx")) && /show === "all" && moreOpen && AI_GUIDES_SHOWN/.test(read("src/components/ProfileQuestions.jsx")));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
