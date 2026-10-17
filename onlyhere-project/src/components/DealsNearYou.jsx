@@ -760,7 +760,7 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
       <footer data-testid="deals-foot" style={{ marginTop: 56, padding: "26px 0 8px", borderTop: `1px solid ${C.gold}1A`, display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
         <GemlyxLogo size={15} color={C.light} />
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flexWrap: "wrap", gap: "6px 12px", fontSize: 12.5 }}>
-          <a href={ABOUT_PATH} data-testid="deals-foot-about" style={{ color: C.light, fontWeight: 600, textDecoration: "none" }}>{uiT("about.link", lang)}</a>
+          <a href={ABOUT_PATH} data-testid="deals-foot-about" style={{ color: C.muted, textDecoration: "none" }}>{uiT("about.link", lang)}</a>
           <span aria-hidden="true" style={{ color: C.muted, opacity: 0.5 }}>·</span>
           <a href="/terms.html" style={{ color: C.muted, textDecoration: "none" }}>Terms of Service</a>
           <span aria-hidden="true" style={{ color: C.muted, opacity: 0.5 }}>·</span>

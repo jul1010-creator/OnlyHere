@@ -47,6 +47,13 @@ export const staticMapUrl = ({ lat, lon, size, zoom = CLOSE_ZOOM }) =>
 
 // Set on the first refusal, for this visit.
 let staticRefused = false;
+// ── A REFUSED PICTURE SHOWS THE SIGN, NOT A LIVE MAP ──────────────
+// Security review, 17 Oct 2026: after one refused picture every tile became a
+// live Maps JavaScript map, which costs more per view, so a daily quota on
+// Static Maps alone moved the bill instead of capping it. Now a refused
+// picture shows the place's sign on a quiet ground, like a tile with no map.
+// The live map's code stays; true here brings it back.
+export const LIVE_FALLBACK = false;
 
 // `fill` makes it the picture of a deal tile (13 Oct 2026, Lidl Plus style):
 // as wide as the tile, at `ratio`, asking Google for a picture big enough.
@@ -74,7 +81,7 @@ export const DealCornerMap = ({ lat, lon, name = "", size = 104, onTap = null, s
 
   // The live map, only when the picture was refused.
   useEffect(() => {
-    if (!ok || !near || !live || made.current || !holder.current) return undefined;
+    if (!ok || !near || !live || !LIVE_FALLBACK || made.current || !holder.current) return undefined;
     let gone = false;
     (async () => {
       try {
@@ -95,6 +102,14 @@ export const DealCornerMap = ({ lat, lon, name = "", size = 104, onTap = null, s
   }, [ok, near, live, lat, lon, zoom]);
 
   if (!ok) return null;
+  if (live && !LIVE_FALLBACK) {
+    return (
+      <div data-testid="deal-corner-sign" aria-label={name} role={onTap ? "button" : undefined} onClick={onTap || undefined}
+        style={{ ...(fill ? { width: "100%", aspectRatio: ratio } : { width: size, height: size, flex: "0 0 auto" }), borderRadius: radius, background: `radial-gradient(circle at 50% 42%, ${C.border}, ${C.bg} 75%)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: fill ? 34 : 22, cursor: onTap ? "pointer" : "default" }}>
+        <span aria-hidden="true">{sign}</span>
+      </div>
+    );
+  }
   return (
     <div data-testid="deal-corner-map" role={onTap ? "button" : undefined} aria-label={name}
       onClick={onTap || undefined}
