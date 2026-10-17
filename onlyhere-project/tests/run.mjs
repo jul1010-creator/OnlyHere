@@ -83785,8 +83785,8 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("the sticker is drawn dark on white, with no markup handed in", /from "qrcode-generator"/.test(st) && !/dangerouslySetInnerHTML/.test(st) && /fill="#FFFFFF"/.test(st) && /<g fill="#111111">/.test(st));
   ok("Studio prints a sticker for each saved deal", /data-testid="deal-studio-sticker"/.test(read("src/components/DealStudio.jsx")) && /stickerPath\(f\.scan, f\.name\)/.test(read("src/components/DealStudio.jsx")));
   // One sentence since 17 Oct 2026: "Pick any of the venues with an active offer and scan the QR code at the counter".
-  ok("How it works over the list, closed for good once closed", /data-testid="deals-howto"/.test(dny) && /\{uiT\("how\.body", lang\)\}/.test(dny) && /localStorage\.setItem\(HOW_KEY, "1"\)/.test(dny));
-  ok("the words read in four languages, no dashes", ["redeem.scanHint", "redeem.scanHow", "redeem.done", "redeem.doneAt", "redeem.notNow", "redeem.unknown", "how.title", "how.body", "how.close"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))) && ["en", "da", "de", "lt"].every(l => M.t("redeem.doneAt", l).includes("{time}")));
+  ok("How it works over the list, closed for good once closed", /data-testid="deals-howto"/.test(dny) && /\["how\.one", "how\.two", "how\.three"\]/.test(dny) && /localStorage\.setItem\(HOW_KEY, "1"\)/.test(dny));
+  ok("the words read in four languages, no dashes", ["redeem.scanHint", "redeem.scanHow", "redeem.done", "redeem.doneAt", "redeem.notNow", "redeem.unknown", "how.title", "how.one", "how.two", "how.three", "how.close"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))) && ["en", "da", "de", "lt"].every(l => M.t("redeem.doneAt", l).includes("{time}")));
   ok("the library is pinned", JSON.parse(read("package.json")).dependencies["qrcode-generator"] === "1.4.4");
 }
 
@@ -83802,8 +83802,10 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("and the list says distances are from there", /\{fromCentre && <div data-testid="deals-from-centre"/.test(dny) && /const fromCentre = !here && !!centreStart;/.test(dny));
   ok("a phone outside Klaipėda or one that says no stays quiet", !/now\.notHere|explore\.needLocation|now\.noLocation/.test(dny.slice(dny.indexOf("const locate = "), dny.indexOf("const locate = ") + 700)));
   ok("Show directions without a place walks from the centre", /const fallback = \(\) => \{ if \(centreStart\) startWalk\(x, centreStart\); \};/.test(dny) && /const walkStart = going\?\._from \|\| start;/.test(dny));
-  is("the how-to is one sentence, his words", M.t("how.body", "en"), "Pick any of the venues with an active offer and scan the QR code at the counter.");
-  ok("and nothing tells a visitor to walk", !/walk/i.test(M.t("how.body", "en")) && ["explore.centre", "explore.fromCentre", "how.body"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
+  // Three steps again the same night: "pick a venue", "scan the QR code at
+  // the counter", "show to the cashier" (staff, which every venue has).
+  is("the how-to is his three steps", ["how.one", "how.two", "how.three"].map(k => M.t(k, "en")), ["Pick a venue", "Scan the QR code at the counter", "Show the screen to staff"]);
+  ok("and nothing tells a visitor to walk", !/walk/i.test(["how.one", "how.two", "how.three"].map(k => M.t(k, "en")).join(" ")) && ["explore.centre", "explore.fromCentre", "how.one", "how.two", "how.three"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
