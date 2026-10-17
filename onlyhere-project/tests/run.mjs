@@ -427,6 +427,7 @@ writeFileSync(entry, `
   export { placePinHtml, PLACE_PIN, turnSign, JOIN_ON_M, CARD_WALKING_MS, walkLegs, bearingOf, kmBetween as mapKm, glideAt, GLIDE_MS, FOCUS, SPARKS } from ${JSON.stringify(join(root, "src/components/GoogleWalkMap.jsx"))};
   export { guideTo, compassOf, distanceWords as walkDistanceWords, ARRIVE_M, COMPASS, FAR_M } from ${JSON.stringify(join(root, "src/components/WalkMode.jsx"))};
   export * as DNY from ${JSON.stringify(join(root, "src/components/DealsNearYou.jsx"))};
+  export * as SCAN from ${JSON.stringify(join(root, "src/utils/scanCode.js"))};
   export * as DCARD from ${JSON.stringify(join(root, "src/components/DealCard.jsx"))};
   export * as DST from ${JSON.stringify(join(root, "src/utils/dealStudio.js"))};
   export * as DCAT from ${JSON.stringify(join(root, "src/utils/dealCategories.js"))};
@@ -82748,7 +82749,8 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   is("a reach counts the place and its hour", S.eventKeys({ e: "reach", id: "food:1" }, 9), ["st:r:food:1", "st:rh:food:1:09"]);
   ok("and nothing else is counted", S.eventKeys({ e: "reach", id: "food:1" }, 24).length === 0 && S.eventKeys({ e: "other", id: "food:1" }, 3).length === 0 && S.eventKeys({ e: "walk", ids: [] }, 3).length === 0);
   ok("a walk carries at most twelve places", S.eventKeys({ e: "walk", ids: Array.from({ length: 30 }, (_, i) => `food:${i}`) }, 1).length === 12);
-  ok("the page reads four totals and 24 hours", S.readKeysFor("food:1").length === 28 && S.readKeysFor("food:1").includes("st:rh:food:1:23"));
+  // Five since 17 Oct 2026: "s", a scan of the Gemlyx code at the counter.
+  ok("the page reads five totals and 24 hours", S.readKeysFor("food:1").length === 29 && S.readKeysFor("food:1").includes("st:rh:food:1:23"));
   const st = S.statsFrom([
     { day: "2026-10-10", key: "st:w:food:1", n: 4 }, { day: "2026-10-11", key: "st:w:food:1", n: 2 },
     { day: "2026-10-11", key: "st:d:food:1", n: 1 }, { day: "2026-10-11", key: "st:r:food:1", n: 3 },
@@ -83755,6 +83757,34 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("and breaking one means immediate suspension, said in red and in the terms", /<span class="n">14\.8<\/span> A business which publishes, or seeks to publish, a Special deal in breach of clause 14\.6 or clause 14\.7 shall be suspended from offering Special deals with immediate effect/.test(terms)
     && D.DEAL_RULES_BREACH === "Breaking either rule means immediate suspension." && /data-testid="deal-studio-rules-breach" style=\{\{[^}]*color: "#E5484D"/.test(ds) && /data-testid="about-rules-breach" style=\{\{[^}]*color: "#E5484D"/.test(ab));
   ok("the rule words read in four languages", ["about.ruleAlcohol", "about.ruleAdult", "about.ruleBreach", "about.ruleAllowed"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
+}
+
+// ── Batch 257: the Gemlyx code at the counter, and How it works ──
+// Oliver, 17 Oct 2026: "So we obviously need a 'how to use'.. I guess both the
+// business would scan the user's QR code?" Turned round, he said "Sure": the
+// visitor scans a Gemlyx sticker by the till.
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const Q = M.SCAN, S = M.PSTATS, D = M.DST;
+  const codes = Array.from({ length: 200 }, () => Q.newScanCode());
+  ok("a code is eight letters and digits a sticker cannot confuse", codes.every(c => /^[a-hj-km-np-z2-9]{8}$/.test(c)) && new Set(codes).size > 190);
+  is("only a clean code is read", [Q.cleanScanCode(" AbC23xyz "), Q.cleanScanCode("x"), Q.cleanScanCode("abc/../x"), Q.cleanScanCode(null)], ["abc23xyz", "", "", ""]);
+  ok("the sticker holds a plain web address, so an app can open it later", Q.scanUrl("abc23xyz") === "https://gemlyxtravel.com/s/abc23xyz" && Q.scanLanding("abc23xyz") === "/lithuania?scan=abc23xyz" && Q.scanFromSearch("?scan=ABC23XYZ&x=1") === "abc23xyz");
+  const saved = D.payloadFromDeal({ ...D.emptyDeal(), name: "x", lat: 55.7, lon: 21.13, text: "x", ongoing: true });
+  ok("a deal gets its code on its first save, and keeps it", Q.cleanScanCode(saved.__scan) === saved.__scan && D.payloadFromDeal({ ...D.emptyDeal(), name: "x", lat: 55.7, lon: 21.13, text: "x", ongoing: true }, { __scan: "keepthis" }).__scan === "keepthis" && D.dealFromRow({ payload: { __scan: "keepthis" } }).scan === "keepthis");
+  ok("the made-up partners carry demo codes", Object.values(M.KEX.examplePromotionPools()).flat().every(it => /^demo[a-z0-9]+$/.test(it.__scan) && Q.cleanScanCode(it.__scan) === it.__scan));
+  is("a scan is counted as its own kind", S.eventKeys({ e: "scan", id: "food:1" }, 3), ["st:s:food:1"]);
+  ok("and shown on the partner's page", S.statsFrom([{ day: "2026-10-17", key: "st:s:food:1", n: 3 }], "food:1").totals.scanned === 3 && /totals\.scanned, T\.scanned/.test(read("src/pages/KlaipedaPartner.jsx")));
+  const dny = read("src/components/DealsNearYou.jsx"), rs = read("src/components/RedeemSheet.jsx"), app = read("src/App.jsx"), st = read("src/pages/ScanSticker.jsx");
+  ok("a scan opens the place's offer as Redeemed, counted once a day per phone", /setRedeem\(\{ x: live, when: when\?\.text \|\| "", scanned: true, at \}\);/.test(dny) && /if \(live\.id && firstScanToday\(live\.id, day\)\) dealScanned\(live\.id, country\);/.test(dny) && /scanned=\{!!redeem\.scanned\}/.test(dny));
+  ok("an offer not on now says so, and an unknown code says so", /note: uiT\("redeem\.notNow", lang\)/.test(dny) && /setNote\(uiT\("redeem\.unknown", lang\)\)/.test(dny));
+  ok("the Redeemed screen moves, so a picture of it cannot pass", /data-testid="redeem-scanned"/.test(rs) && /className="gx-redeem-sweep"/.test(rs) && /gx-redeem-turn/.test(rs) && /@keyframes gxRedeemSweep/.test(rs));
+  ok("the routes: the sticker's address and the sticker page", /<Route path=\{`\$\{SCAN_PATH\}\/:code`\} element=\{<ScanRedirect \/>\} \/>/.test(app) && /<Route path=\{`\$\{STICKER_PATH\}\/:code`\} element=\{<StickerPage \/>\} \/>/.test(app));
+  ok("the sticker is drawn dark on white, with no markup handed in", /from "qrcode-generator"/.test(st) && !/dangerouslySetInnerHTML/.test(st) && /fill="#FFFFFF"/.test(st) && /<g fill="#111111">/.test(st));
+  ok("Studio prints a sticker for each saved deal", /data-testid="deal-studio-sticker"/.test(read("src/components/DealStudio.jsx")) && /stickerPath\(f\.scan, f\.name\)/.test(read("src/components/DealStudio.jsx")));
+  ok("How it works: three steps over the list, closed for good once closed", /data-testid="deals-howto"/.test(dny) && /\["how\.one", "how\.two", "how\.three"\]/.test(dny) && /localStorage\.setItem\(HOW_KEY, "1"\)/.test(dny));
+  ok("the words read in four languages, no dashes", ["redeem.scanHint", "redeem.scanHow", "redeem.done", "redeem.doneAt", "redeem.notNow", "redeem.unknown", "how.title", "how.one", "how.two", "how.three", "how.close"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))) && ["en", "da", "de", "lt"].every(l => M.t("redeem.doneAt", l).includes("{time}")));
+  ok("the library is pinned", JSON.parse(read("package.json")).dependencies["qrcode-generator"] === "1.4.4");
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
