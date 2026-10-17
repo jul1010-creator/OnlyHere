@@ -240,6 +240,9 @@ export const UI_STRINGS = {
   "menu.problem":  { en: "Feedback", da: "Feedback", de: "Feedback", lt: "Atsiliepimai" },
   "menu.support":  { en: "Support",       da: "Hjælp",               de: "Hilfe", lt: "Pagalba" },
   "menu.account":  { en: "Account",       da: "Konto",               de: "Konto", lt: "Paskyra" },
+  // The account page's title (Oliver, 17 Oct 2026: "'Info about me' should be
+  // 'my account'").
+  "me.title":      { en: "My account", da: "Min konto", de: "Mein Konto", lt: "Mano paskyra" },
   // ── AND THE WAY BACK OUT ──────────────────────────────────────────
   //
   // Oliver, 14 Sep 2026: "I want login here." Then, a minute later: "I mean log
