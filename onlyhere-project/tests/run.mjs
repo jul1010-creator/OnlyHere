@@ -18292,7 +18292,9 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // The label lived in the account modal, and the modal is gone: "Account" now
   // goes straight to the page rather than to a panel holding a button to it. So
   // the name is the page's own heading, and the old one is gone from both files.
-  ok("the page is called Info about me", />\s*Info about me\s*</.test(page));
+  // And renamed again on 17 Oct 2026: "'Info about me' should be 'my
+  // account'". The title is read from me.title in four languages.
+  ok("the page is called My account", /const title = uiT\("me\.title", lang\);/.test(page) && M.UI_STRINGS["me.title"].en === "My account" && !/>\s*Info about me\s*</.test(page));
   ok("and the old label is gone", !/Edit what Gemlyx knows about you/.test(stripComments(app + page)));
 
   // A PAGE, WHICH MEANS AN ADDRESS. That is the difference he asked for between
@@ -18611,7 +18613,8 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // lives with Sign out, because the two are the same question asked with
   // different force.
   ok("deletion still names what it takes, immediately above the button",
-     /<H>Delete your account<\/H>[\s\S]{0,2500}Delete my account/.test(page));
+     // A titled panel of its own since the redesign of 17 Oct 2026.
+     /<MeGroup title="Delete account" danger pad testid="me-delete">[\s\S]{0,2500}Removes your saved places[\s\S]{0,1500}This cannot be undone\.[\s\S]{0,600}Delete my account/.test(page));
   ok("and it sits with signing out rather than under About me",
      page.indexOf("Sign out") < page.indexOf("Delete my account"));
 
@@ -18621,7 +18624,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // effect without the new address ever being verified and one typo would lock
   // somebody out permanently. Shown as a fact with the reason rather than as a
   // greyed box, because a disabled control invites a hunt for how to enable it.
-  ok("the email is stated, not offered for editing", /Contact hello@gemlyxtravel\.com to change your email address/.test(page));
+  ok("the email is stated, not offered for editing", /note="To change your email address, write to hello@gemlyxtravel\.com\."/.test(page) && /<MeRow first label="Email" value=\{session\?\.email \|\| "Signed in"\} \/>/.test(page));
   ok("and there is no email field on the page", !/type="email"/.test(page));
   // ── AND HE ASKED FOR THE PHONE NUMBER BACK ──────────────────────
   // The earlier version said none was collected, on the argument that nothing
@@ -18806,11 +18809,11 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // gaining a fourth field does not break this again.
   ok("the terms are reachable", /"Terms of Service", "\/terms\.html"/.test(page));
   ok("and the privacy policy", /"Privacy Policy", "\/privacy\.html"/.test(page));
-  ok("and how the site is paid for", /"How we are paid", AFFILIATES_PATH/.test(page));
-  // The two documents live outside the app and open in their own tab; the third
-  // is a route in it and must not.
-  ok("the two documents open away and the app page does not",
-     /\["How we are paid", AFFILIATES_PATH, false\][\s\S]{0,200}"\/terms\.html", true[\s\S]{0,80}"\/privacy\.html", true/.test(page));
+  // "How we are paid" left this card on 17 Oct 2026 (Oliver: "Remove 'How
+  // we're paid' from the account"). It is still in the site footer.
+  ok("and how the site is paid for is not on the account page", !/\["How we are paid"|AFFILIATES_PATH/.test(page));
+  ok("the two documents open away",
+     /\[\["Terms of Service", "\/terms\.html", true\], \["Privacy Policy", "\/privacy\.html", true\]\]/.test(page));
   ok("from the Legal section itself", /const legalSection[\s\S]{0,1500}terms\.html/.test(page));
   // Reproducing either would be a second copy to keep in step with the first.
   //
@@ -28436,7 +28439,9 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     const pageA = readFileSync(join(root, "src/components/AffiliatesPage.jsx"), "utf8");
     ok("the page has a route", /<Route path=\{AFFILIATES_PATH\} element=\{<AffiliatesPage \/>\} \/>/.test(appA));
     ok("linked from the footer", /href=\{AFFILIATES_PATH\}/.test(appA));
-    ok("and from the menu's Legal card", /AFFILIATES_PATH/.test(meA));
+    // Not from the account page's Legal card since 17 Oct 2026, by Oliver's
+    // ask. The footer link above is the way in.
+    ok("and no longer from the account page's Legal card", !/AFFILIATES_PATH/.test(meA));
     // The address lives with the roster rather than in App.jsx, or App and
     // AboutMePage import each other in a circle.
     ok("the path is not exported from App", !/export const AFFILIATES_PATH/.test(appA));
@@ -64670,9 +64675,10 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("how we are paid sits with the terms and the privacy policy, in the footer",
        /href=\{AFFILIATES_PATH\}[^<]*>How we are paid<\/a>/.test(appMenu)
        && appMenu.indexOf('href="/terms.html"') < appMenu.indexOf("href={AFFILIATES_PATH}"));
-    ok("and on the account page's legal card with the same two",
-       /\["How we are paid", AFFILIATES_PATH, false\][\s\S]{0,200}"\/terms\.html", true[\s\S]{0,80}"\/privacy\.html", true/
-         .test(readFileSync(join(root, "src/components/AboutMePage.jsx"), "utf8")));
+    // Off the account page since 17 Oct 2026 (Oliver: "Remove 'How we're
+    // paid' from the account"). The footer link above is the way in.
+    ok("and no longer on the account page's legal card",
+       !/\["How we are paid"|AFFILIATES_PATH/.test(readFileSync(join(root, "src/components/AboutMePage.jsx"), "utf8")));
     // AND THE KEY WENT WITH THE ROW. An entry nothing renders is a translation
     // nobody can check and three columns to keep in step for no reader.
     ok("and the key the row used is gone rather than left unused",
@@ -83873,6 +83879,26 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("no Saved trips row anywhere while the guides are out of sight", /\{MENU_PAGES_SHOWN && AI_GUIDES_SHOWN && \(<>/.test(read("src/App.jsx")) && /\{MENU_PAGES_SHOWN && AI_GUIDES_SHOWN && <div style=\{\{ fontSize: 10\.5, color: C\.muted \}\}>\{savedGuides\.length\} saved/.test(read("src/App.jsx")));
   ok("the scan count is described as approximate, not as proof", /not proof somebody stood at the\s*\/\/ till/.test(read("src/utils/scanCode.js")) && /not proof of a visit/.test(read("src/utils/partnerStats.js")));
   ok("the sign-up form asks nothing that only shaped a guide", /\{show === "all" && AI_GUIDES_SHOWN && \(/.test(read("src/components/ProfileQuestions.jsx")) && /show === "all" && moreOpen && AI_GUIDES_SHOWN/.test(read("src/components/ProfileQuestions.jsx")));
+}
+
+// ── Batch 264: My account, redesigned with Fable, 17 Oct 2026 ──
+// Oliver: "redesign the whole thing. 'Info about me' should be 'my account'.
+// Take hold on Fable and you together scout the internet for something that
+// can inspire. The logo also needs to be present."
+{
+  const a = readFileSync(join(root, "src/components/AboutMePage.jsx"), "utf8");
+  ok("the Gemlyx logo is on the page", /import \{ GemlyxLogo \} from "\.\/GemlyxLogo";/.test(a) && /data-testid="me-logo" role="img" aria-label="Gemlyx"[\s\S]{0,120}<GemlyxLogo size=\{wide \? 26 : 22\} color=\{C\.text\} \/>/.test(a));
+  ok("My account in four languages", ["en", "da", "de", "lt"].every(l => typeof M.UI_STRINGS["me.title"]?.[l] === "string" && M.UI_STRINGS["me.title"][l].length > 0) && M.UI_STRINGS["me.title"].da === "Min konto");
+  ok("whose account it is: initials, name, email", /data-testid="me-identity"/.test(a) && /\{meInitials\(shownName, session\?\.email\)\}/.test(a));
+  const src = a.match(/export const meInitials = \(name, email\) => \{[\s\S]*?\n\};/)?.[0] || "";
+  let meInitials = null; try { meInitials = new Function(`${src.replace("export const meInitials", "const meInitials")}; return meInitials;`)(); } catch { meInitials = null; }
+  ok("initials from the name, else the email's first letter", !!meInitials && meInitials("Oliver Verhein Hoffmann", "x@y.z") === "OH" && meInitials("oliver", "") === "O" && meInitials("", "jane@x.dk") === "J" && meInitials("", "") === "G");
+  ok("the panels and rows are made once, so a field keeps its focus while typing", /^const MeCard = /m.test(a) && /^const MeGroup = /m.test(a) && /^const MeRow = /m.test(a) && /const Card = MeCard;/.test(a) && !/const Card = \(\{ children \}\) =>/.test(a));
+  ok("the rail marks the open section with a gold edge and says so to a reader", /aria-current=\{on \? "page" : undefined\}/.test(a) && /width: 2, borderRadius: 2, background: on \? C\.gold : "transparent"/.test(a));
+  ok("sign out is the quiet last row of signing in, and of the phone list", /<MeRow label="Sign out" strong=\{false\} onClick=\{onSignOut\} testid="me-signout-row" \/>\s*<\/MeGroup>/.test(a) && /<MeRow first label="Sign out" strong=\{false\} onClick=\{onSignOut\} \/>/.test(a));
+  ok("deleting comes last, on a red edged panel, never in gold", a.indexOf('testid="me-signin"') < a.indexOf('testid="me-delete"') && /border: `1px solid \$\{danger \? "#E5737347"/.test(a) && /data-testid="me-delete-button"\s*style=\{\{ background: "none", border: "1px solid #E5737399", color: "#F0A49C"/.test(a));
+  ok("no promise on the page the privacy policy has to keep", !/No tracking, no marketing email, nothing sold/.test(a));
+  ok("legal rows open their documents in their own tab", /<MeRow key=\{href\} first=\{i === 0\} label=\{label\} href=\{href\} away=\{away\} trail="away" \/>/.test(a));
 }
 
 // ── Batch 263: nothing private is tracked by git ──
