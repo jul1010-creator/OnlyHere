@@ -82967,9 +82967,10 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   is("Closest, from you", D.nearbyDeals(deals, me, { now: at, order: "closest" }).map(x => x.d.name), ["Žuvinė", "Bokštas", "Arbatinė"]);
   ok("and with no position nothing has minutes", D.nearbyDeals(deals, null, { now: at, order: "az" }).every(x => x.minutes === null));
   const dny = read("src/components/DealsNearYou.jsx");
-  ok("no ship and no centre: distance only from the visitor", !/NOW_STARTS|starts\[|defaultFrom/.test(dny) && /const start = here \? \{ id: "here"/.test(dny));
+  // Since 17 Oct 2026 (batch 258): from the visitor, else from the centre, never the ship.
+  ok("never the ship: from the visitor, else the centre", /const start = here \? hereAt\(here\) : centreStart;/.test(dny) && !/\.terminal\b/.test(dny));
   ok("Closest asks for the position, and a phone that said yes opens on it", /if \(k === "closest" && !here\) \{ setSort\("closest"\); locate\(\); return; \}/.test(dny) && /st\?\.state === "granted"\) locate\(\(\) => setSort\("closest"\)\)/.test(dny));
-  ok("Walk there asks for the position when it has none", /locate\(\(at\) => setGoing\(\{ \.\.\.x, minutes: walkMinutes\(at, x\.at\), _from: at \}\)\)/.test(dny));
+  ok("Walk there asks for the position when it has none", /navigator\.geolocation\.getCurrentPosition\(/.test(dny.slice(dny.indexOf("const go = (x) =>"), dny.indexOf("const openRedeem"))) && /startWalk\(x, hereAt\(at\)\);/.test(dny));
   // The filters read what the offer says before the kind of place.
   ok("a beer bar filed with food is Entertainment", D.dealKind({ _src: "food", name: "Inkaras", category: "Beer bar", __offer: { text: "Three beers" } }) === "entertainment");
   ok("a workshop or a bike hire is an Activity", D.dealKind({ _src: "food", name: "Lašas", __offer: { text: "Polish amber yourself" } }) === "activities" && D.dealKind({ _src: "shop", name: "Vėjas", __offer: { text: "Two hours bike hire, €8" } }) === "activities");
@@ -83009,7 +83010,7 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   // from the small map in a photo tile's corner (startOnMap).
   // Since 16 Oct 2026 the deal's directions go through goFromDeal, which keeps
   // the deal open while the phone is found (batch 252).
-  ok("Show directions under it walks there from where the phone is", /onDirections=\{\(\) => goFromDeal\(x\)\}/.test(dny) && /onDirections=\{onDirections\}/.test(read("src/components/DealDetail.jsx")) && /data-testid="place-view-directions"/.test(pv) && /locate\(\(at\) => setGoing\(/.test(dny));
+  ok("Show directions under it walks there from where the phone is", /onDirections=\{\(\) => goFromDeal\(x\)\}/.test(dny) && /onDirections=\{onDirections\}/.test(read("src/components/DealDetail.jsx")) && /data-testid="place-view-directions"/.test(pv) && /leave\(hereAt\(at\)\);/.test(dny));
   ok("the words read in all four languages", ["explore.directions", "explore.closeMap", "explore.mapFailed"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
 }
 
@@ -83676,9 +83677,10 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   const dny = read("src/components/DealsNearYou.jsx"), det = read("src/components/DealDetail.jsx");
   const body = dny.slice(dny.indexOf("const goFromDeal = (x) => {"), dny.indexOf("const walkStart = going"));
   ok("a tap asks the browser for the phone's place", /navigator\.geolocation\.getCurrentPosition\(/.test(body) && /askForCompass\(\);\s*setFinding\(true\);/.test(body));
-  ok("the deal stays open until the walk can start", body.indexOf("dropSheets(); setOpened(null);\n        setGoing(") > body.indexOf("if (!inNowArea(country, at)) { setDirNote(uiT(\"dir.notHere\", lang)); return; }") && body.indexOf("if (!inNowArea") > 0);
-  ok("a phone already found walks straight away", /if \(start\) \{ dropSheets\(\); setOpened\(null\); go\(x\); return; \}/.test(body));
-  ok("a refusal, a miss and a browser without location each say so", /err\?\.code === 1 \? fill\(uiT\("dir\.blocked", lang\), \{ btn: uiT\("explore\.directions", lang\) \}\) : uiT\("dir\.noFix", lang\)/.test(body) && (body.match(/uiT\("dir\.cannot", lang\)/g) || []).length === 2);
+  // 17 Oct 2026: outside Klaipėda, a refusal or a miss walks from the centre (batch 258).
+  ok("the deal stays open until the walk can start", /const leave = \(from\) => \{ setFinding\(false\); dropSheets\(\); setOpened\(null\); startWalk\(x, from\); \};/.test(body) && /if \(!inNowArea\(country, at\)\) \{ fallback\(\); return; \}/.test(body));
+  ok("a phone already found walks straight away", /if \(here\) \{ leave\(hereAt\(here\)\); return; \}/.test(body));
+  ok("a refusal or a miss walks from the centre", /\}, fallback, \{ enableHighAccuracy: true/.test(body) && /if \(centreStart\) leave\(centreStart\); else/.test(body));
   ok("under the buttons, read aloud, brought into sight", /\{dirNote && <div ref=\{dirBox\} role="status" data-testid="deal-detail-dir-note"/.test(det) && /dirBox\.current\.scrollIntoView\(\{ block: "nearest"/.test(det));
   ok("the button says it is looking and takes no second tap", /onClick=\{finding \? undefined : onDirections\}/.test(det) && /labels\.finding \|\| "Finding you"/.test(det) && /finding: uiT\("dir\.finding", lang\)/.test(dny));
   ok("a new deal starts with no old answer", /useEffect\(\(\) => \{ setDirNote\(""\); setFinding\(false\); \}, \[opened\]\);/.test(dny));
@@ -83782,9 +83784,26 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("the routes: the sticker's address and the sticker page", /<Route path=\{`\$\{SCAN_PATH\}\/:code`\} element=\{<ScanRedirect \/>\} \/>/.test(app) && /<Route path=\{`\$\{STICKER_PATH\}\/:code`\} element=\{<StickerPage \/>\} \/>/.test(app));
   ok("the sticker is drawn dark on white, with no markup handed in", /from "qrcode-generator"/.test(st) && !/dangerouslySetInnerHTML/.test(st) && /fill="#FFFFFF"/.test(st) && /<g fill="#111111">/.test(st));
   ok("Studio prints a sticker for each saved deal", /data-testid="deal-studio-sticker"/.test(read("src/components/DealStudio.jsx")) && /stickerPath\(f\.scan, f\.name\)/.test(read("src/components/DealStudio.jsx")));
-  ok("How it works: three steps over the list, closed for good once closed", /data-testid="deals-howto"/.test(dny) && /\["how\.one", "how\.two", "how\.three"\]/.test(dny) && /localStorage\.setItem\(HOW_KEY, "1"\)/.test(dny));
-  ok("the words read in four languages, no dashes", ["redeem.scanHint", "redeem.scanHow", "redeem.done", "redeem.doneAt", "redeem.notNow", "redeem.unknown", "how.title", "how.one", "how.two", "how.three", "how.close"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))) && ["en", "da", "de", "lt"].every(l => M.t("redeem.doneAt", l).includes("{time}")));
+  // One sentence since 17 Oct 2026: "Pick any of the venues with an active offer and scan the QR code at the counter".
+  ok("How it works over the list, closed for good once closed", /data-testid="deals-howto"/.test(dny) && /\{uiT\("how\.body", lang\)\}/.test(dny) && /localStorage\.setItem\(HOW_KEY, "1"\)/.test(dny));
+  ok("the words read in four languages, no dashes", ["redeem.scanHint", "redeem.scanHow", "redeem.done", "redeem.doneAt", "redeem.notNow", "redeem.unknown", "how.title", "how.body", "how.close"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))) && ["en", "da", "de", "lt"].every(l => M.t("redeem.doneAt", l).includes("{time}")));
   ok("the library is pinned", JSON.parse(read("package.json")).dependencies["qrcode-generator"] === "1.4.4");
+}
+
+// ── Batch 258: from the centre when the visitor's place is not known ──
+// Oliver, 17 Oct 2026: "It should be from center if the user's own location is
+// not specified. Also, we need it written more professionally. 'Pick any of
+// the venues with an active offer and scan the QR code at the counter' I don't
+// you need to tell people they should walk there.."
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const dny = read("src/components/DealsNearYou.jsx");
+  ok("the centre is the Tourist Information Centre", /const centre = NOW_STARTS\[String\(country \|\| ""\)\.toUpperCase\(\)\]\?\.centre \|\| null;/.test(dny) && M.NP.NOW_STARTS.LT.centre.ship === false);
+  ok("and the list says distances are from there", /\{fromCentre && <div data-testid="deals-from-centre"/.test(dny) && /const fromCentre = !here && !!centreStart;/.test(dny));
+  ok("a phone outside Klaipėda or one that says no stays quiet", !/now\.notHere|explore\.needLocation|now\.noLocation/.test(dny.slice(dny.indexOf("const locate = "), dny.indexOf("const locate = ") + 700)));
+  ok("Show directions without a place walks from the centre", /const fallback = \(\) => \{ if \(centreStart\) startWalk\(x, centreStart\); \};/.test(dny) && /const walkStart = going\?\._from \|\| start;/.test(dny));
+  is("the how-to is one sentence, his words", M.t("how.body", "en"), "Pick any of the venues with an active offer and scan the QR code at the counter.");
+  ok("and nothing tells a visitor to walk", !/walk/i.test(M.t("how.body", "en")) && ["explore.centre", "explore.fromCentre", "how.body"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
