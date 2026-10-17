@@ -75,6 +75,7 @@ import { SupportPage } from "./components/SupportPage";
 import { AboutPage, ABOUT_PATH } from "./components/AboutPage";
 import { ScanRedirect, StickerPage } from "./pages/ScanSticker";
 import { SCAN_PATH, STICKER_PATH } from "./utils/scanCode";
+import { AI_GUIDES_SHOWN } from "./utils/features";
 // ── THE PAGE THAT SAYS HOW THIS IS PAID FOR ─────────────────────────
 // Oliver, 9 Sep 2026: "make an 'affiliate' in the burgermenu where we list all
 // our affiliates and why we use them." A route rather than a file in public/,
@@ -34307,7 +34308,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     <div style={{ fontSize: 13, fontWeight: 700, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {accountLabel()}
                     </div>
-                    {MENU_PAGES_SHOWN && <div style={{ fontSize: 10.5, color: C.muted }}>{savedGuides.length} saved · {savedPlaces.length} kept</div>}
+                    {MENU_PAGES_SHOWN && AI_GUIDES_SHOWN && <div style={{ fontSize: 10.5, color: C.muted }}>{savedGuides.length} saved · {savedPlaces.length} kept</div>}
                   </div>
                 </div>
                 {/* ── SAVED TRIPS, WITH THE COUNT ON IT ──────────────
@@ -34324,7 +34325,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     which also means the address bar names where you are and the
                     back button works. readTripChanges still runs here, because
                     the count on this row is the thing being marked as read. */}
-                {MENU_PAGES_SHOWN && (<>
+                {MENU_PAGES_SHOWN && AI_GUIDES_SHOWN && (<>
                 <button className="gx-menu-row" onClick={() => { setShowMenu(false); readTripChanges(); navigate(`${ABOUT_ME_PATH}/trips`); }}
                   style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", background: "none", border: "none", color: C.text, padding: "10px 12px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", textAlign: "left", borderRadius: 10 }}>
                   <Ico name="book" size={15} color={C.gold} />
