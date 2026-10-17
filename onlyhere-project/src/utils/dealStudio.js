@@ -17,6 +17,7 @@
 // which is how one is got ready before that moment.
 //
 // This file is the rules, with no React, so the tests read them directly.
+import { cleanScanCode, newScanCode } from "./scanCode.js";
 import { cleanOffer, offerProblems, OFFER_TEXT_MAX } from "./offer";
 import { cleanClock, OFFER_WEEK } from "./offerClock";
 import { bookingProblem, cleanBooking } from "./dealExtras";
@@ -49,7 +50,7 @@ export const emptyDeal = () => ({
   name: "", street: "", lat: "", lon: "", sign: "",
   text: "", days: [], from: "", to: "", until: "", ongoing: false,
   dealKind: "", booking: "", pin: "", photo: "", category: "restaurants",
-  lt: "", da: "", de: "", trFor: "",
+  lt: "", da: "", de: "", trFor: "", scan: "",
 });
 
 // The form, from a row of gemlyx_content.
@@ -64,6 +65,7 @@ export const dealFromRow = (row) => {
     text: String(o.text || ""), days: Array.isArray(o.days) ? o.days : [], from: String(o.from || ""), to: String(o.to || ""), until: String(o.until || ""), ongoing: o.ongoing === true,
     dealKind: DEAL_FILTERS.includes(p.__dealKind) ? p.__dealKind : "", booking: String(p.__booking || ""), pin: pinColour(p.__pin), photo: String(p.photo || ""), category: dealCategory({ ...p, type: row?.type }),
     lt: tr?.lt || "", da: tr?.da || "", de: tr?.de || "", trFor: tr ? tr.src : "",
+    scan: cleanScanCode(p.__scan),
   };
 };
 
@@ -180,6 +182,9 @@ export const payloadFromDeal = (f, base = {}) => {
   // The tile's picture (13 Oct 2026). Empty means the map stands in for it.
   const photo = String(f.photo || "").trim();
   if (photo) p.photo = photo; else delete p.photo;
+  // The code on the sticker by the till (17 Oct 2026, utils/scanCode.js). Made
+  // on the first save and never changed after, so a printed sticker keeps working.
+  p.__scan = cleanScanCode(f.scan) || cleanScanCode(base?.__scan) || newScanCode();
   return p;
 };
 
