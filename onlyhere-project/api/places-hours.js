@@ -33,7 +33,10 @@ export default async function handler(req, res) {
       return res.status(403).json({ error: "This account cannot run Studio research." });
     }
   }
-  const { name, lat, lon } = req.query;
+  // Checked before the paid count is taken (security review, 13 Oct 2026).
+  const name = String(req.query.name || "").trim().slice(0, 200);
+  const la = parseFloat(req.query.lat), lo = parseFloat(req.query.lon);
+  const hasPoint = Number.isFinite(la) && Number.isFinite(lo) && Math.abs(la) <= 90 && Math.abs(lo) <= 180;
   if (!name) {
     return res.status(400).json({ error: "name required" });
   }
@@ -52,8 +55,8 @@ export default async function handler(req, res) {
     // Location bias narrows the search toward the right place when a name is
     // shared across towns (e.g. a chain) — optional, only added when we already
     // have real coordinates for this entry from the geocoding step.
-    if (lat && lon) {
-      body.locationBias = { circle: { center: { latitude: parseFloat(lat), longitude: parseFloat(lon) }, radius: 20000 } };
+    if (hasPoint) {
+      body.locationBias = { circle: { center: { latitude: la, longitude: lo }, radius: 20000 } };
     }
     const r = await fetch("https://places.googleapis.com/v1/places:searchText", {
       method: "POST",

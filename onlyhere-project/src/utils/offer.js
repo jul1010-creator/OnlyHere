@@ -40,7 +40,7 @@ import { dayStart, dayEnd } from "./calendarDay";
 import { stripDashes } from "./helpers";
 import { PAID_PLANS_LIVE } from "../config";
 import { t as uiT } from "./uiLanguage";
-import { OFFER_WEEK, cleanDays, cleanClock, minutesOf, placeClock, windowOf, timingAt } from "./offerClock";
+import { OFFER_WEEK, cleanDays, cleanClock, minutesOf, placeClock, placeDayKey, windowOf, timingAt } from "./offerClock";
 export { OFFER_WEEK, cleanClock, placeClock };
 import { activeCountry, DEFAULT_COUNTRY } from "./countries";
 
@@ -84,15 +84,52 @@ export const hasPaidPlan = (profile) => {
 export const cleanOffer = (raw) => {
   if (!raw || typeof raw !== "object") return null;
   const text = clean(raw.text).slice(0, OFFER_TEXT_MAX);
-  const until = clean(raw.until);
-  if (!text && !until) return null;
+  // ONGOING, 13 Oct 2026. Oliver: "you know the lidl+ app? There is friday
+  // candy EVERY friday. You should be able to have the offer being permanent,
+  // but just certain days and hours." So an offer may run with no last day,
+  // but only when it says so, `ongoing: true`, set by a control in the Studio.
+  // An offer that merely lacks a date is still refused and still invisible,
+  // because that one is a date somebody forgot, not a decision.
+  const ongoing = raw.ongoing === true;
+  const until = ongoing ? "" : clean(raw.until);
+  if (!text && !until && !ongoing) return null;
   const days = cleanDays(raw.days);
   const from = clean(raw.from), to = clean(raw.to);
+  const tr = cleanOfferTr(raw.tr, text);
   return {
     text, until,
+    ...(ongoing ? { ongoing: true } : {}),
     ...(days.length ? { days } : {}),
     ...(from || to ? { from: cleanClock(from) || from, to: cleanClock(to) || to } : {}),
+    ...(tr ? { tr } : {}),
   };
+};
+
+// ── THE OFFER IN THE READER'S LANGUAGE ──────────────────────────────
+//
+// Oliver, 14 Oct 2026: "Also look into languages.. some things are stuck in
+// English." The offer was the biggest of them: a Lithuanian reader saw "Free
+// refill of filter coffee" on a Klaipėda bakery's tile.
+//
+// So an offer may carry its own translations, `tr`, written in the Studio:
+// { src: the text they were made from, lt, da, de }. They are kept only while
+// `src` is still the offer's text. When the owner changes the offer, the old
+// translations stop being shown on their own, because a translation of last
+// week's offer is a promise the counter no longer makes. The English text is
+// then shown until the new ones are written.
+export const OFFER_LANGS = ["lt", "da", "de"];
+const cleanOfferTr = (raw, text) => {
+  if (!raw || typeof raw !== "object" || !text) return null;
+  if (clean(raw.src).slice(0, OFFER_TEXT_MAX) !== text) return null;
+  const out = { src: text };
+  OFFER_LANGS.forEach(l => { const t = clean(raw[l]).slice(0, OFFER_TEXT_MAX); if (t) out[l] = t; });
+  return Object.keys(out).length > 1 ? out : null;
+};
+// The offer's text as `lang` reads it, or the text as written.
+export const offerTextIn = (offer, lang = "en") => {
+  const o = cleanOffer(offer);
+  if (!o) return "";
+  return (lang !== "en" && o.tr?.[lang]) || o.text;
 };
 
 // ── OFFER HOURS ─────────────────────────────────────────────────────
@@ -121,7 +158,7 @@ export const offerWindow = (offer) => windowOf(cleanOffer(offer));
 //   "off"     not today, or already over for today
 // An offer outside its dates is "ended", whatever its window says.
 export const offerTiming = (offer, { now = new Date(), zone = "" } = {}) => {
-  if (!offerLive(offer, now)) return "ended";
+  if (!offerLive(offer, now, zone)) return "ended";
   return timingAt(offerWindow(offer), placeClock(now, zone));
 };
 
@@ -133,7 +170,8 @@ export const offerProblems = (offer) => {
   if (!o) return [];
   const out = [];
   if (!o.text) out.push("The offer has an end date and no text, so there is nothing to show. Write what the traveller gets, in the shop's own words where you can.");
-  if (!o.until) out.push("The offer has no end date, so it will not render. An offer with no end is a promise nobody is going to remember to take down: give it a date, even a far one, and it becomes a review rather than a leak.");
+  if (o.ongoing) { /* runs every week with no last day, by choice */ }
+  else if (!o.until) out.push("The offer has no end date, so it will not render. An offer with no end is a promise nobody is going to remember to take down: give it a date, even a far one, and it becomes a review rather than a leak.");
   else if (!dayEnd(o.until)) out.push(`"${o.until}" is not a date this can read. Use YYYY-MM-DD.`);
   else if (!offerLive(o)) out.push(`This offer ended on ${o.until}, so it is already invisible on the page. Change the date or clear the field.`);
   // The hours. Both or neither, each one a time, and the end after the start.
@@ -151,9 +189,16 @@ export const offerProblems = (offer) => {
 // Live means: readable text, a readable end date, and that date not yet past.
 // The last day counts in full, which is what dayEnd is for: an offer valid
 // until the 30th is valid all of the 30th.
-export const offerLive = (offer, today = new Date()) => {
+// `zone` reads "today" on the place's own calendar (Fable's review, 14 Oct
+// 2026): a cruise passenger's phone on New York time would otherwise still
+// show, past midnight in Klaipėda, an offer whose last day was yesterday.
+export const offerLive = (offer, today = new Date(), zone = "") => {
   const o = cleanOffer(offer);
-  if (!o || !o.text || !o.until) return false;
+  if (!o || !o.text) return false;
+  if (o.ongoing) return true;
+  if (!o.until) return false;
+  const day = zone ? placeDayKey(today, zone) : "";
+  if (day && /^\d{4}-\d{2}-\d{2}$/.test(o.until)) return o.until >= day;
   const end = dayEnd(o.until);
   const now = dayStart(today);
   return !!end && !!now && end.getTime() >= now.getTime();
@@ -208,13 +253,13 @@ export const offerHoursLabel = (offer, { timing = "", lang = "en" } = {}) => {
 //
 // `timing` and `window` ride along for the hours (see OFFER HOURS): the badge
 // says "On now until 16:00" or when it runs, and the lock rule is untouched.
-export const offerView = (offer, { paid = false, today = new Date(), zone = "" } = {}) => {
-  if (!offerLive(offer, today)) return { show: false, locked: false, text: "", until: "", timing: "ended", window: null };
+export const offerView = (offer, { paid = false, today = new Date(), zone = "", lang = "en" } = {}) => {
+  if (!offerLive(offer, today, zone)) return { show: false, locked: false, text: "", until: "", timing: "ended", window: null };
   const o = cleanOffer(offer);
   const timing = offerTiming(o, { now: today, zone });
   const win = offerWindow(o);
   if (!paid) return { show: true, locked: true, text: "", until: o.until, timing, window: win };
-  return { show: true, locked: false, text: o.text, until: o.until, timing, window: win };
+  return { show: true, locked: false, text: (lang !== "en" && o.tr?.[lang]) || o.text, until: o.until, timing, window: win };
 };
 
 // What the locked state says. Names the thing and the condition, and promises

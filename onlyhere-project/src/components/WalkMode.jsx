@@ -183,7 +183,9 @@ export const WalkMode = ({ walk, madeAt, lang = "en", country = "LT", onClose, c
     reached.current.add(s.id);
     try { onReach(s); } catch { /* counting never breaks the walk */ }
   };
-  const moveOn = () => { if (!back && (gpsOff || !pos)) reach(target); setIdx(i => i + 1); };
+  // Only with GPS off: a tap before the first position is not a visit
+  // (security review, 13 Oct 2026).
+  const moveOn = () => { if (!back && gpsOff) reach(target); setIdx(i => i + 1); };
   useEffect(() => {
     if (g?.here && !back && arrived.current !== idx && target) { arrived.current = idx; setFocus({ id: target.id, n: ++n.current }); reach(target); }
   }, [g?.here, idx]);

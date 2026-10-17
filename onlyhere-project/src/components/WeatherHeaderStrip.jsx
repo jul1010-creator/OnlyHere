@@ -5,6 +5,7 @@ import { C } from "../utils/theme";
 import { weatherIcon } from "../utils/helpers";
 import { WEATHER_CITIES } from "../data/mapShapes";
 import { WeatherStrip } from "./WeatherStrip";
+import { t as uiT, currentUiLanguage } from "../utils/uiLanguage";
 import { denmarkClock, isNightThere } from "../utils/denmarkTime";
 
 // ── TODAY IN DENMARK ─────────────────────────────────────────────────
@@ -103,7 +104,7 @@ export const readTheDay = (weather, cities, { night = false } = {}) => {
   return null;   // an ordinary grey day says nothing, rather than saying something empty
 };
 
-export const WeatherHeaderStrip = ({ weather, weatherLoading, checkWeather, compact }) => {
+export const WeatherHeaderStrip = ({ weather, weatherLoading, checkWeather, compact, lang = currentUiLanguage() }) => {
   const [openCity, setOpenCity] = useState(null);
   useEffect(() => {
     WEATHER_CITIES.forEach(c => { if (!weather[c.key] && weatherLoading !== c.key) checkWeather(c.key, c.lat, c.lon); });
@@ -134,7 +135,7 @@ export const WeatherHeaderStrip = ({ weather, weatherLoading, checkWeather, comp
             );
           })}
         </div>
-        {openCityData && createPortal(<CityPopup city={openCityData} onClose={() => setOpenCity(null)} {...{ weather, weatherLoading, checkWeather }} />, document.body)}
+        {openCityData && createPortal(<CityPopup city={openCityData} onClose={() => setOpenCity(null)} {...{ weather, weatherLoading, checkWeather, lang }} />, document.body)}
       </div>
     );
   }
@@ -175,7 +176,7 @@ export const WeatherHeaderStrip = ({ weather, weatherLoading, checkWeather, comp
           );
         })}
       </div>
-      {openCityData && createPortal(<CityPopup city={openCityData} onClose={() => setOpenCity(null)} {...{ weather, weatherLoading, checkWeather }} />, document.body)}
+      {openCityData && createPortal(<CityPopup city={openCityData} onClose={() => setOpenCity(null)} {...{ weather, weatherLoading, checkWeather, lang }} />, document.body)}
     </div>
   );
 };
@@ -203,12 +204,12 @@ export const DenmarkClock = ({ style }) => {
 // slide animation, which makes that strip the containing block for a fixed
 // descendant instead of the viewport. Without the portal the popup lands pinned
 // to a giant multi-tab strip and gets clipped to a sliver.
-const CityPopup = ({ city, onClose, weather, weatherLoading, checkWeather }) => (
+const CityPopup = ({ city, onClose, weather, weatherLoading, checkWeather, lang }) => (
   <div style={{ position: "fixed", inset: 0, zIndex: 900, background: C.scrim || "rgba(5,8,16,0.7)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "70px 16px" }} onClick={onClose}>
     <div style={{ width: "100%", maxWidth: 420 }} onClick={e => e.stopPropagation()}>
-      <WeatherStrip label={city.label} weatherKey={city.key} lat={city.lat} lon={city.lon} weather={weather} weatherLoading={weatherLoading} checkWeather={checkWeather} />
+      <WeatherStrip label={city.label} weatherKey={city.key} lat={city.lat} lon={city.lon} weather={weather} weatherLoading={weatherLoading} checkWeather={checkWeather} lang={lang} />
       <button onClick={onClose} style={{ display: "block", width: "100%", background: C.surface, border: `1px solid ${C.border}`, color: C.light, borderRadius: 12, padding: "12px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-        Close
+        {uiT("explore.closeMap", lang)}
       </button>
     </div>
   </div>

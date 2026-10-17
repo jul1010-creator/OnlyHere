@@ -16,6 +16,9 @@
 //   x   a visitor opened the offer with "Redeem offer" to show at the
 //       counter (13 Oct 2026). What the visitor did, not proof the counter
 //       took it: nothing on the screen can know that.
+//   s   a visitor scanned the Gemlyx code at the place's counter (17 Oct
+//       2026, utils/scanCode.js). The closest thing to proof there is: the
+//       sticker is at the till. Once per place per phone per day.
 //
 // No account, no browser identifier and nothing about the visitor goes in.
 // The counts live in the same daily counter table as the guide limits, so they
@@ -26,7 +29,7 @@
 // so the two can never disagree about a key.
 
 export const PARTNER_STATS_DAYS = 30;
-export const STAT_KINDS = ["w", "d", "r", "x"];
+export const STAT_KINDS = ["w", "d", "r", "x", "s"];
 // A walk shows at most a handful of places; anything longer is not a walk.
 export const MAX_WALK_IDS = 12;
 
@@ -61,6 +64,10 @@ export const eventKeys = (body, hour) => {
     const id = cleanStatId(body?.id);
     return id ? [statKey("x", id)] : [];
   }
+  if (e === "scan") {
+    const id = cleanStatId(body?.id);
+    return id ? [statKey("s", id)] : [];
+  }
   if (e === "reach") {
     const id = cleanStatId(body?.id);
     if (!id || !Number.isInteger(hour) || hour < 0 || hour > 23) return [];
@@ -72,10 +79,10 @@ export const eventKeys = (body, hour) => {
 // The rows the counter table holds for one place, summed into what the page
 // shows. Rows for any other key are ignored, whatever the query returned.
 export const statsFrom = (rows, id) => {
-  const totals = { walks: 0, deals: 0, reached: 0, redeemed: 0 };
+  const totals = { walks: 0, deals: 0, reached: 0, redeemed: 0, scanned: 0 };
   const byHour = new Array(24).fill(0);
   const byDay = new Map();
-  const field = { [statKey("w", id)]: "walks", [statKey("d", id)]: "deals", [statKey("r", id)]: "reached", [statKey("x", id)]: "redeemed" };
+  const field = { [statKey("w", id)]: "walks", [statKey("d", id)]: "deals", [statKey("r", id)]: "reached", [statKey("x", id)]: "redeemed", [statKey("s", id)]: "scanned" };
   const hourPrefix = `st:rh:${id}:`;
   for (const row of Array.isArray(rows) ? rows : []) {
     const key = String(row?.key || "");
@@ -85,7 +92,7 @@ export const statsFrom = (rows, id) => {
       totals[field[key]] += n;
       const day = String(row?.day || "");
       if (/^\d{4}-\d{2}-\d{2}$/.test(day)) {
-        const d = byDay.get(day) || { day, walks: 0, deals: 0, reached: 0, redeemed: 0 };
+        const d = byDay.get(day) || { day, walks: 0, deals: 0, reached: 0, redeemed: 0, scanned: 0 };
         d[field[key]] += n;
         byDay.set(day, d);
       }
@@ -123,6 +130,10 @@ export const dealsSeen = (ids, country) => {
 export const dealRedeemOpened = (id, country) => {
   const clean = cleanStatId(id);
   if (clean) send({ e: "redeem", c: String(country || ""), id: clean });
+};
+export const dealScanned = (id, country) => {
+  const clean = cleanStatId(id);
+  if (clean) send({ e: "scan", c: String(country || ""), id: clean });
 };
 export const placeReached = (stop, country) => {
   const id = cleanStatId(stop?.id);

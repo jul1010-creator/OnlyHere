@@ -2,8 +2,11 @@ import { useEffect, useRef } from "react";
 import L from "leaflet";
 import { addTileLayer } from "../utils/mapTiles";
 import { C } from "../utils/theme";
+// Names and colours come from rows, and Leaflet writes labels and pin html as
+// HTML (security review, 9 Oct 2026, section 1).
+import { htmlText, hexColour } from "../utils/htmlText";
 
-// ── "Where is this, actually" ──────────────────────────────────────
+// ── "Where is this, actually"──────────────────────────────────────
 // Oliver, 6 Aug 2026: "Perhaps include a leaflet map inside blogs as well. So
 // people can see the area it is located."
 //
@@ -92,7 +95,7 @@ export const PlaceMiniMap = ({ lat, lon, name, color, neighbours, onOpenNeighbou
     L.control.zoom({ position: "bottomright" }).addTo(map);
     const pin = L.divIcon({
       className: "gemlyx-place-pin",
-      html: `<div style="width:16px;height:16px;border-radius:50%;background:${color || C.gold};border:3px solid #0A0F1E;box-shadow:0 0 0 3px ${(color || C.gold)}55, 0 2px 8px rgba(0,0,0,.6);"></div>`,
+      html: `<div style="width:16px;height:16px;border-radius:50%;background:${hexColour(color, C.gold)};border:3px solid #0A0F1E;box-shadow:0 0 0 3px ${hexColour(color, C.gold)}55, 0 2px 8px rgba(0,0,0,.6);"></div>`,
       iconSize: [16, 16], iconAnchor: [8, 8],
     });
     // Neighbours first, so the entry's own pin is drawn last and sits on top of
@@ -107,7 +110,7 @@ export const PlaceMiniMap = ({ lat, lon, name, color, neighbours, onOpenNeighbou
       const m = L.marker([n.lat, n.lon], { icon: dot, title: n.name, keyboard: false }).addTo(map);
       // A tooltip rather than a popup: a popup steals the map and needs closing,
       // and this is a label, not a card.
-      m.bindTooltip(`${n.name}${n.km != null ? ` · ${n.km < 10 ? n.km.toFixed(1) : Math.round(n.km)} km` : ""}`, { direction: "top", offset: [0, -6], opacity: 0.95 });
+      m.bindTooltip(htmlText(`${n.name}${n.km != null ? ` · ${n.km < 10 ? n.km.toFixed(1) : Math.round(n.km)} km` : ""}`), { direction: "top", offset: [0, -6], opacity: 0.95 });
       m.on("click", () => openNeighbourRef.current?.(n));
     });
     // ── EVERY BRANCH, IN THE ENTRY'S OWN COLOUR ──────────────────────
@@ -117,12 +120,12 @@ export const PlaceMiniMap = ({ lat, lon, name, color, neighbours, onOpenNeighbou
     spots.forEach(b => {
       const dot = L.divIcon({
         className: "gemlyx-branch-pin",
-        html: `<div style="width:13px;height:13px;border-radius:50%;background:${color || C.gold};border:2px solid #0A0F1E;box-shadow:0 0 0 2px ${(color || C.gold)}44, 0 2px 6px rgba(0,0,0,.55);"></div>`,
+        html: `<div style="width:13px;height:13px;border-radius:50%;background:${hexColour(color, C.gold)};border:2px solid #0A0F1E;box-shadow:0 0 0 2px ${hexColour(color, C.gold)}44, 0 2px 6px rgba(0,0,0,.55);"></div>`,
         iconSize: [13, 13], iconAnchor: [6.5, 6.5],
       });
       L.marker([Number(b.lat), Number(b.lon)], { icon: dot, title: b.label || name, keyboard: false })
         .addTo(map)
-        .bindTooltip(b.label || name, { direction: "top", offset: [0, -6], opacity: 0.95 });
+        .bindTooltip(htmlText(b.label || name), { direction: "top", offset: [0, -6], opacity: 0.95 });
     });
     if (hasOwn) L.marker([Number(lat), Number(lon)], { icon: pin, zIndexOffset: 1000 }).addTo(map);
     // Fit to everything that is actually on the map, so the neighbours are not

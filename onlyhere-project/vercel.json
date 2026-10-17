@@ -5,6 +5,17 @@
       "destination": "/"
     }
   ],
+  "crons": [
+    {
+      "path": "/api/deal-alerts",
+      "schedule": "*/10 * * * *"
+    }
+  ],
+  "functions": {
+    "api/deal-alerts.js": {
+      "maxDuration": 60
+    }
+  },
   "headers": [
     {
       "source": "/(.*)",

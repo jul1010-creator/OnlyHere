@@ -236,10 +236,13 @@ const words = (v, n) => String(v || "").replace(/\s+/g, " ").trim().slice(0, n);
 // cover today at the place, and its window.
 const offerOf = (raw, today) => {
   if (!raw || typeof raw !== "object" || !String(raw.text || "").trim()) return null;
-  const end = dayStart(raw.until);
-  if (!end) return null;
-  const endIso = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}`;
-  if (endIso < today) return null;
+  // An ongoing offer has no last day (offer.js, cleanOffer).
+  if (raw.ongoing !== true) {
+    const end = dayStart(raw.until);
+    if (!end) return null;
+    const endIso = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}`;
+    if (endIso < today) return null;
+  }
   return { text: words(raw.text, 140), window: windowOf({ days: cleanDays(raw.days), from: cleanClock(raw.from), to: cleanClock(raw.to) }) };
 };
 

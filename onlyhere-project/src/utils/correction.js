@@ -41,6 +41,10 @@ import { FERRY, classifyFerry } from "./transport";
 import { hostMatchesName } from "./helpers";
 import { CHECK_SCOPE_BLOCK } from "./checkScope";
 
+// A model's or a search's sourceUrl is a link Oliver is asked to open, so only
+// http(s) survives. Security review, 9 Oct 2026.
+const httpOnly = (u) => (/^https?:\/\//i.test(String(u || "").trim()) ? String(u).trim() : "");
+
 // ── which claims can be settled without asking a model ──────────────
 // Only two things here are settled by a live route query, and the line is
 // drawn deliberately tight. Whether a ferry is required, and how long the
@@ -1627,7 +1631,7 @@ export const correctEntry = async ({ entry, criticism, deps }) => {
     // cited page we read and checked ourselves is exactly a source.
     // A review site, a social page or a listing is not a source here, whatever
     // the search put in sourceUrl: below a board, never the deciding one.
-    const searchUrl = String(parsed.sourceUrl || "").trim();
+    const searchUrl = httpOnly(parsed.sourceUrl);
     const hasSource = (!!searchUrl && !isNeverASource(searchUrl)) || !!cited?.supported;
     const selfEvidentUrl = kind === "website" && hostMatchesName(parsed.correctValue || c.proposed, name);
     // One implementation, in settleVerdict above, so the rule and the test
@@ -1673,7 +1677,7 @@ export const correctEntry = async ({ entry, criticism, deps }) => {
       // context for the verdict rather than the verdict's reason. It is the
       // line that tells him a finding was resting on a page that never said it.
       evidence: `${settled.evidence} ${citedNoteFor(cited, citedUrl, searchUrl)}`.trim(),
-      sourceUrl: parsed.sourceUrl || (cited?.supported ? cited.sourceUrl : "") || (selfEvidentUrl ? (parsed.correctValue || c.proposed) : ""),
+      sourceUrl: httpOnly(parsed.sourceUrl) || (cited?.supported ? cited.sourceUrl : "") || (selfEvidentUrl ? (parsed.correctValue || c.proposed) : ""),
       citedSource: citedUrl,
       readTheirSource: !!cited?.read,
       askedOwnSite: false,

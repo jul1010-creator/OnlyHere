@@ -44,7 +44,7 @@ export const livePromotions = (pools = {}, today = new Date()) => {
   for (const [src, rows] of Object.entries(pools)) {
     if (!PROMO_KINDS[src]) continue;
     for (const row of (Array.isArray(rows) ? rows : [])) {
-      if (!row?.name || !offerLive(row.__offer, today)) continue;
+      if (!row?.name || !offerLive(row.__offer, today, zoneOf(row))) continue;
       const key = `${src}:${row.id ?? row.name}`;
       if (seen.has(key)) continue;
       seen.add(key);
@@ -63,7 +63,7 @@ export const livePromotions = (pools = {}, today = new Date()) => {
 // What one card says, through offerView so the locked rule is the entry
 // page's rule and not a second copy of it.
 export const promoCard = (promo, { paid = false, today = new Date(), lang = "en" } = {}) => {
-  const view = offerView(promo?.__offer, { paid, today, zone: zoneOf(promo) });
+  const view = offerView(promo?.__offer, { paid, today, zone: zoneOf(promo), lang });
   return {
     kind: PROMO_KINDS[promo?._src] || "",
     where: promo?._where || "",

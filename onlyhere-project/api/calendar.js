@@ -16,6 +16,7 @@
 // request has to come from the site, and it has to carry a real Supabase
 // session belonging to a founder. See src/utils/apiGuard.js.
 import { requestIsFromSite, NOT_FROM_SITE, resolveUser, isFounder } from "../src/utils/apiGuard.js";
+import { gateFounder } from "../src/utils/founderGate.js";
 // The name check below is the cheap first net; safeFetch then checks the
 // address the name points at, and https, at every redirect (security review,
 // 6 Oct 2026, finding 1).
@@ -61,6 +62,10 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "That address is not reachable from here." });
   }
 
+  // A daily ceiling, so a copied Studio token cannot use up this route
+  // (security review, 13 Oct 2026). See src/utils/founderGate.js.
+  const counted = await gateFounder({ route: "pagereads", env: process.env });
+  if (!counted.ok) return res.status(counted.status).json({ error: counted.error });
   const stop = AbortSignal.timeout ? AbortSignal.timeout(TIMEOUT_MS) : undefined;
   try {
     const r = await safeFetch(url.toString(), {

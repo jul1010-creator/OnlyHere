@@ -15,6 +15,8 @@ import { ProfileQuestions } from "./ProfileQuestions";
 import { AFFILIATES_PATH } from "../utils/affiliateRoster";
 import { LIBRARY_PATH } from "../utils/tripLibrary";
 import { externalHref } from "../utils/helpers";
+import { t as uiT } from "../utils/uiLanguage";
+import { DealAlertsCard } from "./DealAlerts";
 
 // ── INFO ABOUT ME ────────────────────────────────────────────────────
 //
@@ -112,6 +114,14 @@ export const ME_SECTIONS = [
   // that goes stale: a reader who opens this account page at all is more likely
   // to be looking for what is on this week than for their own name.
   { id: "near", label: "Near you", blurb: "What the locals have on, while it is still on." },
+  // ── DEAL ALERTS ───────────────────────────────────────────────────
+  //
+  // 15 Oct 2026, the same settings as the bell's (components/DealAlerts.jsx):
+  // which kinds of place, and mail or not. Here as well "so it is easy to
+  // find". Fourth, beside Near you, the other section about being told of
+  // things. `labelKey` and `blurbKey` read it in the reader's language; the
+  // English stays as the fallback the rest of this list uses.
+  { id: "alerts", label: "Deal alerts", blurb: "New deals in the app and by email.", labelKey: "alerts.bell", blurbKey: "alerts.blurb" },
   { id: "about", label: "About me", blurb: "Your travel preferences and what Gemlyx has learned." },
   { id: "plan", label: "Plan", blurb: "What your account includes." },
   { id: "legal", label: "Legal", blurb: "Terms of Service and Privacy Policy." },
@@ -135,6 +145,7 @@ export const AboutMePage = ({
   setupSql = null, deleting = false, section = null, onSection, onClose, onProfileSaved,
   onNeedsSetup, onSignOut, onDelete, onOpenGuide, onDeleteGuide,
   notices = [], noticeRadiusKm = 30, hasLocation = false, onAskLocation,
+  lang = "en",
 }) => {
   const [p, setP] = useState(EMPTY_PROFILE);
   const [busy, setBusy] = useState(false);
@@ -258,6 +269,10 @@ export const AboutMePage = ({
   // list screen, because the rail is the list and it is always on screen.
   const showList = !wide && !section;
 
+  // A section's name and line, in the reader's language where it has one.
+  const labelOf = (sec) => (sec?.labelKey ? uiT(sec.labelKey, lang) : sec?.label);
+  const blurbOf = (sec) => (sec?.blurbKey ? uiT(sec.blurbKey, lang) : sec?.blurb);
+
   const railItem = (sec, i) => (
     <button key={sec.id} onClick={() => onSection?.(sec.id)}
       style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left",
@@ -268,7 +283,7 @@ export const AboutMePage = ({
                fontWeight: current === sec.id ? 700 : 600, cursor: "pointer",
                fontFamily: "'Inter', sans-serif", marginBottom: 4 }}>
       <span style={{ color: current === sec.id ? C.gold : C.muted, fontSize: 11, flexShrink: 0 }}>✦</span>
-      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sec.label}</span>
+      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{labelOf(sec)}</span>
     </button>
   );
 
@@ -782,7 +797,18 @@ export const AboutMePage = ({
     </>
   );
 
-  const bodyFor = { general: generalSection, trips: tripsSection, near: nearSection, about: aboutSection, plan: planSection, legal: legalSection };
+  // ── DEAL ALERTS ───────────────────────────────────────────────────
+  // The bell's settings, read and saved by the card itself. A plain box in
+  // Card's own style rather than <Card>, which is made anew on every render
+  // and would start the settings over each time this page draws. No heading
+  // of its own: the rail, or the phone's title, already says Deal alerts.
+  const alertsSection = (
+    <div data-testid="me-alerts-section" style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: pad, marginBottom: 14 }}>
+      <DealAlertsCard session={session} lang={lang} />
+    </div>
+  );
+
+  const bodyFor = { general: generalSection, trips: tripsSection, near: nearSection, alerts: alertsSection, about: aboutSection, plan: planSection, legal: legalSection };
 
   return (
     <div style={{ position: "fixed", inset: 0, background: C.bg, zIndex: 990, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
@@ -817,8 +843,8 @@ export const AboutMePage = ({
               <button key={sec.id} onClick={() => onSection?.(sec.id)}
                 style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", textAlign: "left", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "16px 16px", cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 10 }}>
                 <div style={{ flex: "1 1 auto", minWidth: 0 }}>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: C.text, marginBottom: 3 }}>{sec.label}</div>
-                  <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5 }}>{sec.blurb}</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: C.text, marginBottom: 3 }}>{labelOf(sec)}</div>
+                  <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5 }}>{blurbOf(sec)}</div>
                 </div>
                 <span style={{ color: C.gold, fontSize: 18, flexShrink: 0 }}>›</span>
               </button>
@@ -844,7 +870,7 @@ export const AboutMePage = ({
                     <span style={{ fontSize: 17 }}>‹</span> Info about me
                   </button>
                   <div style={{ fontFamily: "'Fraunces', serif", fontSize: 22, fontWeight: 600, color: C.text, marginTop: 4 }}>
-                    {(ME_SECTIONS.find(x => x.id === current) || {}).label}
+                    {labelOf(ME_SECTIONS.find(x => x.id === current) || {})}
                   </div>
                 </div>
               )}

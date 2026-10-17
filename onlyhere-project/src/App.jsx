@@ -72,6 +72,9 @@ import { changeToApply, onlyRefusals, liveRowIdOf } from "./utils/eventCheckAppl
 import { dueForCheck, lastCheckOf, checkRecord, checkKey, LOCAL_CHECKS_KEY } from "./utils/eventCheckDue";
 const LAST_CHECK_RESULTS_KEY = "gemlyx_event_check_results";
 import { SupportPage } from "./components/SupportPage";
+import { AboutPage, ABOUT_PATH } from "./components/AboutPage";
+import { ScanRedirect, StickerPage } from "./pages/ScanSticker";
+import { SCAN_PATH, STICKER_PATH } from "./utils/scanCode";
 // ── THE PAGE THAT SAYS HOW THIS IS PAID FOR ─────────────────────────
 // Oliver, 9 Sep 2026: "make an 'affiliate' in the burgermenu where we list all
 // our affiliates and why we use them." A route rather than a file in public/,
@@ -87,7 +90,11 @@ import { KlaipedaBusiness } from "./pages/KlaipedaBusiness";
 import { KlaipedaPartner } from "./pages/KlaipedaPartner";
 import { ReworkPage } from "./pages/ReworkPage";
 import { KlaipedaExplore } from "./components/KlaipedaExplore";
-import { DEAL_KINDS } from "./components/DealsNearYou";
+import { DealAlertsBell } from "./components/DealAlerts";
+import { requestOpenDeal, dealFromSearch } from "./utils/dealOpen";
+import { DealStudio } from "./components/DealStudio";
+import { offerTranslatePrompt, readOfferTranslation } from "./utils/dealStudio";
+import { DEAL_CATEGORIES } from "./utils/dealCategories";
 import { KLAIPEDA_PARTNER_PATH } from "./utils/partnerStats";
 import { COUNTRY_PROFILES, DEFAULT_COUNTRY, countryProfile, setWorkingCountry, countryParam, rowCountry, activeCountry, homePath, plainTownName } from "./utils/countries";
 import { KLAIPEDA_DEMO_PATH } from "./data/klaipedaDemo";
@@ -425,6 +432,21 @@ const PAGE_COUNTRY = activeCountry();
 const PAGE_LAND = countryProfile(PAGE_COUNTRY);
 const PAGE_ABROAD = PAGE_COUNTRY !== DEFAULT_COUNTRY;
 const HOME_PATH = homePath(PAGE_COUNTRY);
+// ── NO BAR OF PAGES ALONG THE TOP IN LITHUANIA ──────────────────────────
+// Oliver, 16 Oct 2026: "Just remove the navigations at the very top as well.
+// Have them saved, but remove them visually. No need for them anymore." On
+// /lithuania, Explore with its deals is the site, so the pages along the top
+// of the header (Explore, Special deals, Attractions, Plan my trip) are not
+// drawn. Their code is untouched: drop the LT test here to bring them back.
+// Denmark keeps its bar.
+const TOP_NAV_SHOWN = PAGE_COUNTRY !== "LT";
+// ── AND NO PAGES OR SAVED TRIPS IN ITS MENU ────────────────────────────
+// Oliver, 16 Oct 2026: "The saved trips and tours and all that gotta be
+// temporarily removed. Not sure if we keep it at all." So on /lithuania the
+// menu leaves out the Saved trips row (and the saved and kept counts under the
+// name) and the list of pages a phone used to get there. The code is kept:
+// drop the LT test here to bring them back. Denmark keeps both.
+const MENU_PAGES_SHOWN = PAGE_COUNTRY !== "LT";
 // What is not built for another country yet stays off its pages rather than
 // answering in Danish. Nothing, since Phase 3 put the planner on them without
 // its chat (PlanAbroadForm). Tips came back 29 Sep 2026. Oliver: "Where is the tips? That navigation
@@ -1103,7 +1125,7 @@ const HeroDateField = ({ label, value, min, onPick }) => {
       <div onClick={open}
         style={{
           position: "relative", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
-          background: "rgba(10,15,30,0.55)", backdropFilter: "blur(8px)",
+          background: "rgba(14,14,17,0.55)", backdropFilter: "blur(8px)",
           border: `1px solid ${lit ? C.gold : `${C.gold}55`}`, borderRadius: 10,
           padding: "10px 12px", cursor: "pointer", transition: "border-color 0.15s ease",
         }}>
@@ -2694,6 +2716,9 @@ function GemlyxApp() {
   };
 
   const [editingId, setEditingId] = useState(null); // id of the row being edited, or null for a fresh draft
+  // The open row's own type, so a type chip tapped while editing cannot change
+  // which place a partner link names (security review, 13 Oct 2026).
+  const [editingType, setEditingType] = useState(null);
   // ── THE REPORTS PANEL ───────────────────────────────────────────
   //
   // Oliver, 15 Sep 2026: "all the reports should go to Oliververhein@gmail.com's
@@ -2961,11 +2986,12 @@ function GemlyxApp() {
     setStudioPhotoName(payload.photo ? String(payload.photo).split("/").pop() : `${slugify(payload.name)}.jpg`);
     setStudioOfferText(payload.__offer?.text || "");
     setStudioOfferUntil(payload.__offer?.until || "");
+    setStudioOfferOngoing(payload.__offer?.ongoing === true);
     setStudioOfferDays(Array.isArray(payload.__offer?.days) ? payload.__offer.days : []);
     setStudioOfferFrom(payload.__offer?.from || "");
     setStudioOfferTo(payload.__offer?.to || "");
     setStudioBooking(payload.__booking || "");
-    setStudioDealKind(DEAL_KINDS.includes(payload.__dealKind) ? payload.__dealKind : "");
+    setStudioDealKind(DEAL_CATEGORIES.includes(payload.__category) ? payload.__category : "");
     setDraftPasteError("");
     // The two bugs this function was carrying, studioFrozenGeo inheriting the
     // previous run's coordinate ("Stored at 0.000, 0.000") and editingId
@@ -2983,6 +3009,7 @@ function GemlyxApp() {
     // for a different place than the one on screen. It says what is open now.
     setStudioTown(row.payload?.name || "");
     setEditingId(row.id);
+    setEditingType(row.type || null);
     setStudioDraft(row.payload);
     setStudioDraftText(JSON.stringify(row.payload, null, 2));
     setStudioResult("// Editing an existing published entry — Save changes below updates it in place.\n// (No manual-paste code needed for edits — this goes straight to Supabase.)");
@@ -2991,11 +3018,12 @@ function GemlyxApp() {
     // carries rather than an empty box that would clear it on save.
     setStudioOfferText(row.payload?.__offer?.text || "");
     setStudioOfferUntil(row.payload?.__offer?.until || "");
+    setStudioOfferOngoing(row.payload?.__offer?.ongoing === true);
     setStudioOfferDays(Array.isArray(row.payload?.__offer?.days) ? row.payload.__offer.days : []);
     setStudioOfferFrom(row.payload?.__offer?.from || "");
     setStudioOfferTo(row.payload?.__offer?.to || "");
     setStudioBooking(row.payload?.__booking || "");
-    setStudioDealKind(DEAL_KINDS.includes(row.payload?.__dealKind) ? row.payload.__dealKind : "");
+    setStudioDealKind(DEAL_CATEGORIES.includes(row.payload?.__category) ? row.payload.__category : "");
     setBusyFetch(null);
     const reelBlock = row.payload?.blogBody?.find(b => b.type === "instagram") || null;
     setStudioInstagramUrl(reelBlock?.url || "");
@@ -3035,6 +3063,7 @@ function GemlyxApp() {
     clearPreviousEntry();
     setStudioTown(name);
     setEditingId(null);
+    setEditingType(null);
     const blank = shapeForLive(studioType, { name });
     setStudioDraft(blank);
     setStudioDraftText(JSON.stringify(blank, null, 2));
@@ -3436,7 +3465,7 @@ function GemlyxApp() {
   const addReelToRow = async (row) => {
     const url = mediaReelInput.trim();
     if (!url || mediaBusy) return;
-    if (!/instagram\.com\//i.test(url)) { setMediaError("Paste a full Instagram link (instagram.com/reel/...)"); return; }
+    if (!isEmbeddablePost(url)) { setMediaError("Paste a full Instagram link (instagram.com/reel/...)"); return; }
     setMediaBusy(true); setMediaError(null);
     try {
       const p = row.payload || {};
@@ -3562,7 +3591,7 @@ function GemlyxApp() {
       if (renewed?.access_token) token = renewed.access_token;
     }
     if (token) {
-      fetch(`${SUPABASE_URL}/auth/v1/logout?scope=local`, { method: "POST", headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}` } }).catch(() => { /* cleared here either way */ });
+      fetch(`${SUPABASE_URL}/auth/v1/logout?scope=global`, { method: "POST", headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}` } }).catch(() => { /* cleared here either way */ });
     }
     localStorage.removeItem("gemlyx_studio_session");
     setStudioSession(null);
@@ -4173,16 +4202,41 @@ Say which answer came from which source, so a fact from a vouched page and a fac
   // why the date is required rather than optional.
   const [studioOfferText, setStudioOfferText] = useState("");
   const [studioOfferUntil, setStudioOfferUntil] = useState("");
+  // No last day, every week (13 Oct 2026, "friday candy EVERY friday").
+  const [studioOfferOngoing, setStudioOfferOngoing] = useState(false);
   // Offer hours (utils/offer.js, OFFER HOURS): weekdays and a clock window.
   const [studioOfferDays, setStudioOfferDays] = useState([]);
   const [studioOfferFrom, setStudioOfferFrom] = useState("");
   const [studioOfferTo, setStudioOfferTo] = useState("");
-  const studioOfferFields = { text: studioOfferText, until: studioOfferUntil, days: studioOfferDays, from: studioOfferFrom, to: studioOfferTo };
+  const studioOfferFields = { text: studioOfferText, until: studioOfferUntil, days: studioOfferDays, from: studioOfferFrom, to: studioOfferTo, ongoing: studioOfferOngoing };
   // ── A PARTNER'S PRIVATE LINK ──────────────────────────────────────
   // Oliver, 12 Oct 2026: real numbers for a business, no account. One click
   // here signs a link to /lithuania/partner for the place that is open; he
   // sends it to the owner. See utils/partnerLink.js.
   const [partnerLink, setPartnerLink] = useState({ forId: null, url: "", note: "" });
+  // ── A DEAL SAVED IN THE EXPLORE STUDIO ────────────────────────────
+  // Oliver, 13 Oct 2026: "Bring in a studio so i can edit", the Explore deals
+  // (components/DealStudio.jsx). The row is written there; this puts the change
+  // on the page without a reload, by the same three operations the full Studio
+  // uses: a row that starts showing is fetched in, one that stops is taken
+  // out, and one that keeps showing is replaced where it stands.
+  // The offer in Lithuanian, Danish and German, 14 Oct 2026 ("some things are
+  // stuck in English"). Null when the reply is not usable; DealStudio then
+  // saves the deal with its English text and says so.
+  const translateDealOffer = async (text) => {
+    const r = await askClaude(offerTranslatePrompt(text), 600, "claude-sonnet-5", true);
+    if (!r || r.error) throw new Error(r?.error || "No reply");
+    return readOfferTranslation(r.text);
+  };
+  const dealChanged = async ({ before, after }) => {
+    const was = !!before?.published, now = !!after?.published;
+    try {
+      if (now && !was) await refreshLiveContent();
+      else if (was && !now) removeLiveRow(after.id, after.type);
+      else if (was && now && !applyEditedRow(after.id, after.type, after.payload)) await refreshLiveContent();
+    } catch { /* the database has it; a reload shows it */ }
+    bumpLiveContent(v => v + 1);
+  };
   const makePartnerLink = async () => {
     const forId = editingId;
     setPartnerLink({ forId, url: "", note: "Making the link." });
@@ -4190,7 +4244,7 @@ Say which answer came from which source, so a fact from a vouched page and a fac
       const r = await studioFetch("/api/partner-stats", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ make: { id: `${studioType}:${forId}`, name: studioDraft?.name || "" } }),
+        body: JSON.stringify({ make: { id: `${editingType || studioType}:${forId}`, name: studioDraft?.name || "" } }),
       });
       const j = await r.json().catch(() => ({}));
       if (!r.ok || !j.path) { setPartnerLink({ forId, url: "", note: j.error || `The link could not be made (${r.status}).` }); return; }
@@ -11372,8 +11426,9 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
     if (saved.photoName) setStudioPhotoName(saved.photoName);
     if (saved.offerText) setStudioOfferText(saved.offerText);
     if (saved.booking) setStudioBooking(saved.booking);
-    if (DEAL_KINDS.includes(saved.dealKind)) setStudioDealKind(saved.dealKind);
+    if (DEAL_CATEGORIES.includes(saved.dealKind)) setStudioDealKind(saved.dealKind);
     if (saved.offerUntil) setStudioOfferUntil(saved.offerUntil);
+    if (saved.offerOngoing === true) setStudioOfferOngoing(true);
     if (Array.isArray(saved.offerDays) && saved.offerDays.length) setStudioOfferDays(saved.offerDays);
     if (saved.offerFrom) setStudioOfferFrom(saved.offerFrom);
     if (saved.offerTo) setStudioOfferTo(saved.offerTo);
@@ -11407,6 +11462,7 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
         photoName: studioPhotoName,
         offerText: studioOfferText,
         offerUntil: studioOfferUntil,
+        offerOngoing: studioOfferOngoing,
         offerDays: studioOfferDays,
         offerFrom: studioOfferFrom,
         offerTo: studioOfferTo,
@@ -11424,7 +11480,7 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
     return () => clearTimeout(t);
   }, [studioSession, draftQueue, queueResults, editingId, studioDraft, studioDraftText,
       studioType, studioTown, studioResult, studioFrozenGeo, studioIdentityWarning,
-      studioInventedWarning, studioPhotoName, studioOfferText, studioOfferUntil, studioOfferDays, studioOfferFrom, studioOfferTo, studioBooking, studioDealKind]);
+      studioInventedWarning, studioPhotoName, studioOfferText, studioOfferUntil, studioOfferOngoing, studioOfferDays, studioOfferFrom, studioOfferTo, studioBooking, studioDealKind]);
 
   // Dropping the finished list is a deliberate act, so it needs a button. It is
   // also the only advice problemNote can give when storage is full.
@@ -14545,7 +14601,9 @@ ${researchRules("festival", ev)}`
       // keeps the standing rule from PASS 45: what you review is what you
       // publish, and a field on screen that the save ignores is the thing that
       // rule exists to stop.
-      const offerFromFields = cleanOffer(studioOfferFields);
+      // Its translations ride along from the row (14 Oct 2026); cleanOffer
+      // drops them by itself when the text in the box is no longer theirs.
+      const offerFromFields = cleanOffer({ ...studioOfferFields, tr: shaped.__offer?.tr });
       const offerFaults = offerProblems(offerFromFields);
       if (offerFaults.length) {
         setPublishStatus(null);
@@ -14566,8 +14624,10 @@ ${researchRules("festival", ev)}`
         if (cleanBooking(studioBooking)) shaped.__booking = studioBooking.trim();
         else delete shaped.__booking;
         // The Explore filter, on the same rule: the box is the truth.
-        if (DEAL_KINDS.includes(studioDealKind)) shaped.__dealKind = studioDealKind;
-        else delete shaped.__dealKind;
+        // The kind of place on Explore (14 Oct 2026: restaurants, nightlife,
+        // attractions, rentals), on the same rule: the box is the truth.
+        if (DEAL_CATEGORIES.includes(studioDealKind)) shaped.__category = studioDealKind;
+        else delete shaped.__category;
         // The busyness forecast is a paid lookup kept in the draft, and
         // shapeForLive's allow-list does not carry it, so a new entry lost it at
         // publish (review, 2 Oct 2026). Carried across here, checked.
@@ -21565,6 +21625,15 @@ If the conversation only covers a single day or a few stops with no explicit day
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [guideModal]);
   const [showMenu, setShowMenu] = useState(false);
+  // The menu panel starts under the header, so the burger stays in sight and
+  // its X closes what it opened (16 Oct 2026).
+  const headerRef = useRef(null);
+  useEffect(() => {
+    if (!showMenu) return undefined;
+    const esc = (e) => { if (e.key === "Escape") setShowMenu(false); };
+    window.addEventListener("keydown", esc);
+    return () => window.removeEventListener("keydown", esc);
+  }, [showMenu]);
   const [showSearch, setShowSearch] = useState(false);
   const [videoError, setVideoError] = useState(false);
   const [videoReady, setVideoReady] = useState(false);
@@ -21906,6 +21975,24 @@ If the conversation only covers a single day or a few stops with no explicit day
   //
   // ONCE, on arrival. Pressing Explore later must not re-open anything, and the
   // ref is what keeps this an arrival rule rather than a standing one.
+  // ── A DEAL MAIL'S LINK OPENS ITS DEAL ─────────────────────────────
+  // 15 Oct 2026. A deal alert mail links to /lithuania?deal=food:12. Explore
+  // is the page, and the deal opens on it as its tile would (utils/dealOpen.js,
+  // DealsNearYou). The address is cleaned at once so a reload or a shared link
+  // does not open it again.
+  const dealLinkDone = useRef(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || dealLinkDone.current || PAGE_COUNTRY !== "LT") return;
+    dealLinkDone.current = true;
+    const id = dealFromSearch(window.location.search);
+    if (!id) return;
+    const q = new URLSearchParams(window.location.search);
+    q.delete("deal");
+    const rest = q.toString();
+    window.history.replaceState(window.history.state, "", `${window.location.pathname}${rest ? `?${rest}` : ""}${window.location.hash}`);
+    setActive("home");
+    requestOpenDeal(id);
+  }, []);
   const tabLinkDone = useRef(false);
   useEffect(() => {
     if (typeof window === "undefined" || tabLinkDone.current) return;
@@ -22087,6 +22174,9 @@ If the conversation only covers a single day or a few stops with no explicit day
     const ownedByAScroller = (target) => {
       let el = target;
       while (el && el !== root) {
+        // A carousel that turns its own slides on a swipe, the banner on
+        // Explore (ExploreBanner.jsx, 14 Oct 2026), says so with this.
+        if (el.hasAttribute?.("data-own-swipe")) return true;
         if (el.scrollWidth - el.clientWidth > 4) {
           const ox = getComputedStyle(el).overflowX;
           if (ox === "auto" || ox === "scroll") return true;
@@ -23431,15 +23521,15 @@ ${languageBlock()}`;
             <img src={event.photo} alt={event.name} onError={e => { e.target.style.display = "none"; }}
               style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
           )}
-          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(10,15,30,0.5), transparent 45%)" }} />
+          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(14,14,17,0.5), transparent 45%)" }} />
           {d && (
-            <div style={{ position: "absolute", top: 12, left: 12, textAlign: "center", background: "rgba(10,15,30,0.82)", backdropFilter: "blur(6px)", border: `1px solid ${C.border}`, borderRadius: 10, padding: "6px 10px 8px", minWidth: 46 }}>
+            <div style={{ position: "absolute", top: 12, left: 12, textAlign: "center", background: "rgba(14,14,17,0.82)", backdropFilter: "blur(6px)", border: `1px solid ${C.border}`, borderRadius: 10, padding: "6px 10px 8px", minWidth: 46 }}>
               <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 1.2, color: C.accent, textTransform: "uppercase", lineHeight: 1 }}>{d.toLocaleString("en-GB", { month: "short" })}</div>
               <div style={{ fontSize: 21, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.2 }}>{d.getDate()}</div>
             </div>
           )}
           {away && (
-            <div style={{ position: "absolute", top: 12, right: 12, fontSize: 10.5, fontWeight: 700, color: away === "Happening now" ? "#6ECF97" : C.gold, background: "rgba(10,15,30,0.82)", backdropFilter: "blur(6px)", border: `1px solid ${away === "Happening now" ? "rgba(110,207,151,0.35)" : `${C.gold}44`}`, padding: "5px 11px", borderRadius: 100 }}>{away}</div>
+            <div style={{ position: "absolute", top: 12, right: 12, fontSize: 10.5, fontWeight: 700, color: away === "Happening now" ? "#6ECF97" : C.gold, background: "rgba(14,14,17,0.82)", backdropFilter: "blur(6px)", border: `1px solid ${away === "Happening now" ? "rgba(110,207,151,0.35)" : `${C.gold}44`}`, padding: "5px 11px", borderRadius: 100 }}>{away}</div>
           )}
         </div>
         <div style={{ padding: "14px 16px 15px" }}>
@@ -25139,7 +25229,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           <div key={row.id} style={{ display: "flex", alignItems: "center", gap: 8, background: C.bg, borderRadius: 8, padding: "7px 10px" }}>
                             <input type="checkbox" checked={row.enabled !== false} disabled={feedBusy}
                               onChange={e => setFeedEnabled(row, e.target.checked)} style={{ accentColor: C.gold, cursor: "pointer", flexShrink: 0 }} />
-                            <a href={row.url} target="_blank" rel="noreferrer"
+                            <a href={externalHref(row.url) || undefined} target="_blank" rel="noreferrer"
                               style={{ fontSize: 12, color: C.text, fontWeight: 600, textDecoration: "none", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                               {row.name} ↗
                             </a>
@@ -25373,7 +25463,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                 </button>
                               </>
                             )}
-                            {dirSource && <a href={dirSource} target="_blank" rel="noreferrer" style={{ fontSize: 10.5, color: C.muted }}>the page ↗</a>}
+                            {dirSource && <a href={externalHref(dirSource) || undefined} target="_blank" rel="noreferrer" style={{ fontSize: 10.5, color: C.muted }}>the page ↗</a>}
                             {dirAdded && <span style={{ fontSize: 10.5, color: C.gold }}>{dirAdded}</span>}
                             {dirError && <span style={{ fontSize: 10.5, color: "#FFB347" }}>{dirError}</span>}
                           </div>
@@ -25483,7 +25573,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                   {noticeSending === (c.postId || c.postUrl || c.date) ? "…" : "Send as a notice"}
                                 </button>
                                 {c.postUrl && (
-                                  <a href={c.postUrl} target="_blank" rel="noreferrer"
+                                  <a href={externalHref(c.postUrl) || undefined} target="_blank" rel="noreferrer"
                                     style={{ fontSize: 11, fontWeight: 700, color: C.muted, textDecoration: "none" }}>
                                     The post ↗
                                   </a>
@@ -26016,7 +26106,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                     {kindError && <div style={{ fontSize: 11, color: "#E57373", marginTop: 8 }}>{kindError}</div>}
                                     <div style={{ display: "flex", gap: 8, marginTop: 11 }}>
                                       <button onClick={() => saveKindEdit(row)} disabled={kindSaving || !changed}
-                                        style={{ background: changed ? C.gold : C.surface, border: "none", color: changed ? "#0A0F1E" : C.muted, borderRadius: 100, padding: "8px 16px", fontSize: 12, fontWeight: 700, cursor: changed ? "pointer" : "default" }}>
+                                        style={{ background: changed ? C.gold : C.surface, border: "none", color: changed ? C.onGold : C.muted, borderRadius: 100, padding: "8px 16px", fontSize: 12, fontWeight: 700, cursor: changed ? "pointer" : "default" }}>
                                         {kindSaving ? "Saving…" : changed ? "Save" : "No change"}
                                       </button>
                                       <button onClick={() => setKindEditId(null)}
@@ -26146,7 +26236,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
 
                                     <div style={{ display: "flex", gap: 8, marginTop: 11 }}>
                                       <button onClick={() => savePlaceEdit(row)} disabled={placeSaving || !hasPlaceChange(pl, placeDraft)}
-                                        style={{ background: hasPlaceChange(pl, placeDraft) ? C.gold : C.surface, border: "none", color: hasPlaceChange(pl, placeDraft) ? "#0A0F1E" : C.muted, borderRadius: 100, padding: "8px 16px", fontSize: 12, fontWeight: 700, cursor: hasPlaceChange(pl, placeDraft) ? "pointer" : "default" }}>
+                                        style={{ background: hasPlaceChange(pl, placeDraft) ? C.gold : C.surface, border: "none", color: hasPlaceChange(pl, placeDraft) ? C.onGold : C.muted, borderRadius: 100, padding: "8px 16px", fontSize: 12, fontWeight: 700, cursor: hasPlaceChange(pl, placeDraft) ? "pointer" : "default" }}>
                                         {placeSaving ? "Saving…" : hasPlaceChange(pl, placeDraft) ? "Save" : "No change"}
                                       </button>
                                       <button onClick={() => setPlaceEditId(null)}
@@ -26218,10 +26308,10 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                             <button onClick={() => switchLang("en")} style={pill(photoMail.lang === "en")}>English</button>
                                             <div style={{ flex: 1 }} />
                                             {p.website && (
-                                              <a href={p.website} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: C.light, textDecoration: "underline" }}>Their site ↗</a>
+                                              <a href={externalHref(p.website) || undefined} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: C.light, textDecoration: "underline" }}>Their site ↗</a>
                                             )}
                                             {press && (
-                                              <a href={press} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: C.light, textDecoration: "underline", marginLeft: 10 }}>Press photos? ↗</a>
+                                              <a href={externalHref(press) || undefined} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: C.light, textDecoration: "underline", marginLeft: 10 }}>Press photos? ↗</a>
                                             )}
                                           </div>
                                           <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
@@ -26764,7 +26854,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                 <span style={{ fontSize: 9.5, color: C.muted }}>{d.credit.photographer} · {d.credit.license}</span>
                               )}
                               {d.sourceUrl ? (
-                                <a href={d.sourceUrl} target="_blank" rel="noreferrer" style={{ fontSize: 10.5, color: C.muted, textDecoration: "underline" }}>source</a>
+                                <a href={externalHref(d.sourceUrl) || undefined} target="_blank" rel="noreferrer" style={{ fontSize: 10.5, color: C.muted, textDecoration: "underline" }}>source</a>
                               ) : (
                                 <span style={{ fontSize: 10.5, color: "#FFB347" }}>no source URL</span>
                               )}
@@ -26953,13 +27043,13 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                               return (
                                 <button key={opt.id} onClick={() => { setDiscoverTarget(opt.id); setDiscoverTown(""); }}
                                   title={opt.hint}
-                                  style={{ background: on ? C.gold : "none", border: `1px solid ${on ? C.gold : C.border}`, color: on ? "#0A0F1E" : C.light, borderRadius: 100, padding: "5px 11px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                  style={{ background: on ? C.gold : "none", border: `1px solid ${on ? C.gold : C.border}`, color: on ? C.onGold : C.light, borderRadius: 100, padding: "5px 11px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                                   {opt.label}
                                   {/* null means this one cannot be counted honestly.
                                       An island is not a latitude band, and a count
                                       that is quietly false is worse than none. */}
                                   {typeof n === "number" && (
-                                    <span style={{ color: on ? "#0A0F1E99" : n === 0 ? "#FFB347" : C.muted, fontWeight: 700 }}> {n}</span>
+                                    <span style={{ color: on ? `${C.onGold}99` : n === 0 ? "#FFB347" : C.muted, fontWeight: 700 }}> {n}</span>
                                   )}
                                 </button>
                               );
@@ -27002,9 +27092,9 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                   return (
                                     <button key={st.id || st.name} onClick={() => setDiscoverStreet(on ? "" : st.name)}
                                       title={`${st.name}${st.town ? `, ${st.town}` : ""}: ${n} published on it`}
-                                      style={{ background: on ? C.gold : "none", border: `1px solid ${on ? C.gold : C.border}`, color: on ? "#0A0F1E" : C.light, borderRadius: 100, padding: "5px 11px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                      style={{ background: on ? C.gold : "none", border: `1px solid ${on ? C.gold : C.border}`, color: on ? C.onGold : C.light, borderRadius: 100, padding: "5px 11px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                                       {st.name}
-                                      <span style={{ color: on ? "#0A0F1E99" : n === 0 ? "#FFB347" : C.muted, fontWeight: 700 }}> {n}</span>
+                                      <span style={{ color: on ? `${C.onGold}99` : n === 0 ? "#FFB347" : C.muted, fontWeight: 700 }}> {n}</span>
                                     </button>
                                   );
                                 })}
@@ -27031,13 +27121,13 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                   return (
                                     <button key={opt.id} onClick={() => setDiscoverMonth(opt.id)}
                                       title={yr ? `${opt.label} ${yr}, the next one` : "No month filter"}
-                                      style={{ background: on ? C.gold : "none", border: `1px solid ${on ? C.gold : C.border}`, color: on ? "#0A0F1E" : C.light, borderRadius: 100, padding: "5px 11px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                      style={{ background: on ? C.gold : "none", border: `1px solid ${on ? C.gold : C.border}`, color: on ? C.onGold : C.light, borderRadius: 100, padding: "5px 11px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                                       {opt.label}
                                       {/* The year, because asking for December in
                                           August means this one and February means
                                           next, and getting that wrong sends the
                                           search after an edition already over. */}
-                                      {yr && <span style={{ color: on ? "#0A0F1E99" : C.muted, fontWeight: 700 }}> {String(yr).slice(2)}</span>}
+                                      {yr && <span style={{ color: on ? `${C.onGold}99` : C.muted, fontWeight: 700 }}> {String(yr).slice(2)}</span>}
                                     </button>
                                   );
                                 })}
@@ -27280,7 +27370,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                   </div>
                                   <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.55, marginTop: 2 }}>{pr.why}</div>
                                   {pr.url && (
-                                    <a href={pr.url} target="_blank" rel="noreferrer"
+                                    <a href={externalHref(pr.url) || undefined} target="_blank" rel="noreferrer"
                                       style={{ fontSize: 10.5, color: C.gold, textDecoration: "underline", wordBreak: "break-all" }}>
                                       {pr.url}
                                     </a>
@@ -27756,7 +27846,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                       <div style={{ fontSize: 10.5, color: C.muted, marginTop: 4, display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
                                         <span>Read off:</span>
                                         {c.evidence.slice(0, 3).map((u, k) => (
-                                          <a key={k} href={u} target="_blank" rel="noreferrer" style={{ color: C.gold, textDecoration: "underline" }}>{domainOf(u) || u}</a>
+                                          <a key={k} href={externalHref(u) || undefined} target="_blank" rel="noreferrer" style={{ color: C.gold, textDecoration: "underline" }}>{domainOf(u) || u}</a>
                                         ))}
                                       </div>
                                     )}
@@ -28274,7 +28364,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                               <span style={{ color: "#8BC34A" }}>{String(d.value)}</span>
                                             </div>
                                             {d.evidence && <div style={{ fontSize: 10.5, color: C.muted, marginTop: 2, lineHeight: 1.5, paddingLeft: 18 }}>{d.evidence}</div>}
-                                            {d.sourceUrl && <div style={{ fontSize: 10.5, marginTop: 2, paddingLeft: 18 }}><a href={d.sourceUrl} target="_blank" rel="noreferrer" style={{ color: C.gold }}>{d.sourceUrl.slice(0, 70)}</a></div>}
+                                            {d.sourceUrl && <div style={{ fontSize: 10.5, marginTop: 2, paddingLeft: 18 }}><a href={externalHref(d.sourceUrl) || undefined} target="_blank" rel="noreferrer" style={{ color: C.gold }}>{d.sourceUrl.slice(0, 70)}</a></div>}
                                           </div>
                                         )) : (
                                           <div style={{ fontSize: 11.5, color: C.muted, marginTop: 3 }}>Nothing settled it, so nothing changes here.</div>
@@ -29207,7 +29297,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                             {googleCheckResult.citations.length > 0 && (
                               <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
                                 {googleCheckResult.citations.map((c, i) => (
-                                  <a key={i} href={c.url} target="_blank" rel="noreferrer" style={{ fontSize: 10, color: "#8AB4F8", background: "#4285F418", border: "1px solid #4285F444", borderRadius: 100, padding: "3px 9px", textDecoration: "none" }}>{c.title.slice(0, 30)} ↗</a>
+                                  <a key={i} href={externalHref(c.url) || undefined} target="_blank" rel="noreferrer" style={{ fontSize: 10, color: "#8AB4F8", background: "#4285F418", border: "1px solid #4285F444", borderRadius: 100, padding: "3px 9px", textDecoration: "none" }}>{c.title.slice(0, 30)} ↗</a>
                                 ))}
                               </div>
                             )}
@@ -29257,7 +29347,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                         {c.verdict === "confirmed" ? "Checked against a source and it holds. " : c.verdict === "rejected" ? "Checked, and the draft was already right. " : c.verdict === "asserted" ? "Applied on your word, still unconfirmed. " : "Nothing settled it, so the draft is left alone. "}
                                         {c.evidence}
                                       </div>
-                                      {c.sourceUrl && <div style={{ paddingLeft: 18 }}><a href={c.sourceUrl} target="_blank" rel="noreferrer" style={{ color: C.gold, fontSize: 10.5 }}>{String(c.sourceUrl).slice(0, 70)}</a></div>}
+                                      {c.sourceUrl && <div style={{ paddingLeft: 18 }}><a href={externalHref(c.sourceUrl) || undefined} target="_blank" rel="noreferrer" style={{ color: C.gold, fontSize: 10.5 }}>{String(c.sourceUrl).slice(0, 70)}</a></div>}
                                     </div>
                                   );
                                 })}
@@ -29298,7 +29388,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                             {verifyResults.map((r, i) => (
                               <div key={i} style={{ marginBottom: i < verifyResults.length - 1 ? 10 : 0, paddingBottom: i < verifyResults.length - 1 ? 10 : 0, borderBottom: i < verifyResults.length - 1 ? `1px solid ${C.border}` : "none" }}>
                                 {r.url ? (
-                                  <a href={r.url} target="_blank" rel="noreferrer" style={{ fontSize: 11.5, fontWeight: 700, color: C.gold, textDecoration: "none" }}>{r.title} ↗</a>
+                                  <a href={externalHref(r.url) || undefined} target="_blank" rel="noreferrer" style={{ fontSize: 11.5, fontWeight: 700, color: C.gold, textDecoration: "none" }}>{r.title} ↗</a>
                                 ) : (
                                   <div style={{ fontSize: 11.5, fontWeight: 700, color: C.text }}>{r.title}</div>
                                 )}
@@ -29311,7 +29401,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         {editingId !== null && (
                           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: `${C.gold}12`, border: `1px solid ${C.gold}44`, borderRadius: 8, padding: "8px 12px", marginBottom: 10 }}>
                             <span style={{ fontSize: 11, color: C.gold, fontWeight: 700 }}>✏️ Editing an existing published entry (id {editingId})</span>
-                            <button onClick={() => { setEditingId(null); setStudioResult(null); setStudioDraft(null); setStudioDraftText(""); setStudioInstagramUrl(""); setStudioReelActive(false); setStudioFrozenGeo(null); }}
+                            <button onClick={() => { setEditingId(null); setEditingType(null); setStudioResult(null); setStudioDraft(null); setStudioDraftText(""); setStudioInstagramUrl(""); setStudioReelActive(false); setStudioFrozenGeo(null); }}
                               style={{ background: "none", border: "none", color: C.muted, fontSize: 11, cursor: "pointer", textDecoration: "underline" }}>Cancel</button>
                           </div>
                         )}
@@ -29343,10 +29433,14 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         <input value={studioOfferText} onChange={e => setStudioOfferText(e.target.value)}
                           maxLength={OFFER_TEXT_MAX} placeholder="Free bag of bolcher for the first 10 Gemlyx members"
                           style={{ width: "100%", border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 12px", fontSize: 12, outline: "none", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif", marginBottom: 8 }} />
-                        <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, marginBottom: 5 }}>VALID UNTIL (YYYY-MM-DD)</div>
-                        <input value={studioOfferUntil} onChange={e => setStudioOfferUntil(e.target.value)}
+                        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: C.light, marginBottom: 6, cursor: "pointer" }}>
+                          <input type="checkbox" checked={studioOfferOngoing} onChange={e => setStudioOfferOngoing(e.target.checked)} data-testid="studio-offer-ongoing" />
+                          No last day, it runs every week
+                        </label>
+                        {!studioOfferOngoing && <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, marginBottom: 5 }}>VALID UNTIL (YYYY-MM-DD)</div>}
+                        {!studioOfferOngoing && <input value={studioOfferUntil} onChange={e => setStudioOfferUntil(e.target.value)}
                           placeholder="2026-12-31"
-                          style={{ width: "100%", border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 12px", fontSize: 12, outline: "none", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif" }} />
+                          style={{ width: "100%", border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 12px", fontSize: 12, outline: "none", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif" }} />}
                         {/* Offer hours, Oliver 2 Oct 2026: "from 13.00-16.00 we
                             offer a full meal + free soda". No day picked and no
                             times means all day, every day, as before. The clock
@@ -29420,16 +29514,18 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           </div>
                         )}
 
-                        {/* ── WHICH EXPLORE FILTER ─────────────────────────────
-                            Oliver, 13 Oct 2026: Discounts, Entertainment,
-                            Activities on the Lithuanian Explore page. */}
-                        <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, margin: "12px 0 5px" }}>EXPLORE FILTER</div>
+                        {/* ── WHICH KIND OF PLACE ON EXPLORE ───────────────────
+                            Oliver, 14 Oct 2026: Restaurants, Nightlife,
+                            Attractions, Rentals on the Lithuanian Explore page,
+                            the round filters (CategoryFilter.jsx). */}
+                        <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, margin: "12px 0 5px" }}>KIND OF PLACE ON EXPLORE</div>
                         <select value={studioDealKind} onChange={e => setStudioDealKind(e.target.value)} data-testid="studio-deal-kind"
                           style={{ width: "100%", border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 12px", fontSize: 12, outline: "none", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif", boxSizing: "border-box" }}>
                           <option value="">Automatic, from the kind of place</option>
-                          <option value="discounts">Discounts</option>
-                          <option value="entertainment">Entertainment</option>
-                          <option value="activities">Activities</option>
+                          <option value="restaurants">Restaurants</option>
+                          <option value="nightlife">Nightlife</option>
+                          <option value="attractions">Attractions</option>
+                          <option value="rentals">Rentals</option>
                         </select>
 
                         {/* ── BOOK A TABLE, AND HOW BUSY ─────────────────────
@@ -29615,7 +29711,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               were fixed without 71 redrafts. See liveContentFailure. */}
           {libraryFailed && (
             <div style={{ margin: "10px 16px 0", padding: "10px 14px", borderRadius: 12, background: `${C.gold}14`, border: `1px solid ${C.gold}44`, fontSize: 12, color: C.text, lineHeight: 1.55 }}>
-              <b>We could not load the latest content.</b> What is shown below is what this page already had, so some places may be missing. It is not that they are not published. Reload in a moment and it should come back.
+              <b>{uiT("load.failedTitle", uiLang)}</b> {uiT("load.failedBody", uiLang)}
             </div>
           )}
           {/* ── HOME LANDING ─────────────────────────────────── */}
@@ -29625,8 +29721,15 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               and no guide sections here: the deals with their three filters,
               and the tourism centre's own site for everything else. */}
           {tab === "home" && PAGE_ABROAD && (
-            <div className={pageAnim} data-testid="explore-abroad" style={{ maxWidth: 680, margin: "0 auto", padding: "18px 16px 48px" }}>
-              <KlaipedaExplore lang={uiLang} />
+            <div className={pageAnim} data-testid="explore-abroad" style={{ paddingBottom: 48 }}>
+              <KlaipedaExplore lang={uiLang} version={liveContentVersion}
+                studio={isStudio && studioSession ? <DealStudio supaFetch={supaFetch} studioFetch={studioFetch} onChanged={dealChanged} upload={(file) => uploadToMedia(file, mediaPathFor(file, "deals", `deal-${Date.now()}`))} translate={translateDealOffer} />
+                  : isStudio && studioDoorOpen ? (
+                    <div data-testid="deal-studio-login" style={{ background: C.surface, border: `1px dashed ${C.gold}66`, borderRadius: 14, padding: "12px 15px", marginBottom: 18, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                      <div style={{ fontSize: 13, color: C.light }}>Log in to Studio to edit the deals.</div>
+                      <button onClick={() => goTab("ai")} style={{ background: C.gold, color: C.onGold, border: "none", borderRadius: 100, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap" }}>Log in</button>
+                    </div>
+                  ) : null} />
             </div>
           )}
           {tab === "home" && !PAGE_ABROAD && (
@@ -29634,7 +29737,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
 
 
               {/* Hero */}
-              <div className="hero-h" style={{ position: "relative", overflow: "hidden", background: PAGE_ABROAD ? "linear-gradient(160deg, #1A2A48 0%, #0A0F1E 100%)" : `url('/picture3.png') center/cover no-repeat` }}>
+              <div className="hero-h" style={{ position: "relative", overflow: "hidden", background: PAGE_ABROAD ? `linear-gradient(160deg, ${C.surface} 0%, ${C.bg} 100%)` : `url('/picture3.png') center/cover no-repeat` }}>
                 {/* Danish footage, so another country's page keeps the dark
                     gradient under it rather than showing Denmark. */}
                 {!videoError && !PAGE_ABROAD && (
@@ -29643,7 +29746,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     onError={() => setVideoError(true)}
                     style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "25% center", opacity: videoReady ? 1 : 0, transition: "opacity 0.6s ease" }} />
                 )}
-                <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(10,15,30,0.3) 0%, rgba(10,15,30,0.7) 100%)" }} />
+                <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(14,14,17,0.3) 0%, rgba(14,14,17,0.7) 100%)" }} />
                 {/* This is DENMARK's page now — the brand moment moved to the front
                     door (the country-select entrance). Headline is Denmark-specific;
                     the scroll cue sits in-flow so it can never overlap the CTA again
@@ -29730,7 +29833,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 2, textTransform: "uppercase", marginBottom: 12, textAlign: "center" }}>Today in {PAGE_LAND.name} <span style={{ color: C.muted }}>·</span> <DenmarkClock style={{ color: C.text, letterSpacing: 1 }} /></div>
 
                 <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
-                  <WeatherHeaderStrip weather={weather} weatherLoading={weatherLoading} checkWeather={checkWeather} />
+                  <WeatherHeaderStrip weather={weather} weatherLoading={weatherLoading} checkWeather={checkWeather} lang={uiLang} />
                 </div>
                 {(userCoords === null || userCoords === "denied") && (
                   <button onClick={requestLocation}
@@ -30596,7 +30699,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   <div className="towns-grid">
                     {filtered.map(item => (
                       <div key={`${item._kind}-${item.id}`} onClick={() => item._kind === "free" ? setFreeDetail(item) : setCraftDetail(item)} style={{ cursor: "pointer" }}>
-                        <div style={{ position: "relative", height: 210, borderRadius: 6, overflow: "hidden", background: `linear-gradient(135deg, ${item.color}40 0%, #0A0F1E 100%)`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <div style={{ position: "relative", height: 210, borderRadius: 6, overflow: "hidden", background: `linear-gradient(135deg, ${item.color}40 0%, ${C.bg} 100%)`, display: "flex", alignItems: "center", justifyContent: "center" }}>
                           {/* PhotoPlate, not a bare <img>: craft_items rows have no
                               photo column at all, and a src-less <img> never fires
                               onError, so Chrome used to draw its own broken-image
@@ -30644,7 +30747,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
 
                           <button onClick={(e) => { e.stopPropagation(); toggleSavePlace(item._kind, item, item._kind === "craft" ? item.location : item.city); }}
                             aria-label={isPlaceSaved(item._kind, item.id) ? "Saved" : "Save"}
-                            style={{ position: "absolute", bottom: 8, right: 8, background: "rgba(10,15,30,0.75)", backdropFilter: "blur(4px)", border: "none", borderRadius: 100, width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 13, color: isPlaceSaved(item._kind, item.id) ? "#E91E63" : "#ffffffaa" }}>
+                            style={{ position: "absolute", bottom: 8, right: 8, background: "rgba(14,14,17,0.75)", backdropFilter: "blur(4px)", border: "none", borderRadius: 100, width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 13, color: isPlaceSaved(item._kind, item.id) ? "#E91E63" : "#ffffffaa" }}>
                             {isPlaceSaved(item._kind, item.id) ? "♥" : "♡"}
                           </button>
                         </div>
@@ -30941,8 +31044,8 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         <img src={spot.photo} alt={spot.name} onError={e => { e.target.style.display = "none"; }}
                           style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
                       )}
-                      <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(10,15,30,0.5), transparent 45%)" }} />
-                      <div style={{ position: "absolute", bottom: 10, right: 12, fontSize: 12, fontWeight: 700, color: "#fff", background: "rgba(10,15,30,0.78)", backdropFilter: "blur(6px)", padding: "4px 11px", borderRadius: 100, border: `1px solid ${C.border}` }}>{shortLabel(spot.price, 22)}</div>
+                      <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(14,14,17,0.5), transparent 45%)" }} />
+                      <div style={{ position: "absolute", bottom: 10, right: 12, fontSize: 12, fontWeight: 700, color: "#fff", background: "rgba(14,14,17,0.78)", backdropFilter: "blur(6px)", padding: "4px 11px", borderRadius: 100, border: `1px solid ${C.border}` }}>{shortLabel(spot.price, 22)}</div>
                     </div>
                     <div style={{ padding: "13px 15px 15px" }}>
                       <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 4 }}>{[shortLabel(spot.category), spot.location].filter(Boolean).join(" · ")}</div>
@@ -31412,12 +31515,12 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   <div className="towns-grid">
                     {towns.filter(t => t.isMajorCity && !isArea(t) && townMatches(t)).sort(byRecommended).map(town => (
                       <div key={town.id} onClick={() => setTownDetail(town)} style={{ cursor: "pointer" }}>
-                        <div style={{ position: "relative", height: 210, borderRadius: 6, overflow: "hidden", background: "linear-gradient(135deg, #16233F 0%, #0A0F1E 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <div style={{ position: "relative", height: 210, borderRadius: 6, overflow: "hidden", background: `linear-gradient(135deg, ${C.surface} 0%, ${C.bg} 100%)`, display: "flex", alignItems: "center", justifyContent: "center" }}>
                           <PhotoPlate photo={town.photo} name={town.name} color={C.gold} />
                           <div style={{ position: "absolute", top: 8, right: 8, width: 68, height: 68, borderRadius: 10, overflow: "hidden", border: "1px solid rgba(255,255,255,0.4)", pointerEvents: "none" }}>
                             <DKLocator town={town.name} color={C.gold} />
                           </div>
-                          <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(10,15,30,0.8)", color: C.muted, fontSize: 9, fontWeight: 700, padding: "3px 9px", borderRadius: 100 }}>🏙 Major City</div>
+                          <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(14,14,17,0.8)", color: C.muted, fontSize: 9, fontWeight: 700, padding: "3px 9px", borderRadius: 100 }}>🏙 Major City</div>
                         </div>
                         <div style={{ fontSize: 21, fontWeight: 600, color: C.text, fontFamily: "'Fraunces', serif", marginTop: 12, lineHeight: 1.1 }}><EntryLink type="town" name={town.name}>{town.name}</EntryLink></div>
                         <div style={{ fontSize: 9, color: C.muted, textTransform: "uppercase", letterSpacing: 1.2, marginTop: 4 }}>{town.region}</div>
@@ -31561,7 +31664,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               <div className="towns-grid">
                 {towns.filter(t => !t.isMajorCity && !isArea(t) && townMatches(t)).sort(byRecommended).map(town => (
                   <div key={town.id} onClick={() => setTownDetail(town)} style={{ cursor: "pointer" }}>
-                    <div style={{ position: "relative", height: 210, borderRadius: 6, overflow: "hidden", background: "linear-gradient(135deg, #16233F 0%, #0A0F1E 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <div style={{ position: "relative", height: 210, borderRadius: 6, overflow: "hidden", background: `linear-gradient(135deg, ${C.surface} 0%, ${C.bg} 100%)`, display: "flex", alignItems: "center", justifyContent: "center" }}>
                       <PhotoPlate photo={town.photo} name={town.name} color={C.gold} />
                       <div style={{ position: "absolute", top: 8, right: 8, width: 68, height: 68, borderRadius: 10, overflow: "hidden", border: "1px solid rgba(255,255,255,0.4)", pointerEvents: "none" }}>
                         <DKLocator town={town.name} color={C.gold} />
@@ -31671,14 +31774,14 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         <div className="towns-grid">
                           {areas.filter(t => key(t).toLowerCase() === parent.toLowerCase()).sort(byName).map(town => (
                             <div key={town.id} onClick={() => setTownDetail(town)} style={{ cursor: "pointer" }}>
-                              <div style={{ position: "relative", height: 210, borderRadius: 6, overflow: "hidden", background: "linear-gradient(135deg, #16233F 0%, #0A0F1E 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                              <div style={{ position: "relative", height: 210, borderRadius: 6, overflow: "hidden", background: `linear-gradient(135deg, ${C.surface} 0%, ${C.bg} 100%)`, display: "flex", alignItems: "center", justifyContent: "center" }}>
                                 <PhotoPlate photo={town.photo} name={town.name} color={C.gold} />
                                 {/* No DKLocator here. A national map with one pin
                                     on it is a useful thing to show for a town on
                                     Ærø and a useless one for a district of
                                     Copenhagen: at that scale it points at the
                                     same dot as its parent. */}
-                                {parent && <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(10,15,30,0.8)", color: C.muted, fontSize: 9, fontWeight: 700, padding: "3px 9px", borderRadius: 100 }}>◇ In {parent}</div>}
+                                {parent && <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(14,14,17,0.8)", color: C.muted, fontSize: 9, fontWeight: 700, padding: "3px 9px", borderRadius: 100 }}>◇ In {parent}</div>}
                               </div>
                               <div style={{ fontSize: 21, fontWeight: 600, color: C.text, fontFamily: "'Fraunces', serif", marginTop: 12, lineHeight: 1.1 }}><EntryLink type="town" name={town.name}>{town.name}</EntryLink></div>
                               {/* "no parent set" is Studio's phrase for a missing field and means
@@ -31835,7 +31938,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     <div className="towns-grid">
                       {shown.map(isle => (
                         <div key={isle.id} onClick={() => setIslandDetail(isle)} style={{ cursor: "pointer" }}>
-                          <div style={{ position: "relative", height: 210, borderRadius: 6, overflow: "hidden", background: "linear-gradient(135deg, #16233F 0%, #0A0F1E 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <div style={{ position: "relative", height: 210, borderRadius: 6, overflow: "hidden", background: `linear-gradient(135deg, ${C.surface} 0%, ${C.bg} 100%)`, display: "flex", alignItems: "center", justifyContent: "center" }}>
                             <PhotoPlate photo={isle.photo} name={isle.name} color={C.gold} />
                             {/* An island is not in TOWN_COORDS, so the locator is
                                 handed the island's own published coordinate
@@ -32235,7 +32338,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     const on = intakeScope === sc.key;
                     return (
                       <button key={sc.key} onClick={() => setIntakeScope(on ? "" : sc.key)}
-                        style={{ background: on ? C.gold : "none", border: `1px solid ${on ? C.gold : C.border}`, color: on ? "#0A0F1E" : C.light, borderRadius: 100, padding: "8px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                        style={{ background: on ? C.gold : "none", border: `1px solid ${on ? C.gold : C.border}`, color: on ? C.onGold : C.light, borderRadius: 100, padding: "8px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                         {sc.label}
                       </button>
                     );
@@ -32305,7 +32408,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     const mark = stayIsHouse(ch.key) ? SUMMERHOUSE_MARK[houseVerdict] : "";
                     return (
                       <button key={ch.key} onClick={() => { setIntakeStay(on ? "" : ch.key); if (on) setIntakeStayName(""); }}
-                        style={{ background: on ? C.gold : "none", border: `1px solid ${on ? C.gold : C.border}`, color: on ? "#0A0F1E" : C.light, borderRadius: 100, padding: "8px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                        style={{ background: on ? C.gold : "none", border: `1px solid ${on ? C.gold : C.border}`, color: on ? C.onGold : C.light, borderRadius: 100, padding: "8px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                         {ch.label}{mark ? <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, opacity: 0.85 }}>{houseVerdict === "strong" ? "★" : "✓"}</span> : null}
                       </button>
                     );
@@ -32343,7 +32446,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     return (
                       <button key={t.key} onClick={() => setIntakeFood(on ? "" : t.key)}
                         title={t.what}
-                        style={{ background: on ? C.gold : "none", border: `1px solid ${on ? C.gold : C.border}`, color: on ? "#0A0F1E" : C.light, borderRadius: 100, padding: "8px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                        style={{ background: on ? C.gold : "none", border: `1px solid ${on ? C.gold : C.border}`, color: on ? C.onGold : C.light, borderRadius: 100, padding: "8px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                         {t.label}
                       </button>
                     );
@@ -32664,8 +32767,8 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             return (
             <div className={pageAnim} style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
               <div style={{ marginBottom: 16 }}>
-                <div style={{ fontSize: 20, fontWeight: 700, fontFamily: "'Fraunces', serif", color: C.text }}>{onTips ? "✦ Tips" : "✓ Travel Essentials"}</div>
-                <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>{onTips ? "Worth knowing. None of it will strand you, all of it makes the trip better." : "The short list. Sort these before you go, or they cost you money on the day."}</div>
+                <div style={{ fontSize: 20, fontWeight: 700, fontFamily: "'Fraunces', serif", color: C.text }}>{onTips ? `✦ ${uiT("nav.tips", uiLang)}` : `✓ ${uiT("ess.title", uiLang)}`}</div>
+                <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>{uiT(onTips ? "tips.lead" : "ess.lead", uiLang)}</div>
               </div>
               <PageHero src="/checklist.jpg" emoji={onTips ? "✦" : "✓"} color={onTips ? "#B8860B" : "#2E7D32"} />
               {/* ── THE TWO PAGES POINT AT EACH OTHER ─────────────────
@@ -32677,7 +32780,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               {!(PAGE_ABROAD && onTips && essentialsOnly(essentials).length === 0) && (
               <button data-testid="ess-tips-pointer" onClick={() => goTab(onTips ? "essentials" : "tips")}
                 style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 12, padding: "10px 14px", marginBottom: 16, cursor: "pointer", fontFamily: "'Inter', sans-serif", fontSize: 12, fontWeight: 600, color: C.gold }}>
-                {onTips ? (PAGE_ABROAD ? "Tickets, money and transport are on Essentials →" : "Tickets, money and the transit fine are on Essentials →") : (PAGE_ABROAD ? "Extras worth knowing are on Tips →" : "The Copenhagen Card, bikes and other extras are on Tips →")}
+                {uiT(onTips ? (PAGE_ABROAD ? "ess.toEss" : "ess.toEssDk") : (PAGE_ABROAD ? "ess.toTips" : "ess.toTipsDk"), uiLang).replace("{to}", uiT(onTips ? "nav.essentials" : "nav.tips", uiLang))}
               </button>
               )}
 
@@ -32690,7 +32793,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   </div>
                   <div style={{ fontSize: 12, color: C.light, lineHeight: 1.6, marginBottom: 8 }}>{item.desc}</div>
                   <div style={{ background: C.bg, borderRadius: 8, padding: "8px 10px", marginBottom: 8 }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: "#FFB347", marginBottom: 3 }}>The 3 mistakes to avoid</div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#FFB347", marginBottom: 3 }}>{uiT("ess.mistakes", uiLang)}</div>
                     <div style={{ fontSize: 11, color: C.text, lineHeight: 1.5 }}>{item.howTo}</div>
                   </div>
                   {/* Guarded: a draft with no tip published a card showing a
@@ -32711,9 +32814,9 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   // Essentials keeps it. Tips is advice worth reading before a
                   // trip and a five day forecast is neither advice nor worth
                   // reading in advance, so the chip goes with the block below.
-                  ...(onTips ? [] : [{ id: "ess-weather", icon: "🌤", label: "Weather", color: "#1565C0" }]),
+                  ...(onTips ? [] : [{ id: "ess-weather", icon: "🌤", label: uiT("ess.weather", uiLang), color: "#1565C0" }]),
                   ...cats.map(c => ({ id: c.anchor, icon: c.icon, label: c.cat, color: c.color })),
-                  { id: "ess-faq", icon: "❓", label: "FAQ", color: "#455A64" },
+                  { id: "ess-faq", icon: "❓", label: uiT("menu.faq", uiLang), color: "#455A64" },
                 ].map(s => (
                   <button key={s.id} onClick={() => document.getElementById(s.id)?.scrollIntoView({ behavior: "smooth", block: "start" })}
                     style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px 6px", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
@@ -32727,7 +32830,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               {!onTips && (
                 <div id="ess-weather" style={{ scrollMarginTop: 90 }}>
                   {WEATHER_CITIES.map(c => (
-                    <WeatherStrip key={c.key} label={`🌤 ${c.label}`} weatherKey={c.key} lat={c.lat} lon={c.lon} weather={weather} weatherLoading={weatherLoading} checkWeather={checkWeather} />
+                    <WeatherStrip key={c.key} label={`🌤 ${c.label}`} weatherKey={c.key} lat={c.lat} lon={c.lon} weather={weather} weatherLoading={weatherLoading} checkWeather={checkWeather} lang={uiLang} />
                   ))}
                 </div>
               )}
@@ -33059,13 +33162,11 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               <div id="ess-faq" style={{ marginBottom: 20, scrollMarginTop: 90 }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>{uiT("menu.faq", uiLang)}</div>
                 {[
-                  { q: "Is Gemlyx free?", a: "Everything on the site today is free: browsing, saving, the map, the guides and the finds. If a paid plan is ever added it will be for extra things on top, the free part stays free, and we will say so here before anything changes rather than after." },
-                  { q: "How do I save a find?", a: "Tap the ♡ heart on any business. It gets saved to your Saved tab instantly." },
-                  { q: "How do I get my shop listed?", a: "Send us a message on Instagram or email hello@gemlyxtravel.com. Every listing is hand-researched and checked against multiple sources before it goes live." },
-                  { q: "Are all finds verified?", a: "Every listing is researched and checked by one person before it goes live, and nothing here is invented. Where the sources are recorded we show them on the page, including the corrections we had to make and the questions still open. Older entries were written before we started storing sources, so some show fewer than others, and we are working back through them." },
+                  // In the reader's language since 14 Oct 2026 (uiLanguage.js, faq.*).
+                  ...["free", "save", "listed", "verified"].map(k => ({ q: uiT(`faq.${k}.q`, uiLang), a: uiT(`faq.${k}.a`, uiLang) })),
                   PAGE_ABROAD
-                    ? { q: "Which cities are covered?", a: `${towns.length ? towns.map(t => t.name).join(", ") : "Klaipėda"} for now, with more of ${PAGE_LAND.name} to follow. Denmark has its own guide at gemlyxtravel.com.` }
-                    : { q: "Which cities are covered?", a: "All of Denmark, not just Copenhagen. Towns across Jutland, North Zealand and the islands are covered too, along with the coasts most visitors to Denmark are already heading for." },
+                    ? { q: uiT("faq.cities.q", uiLang), a: uiT("faq.citiesAbroad.a", uiLang).replace("{towns}", towns.length ? towns.map(t => t.name).join(", ") : "Klaipėda").replace("{land}", countryName(PAGE_COUNTRY, uiLang, PAGE_LAND.name)) }
+                    : { q: uiT("faq.cities.q", uiLang), a: uiT("faq.citiesDk.a", uiLang) },
                 ].map((item, i) => (
                   <div key={i} style={{ background: C.surface, borderRadius: 12, padding: "12px 16px", marginBottom: 8, border: `1px solid ${C.border}` }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 4 }}>{item.q}</div>
@@ -33073,7 +33174,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   </div>
                 ))}
                 <div style={{ background: C.surface, borderRadius: 12, padding: "12px 16px", border: `1px solid ${C.border}` }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 4 }}>Still need help?</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 4 }}>{uiT("faq.help", uiLang)}</div>
                   <a href="mailto:hello@gemlyxtravel.com" style={{ display: "inline-block", background: C.accent, color: C.onAccent, borderRadius: 100, padding: "6px 14px", fontSize: 11, fontWeight: 700, textDecoration: "none", marginTop: 6 }}>✉ hello@gemlyxtravel.com</a>
                 </div>
               </div>
@@ -33197,9 +33298,9 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
         ::-webkit-scrollbar { width: 0; }
         @media (min-width: 900px) {
           ::-webkit-scrollbar { width: 10px; }
-          ::-webkit-scrollbar-track { background: #0A0F1E; }
-          ::-webkit-scrollbar-thumb { background: #2A3A52; border-radius: 100px; }
-          ::-webkit-scrollbar-thumb:hover { background: #64708C; }
+          ::-webkit-scrollbar-track { background: ${C.bg}; }
+          ::-webkit-scrollbar-thumb { background: ${C.border}; border-radius: 100px; }
+          ::-webkit-scrollbar-thumb:hover { background: ${C.muted}; }
         }
         .towns-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px 14px; }
         @media (min-width: 900px) { .towns-grid { grid-template-columns: repeat(3, 1fr); gap: 34px 22px; } }
@@ -33230,13 +33331,13 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
            Found the hard way, thirty seconds after writing this comment with
            backticks in it. */
         ${tileCss()}
-        .gemlyx-map-label { background: #0A0F1E; color: #D9A441; border: 1px solid #D9A44166; border-radius: 6px; padding: 2px 7px; font-size: 10px; font-weight: 700; font-family: 'Inter', sans-serif; box-shadow: 0 2px 6px rgba(0,0,0,0.5); }
+        .gemlyx-map-label { background: ${C.bg}; color: ${C.gold}; border: 1px solid ${C.gold}66; border-radius: 6px; padding: 2px 7px; font-size: 10px; font-weight: 700; font-family: 'Inter', sans-serif; box-shadow: 0 2px 6px rgba(0,0,0,0.5); }
         .gemlyx-map-label::before { border-top-color: #D9A44166 !important; }
         .leaflet-container { background: #0D1526 !important; font-family: 'Inter', sans-serif !important; }
         .leaflet-control-zoom { border: 1px solid #212C44 !important; border-radius: 10px !important; overflow: hidden; box-shadow: 0 4px 14px rgba(0,0,0,0.5) !important; }
-        .leaflet-control-zoom a { background: rgba(10,15,30,0.92) !important; color: #E8EDF7 !important; border-bottom: 1px solid #212C44 !important; width: 30px !important; height: 30px !important; line-height: 30px !important; font-size: 15px !important; }
+        .leaflet-control-zoom a { background: rgba(14,14,17,0.92) !important; color: #E8EDF7 !important; border-bottom: 1px solid #212C44 !important; width: 30px !important; height: 30px !important; line-height: 30px !important; font-size: 15px !important; }
         .leaflet-control-zoom a:hover { background: #16203A !important; color: #D9A441 !important; }
-        .leaflet-control-attribution { background: rgba(10,15,30,0.78) !important; color: #64708C !important; font-size: 9px !important; padding: 2px 6px !important; border-radius: 8px 0 0 0 !important; }
+        .leaflet-control-attribution { background: rgba(14,14,17,0.78) !important; color: #64708C !important; font-size: 9px !important; padding: 2px 6px !important; border-radius: 8px 0 0 0 !important; }
         .leaflet-control-attribution a { color: #8fa3c7 !important; }
         @supports (height: 100dvh) { .app-root { height: 100dvh; } .hero-h { height: calc(100dvh - 196px); } }
         @media (min-width: 900px) {
@@ -33257,6 +33358,34 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
         .gemlyx-msg-in { animation: gemlyxMsgIn 0.28s ease both; }
         ${railCss()}
         ${railMapCss(C)}
+        /* ── THE MENU, 16 OCT 2026 ─────────────────────────────────
+           Oliver, with a UI guide for the burger and its menu: "We need the
+           menu and burger menu fixed. Modernised." Three gold bars that turn
+           into an X while the menu is open, a gold ring on hover like the
+           search field's, and a panel that slides in from the right over a
+           dimmed page, frosted, with a hairline of gold at its edge. */
+        .gemlyx-account { width: 40px; height: 40px; border: 1px solid transparent !important; transition: border-color .2s ease, box-shadow .2s ease; }
+        @media (hover: hover) { .gemlyx-account:hover { border-color: ${C.gold}88 !important; box-shadow: 0 0 0 3px ${C.gold}1F; } }
+        .gemlyx-account:focus-visible { outline: none; border-color: ${C.gold} !important; box-shadow: 0 0 0 3px ${C.gold}33; }
+        .gx-burger-bars { position: relative; display: block; width: 20px; height: 14px; }
+        .gx-burger-bars > i { position: absolute; left: 0; width: 20px; height: 2.25px; border-radius: 2px; background: ${C.gold}; transition: transform .28s cubic-bezier(.2,.7,.2,1), top .28s cubic-bezier(.2,.7,.2,1), opacity .18s ease; }
+        .gx-burger-bars > i:nth-child(1) { top: 0; }
+        .gx-burger-bars > i:nth-child(2) { top: 6px; }
+        .gx-burger-bars > i:nth-child(3) { top: 12px; }
+        .gemlyx-account[aria-expanded="true"] .gx-burger-bars > i:nth-child(1) { top: 6px; transform: rotate(45deg); }
+        .gemlyx-account[aria-expanded="true"] .gx-burger-bars > i:nth-child(2) { opacity: 0; transform: scaleX(.2); }
+        .gemlyx-account[aria-expanded="true"] .gx-burger-bars > i:nth-child(3) { top: 6px; transform: rotate(-45deg); }
+        @keyframes gxDrawerIn { from { transform: translateX(100%); } to { transform: none; } }
+        @keyframes gxDimIn { from { opacity: 0; } to { opacity: 1; } }
+        .gx-drawer { animation: gxDrawerIn .34s cubic-bezier(.2,.7,.2,1) both; }
+        .gx-drawer-dim { animation: gxDimIn .25s ease both; }
+        @media (hover: hover) { .gx-menu-row:hover { background: ${C.gold}14 !important; } }
+        .gx-swatch-dot, .gx-flag-dot { transition: box-shadow .18s ease; }
+        @media (hover: hover) { .gx-swatch:hover .gx-swatch-dot, .gx-flag:hover .gx-flag-dot { box-shadow: 0 0 0 2px ${C.bg}, 0 0 0 3px ${C.gold}66; } }
+        .gx-flag-dot svg { filter: grayscale(.9) brightness(.78); transition: filter .2s ease; }
+        .gx-flag[aria-pressed="true"] .gx-flag-dot svg { filter: none; }
+        @media (hover: hover) { .gx-flag:hover .gx-flag-dot svg { filter: none; } }
+        @media (prefers-reduced-motion: reduce) { .gx-drawer, .gx-drawer-dim { animation: none; } .gx-burger-bars > i { transition: none; } }
         .gemlyx-thinking-dot { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: ${C.gold}; margin: 0 2px; animation: gemlyxDotPulse 1.1s ease infinite; }
         @media (min-width: 900px) { .mobile-only { display: none !important; } }
         @media (max-width: 899px) { .desktop-only { display: none !important; } }
@@ -33336,6 +33465,13 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           .gx-topnav { display: flex; }
           .gx-topnav-ai { display: inline-flex; }
           .gx-nav-in-menu { display: none !important; }
+          /* The page pill at the foot of the pager says what the bar above
+             already underlines (design review, 15 Oct 2026). */
+          .gx-pager-pill { display: none !important; }
+          /* The lockup a step larger where there is room for it: 22px reads
+             as a favicon next to a 34px search pill. Scaled, not resized, so
+             the drawing is the same one a phone shows. */
+          .gx-lockup { transform: scale(1.18); transform-origin: left center; margin-right: 24px; }
         }
         /* ── ARRIVING IN DENMARK ─────────────────────────────────
            The white the wash left behind, handed over to the app side so the
@@ -33961,7 +34097,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
         </div>
       )}
 
-      <div style={{ background: C.bg, borderBottom: `1px solid ${C.border}`, padding: "calc(14px + env(safe-area-inset-top)) 16px 10px", position: "relative" }}>
+      <div ref={headerRef} style={{ background: C.bg, borderBottom: `1px solid ${C.border}`, padding: "calc(14px + env(safe-area-inset-top)) 16px 10px", position: "relative", zIndex: showMenu ? 310 : "auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           {/* ── THE LOGO IS THE WAY BACK TO THE FRONT PAGE ──────────
               His words, 23 Aug. A <button> rather than a <div onClick>, which
@@ -33969,7 +34105,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               nothing to a screen reader, and this is the one control on the
               header that every other site has trained people to press. His
               father is the accessibility test for this product. */}
-          <button onClick={backToFrontPage} aria-label={uiT("header.back", uiLang)}
+          <button onClick={backToFrontPage} aria-label={uiT("header.back", uiLang)} className="gx-lockup"
             style={{ display: "flex", alignItems: "center", background: "none", border: "none", padding: 0, cursor: "pointer", flexShrink: 0 }}>
             <GemlyxLogo size={22} color={C.text} />
           </button>
@@ -33987,6 +34123,9 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               first casualty: his screenshot reads "✦ Gemlyx Det". Rendering it
               outside the strip is what makes always-visible true by
               construction rather than by guessing a breakpoint. */}
+          {/* Not on /lithuania since 16 Oct 2026 (TOP_NAV_SHOWN, at the top
+              of this file): the logo, the search and the menu are the bar there. */}
+          {TOP_NAV_SHOWN && (<>
           <NavStrip C={C}>
             <NavGroupButtons groups={navGroups} active={active} eventTab={eventTab} onPick={pickNav} C={C} />
           </NavStrip>
@@ -34002,6 +34141,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             style={{ gap: 6, background: `linear-gradient(135deg, ${C.gold}, ${C.accent})`, color: "#fff", border: "none", borderRadius: 100, padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginLeft: 8, marginRight: 4, whiteSpace: "nowrap", flexShrink: 0, boxShadow: `0 2px 10px ${C.gold}33` }}>
             {NAV_ITEMS.find(item => item.id === featuredTab)?.label}
           </button>}
+          </>)}
 
           {/* Right: the small persistent search pill (always visible, not a
               toggle) + menu. The language flags were here for a day and cost the
@@ -34056,15 +34196,26 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 and the width of the header do not move when somebody signs in.
                 See components/AccountAvatar.jsx for why the person is drawn
                 underneath the picture rather than instead of it. */}
-            <button className="gemlyx-account" onClick={() => setShowMenu(!showMenu)}
+            {/* ── THE BELL, FOR NEW DEALS ──────────────────────────
+                Oliver, 14 Oct 2026: "make a notification system for users, so
+                they can see whenever a new discount has popped up." For members
+                who are signed in, on the Lithuanian site, beside the account
+                picture and in the same row, never fixed on top of it (the bell
+                of 5 Sep was, and took the menu with it). It draws nothing until
+                its tables exist. See components/DealAlerts.jsx. */}
+            {PAGE_COUNTRY === "LT" && userSession?.userId && (
+              <DealAlertsBell session={userSession} lang={uiLang} version={liveContentVersion}
+                onOpenDeal={(id) => { setShowMenu(false); goTab("home"); requestOpenDeal(id); }} />
+            )}
+            <button className="gemlyx-account" onClick={() => setShowMenu(!showMenu)} aria-expanded={showMenu}
               aria-label={[uiT("header.menu", uiLang), userSession ? accountLabel() : "", unreadTripChanges > 0 ? alertCountLine(unreadTripChanges) : "", noticesWaiting > 0 ? `${noticesWaiting} thing${noticesWaiting === 1 ? "" : "s"} on near you` : ""].filter(Boolean).join(". ")}
               title={unreadTripChanges > 0 ? alertCountLine(unreadTripChanges) : uiT("header.menu", uiLang)}
-              style={{ position: "relative", background: "none", border: "none", padding: 0, cursor: "pointer", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              style={{ position: "relative", background: "none", padding: 0, cursor: "pointer", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               {userSession ? (
                 <AccountAvatar url={avatarUrl(userSession, userProfile)} size={32} alt="" />
               ) : (
                 <span style={{ width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <Ico name="menu" size={21} color={C.text} />
+                  <span className="gx-burger-bars" aria-hidden="true"><i /><i /><i /></span>
                 </span>
               )}
               {/* Gold rather than red, and a dot rather than a number. Red on
@@ -34122,8 +34273,8 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
 
       {/* ── DROPDOWN MENU ──────────────────────────────────── */}
       {showMenu && (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 300 }} onClick={() => setShowMenu(false)}>
-          <div style={{ position: "absolute", top: 70, right: 16, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "8px", minWidth: 220, boxShadow: "0 8px 32px rgba(0,0,0,0.6)", maxHeight: "70vh", overflowY: "auto" }} onClick={e => e.stopPropagation()}>
+        <div className="gx-drawer-dim" style={{ position: "fixed", top: headerRef.current ? Math.round(headerRef.current.getBoundingClientRect().bottom) : 0, left: 0, right: 0, bottom: 0, zIndex: 300, background: "rgba(6,6,8,0.5)", backdropFilter: "blur(2px)", WebkitBackdropFilter: "blur(2px)" }} onClick={() => setShowMenu(false)}>
+          <nav className="gx-drawer" aria-label={uiT("header.menu", uiLang)} style={{ position: "absolute", top: 0, right: 0, bottom: 0, width: "min(360px, 88vw)", background: `${C.surface}E6`, backdropFilter: "blur(14px) saturate(140%)", WebkitBackdropFilter: "blur(14px) saturate(140%)", borderLeft: `1px solid ${C.gold}33`, boxShadow: "-18px 0 48px rgba(0,0,0,0.45)", padding: "14px 14px calc(24px + env(safe-area-inset-bottom))", overflowY: "auto", overscrollBehavior: "contain" }} onClick={e => e.stopPropagation()}>
             <style>{`@keyframes fadeSlideIn { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: translateX(0); } }
               @keyframes gxPulse { 0%,100% { opacity: 1 } 50% { opacity: .45 } }
               @media (prefers-reduced-motion: reduce) { .gx-pulse { animation: none !important } }`}</style>
@@ -34156,7 +34307,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     <div style={{ fontSize: 13, fontWeight: 700, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {accountLabel()}
                     </div>
-                    <div style={{ fontSize: 10.5, color: C.muted }}>{savedGuides.length} saved · {savedPlaces.length} kept</div>
+                    {MENU_PAGES_SHOWN && <div style={{ fontSize: 10.5, color: C.muted }}>{savedGuides.length} saved · {savedPlaces.length} kept</div>}
                   </div>
                 </div>
                 {/* ── SAVED TRIPS, WITH THE COUNT ON IT ──────────────
@@ -34173,7 +34324,8 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     which also means the address bar names where you are and the
                     back button works. readTripChanges still runs here, because
                     the count on this row is the thing being marked as read. */}
-                <button onClick={() => { setShowMenu(false); readTripChanges(); navigate(`${ABOUT_ME_PATH}/trips`); }}
+                {MENU_PAGES_SHOWN && (<>
+                <button className="gx-menu-row" onClick={() => { setShowMenu(false); readTripChanges(); navigate(`${ABOUT_ME_PATH}/trips`); }}
                   style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", background: "none", border: "none", color: C.text, padding: "10px 12px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", textAlign: "left", borderRadius: 10 }}>
                   <Ico name="book" size={15} color={C.gold} />
                   <span style={{ flex: 1 }}>{uiT("menu.saved", uiLang)}</span>
@@ -34183,26 +34335,28 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     </span>
                   )}
                 </button>
-                <div style={{ height: 1, background: C.border, margin: "6px 8px 8px" }} />
+                </>)}
+                <div style={{ height: 1, background: `${C.gold}1A`, margin: "8px 8px 10px" }} />
               </>
             )}
             {/* Three swatches rather than a dropdown: the choice is entirely
                 about how something looks, so showing the colour is the whole
                 control. Warm is first because it is the default. */}
             <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", padding: "8px 16px 6px" }}>{uiT("header.theme", uiLang)}</div>
-            <div style={{ display: "flex", gap: 6, padding: "0 12px 10px" }}>
+            {/* Circles since 16 Oct 2026, like the category circles: the
+                theme's own ground with its gold in the middle, and a gold ring
+                round the one in use. */}
+            <div style={{ display: "flex", gap: 4, padding: "2px 8px 12px" }}>
               {THEME_ORDER.map(key => {
                 const t = THEMES[key];
                 const on = themeName === key;
                 return (
-                  <button key={key} onClick={() => setThemeName(key)} title={t.hint}
-                    style={{ flex: 1, background: "transparent", border: `1px solid ${on ? C.gold : C.border}`, borderRadius: 10, padding: "7px 6px 6px", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                    <span style={{ display: "flex", gap: 3, justifyContent: "center", marginBottom: 5 }}>
-                      {[t.bg, t.surface, t.gold].map((col, ci) => (
-                        <span key={ci} style={{ width: 11, height: 11, borderRadius: "50%", background: col, border: `1px solid ${t.border}`, display: "inline-block" }} />
-                      ))}
+                  <button key={key} className="gx-swatch" onClick={() => setThemeName(key)} title={t.hint} aria-pressed={on}
+                    style={{ flex: 1, background: "transparent", border: "none", padding: "6px 2px", cursor: "pointer", fontFamily: "'Inter', sans-serif", display: "flex", flexDirection: "column", alignItems: "center", gap: 7 }}>
+                    <span className="gx-swatch-dot" style={{ width: 30, height: 30, borderRadius: "50%", background: t.bg, border: `1px solid ${t.border}`, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: on ? `0 0 0 2px ${C.bg}, 0 0 0 3.5px ${C.gold}` : "none" }}>
+                      <span style={{ width: 10, height: 10, borderRadius: "50%", background: t.gold }} />
                     </span>
-                    <span style={{ fontSize: 10.5, fontWeight: 700, color: on ? C.gold : C.muted }}>{t.name}</span>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: on ? C.gold : C.muted }}>{t.name}</span>
                   </button>
                 );
               })}
@@ -34215,7 +34369,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             {/* gx-nav-in-menu: at 1080px and up these same pages are in the bar
                 along the top, so repeating them here would be two controls for
                 one thing. Everything BELOW this block stays at every width. */}
-            <div className="gx-nav-in-menu">
+            {MENU_PAGES_SHOWN && (<div className="gx-nav-in-menu">
             <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", padding: "8px 16px 6px" }}>{uiT("menu.navigate", uiLang)}</div>
             {/* The same groups as the bar along the top (utils/navGroups.js),
                 as an accordion: a group opens under itself, and the one holding
@@ -34226,7 +34380,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 const c = g.children[0];
                 const on = childActive(c, active, eventTab);
                 return (
-                  <button key={g.id} onClick={() => { setShowMenu(false); pickNav(c); }} style={rowStyle(on, false)}>
+                  <button key={g.id} className="gx-menu-row" onClick={() => { setShowMenu(false); pickNav(c); }} style={rowStyle(on, false)}>
                     {c.ico && <Ico name={c.ico} size={15} color={on ? C.text : C.muted} />}
                     {c.label}
                   </button>
@@ -34236,7 +34390,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               const open = menuGroupOpen === g.id || (menuGroupOpen === null && holds);
               return (
                 <div key={g.id}>
-                  <button data-testid={`menu-group-${g.id}`} aria-expanded={open} onClick={() => setMenuGroupOpen(open ? "" : g.id)} style={rowStyle(holds && !open, false)}>
+                  <button className="gx-menu-row" data-testid={`menu-group-${g.id}`} aria-expanded={open} onClick={() => setMenuGroupOpen(open ? "" : g.id)} style={rowStyle(holds && !open, false)}>
                     {g.ico && <Ico name={g.ico} size={15} color={holds ? C.text : C.muted} />}
                     <span style={{ flex: 1 }}>{g.label}</span>
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={C.muted} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform .15s ease" }} aria-hidden="true"><polyline points="6 9 12 15 18 9" /></svg>
@@ -34244,7 +34398,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   {open && g.children.map(c => {
                     const on = childActive(c, active, eventTab);
                     return (
-                      <button key={c.key} onClick={() => { setShowMenu(false); pickNav(c); }} style={rowStyle(on, true)}>
+                      <button key={c.key} className="gx-menu-row" onClick={() => { setShowMenu(false); pickNav(c); }} style={rowStyle(on, true)}>
                         {c.label}
                       </button>
                     );
@@ -34258,8 +34412,8 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 {item.label}
               </button>
             ))}
-            </div>
-            <div style={{ borderTop: `1px solid ${C.border}`, margin: "6px 0" }} />
+            </div>)}
+            <div style={{ height: 1, background: `${C.gold}1A`, margin: "10px 8px" }} />
             {/* ── WHAT CAME OUT OF THIS LIST, 14 SEP 2026 ──────────────
                 Oliver read it back to himself with the menu open and took three
                 rows off it, each for its own reason.
@@ -34332,7 +34486,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               ...(userSession || OPEN_ABROAD ? [{ id: "problem", label: uiT("menu.problem", uiLang), ico: "bulb", action: "problem" }] : []),
               { id: "support", label: uiT("menu.support", uiLang), ico: "mail", action: "mail" },
             ].map((item, i) => (
-              <button key={item.id}
+              <button key={item.id} className="gx-menu-row"
                 onClick={() => {
                   setShowMenu(false);
                   if (item.action === "problem") navigate(`${SUPPORT_PATH}?topic=${PROBLEM_TOPIC}${countryParam(PAGE_COUNTRY)}`);
@@ -34352,12 +34506,16 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   // to the sheet when there is not. One decision, in openAccount.
                   else if (item.action === "login") openAccount();
                 }}
-                style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: "transparent", color: C.light, border: "none", borderRadius: 10, padding: "13px 16px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 2, animation: `fadeSlideIn 0.2s ease ${(i + 11) * 0.04}s both` }}>
-                <Ico name={item.ico} size={15} color={C.muted} />
+                style={{ display: "flex", alignItems: "center", gap: 14, width: "100%", textAlign: "left", background: "transparent", color: C.text, border: "none", borderRadius: 12, padding: "10px 10px", fontSize: 19, fontWeight: 500, letterSpacing: -0.1, cursor: "pointer", fontFamily: "'Fraunces', serif", marginBottom: 2, animation: `fadeSlideIn 0.2s ease ${(i + 4) * 0.04}s both` }}>
+                {/* A gold sign on a soft gold disc, the way the category
+                    circles carry theirs (16 Oct 2026). */}
+                <span aria-hidden="true" style={{ width: 34, height: 34, borderRadius: "50%", background: `${C.gold}1F`, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <Ico name={item.ico} size={16} color={C.gold} strokeWidth={2.2} />
+                </span>
                 {item.label}
               </button>
             ))}
-          </div>
+          </nav>
         </div>
       )}
 
@@ -34385,7 +34543,15 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             you are on now sits in the same pill, which answers the question the
             dots were raising, and the active dot is a bar rather than a circle
             so position is readable at a glance. */}
-        <div style={{ position: "absolute", bottom: 12, left: "50%", transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: 9, zIndex: 60, background: "rgba(10,15,30,0.62)", padding: "6px 12px 6px 14px", borderRadius: 100, backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.08)", maxWidth: "calc(100vw - 32px)" }}>
+        {/* ── NOT ON A COMPUTER ──────────────────────────────────────
+            Design review, 15 Oct 2026, with Explore on /lithuania at 1440px:
+            this pill floated over the names under the category circles and
+            over the last line of the deals (design_before_desktop_explore.png).
+            From 1024px up the pages are in the bar at the top, with the one
+            you are on underlined, so the pill was saying it twice and covering
+            content to do it. .gx-pager-pill hides it there; a phone and a
+            tablet keep it, since the burger holds their pages. */}
+        <div className="gx-pager-pill" style={{ position: "absolute", bottom: 12, left: "50%", transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: 9, zIndex: 60, background: "rgba(14,14,17,0.62)", padding: "6px 12px 6px 14px", borderRadius: 100, backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.08)", maxWidth: "calc(100vw - 32px)" }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: "#fff", whiteSpace: "nowrap", letterSpacing: 0.2 }}>
             {(NAV_ITEMS.find(n => n.id === active)?.label || "").replace("✦ ", "")}
           </span>
@@ -34821,7 +34987,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       <button onClick={() => setPickedExtras(prev => (prev || []).includes(place.name)
                         ? (prev || []).filter(n => n !== place.name)
                         : [...(prev || []), place.name])}
-                        style={{ flexShrink: 0, background: on ? C.gold : "none", border: `1px solid ${C.gold}${on ? "" : "55"}`, color: on ? "#0A0F1E" : C.gold, borderRadius: 100, padding: "6px 12px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                        style={{ flexShrink: 0, background: on ? C.gold : "none", border: `1px solid ${C.gold}${on ? "" : "55"}`, color: on ? C.onGold : C.gold, borderRadius: 100, padding: "6px 12px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                         {on ? "Added \u2713" : "Add"}
                       </button>
                     </div>
@@ -34964,7 +35130,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             <div style={{ fontSize: 11, opacity: 0.75 }}>Tap to open it</div>
           </div>
           <button onClick={e => { e.stopPropagation(); setGuideReady(false); }} aria-label="Dismiss"
-            style={{ background: "rgba(10,15,30,0.14)", border: "none", color: "#0A0F1E", width: 26, height: 26, borderRadius: "50%", fontSize: 12, cursor: "pointer", flexShrink: 0 }}>✕</button>
+            style={{ background: "rgba(14,14,17,0.14)", border: "none", color: "#0A0F1E", width: 26, height: 26, borderRadius: "50%", fontSize: 12, cursor: "pointer", flexShrink: 0 }}>✕</button>
         </div>
       )}
 
@@ -35201,6 +35367,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
       <AboutMePage
         open={aboutMeOpen && !!userSession}
         session={userSession}
+        lang={uiLang}
         profile={userProfile}
         savedGuides={savedGuides}
         savedPlaces={savedPlaces}
@@ -35430,12 +35597,12 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               <span style={{ fontSize: 72 }}>{craftDetail.emoji}</span>
             )}
             <button onClick={closeEntry}
-              style={{ position: "absolute", top: "calc(14px + env(safe-area-inset-top))", left: 14, background: "rgba(10,15,30,0.7)", border: "none", color: "#fff", borderRadius: 100, padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+              style={{ position: "absolute", top: "calc(14px + env(safe-area-inset-top))", left: 14, background: "rgba(14,14,17,0.7)", border: "none", color: "#fff", borderRadius: 100, padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
               ‹ Back
             </button>
             <div style={{ position: "absolute", top: "calc(14px + env(safe-area-inset-top))", right: 14, display: "flex", alignItems: "center", gap: 8 }}>
               <button onClick={() => toggleSavePlace("craft", craftDetail, craftDetail.location)}
-                style={{ background: "rgba(10,15,30,0.75)", backdropFilter: "blur(4px)", border: "none", borderRadius: 100, width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 15, color: isPlaceSaved("craft", craftDetail.id) ? "#E91E63" : "#ffffffaa" }}>
+                style={{ background: "rgba(14,14,17,0.75)", backdropFilter: "blur(4px)", border: "none", borderRadius: 100, width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 15, color: isPlaceSaved("craft", craftDetail.id) ? "#E91E63" : "#ffffffaa" }}>
                 {isPlaceSaved("craft", craftDetail.id) ? "♥" : "♡"}
               </button>
               <div style={{ background: craftDetail.color, color: "#fff", fontSize: 10, fontWeight: 700, padding: "5px 11px", borderRadius: 100, textTransform: "uppercase" }}>{craftDetail.type}</div>
@@ -35565,7 +35732,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
 
             {craftDetail.bookingType === "online" ? (
               <>
-                <a href={craftDetail.bookingUrl} target="_blank" rel="noreferrer"
+                <a href={externalHref(craftDetail.bookingUrl) || undefined} target="_blank" rel="noreferrer"
                   style={{ display: "block", textAlign: "center", width: "100%", background: C.accent, borderRadius: 12, padding: "15px", fontSize: 15, fontWeight: 700, color: C.onAccent, textDecoration: "none", fontFamily: "'Inter', sans-serif" }}>
                   Book Online ↗
                 </a>
@@ -35816,6 +35983,13 @@ export default function Gemlyx() {
           session, which is the right shape for a standalone page anyway. It
           already reads its own search params for the same reason. */}
       <Route path={SUPPORT_PATH} element={<SupportPage />} />
+      {/* About Gemlyx, 16 Oct 2026: a page of its own, linked from the foot of
+          /lithuania. See components/AboutPage.jsx. */}
+      <Route path={ABOUT_PATH} element={<AboutPage />} />
+      {/* The Gemlyx code at the counter, 17 Oct 2026 (utils/scanCode.js): the
+          address a sticker holds, and the page a sticker is printed from. */}
+      <Route path={`${SCAN_PATH}/:code`} element={<ScanRedirect />} />
+      <Route path={`${STICKER_PATH}/:code`} element={<StickerPage />} />
       <Route path={AFFILIATES_PATH} element={<AffiliatesPage />} />
       {/* ── KLAIPĖDA, A DEMO FOR THE TOURISM CENTRE ──────────────
           Oliver, 29 Sep 2026. Two hand-written trips, linked from nowhere and

@@ -243,6 +243,56 @@ do $$ declare t text; begin
   end loop;
 end $$;
 
+-- 3d. 9 Oct 2026: the names in a saved or published guide are text, never
+--     markup, and a published trip has the shape of a trip. The route map
+--     escapes names too; this keeps a bad one out of the database. Safe to
+--     run more than once. Run after section 3.
+create or replace function public.gemlyx_names_are_text(p jsonb) returns boolean
+language sql immutable as $$
+  select not (
+       jsonb_path_exists(p, 'lax $.title ? (@ like_regex "<[a-z!/?]" flag "i")')
+    or jsonb_path_exists(p, 'lax $.days[*].title ? (@ like_regex "<[a-z!/?]" flag "i")')
+    or jsonb_path_exists(p, 'lax $.days[*].stops[*].name ? (@ like_regex "<[a-z!/?]" flag "i")')
+    or jsonb_path_exists(p, 'lax $.days[*].stops[*].town ? (@ like_regex "<[a-z!/?]" flag "i")')
+    or jsonb_path_exists(p, 'lax $._geo.keyvalue().key ? (@ like_regex "<[a-z!/?]" flag "i")')
+  );
+$$;
+-- Members run it inside their insert rule, the server inside its check. Not
+-- the public key: the function list stays as section 4 left it.
+revoke all on function public.gemlyx_names_are_text(jsonb) from public;
+do $$ begin
+  if exists (select 1 from pg_roles where rolname = 'anon') then
+    execute 'revoke all on function public.gemlyx_names_are_text(jsonb) from anon';
+  end if;
+  execute 'grant execute on function public.gemlyx_names_are_text(jsonb) to authenticated';
+  if exists (select 1 from pg_roles where rolname = 'service_role') then
+    execute 'grant execute on function public.gemlyx_names_are_text(jsonb) to service_role';
+  end if;
+end $$;
+
+do $$
+begin
+  if to_regclass('public.gemlyx_guides') is not null then
+    -- A check, not a policy: api/save-guide.js writes with the service key,
+    -- which passes every policy but not a check. NOT VALID: old rows stay.
+    alter table public.gemlyx_guides drop constraint if exists gemlyx_guides_names_are_text;
+    alter table public.gemlyx_guides add constraint gemlyx_guides_names_are_text
+      check (public.gemlyx_names_are_text(payload)) not valid;
+  end if;
+  if to_regclass('public.gemlyx_trip_library') is not null then
+    drop policy if exists "members add to the library" on public.gemlyx_trip_library;
+    create policy "members add to the library" on public.gemlyx_trip_library for insert to authenticated
+      with check (
+        id ~ '^lib_[a-z0-9]{6,24}$' and length(title) <= 160 and pg_column_size(payload) < 400000
+        and jsonb_typeof(payload->'days') = 'array'
+        and case when jsonb_typeof(payload->'days') = 'array'
+                 then jsonb_array_length(payload->'days') between 1 and 21 else false end
+        and length(coalesce(payload->>'title', '')) <= 160
+        and public.gemlyx_names_are_text(payload)
+      );
+  end if;
+end $$;
+
 -- 4. Forms visitors send (reports, suggestions, workshop requests): their own
 --    insert rules stay; reading and marking handled is his alone.
 --    2 Oct 2026, from the policy readback: gemlyx_support also carries
@@ -377,4 +427,4 @@ order by c.relname;
 select policyname, cmd, roles, qual, with_check from pg_policies where schemaname = 'storage' order by 1;
 select p.proname, has_function_privilege('anon', p.oid, 'execute') as anon_can_run
 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-where n.nspname = 'public' and p.proname in ('gemlyx_take_guide', 'gemlyx_refund_guide', 'gemlyx_guide', 'gemlyx_form_guard', 'gemlyx_member_post_guard');
+where n.nspname = 'public' and p.proname in ('gemlyx_take_guide', 'gemlyx_refund_guide', 'gemlyx_guide', 'gemlyx_form_guard', 'gemlyx_member_post_guard', 'gemlyx_names_are_text');

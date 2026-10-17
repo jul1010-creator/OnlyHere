@@ -1,0 +1,518 @@
+// ── STUDIO FOR THE EXPLORE DEALS ────────────────────────────────────
+//
+// Oliver, 13 Oct 2026: "Bring in a studio so i can edit", the Explore deals.
+// Shown above the deals on /lithuania#studio once he is logged in to Studio,
+// and to nobody else. The rules are in utils/dealStudio.js; this is the panel.
+//
+// A list of the Klaipėda deals in the database, shown and hidden alike, and
+// one editor for a new deal or an old one: the place, its spot on the map, the
+// offer and when it holds. Saving writes the row and puts it on the page
+// without a reload.
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { C } from "../utils/theme";
+import { stickerPath } from "../utils/scanCode";
+import { SUPABASE_URL } from "../config";
+import { DEAL_PLACE_TYPES, DEAL_FILTERS, DEAL_CATEGORIES, typeForCategory, DAY_SHORT, WEEK_ORDER, isDealRow, emptyDeal, dealFromRow, dealProblems, payloadFromDeal, dealWhenShort, offerOf, OFFER_LANG_NAMES, translationsCurrent, DEAL_RULES, DEAL_RULES_BREACH, DEAL_RULES_ALLOWED } from "../utils/dealStudio";
+import { offerWhen, signFor, nextStart, liveBadge, upcomingBadge } from "./DealsNearYou";
+import { DealTile, DealPicture, eyebrow } from "./DealCard";
+import { PIN_COLOURS, PIN_NAMES } from "../utils/pinColours";
+import { CATEGORY_COLOUR } from "../utils/dealCategories";
+const CATEGORY_LABEL = { restaurants: "Restaurants", nightlife: "Nightlife", attractions: "Attractions", rentals: "Rentals" };
+import { promoCard } from "../utils/promotions";
+import { GOOGLE_MAP_ID, googleMapsReady, loadGoogleMaps } from "../utils/googleMapsLoader";
+import { NOW_AREAS } from "../utils/nowPlanner";
+
+const FILTER_LABEL = { "": "Automatic", discounts: "Discounts", entertainment: "Entertainment", activities: "Activities" };
+const TYPE_LABEL = Object.fromEntries(DEAL_PLACE_TYPES.map(t => [t.type, t.label]));
+const LIST_URL = `${SUPABASE_URL}/rest/v1/gemlyx_content?select=id,type,payload,published&payload->>country=eq.LT&type=in.(${DEAL_PLACE_TYPES.map(t => t.type).join(",")})&order=id.desc`;
+
+// ── THE LOOK, 13 OCT 2026 ───────────────────────────────────────────
+// A design review he sent: "too many outlined boxes", "the gold is used too
+// aggressively", "a long old-fashioned form", "the preview doesn't feel like a
+// real offer". So: the form in four sections on quiet panels, one border only
+// on the boxes you type into (the 3:1 border his father needed to see which
+// boxes take typing, theme.js FIELDS), chips without outlines, gold only for
+// the chosen option and Save, and the preview is Explore's own card.
+// Functions, because C changes with the theme.
+const field = () => ({ width: "100%", border: `1px solid ${C.fieldBorder || C.border}`, borderRadius: 12, padding: "11px 13px", fontSize: 14, outline: "none", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif", boxSizing: "border-box" });
+const label = () => ({ display: "block", fontSize: 12, fontWeight: 600, color: C.light, margin: "16px 0 7px", fontFamily: "'Inter', sans-serif" });
+const chip = (on) => ({ background: on ? C.gold : `${C.border}`, color: on ? C.onGold : C.light, border: "none", borderRadius: 100, padding: "8px 14px", fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" });
+const small = (primary) => ({ background: primary ? C.gold : "transparent", color: primary ? C.onGold : C.light, border: primary ? "none" : `1px solid ${C.border}`, borderRadius: 100, padding: "7px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap" });
+const panel = () => ({ background: C.surface, borderRadius: 20, padding: "6px 18px 20px", marginTop: 14 });
+const sectionTitle = () => ({ ...eyebrow(), margin: "14px 0 0" });
+// One control with two or three answers, the way a phone's settings show it.
+const Segmented = ({ options, value, onChange, testids = {} }) => (
+  <div role="radiogroup" style={{ display: "inline-flex", background: C.bg, borderRadius: 100, padding: 3, gap: 2 }}>
+    {options.map(([v, text]) => (
+      <button key={String(v)} type="button" role="radio" aria-checked={value === v} onClick={() => onChange(v)} data-testid={testids[String(v)]}
+        style={{ background: value === v ? C.surface : "transparent", color: value === v ? C.text : C.muted, border: "none", borderRadius: 100, padding: "8px 16px", fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", boxShadow: value === v ? "0 1px 3px rgba(0,0,0,0.35)" : "none" }}>
+        {text}
+      </button>
+    ))}
+  </div>
+);
+
+// ── WHERE THE DOOR IS: TAP THE MAP ──────────────────────────────────
+// Google's own map in the guide's style. A tap moves the pin; nothing else on
+// the map does anything, so it cannot be dragged into the wrong town.
+const SpotMap = ({ lat, lon, onPick }) => {
+  const box = useRef(null);
+  const map = useRef(null);
+  const pin = useRef(null);
+  const pick = useRef(onPick);
+  pick.current = onPick;
+  const has = Number.isFinite(Number(lat)) && Number.isFinite(Number(lon)) && lat !== "" && lon !== "";
+  useEffect(() => {
+    if (!googleMapsReady() || !box.current) return undefined;
+    let gone = false;
+    (async () => {
+      try {
+        const maps = await loadGoogleMaps();
+        const { Map } = await maps.importLibrary("maps");
+        const { AdvancedMarkerElement } = await maps.importLibrary("marker");
+        if (gone || !box.current) return;
+        const centre = has ? { lat: Number(lat), lng: Number(lon) } : { lat: NOW_AREAS.LT.lat, lng: NOW_AREAS.LT.lon };
+        map.current = new Map(box.current, { mapId: GOOGLE_MAP_ID, center: centre, zoom: has ? 17 : 15, disableDefaultUI: true, zoomControl: true, clickableIcons: false, gestureHandling: "greedy" });
+        pin.current = new AdvancedMarkerElement({ map: has ? map.current : null, position: centre });
+        map.current.addListener("click", (e) => {
+          const p = { lat: e.latLng.lat(), lon: e.latLng.lng() };
+          pin.current.position = { lat: p.lat, lng: p.lon };
+          pin.current.map = map.current;
+          pick.current(p);
+        });
+      } catch { /* the number fields still work */ }
+    })();
+    return () => { gone = true; };
+  }, []);
+  // A spot found on Google moves the pin and the map with it.
+  useEffect(() => {
+    if (!has || !map.current || !pin.current) return;
+    const at = { lat: Number(lat), lng: Number(lon) };
+    pin.current.position = at;
+    pin.current.map = map.current;
+    map.current.panTo(at);
+  }, [lat, lon]);
+  if (!googleMapsReady()) return null;
+  return <div ref={box} data-testid="deal-studio-map" style={{ width: "100%", height: 220, borderRadius: 16, overflow: "hidden", background: C.bg }} />;
+};
+
+// ── THE TILE AS EXPLORE WILL SHOW IT ────────────────────────────────
+// Explore's own tile (DealCard.jsx, DealTile) with this deal in it, at the
+// width it has on a phone, two to a row, Upcoming included.
+const Preview = ({ f }) => {
+  const offer = offerOf(f);
+  const has = f.lat !== "" && Number.isFinite(Number(f.lat)) && Number.isFinite(Number(f.lon));
+  const d = { name: f.name, emoji: f.sign, __category: f.category, __offer: offer, country: "LT" };
+  const card = offer ? promoCard(d, { today: new Date(), lang: "en" }) : null;
+  const waiting = card?.timing === "later" || card?.timing === "off";
+  const badge = !offer ? "" : waiting ? upcomingBadge(nextStart(offer, new Date()), "en")
+    : card?.timing === "ended" ? "Ended" : liveBadge(offer, offerWhen(offer, card?.timing, { now: new Date(), lang: "en" }), "en");
+  return (
+    <div data-testid="deal-studio-preview" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 170px))", gap: 12 }}>
+      <div>
+        {waiting && <div style={{ ...eyebrow(), marginBottom: 8 }}>Upcoming</div>}
+        <DealTile testid="deal-studio-card" upcoming={waiting} name={f.name || "The place's name"} offer={offer?.text || "What a visitor gets"}
+          badge={badge} photo={f.photo} at={has ? { lat: Number(f.lat), lon: Number(f.lon) } : null} sign={signFor(d)} pin={f.pin} />
+      </div>
+    </div>
+  );
+};
+
+const Editor = ({ start, onSave, onClose, busy, error, upload = null, translate = null }) => {
+  const [photoNote, setPhotoNote] = useState("");
+  const pickPhoto = async (file) => {
+    if (!file || !upload) return;
+    setPhotoNote("Uploading");
+    try { const url = await upload(file); setF(x => ({ ...x, photo: url })); setPhotoNote(""); }
+    catch (e) { setPhotoNote(e.message || "The photo did not upload."); }
+  };
+  const [f, setF] = useState(start);
+  const set = (k, v) => setF(x => ({ ...x, [k]: v }));
+  const [finding, setFinding] = useState({ busy: false, note: "", list: [] });
+  const problems = dealProblems(f);
+  const [tried, setTried] = useState(false);
+
+  const find = async () => {
+    const q = `${f.name || ""} ${f.street || ""}`.trim();
+    if (!q) { setFinding({ busy: false, note: "Write the name or the street first.", list: [] }); return; }
+    setFinding({ busy: true, note: "", list: [] });
+    try {
+      const r = await onSave.locate(`${q}, Klaipėda`);
+      const list = (r?.candidates || []).filter(c => Number.isFinite(Number(c.lat))).slice(0, 5);
+      setFinding({ busy: false, note: list.length ? "" : "Google did not find it. Tap the map where the door is.", list });
+    } catch (e) { setFinding({ busy: false, note: e.message || "The search did not work just now. Tap the map instead.", list: [] }); }
+  };
+  const take = (c) => {
+    setF(x => ({ ...x, lat: c.lat, lon: c.lon, street: x.street || String(c.address || "").split(",")[0] }));
+    setFinding({ busy: false, note: `Placed at ${c.name}${c.address ? `, ${c.address}` : ""}.`, list: [] });
+  };
+  const toggleDay = (d) => set("days", f.days.includes(d) ? f.days.filter(x => x !== d) : [...f.days, d]);
+  // Lithuanian, Danish and German, written by Claude when asked or on save
+  // (utils/dealStudio.js, THE OFFER IN LITHUANIAN, DANISH AND GERMAN).
+  const [trBusy, setTrBusy] = useState(false);
+  const [trNote, setTrNote] = useState("");
+  const squash = (v) => String(v ?? "").replace(/\s+/g, " ").trim();
+  const trLangs = ["lt", "da", "de"];
+  const trStale = trLangs.some(l => squash(f[l])) && squash(f.trFor) !== squash(f.text);
+  const runTranslate = async (form, keepWritten) => {
+    if (!translate || !squash(form.text)) return form;
+    setTrBusy(true); setTrNote("");
+    try {
+      const got = await translate(form.text);
+      if (!got) throw new Error("no reply");
+      const next = { ...form, trFor: form.text };
+      trLangs.forEach(l => { next[l] = keepWritten && squash(form[l]) ? form[l] : (got[l] || ""); });
+      setF(next);
+      return next;
+    } catch {
+      setTrNote("The translation did not come through. The offer shows in English until it does.");
+      return form;
+    } finally { setTrBusy(false); }
+  };
+  // Typing in one of the boxes makes it a translation of the offer as it is
+  // now. Any other box still holding a translation of an older offer is
+  // emptied, so it is written again rather than saved as if it were current.
+  const setTr = (l, v) => setF(x => {
+    const stale = squash(x.trFor) !== squash(x.text);
+    return { ...x, ...(stale ? { lt: "", da: "", de: "" } : {}), [l]: v, trFor: x.text };
+  });
+  const save = async () => {
+    setTried(true);
+    if (problems.length) return;
+    const current = translationsCurrent(f);
+    const missing = trLangs.some(l => !squash(f[l]));
+    const out = translate && (!current || missing) ? await runTranslate(f, current) : f;
+    onSave.save(out);
+  };
+  useEffect(() => {
+    const esc = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", esc);
+    return () => window.removeEventListener("keydown", esc);
+  }, [onClose]);
+
+  const row2 = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "0 12px" };
+  return createPortal(
+    <div role="dialog" aria-label="Edit deal" data-testid="deal-studio-editor"
+      style={{ position: "fixed", inset: 0, zIndex: 10000, background: C.bg, display: "flex", flexDirection: "column", fontFamily: "'Inter', sans-serif" }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: "calc(18px + env(safe-area-inset-top, 0px)) 16px 28px" }}>
+        <div style={{ maxWidth: 620, margin: "0 auto" }}>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+            <div>
+              <div style={eyebrow()}>Partner studio · Klaipėda</div>
+              <h2 style={{ fontSize: 30, fontWeight: 500, fontFamily: "'Fraunces', serif", color: C.text, letterSpacing: -0.3, margin: "8px 0 0" }}>{start.id ? "Edit deal" : "New deal"}</h2>
+            </div>
+            <button onClick={onClose} aria-label="Close" style={{ ...small(false), padding: "7px 12px" }}>✕</button>
+          </div>
+
+          <section style={panel()}>
+            <h3 style={sectionTitle()}>The place</h3>
+            <div style={row2}>
+              <div>
+                <label style={label()}>Name</label>
+                <input value={f.name} onChange={e => set("name", e.target.value)} placeholder="Kepyklėlė Rūta" style={field()} data-testid="deal-studio-name" />
+              </div>
+              <div>
+                <label style={label()}>Street</label>
+                <input value={f.street} onChange={e => set("street", e.target.value)} placeholder="Turgaus g. 7" style={field()} />
+              </div>
+            </div>
+            <label style={label()}>Kind of place</label>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {DEAL_CATEGORIES.map(c => (
+                <button key={c} type="button" data-testid={`deal-studio-cat-${c}`} onClick={() => setF(x => ({ ...x, category: c, ...(x.id ? {} : { type: typeForCategory(c) }) }))}
+                  style={{ ...chip(f.category === c), display: "inline-flex", alignItems: "center", gap: 7 }}>
+                  <span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: "50%", background: CATEGORY_COLOUR[c] }} />{CATEGORY_LABEL[c]}
+                </button>
+              ))}
+            </div>
+            <label style={label()}>Photo</label>
+            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+              <div style={{ width: 84, flex: "0 0 auto", borderRadius: 12, overflow: "hidden" }}>
+                <DealPicture photo={f.photo} at={f.lat !== "" && Number.isFinite(Number(f.lat)) ? { lat: Number(f.lat), lon: Number(f.lon) } : null} name={f.name} sign={f.sign || "📍"} pin={f.pin} ratio="1 / 1" />
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                {upload && (
+                  <label style={{ ...small(true), display: "inline-block" }} data-testid="deal-studio-photo-upload">
+                    {f.photo ? "Change photo" : "Upload photo"}
+                    <input type="file" accept="image/*" onChange={e => pickPhoto(e.target.files?.[0])} style={{ display: "none" }} />
+                  </label>
+                )}
+                {f.photo && <button type="button" onClick={() => set("photo", "")} style={small(false)}>Use the map</button>}
+                {photoNote && <span style={{ fontSize: 12, color: C.light }}>{photoNote}</span>}
+              </div>
+            </div>
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
+              <label style={label()}>Where it is</label>
+              <button type="button" onClick={find} disabled={finding.busy} style={small(true)} data-testid="deal-studio-find">{finding.busy ? "Looking" : "Find on Google"}</button>
+            </div>
+            {finding.list.length > 0 && (
+              <div style={{ display: "grid", gap: 6, marginBottom: 8 }}>
+                {finding.list.map((c, i) => (
+                  <button key={i} type="button" onClick={() => take(c)} style={{ ...field(), textAlign: "left", cursor: "pointer" }}>
+                    <b style={{ fontWeight: 600 }}>{c.name}</b>{c.address ? <span style={{ color: C.muted }}> · {c.address}</span> : null}
+                  </button>
+                ))}
+              </div>
+            )}
+            {finding.note && <div style={{ fontSize: 12, color: C.light, marginBottom: 8 }}>{finding.note}</div>}
+            <SpotMap lat={f.lat} lon={f.lon} onPick={(p) => setF(x => ({ ...x, lat: Number(p.lat.toFixed(6)), lon: Number(p.lon.toFixed(6)) }))} />
+            <div style={{ ...row2, marginTop: 8 }}>
+              <input value={f.lat} onChange={e => set("lat", e.target.value)} placeholder="Latitude" inputMode="decimal" aria-label="Latitude" style={{ ...field(), fontSize: 12.5, color: C.light }} />
+              <input value={f.lon} onChange={e => set("lon", e.target.value)} placeholder="Longitude" inputMode="decimal" aria-label="Longitude" style={{ ...field(), fontSize: 12.5, color: C.light }} />
+            </div>
+          </section>
+
+          <section style={panel()}>
+            <h3 style={sectionTitle()}>The offer</h3>
+            {/* The two rules, in red (Oliver, 17 Oct 2026). Terms clause 14.6;
+                dealProblems refuses a deal that breaks them. */}
+            <div data-testid="deal-studio-rules" style={{ display: "flex", flexWrap: "wrap", gap: 8, margin: "0 0 12px" }}>
+              {DEAL_RULES.map(r => (
+                <span key={r} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#E5484D", border: "1px solid #E5484D66", background: "#E5484D14", borderRadius: 100, padding: "5px 11px", fontSize: 12.5, fontWeight: 700 }}>
+                  <span aria-hidden="true">⊘</span>{r}
+                </span>
+              ))}
+              <div data-testid="deal-studio-rules-allowed" style={{ flexBasis: "100%", color: C.muted, fontSize: 12.5 }}>{DEAL_RULES_ALLOWED}</div>
+              <div data-testid="deal-studio-rules-breach" style={{ flexBasis: "100%", color: "#E5484D", fontSize: 12.5, fontWeight: 700 }}>{DEAL_RULES_BREACH}</div>
+            </div>
+            <label style={label()}>What a visitor gets</label>
+            <textarea value={f.text} onChange={e => set("text", e.target.value)} rows={2} placeholder="Free refill of filter coffee with any pastry" style={{ ...field(), resize: "vertical", lineHeight: 1.5 }} data-testid="deal-studio-text" />
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
+              <label style={label()}>In other languages</label>
+              {translate && (
+                <button type="button" onClick={() => runTranslate(f, false)} disabled={trBusy || !squash(f.text)} data-testid="deal-studio-translate" style={small(false)}>
+                  {trBusy ? "Translating" : trStale ? "Translate again" : "Translate"}
+                </button>
+              )}
+            </div>
+            <div style={{ display: "grid", gap: 6 }}>
+              {trLangs.map(l => (
+                <div key={l} style={{ display: "grid", gridTemplateColumns: "74px 1fr", gap: 10, alignItems: "center" }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: C.muted }}>{OFFER_LANG_NAMES[l]}</span>
+                  <input value={f[l] || ""} onChange={e => setTr(l, e.target.value)} aria-label={OFFER_LANG_NAMES[l]} data-testid={`deal-studio-tr-${l}`}
+                    style={{ ...field(), opacity: trStale ? 0.5 : 1 }} />
+                </div>
+              ))}
+            </div>
+            {trNote && <div style={{ fontSize: 12.5, color: "#E8A35C", marginTop: 8 }}>{trNote}</div>}
+            <label style={label()}>Days</label>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              <button type="button" onClick={() => set("days", [])} style={chip(f.days.length === 0)}>Every day</button>
+              {WEEK_ORDER.map(d => <button key={d} type="button" onClick={() => toggleDay(d)} style={chip(f.days.includes(d))}>{DAY_SHORT[d]}</button>)}
+            </div>
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+              <label style={label()}>Hours</label>
+              {!f.from && !f.to && <span style={{ fontSize: 11.5, color: C.muted }}>All day</span>}
+            </div>
+            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+              <input type="time" value={f.from} onChange={e => set("from", e.target.value)} style={field()} aria-label="From" />
+              <span style={{ color: C.muted, fontSize: 12 }}>to</span>
+              <input type="time" value={f.to} onChange={e => set("to", e.target.value)} style={field()} aria-label="To" />
+            </div>
+            <label style={label()}>Runs</label>
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <Segmented value={!!f.ongoing} onChange={(v) => set("ongoing", v)} options={[[true, "No last day"], [false, "Until a date"]]} testids={{ true: "deal-studio-ongoing", false: "deal-studio-dated" }} />
+              {!f.ongoing && <input type="date" value={f.until} onChange={e => set("until", e.target.value)} style={{ ...field(), width: "auto", flex: "1 1 160px" }} data-testid="deal-studio-until" />}
+            </div>
+            <label style={label()}>Book a table</label>
+            <input value={f.booking} onChange={e => set("booking", e.target.value)} placeholder="+370 600 00000" style={field()} />
+          </section>
+
+          <section style={panel()}>
+            <h3 style={sectionTitle()}>On the map</h3>
+            <label style={label()}>Pin colour</label>
+            <div role="radiogroup" style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              {PIN_COLOURS.map((c, i) => {
+                const v = i === 0 ? "" : c;
+                const on = (f.pin || "") === v;
+                return (
+                  <button key={c} type="button" role="radio" aria-checked={on} aria-label={PIN_NAMES[c]} title={PIN_NAMES[c]} onClick={() => set("pin", v)} data-testid={`deal-studio-pin-${PIN_NAMES[c].toLowerCase()}`}
+                    style={{ width: 34, height: 34, borderRadius: "50%", background: c, border: "none", cursor: "pointer", boxShadow: on ? `0 0 0 2px ${C.surface}, 0 0 0 4px ${C.text}` : "none" }} />
+                );
+              })}
+            </div>
+            <div style={row2}>
+              <div>
+                <label style={label()}>Sign in the pin</label>
+                <input value={f.sign} onChange={e => set("sign", e.target.value)} placeholder="☕" maxLength={4} style={{ ...field(), width: 90 }} />
+              </div>
+            </div>
+          </section>
+
+          <section style={panel()}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginTop: 14 }}>
+              <h3 style={{ ...sectionTitle(), margin: 0 }}>On Explore</h3>
+              <Segmented value={!!f.published} onChange={(v) => set("published", v)} options={[[true, "Show"], [false, "Hidden"]]} testids={{ true: "deal-studio-show", false: "deal-studio-hide" }} />
+            </div>
+          </section>
+
+          <h3 style={{ ...sectionTitle(), margin: "26px 0 10px" }}>Preview</h3>
+          <Preview f={f} />
+
+          {(tried && problems.length > 0) && (
+            <div data-testid="deal-studio-problems" style={{ marginTop: 16, fontSize: 13, color: "#E8A35C", lineHeight: 1.65, background: "#E8A35C14", borderRadius: 14, padding: "12px 14px" }}>
+              {problems.map((p, i) => <div key={i}>{p}</div>)}
+            </div>
+          )}
+          {error && <div style={{ marginTop: 12, fontSize: 13, color: "#FF8A80" }}>{error}</div>}
+        </div>
+      </div>
+      <div style={{ borderTop: `1px solid ${C.border}`, background: C.bg, padding: "12px 16px calc(14px + env(safe-area-inset-bottom, 0px))" }}>
+        <div style={{ maxWidth: 620, margin: "0 auto", display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <button onClick={onClose} style={{ ...small(false), padding: "12px 20px", fontSize: 14 }}>Cancel</button>
+          <button onClick={save} disabled={busy || trBusy} data-testid="deal-studio-save" style={{ ...small(true), padding: "12px 28px", fontSize: 14, flex: "0 1 220px" }}>{busy ? "Saving" : trBusy ? "Translating" : start.id ? "Save changes" : "Save deal"}</button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+};
+
+export const DealStudio = ({ supaFetch, studioFetch, onChanged, upload = null, translate = null }) => {
+  const [rows, setRows] = useState(null);
+  const [note, setNote] = useState("");
+  const [editing, setEditing] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [links, setLinks] = useState({});
+
+  const load = async () => {
+    setNote("");
+    try {
+      const r = await supaFetch(LIST_URL);
+      if (!r.ok) throw new Error(`The deals could not be read (${r.status}).`);
+      const list = await r.json();
+      setRows((Array.isArray(list) ? list : []).filter(isDealRow));
+    } catch (e) { setRows([]); setNote(e.message || "The deals could not be read just now."); }
+  };
+  useEffect(() => { load(); }, []);
+
+  const locate = async (q) => {
+    const r = await studioFetch(`/api/places-locate?name=${encodeURIComponent(q)}&country=LT`);
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || `The search did not work (${r.status}).`);
+    return j.found ? j : { candidates: [] };
+  };
+
+  // ── A DEAL SHOWN TELLS THE MEMBERS WHO WANT IT ─────────────────────
+  // 15 Oct 2026 (api/deal-alerts.js): once a deal is saved and showing, the
+  // server writes its news and mails a short promotion at once, rather than
+  // waiting up to ten minutes for the next cron run. Best effort and not
+  // awaited: it never holds the save up and never shows an error, because the
+  // cron does the same job a few minutes later anyway.
+  const tellMembers = () => {
+    try { Promise.resolve(studioFetch("/api/deal-alerts", { method: "POST" })).catch(() => {}); } catch { /* never in the way of a save */ }
+  };
+
+  const save = async (f) => {
+    setBusy(true); setError("");
+    try {
+      const before = f.id ? rows.find(x => x.id === f.id) : null;
+      const payload = payloadFromDeal(f, before?.payload);
+      if (!f.id) {
+        // One row per name and type: the site keeps the first it meets and a
+        // second renders nowhere (see publishDraft, step 5).
+        const dup = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=id&type=eq.${f.type}&payload->>name=ilike.${encodeURIComponent(payload.name)}`);
+        const had = dup.ok ? await dup.json() : [];
+        if (Array.isArray(had) && had.length) throw new Error(`"${payload.name}" is already in the database as ${TYPE_LABEL[f.type]}. Edit that one instead.`);
+        const r = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content`, {
+          method: "POST", headers: { "Content-Type": "application/json", Prefer: "return=representation" },
+          body: JSON.stringify({ type: f.type, payload, published: !!f.published }),
+        });
+        if (!r.ok) throw new Error(`Not saved (${r.status}): ${(await r.text()).slice(0, 160)}`);
+        const made = (await r.json().catch(() => []))?.[0] || { id: null, type: f.type, payload, published: !!f.published };
+        setRows(xs => [made, ...(xs || [])]);
+        await onChanged?.({ before: null, after: made });
+        if (made.published) tellMembers();
+      } else {
+        const r = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${f.id}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
+          body: JSON.stringify({ payload, published: !!f.published }),
+        });
+        if (!r.ok) throw new Error(`Not saved (${r.status}): ${(await r.text()).slice(0, 160)}`);
+        const after = { ...before, payload, published: !!f.published };
+        setRows(xs => (xs || []).map(x => (x.id === f.id ? after : x)));
+        await onChanged?.({ before, after });
+        if (after.published) tellMembers();
+      }
+      setEditing(null);
+    } catch (e) { setError(e.message || "Not saved."); }
+    setBusy(false);
+  };
+
+  const flip = async (row) => {
+    const after = { ...row, published: !row.published };
+    setNote("");
+    try {
+      const r = await supaFetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${row.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
+        body: JSON.stringify({ published: after.published }),
+      });
+      if (!r.ok) throw new Error(`Not changed (${r.status}).`);
+      setRows(xs => xs.map(x => (x.id === row.id ? after : x)));
+      await onChanged?.({ before: row, after });
+      if (after.published) tellMembers();
+    } catch (e) { setNote(e.message || "Not changed."); }
+  };
+
+  // The partner's own numbers page, the same link as in the full Studio.
+  const partnerLink = async (row) => {
+    setLinks(l => ({ ...l, [row.id]: "Making the link." }));
+    try {
+      const r = await studioFetch("/api/partner-stats", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ make: { id: `${row.type}:${row.id}`, name: row.payload?.name || "" } }),
+      });
+      const j = await r.json().catch(() => ({}));
+      setLinks(l => ({ ...l, [row.id]: r.ok && j.path ? `${window.location.origin}${j.path}` : (j.error || `The link could not be made (${r.status}).`) }));
+    } catch { setLinks(l => ({ ...l, [row.id]: "The link could not be made just now." })); }
+  };
+
+  const shown = (rows || []).filter(r => r.published).length;
+  return (
+    <section data-testid="deal-studio" style={{ background: C.surface, borderRadius: 20, padding: "16px 16px 14px", marginBottom: 22, fontFamily: "'Inter', sans-serif" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+        <div>
+          <div style={eyebrow()}>Partner studio</div>
+          <div style={{ fontSize: 19, fontWeight: 500, color: C.text, fontFamily: "'Fraunces', serif", marginTop: 4 }}>Explore deals</div>
+          <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{rows === null ? "Loading" : `${rows.length} in the database, ${shown} showing`}</div>
+        </div>
+        <button onClick={() => { setError(""); setEditing(emptyDeal()); }} style={small(true)} data-testid="deal-studio-new">+ New deal</button>
+      </div>
+      {note && <div style={{ fontSize: 12, color: "#FFB347", marginTop: 10 }}>{note}</div>}
+      {rows && rows.length > 0 && (
+        <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
+          {rows.map(row => {
+            const f = dealFromRow(row);
+            return (
+              <div key={row.id} data-testid="deal-studio-row" style={{ borderRadius: 14, padding: "12px 14px", background: C.bg }}>
+                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}><span aria-hidden="true" style={{ width: 9, height: 9, borderRadius: "50%", background: f.pin || C.gold, flex: "0 0 auto" }} /><span style={{ fontSize: 15, fontWeight: 600, color: C.text, overflowWrap: "anywhere" }}>{f.name}</span></div>
+                  <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, color: row.published ? C.onGold : C.muted, background: row.published ? C.gold : C.border, borderRadius: 100, padding: "3px 9px", whiteSpace: "nowrap" }}>{row.published ? "SHOWING" : "HIDDEN"}</span>
+                </div>
+                <div style={{ fontSize: 13, color: C.light, marginTop: 5 }}>{f.text}</div>
+                <div style={{ fontSize: 11.5, color: C.muted, marginTop: 2 }}>{dealWhenShort(f)}{f.ongoing ? ", no last day" : `, until ${f.until}`}</div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                  <button onClick={() => { setError(""); setEditing(f); }} style={small(false)}>Edit</button>
+                  <button onClick={() => flip(row)} style={small(false)}>{row.published ? "Hide" : "Show"}</button>
+                  <button onClick={() => partnerLink(row)} style={small(false)}>Partner link</button>
+                  {/* The sticker for the till (17 Oct 2026, utils/scanCode.js).
+                      A deal saved before then gets its code on its next save. */}
+                  <button onClick={() => { try { window.open(stickerPath(f.scan, f.name), "_blank", "noopener"); } catch { /* no window */ } }} disabled={!f.scan} data-testid="deal-studio-sticker" style={{ ...small(false), opacity: f.scan ? 1 : 0.45 }}>{f.scan ? "Sticker" : "Sticker after next save"}</button>
+                </div>
+                {links[row.id] && <div style={{ fontSize: 11.5, color: C.light, marginTop: 6, wordBreak: "break-all", userSelect: "all" }}>{links[row.id]}</div>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {rows && rows.length === 0 && !note && (
+        <div style={{ fontSize: 12.5, color: C.light, marginTop: 10, lineHeight: 1.55 }}>No real deals yet, so Explore shows the made-up examples. Add the first with New deal.</div>
+      )}
+      {editing && <Editor key={editing.id ?? "new"} start={editing} busy={busy} error={error} onClose={() => setEditing(null)} onSave={{ save, locate }} upload={upload} translate={translate} />}
+    </section>
+  );
+};
+
+export default DealStudio;

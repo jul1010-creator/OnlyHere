@@ -6,6 +6,8 @@ import { activeCountry, countryProfile, DEFAULT_COUNTRY } from "../utils/countri
 // country gets a plain line instead of a borrowed one.
 const LAND = countryProfile(activeCountry());
 import { Pill } from "./Pill";
+// Only an http(s) source reaches an href (security review, 9 Oct 2026).
+import { externalHref } from "../utils/helpers";
 import { gemsView, GEM_SECTION, WHERE_LABEL, checkedLabel, isOwnSite, gemMatches, gemFilterOptions, gemWhere, GEM_CATEGORY_LABEL, AUDIENCE_LABEL } from "../utils/cheapGems";
 
 // ── THE CHEAP GEMS PAGE ─────────────────────────────────────────────
@@ -77,7 +79,7 @@ const GemCard = ({ g, point, me }) => (
           on a local's word has no page at all, and shows no link rather than
           a link to nowhere. */}
       {g.source && (
-        <a href={g.source} target="_blank" rel="noreferrer" style={{ color: C.gold, fontWeight: 700, textDecoration: "none" }}>
+        <a href={externalHref(g.source) || undefined} target="_blank" rel="noreferrer" style={{ color: C.gold, fontWeight: 700, textDecoration: "none" }}>
           {isOwnSite(g.source, g.name) ? "Their page" : sourceHost(g.source)} ↗
         </a>
       )}

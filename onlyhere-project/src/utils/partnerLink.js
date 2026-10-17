@@ -16,7 +16,10 @@ import { cleanStatId } from "./partnerStats.js";
 
 export const partnerSecret = (env = {}) => {
   const own = String(env.PARTNER_LINK_SECRET || "");
-  if (own.length >= 16) return own;
+  // Set but too short is a mistake to fix, not a reason to sign with another
+  // secret (security review, 13 Oct 2026): every link reads as not valid
+  // until it is fixed.
+  if (own) return own.length >= 16 ? own : "";
   const service = String(env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SERVICE_KEY || "");
   return service ? createHmac("sha256", service).update("gemlyx:partner-link:v1").digest("hex") : "";
 };

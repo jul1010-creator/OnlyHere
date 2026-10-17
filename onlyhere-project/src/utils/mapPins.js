@@ -108,9 +108,9 @@ export const pushPin = (r, latest, id, { label = "", color = PIN_RED, reach = PI
       + `<stop offset="68%" stop-color="#AAB4C6"/><stop offset="100%" stop-color="#636B7D"/></linearGradient></defs>`
       + `<g transform="rotate(${PIN_TILT} ${cx} ${tip})">`
       + `<path d="M${cx - topW} ${cy} L${cx + topW} ${cy} L${cx + topW * 0.1} ${tip} L${cx - topW * 0.1} ${tip} Z" fill="url(#${id}n)"/>`
-      + `<path d="M${cx + topW} ${cy} L${cx + topW * 0.1} ${tip} L${cx - topW * 0.1} ${tip} Z" fill="#0A0F1E" opacity=".3"/>`
+      + `<path d="M${cx + topW} ${cy} L${cx + topW * 0.1} ${tip} L${cx - topW * 0.1} ${tip} Z" fill="#0E0E11" opacity=".3"/>`
       + `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${hollow ? "rgba(10,15,30,.78)" : `url(#${id}b)`}"`
-      + ` stroke="${hollow ? color : "#0A0F1E"}" stroke-width="${(r * (hollow ? 0.16 : 0.11)).toFixed(2)}"`
+      + ` stroke="${hollow ? color : "#0E0E11"}" stroke-width="${(r * (hollow ? 0.16 : 0.11)).toFixed(2)}"`
       + `${hollow ? ` stroke-dasharray="${(r * 0.5).toFixed(1)} ${(r * 0.36).toFixed(1)}"` : ""} stroke-opacity="${hollow ? ".95" : ".7"}"/>`
       + `<ellipse cx="${cx - r * 0.3}" cy="${cy - r * 0.36}" rx="${(r * 0.34).toFixed(2)}" ry="${(r * 0.24).toFixed(2)}" fill="#fff" opacity="${hollow ? ".3" : ".78"}"`
       + ` transform="rotate(-30 ${cx - r * 0.3} ${cy - r * 0.36})"/>`

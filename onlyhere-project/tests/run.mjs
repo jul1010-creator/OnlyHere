@@ -117,7 +117,7 @@ writeFileSync(entry, `
   export { literalRenderings, literalNote, looksLikeAName, FALSE_FRIENDS, FALSE_FRIEND_RULE, NAME_RULE } from ${JSON.stringify(join(root, "src/utils/literalDanish.js"))};
   export { licenseUrl, creditIsRequired } from ${JSON.stringify(join(root, "src/utils/imageCredits.js"))};
   export { STUDIO_VOICE } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
-  export { cleanOffer, offerProblems, offerLive, offerView, offerTiming, offerWindow, offerHoursLabel, cleanClock, placeClock, OFFER_WEEK, hasPaidPlan, OFFER_TEXT_MAX, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE, offerLockedNote } from ${JSON.stringify(join(root, "src/utils/offer.js"))};
+  export { offerTextIn, OFFER_LANGS, cleanOffer, offerProblems, offerLive, offerView, offerTiming, offerWindow, offerHoursLabel, cleanClock, placeClock, OFFER_WEEK, hasPaidPlan, OFFER_TEXT_MAX, OFFER_LOCKED_LABEL, OFFER_LOCKED_NOTE, OFFER_NOTE, offerLockedNote } from ${JSON.stringify(join(root, "src/utils/offer.js"))};
   export { AI_DISCLOSURE, aiDisclosure, aiDisclosureFor, disclosureLanguage, AI_CHAT_SURFACES, AI_IMAGE_NOTE, aiImageNote, inReaderLanguage } from ${JSON.stringify(join(root, "src/utils/aiDisclosure.js"))};
   export { splitReport, sortReports, filterReports, reportAge, isHandled, unhandledCount, INBOX_SETUP_SQL, FILTERS as INBOX_FILTERS, topicLabel as inboxTopicLabel, reportCountry } from ${JSON.stringify(join(root, "src/utils/supportInbox.js"))};
   export { SUPPORT_TOPICS, REPORT_TOPIC, topicIds, topicLabel, isTopic, GOOD_FAITH_STATEMENT, messagePrompt, MESSAGE_MIN, MESSAGE_MAX, NAME_MAX, looksLikeEmail, looksLikeUrl, supportProblems, problemFor, supportReference, supportPayload, supportMailto, supportReceipt, SUPPORT_TABLE, SUPPORT_SETUP_SQL, SUPPORT_EMAIL, PRIVACY_EMAIL } from ${JSON.stringify(join(root, "src/utils/support.js"))};
@@ -190,6 +190,7 @@ writeFileSync(entry, `
   export { THEMES, THEME_ORDER, DEFAULT_THEME, storedTheme, THEME_PARAM } from ${JSON.stringify(join(root, "src/utils/theme.js"))};
   export { layoutBody, trimCaption } from ${JSON.stringify(join(root, "src/utils/articleLayout.js"))};
   export { instagramTarget, isEmbeddablePost } from ${JSON.stringify(join(root, "src/components/InstagramEmbed.jsx"))};
+  export { htmlText, hexColour } from ${JSON.stringify(join(root, "src/utils/htmlText.js"))};
   export { EXAMPLE_GUIDE, EXAMPLE_GUIDE_PATH, EXAMPLE_GUIDE_NOTE, exampleGuideProblems, hasExampleGuide } from ${JSON.stringify(join(root, "src/data/exampleGuide.js"))};
   export { decodePastedText, looksPercentEncoded } from ${JSON.stringify(join(root, "src/utils/pastedText.js"))};
   export { placesNamedIn, rejectedIn, correctedTo, CHAT_PLACE_CAP } from ${JSON.stringify(join(root, "src/utils/chatPlaces.js"))};
@@ -426,6 +427,15 @@ writeFileSync(entry, `
   export { placePinHtml, PLACE_PIN, turnSign, JOIN_ON_M, CARD_WALKING_MS, walkLegs, bearingOf, kmBetween as mapKm, glideAt, GLIDE_MS, FOCUS, SPARKS } from ${JSON.stringify(join(root, "src/components/GoogleWalkMap.jsx"))};
   export { guideTo, compassOf, distanceWords as walkDistanceWords, ARRIVE_M, COMPASS, FAR_M } from ${JSON.stringify(join(root, "src/components/WalkMode.jsx"))};
   export * as DNY from ${JSON.stringify(join(root, "src/components/DealsNearYou.jsx"))};
+  export * as SCAN from ${JSON.stringify(join(root, "src/utils/scanCode.js"))};
+  export * as DCARD from ${JSON.stringify(join(root, "src/components/DealCard.jsx"))};
+  export * as DST from ${JSON.stringify(join(root, "src/utils/dealStudio.js"))};
+  export * as DCAT from ${JSON.stringify(join(root, "src/utils/dealCategories.js"))};
+  export * as CMS from ${JSON.stringify(join(root, "src/utils/cardMapStyle.js"))};
+  export * as DAL from ${JSON.stringify(join(root, "src/utils/dealAlerts.js"))};
+  export * as DALR from ${JSON.stringify(join(root, "api/deal-alerts.js"))};
+  export * as DOPEN from ${JSON.stringify(join(root, "src/utils/dealOpen.js"))};
+  export { pinColour as pinColourOf } from ${JSON.stringify(join(root, "src/utils/pinColours.js"))};
   export * as SF from ${JSON.stringify(join(root, "src/utils/safeFetch.js"))};
   export * as LP from ${JSON.stringify(join(root, "src/utils/livePhoto.js"))};
   export * as CR from ${JSON.stringify(join(root, "src/utils/cruiseDays.js"))};
@@ -18466,8 +18476,12 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // THIRD, under Saved trips, and the rule is the same one: it belongs with the
   // other section somebody opens to USE rather than to change. It is also the
   // only one here that goes stale on its own.
-  is("six categories", sections.length, 6);
-  is("in the order he reads them", sections.map(x => x.id).join(","), "general,trips,near,about,plan,legal");
+  // Seven on 15 Oct 2026, when the deal alerts' settings came here as well
+  // as under the bell, "so it is easy to find". FOURTH, beside Near you, the
+  // other section about being told of things. Updated with that change; the
+  // rules above (General first, the two you USE under it) are unchanged.
+  is("seven categories", sections.length, 7);
+  is("in the order he reads them", sections.map(x => x.id).join(","), "general,trips,near,alerts,about,plan,legal");
   ok("every one has a label", sections.length > 0 && sections.every(x => !!x.label));
   // The blurb is the line under the name on the PHONE list, which is the whole
   // screen before anything is opened. A row with a name and no line is a guess,
@@ -33472,6 +33486,16 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       ok(`${name} requires a session`, /auth\/v1\/user/.test(src));
       return;
     }
+    // 15 Oct 2026, added with the route. deal-alerts is called three ways:
+    // by Vercel Cron, which carries CRON_SECRET; by a mail app's one-click
+    // unsubscribe, which carries the secret in the link; and by the Studio.
+    // Only the Studio is a browser on the site, so the origin check is on that
+    // branch, and the cron is held to its key as update-events-check is.
+    if (name === "deal-alerts") {
+      ok(`${name} is protected by its own key`, /if \(!cronAllowed\(req\.headers, env\.CRON_SECRET\)\) return res\.status\(401\)/.test(src));
+      ok(`${name} refuses a Studio call that is not from the site`, /if \(req\.method === "POST"\) \{\s*if \(!requestIsFromSite\(req\.headers\)\) \{\s*return res\.status\(403\)\.json\(\{ error: NOT_FROM_SITE \}\);/.test(src));
+      return;
+    }
     ok(`${name} refuses a request that is not from the site`,
        /if \(!requestIsFromSite\(req\.headers\)\) \{/.test(src));
     ok(`${name} says why in the body`, /NOT_FROM_SITE/.test(src));
@@ -33671,7 +33695,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     "/auth/v1/token?grant_type=password",
     // 6 Oct 2026: Log out tells Supabase to end the session (security review,
     // finding 4). It carries the session's own token, not the anon key alone.
-    "/auth/v1/logout?scope=local",
+    "/auth/v1/logout?scope=global",
     // 7 Oct 2026: suggestions and workshop requests go through
     // /api/send-form, counted per network (security review), so they are
     // off this list.
@@ -33702,7 +33726,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // A prop that is not passed is undefined, and undefined(...) is a crash on
   // the first correction rather than a 401. Both mount points, because this
   // component is rendered twice and one of them is the floating one.
-  is("both mount points pass it", (app16.match(/supaFetch=\{supaFetch\}/g) || []).length, 2);
+  is("both mount points pass it", (app16.match(/supaFetch=\{supaFetch\}/g) || []).length - (app16.match(/<DealStudio supaFetch=\{supaFetch\}/g) || []).length, 2);
 
   // ── AND WHEN THE REFRESH TOKEN IS DEAD TOO ───────────────────────
   // The one case a retry cannot fix. Supabase says invalid_grant, he is
@@ -44010,9 +44034,12 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
      /evidence: \[fromSite\.url\]\.filter\(Boolean\)/.test(appD));
   // Same lesson, same shape: pinning the map and the href left the surrounding
   // guard free to be turned off, and a mutant that did exactly that survived.
+  // Since 15 Oct 2026 the link goes through externalHref, so a javascript:
+  // link from a search cannot reach the href (security review 9 Oct 2026,
+  // section 2).
   ok("the card renders them as links rather than as hostnames",
      /\{Array\.isArray\(c\.evidence\) && c\.evidence\.length > 0 && \(/.test(appD)
-     && /c\.evidence\.slice\(0, 3\)\.map/.test(appD) && /href=\{u\} target="_blank"/.test(appD));
+     && /c\.evidence\.slice\(0, 3\)\.map/.test(appD) && /href=\{externalHref\(u\) \|\| undefined\} target="_blank"/.test(appD));
 
   // ── AND A DAY OF THE EVENT IS NOT THE EVENT MOVING ───────────────
   //
@@ -44182,11 +44209,12 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     // the assertion passed on the survivors. Pinned to the answer that carries
     // the claim, by its own sentence, and counted so a quiet deletion shows.
     ok("but the honest description of the process stays",
-       /Every listing is researched and checked by one person before it goes live, and nothing here is invented/.test(appV));
+       // In uiLanguage.js since the FAQ was translated, 14 Oct 2026.
+       /Every listing is researched and checked by one person before it goes live, and nothing here is invented/.test(M.UI_STRINGS["faq.verified.a"].en) && /\["free", "save", "listed", "verified"\]\.map\(k => \(\{ q: uiT\(`faq\.\$\{k\}\.q`, uiLang\), a: uiT\(`faq\.\$\{k\}\.a`, uiLang\) \}\)\)/.test(appV));
     ok("and it admits the older entries show fewer sources",
-       /Older entries were written before we started storing sources/.test(appV));
+       /Older entries were written before we started storing sources/.test(M.UI_STRINGS["faq.verified.a"].en));
     is("every place that describes the process still does",
-       (appV.match(/hand-researched and checked against multiple sources/g) || []).length, 4);
+       ((appV + readFileSync(join(root, "src/utils/uiLanguage.js"), "utf8")).match(/hand-researched and checked against multiple sources/g) || []).length, 4);
     // And the real version of the claim is per entry and checkable, which is why
     // the badge going costs nothing: HowWeKnow prints that entry's own sources,
     // its corrections and its open questions.
@@ -48536,9 +48564,11 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // What it says instead has to do the one job the old string did not: stop a
   // reader reading a failed request as a claim about the weather. The same
   // rule ReviewsSection already keeps about a failed reviews read.
-  ok("a failed forecast read says the load failed", /could not be loaded just now/.test(ws));
-  ok("and refuses to be read as a quiet spell", /not a quiet spell/.test(ws));
-  ok("and points somewhere real", /DMI or Yr/.test(ws));
+  // The sentence is in uiLanguage.js since 14 Oct 2026, in four languages.
+  const wsSays = M.UI_STRINGS["weather.failed"].en;
+  ok("a failed forecast read says the load failed", /could not be loaded just now/.test(wsSays) && /uiT\("weather\.failed", lang\)/.test(ws));
+  ok("and refuses to be read as a quiet spell", /not a quiet spell/.test(wsSays));
+  ok("and points somewhere real", /\{src\}/.test(wsSays) && /SERVICE\[activeCountry\(\)\] \|\| "DMI"\} \$\{uiT\("weather\.or", lang\)\} Yr/.test(ws));
 }
 
 // ── AND NO DASH IN ANYTHING A TRAVELLER READS ──────────────────────
@@ -63558,7 +63588,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("and one banner covers every tab at once",
      /const renderTab = \(tab\) => \(\s*<>[\s\S]{0,900}\{libraryFailed && \(/.test(appS));
   ok("which says the places may be missing rather than absent",
-     /It is not that they are not published/.test(appS));
+     /It is not that they are not published/.test(M.UI_STRINGS["load.failedBody"].en) && /uiT\("load\.failedBody", uiLang\)/.test(appS));
 
   // ── 3. TWO SAVE SYSTEMS, ONE OF THEM UNREACHABLE ────────────────
   //
@@ -67966,8 +67996,10 @@ SOURCE: https://www.tripadvisor.com/whatever`;
     // carries the navigation on a phone.
     ok("the header button is the face once somebody is signed in",
        /userSession \? \(\s*<AccountAvatar url=\{avatarUrl\(userSession, userProfile\)\} size=\{32\}/.test(appA));
+    // Since 16 Oct 2026 the three lines are drawn as three gold bars, so they
+    // can turn into an X while the menu is open.
     ok("and three lines before that",
-       /<Ico name="menu" size=\{21\}/.test(appA)
+       /<span className="gx-burger-bars" aria-hidden="true"><i \/><i \/><i \/><\/span>/.test(appA)
        && /^  menu: P\(/m.test(readFileSync(join(root, "src/components/Icon.jsx"), "utf8")));
     // THE BOX IS 32 EITHER WAY, so the badge on its corner and the width of the
     // header do not move at the moment somebody signs in.
@@ -79712,7 +79744,8 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("clause 12.6 extends the accuracy clauses to all other content", /<span class="n">12\.6<\/span> Clauses 12\.2 to 12\.4 apply equally to all other Gemlyx Content[\s\S]{0,400}any answer given through the conversation interface[\s\S]{0,200}accepts no responsibility for any such information being incorrect, incomplete or out of date, save as provided in clause 19\.1\./.test(terms));
   ok("and reliance on it is excluded like a Guide's", /19\.2\.1<\/span> reliance upon a price, timetable, opening hour, event date, availability or other item of information contained in a Guide or in any other Gemlyx Content, or given in an answer/.test(terms));
   ok("still never beyond what the law allows", /19\.1<\/span> Nothing in these Terms shall exclude or limit the liability of Gemlyx for death or personal injury/.test(terms));
-  ok("the version moved and says why", M.TERMS_VERSION === "2.3" && /Version 2\.3 · In force from/.test(terms) && /Version 2\.2, in force from 27 September 2026, adds clause 12\.6/.test(terms) && /Version 2\.3, in force from 1 November 2026, extends the Service to Lithuania/.test(terms));
+  // Version 2.4 since 17 Oct 2026 (clauses 14.6 and 14.7, batch 256).
+  ok("the version moved and says why", M.TERMS_VERSION === "2.4" && /Version 2\.4 · In force from/.test(terms) && /Version 2\.2, in force from 27 September 2026, adds clause 12\.6/.test(terms) && /Version 2\.3, in force from 1 November 2026, extends the Service to Lithuania/.test(terms));
 }
 
 // ── BATCH 147: ONE GUIDE A DAY, AND A CEILING ON THE DAY ─────────────
@@ -80363,7 +80396,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const card = app.slice(app.indexOf("THE VERDICT AND THE MAP, AS ON A TOWN"), app.indexOf("THE VERDICT AND THE MAP, AS ON A TOWN") + 6000);
   ok("the attraction card carries the tier badge on the picture", /tierBadge\(item\)/.test(card) && /b\.label/.test(card));
   ok("and the map of Denmark in the top right corner, from its own point when it has one", /<DKLocator town=\{key \|\| item\.name\} point=\{pt \? \[pt\.lat, pt\.lon\] : null\}/.test(card) && /top: 8, right: 8, width: 68, height: 68/.test(card));
-  ok("the heart moved to the bottom corner to make room", /bottom: 8, right: 8, background: "rgba\(10,15,30,0\.75\)"/.test(card));
+  ok("the heart moved to the bottom corner to make room", /bottom: 8, right: 8, background: "rgba\(14,14,17,0\.75\)"/.test(card));
   ok("the line under the name is kind, town, and distance from the reader", /dotJoin\(entryKindLabel\(item\._kind, item\.type\), attractionWhere\(town, key, placeCoords\(item\)\), distanceLine\(userCoords, key\), item\.priceNote\)/.test(card));
   ok("and nothing on it measures from Copenhagen", !/from CPH|travelLabel\(/.test(card.slice(0, card.indexOf("Good for families"))));
 }
@@ -80485,7 +80518,7 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("the chat stays off a Lithuanian page, the planner and Tips do not", /const NOT_YET_ABROAD = \[\];/.test(app) && /if \(PAGE_ABROAD\) return null;\s*\n\s*return <AskGemlyx/.test(app) && /\{NAV_ITEMS\.some\(item => item\.id === featuredTab\) && <button className="gx-topnav-ai"/.test(app) && /\{!PAGE_ABROAD && \(<>/.test(app));
   // Batch 162: and Studio, which lives on the planner's page, stays reachable at /lithuania#studio.
   ok("an empty page leaves a Lithuanian menu by itself, and Studio keeps its page", /const hideAbroad = \(t\) => PAGE_ABROAD && \(\(NOT_YET_ABROAD\.includes\(t\) && !\(t === "ai" && isStudio\)\) \|\| \(liveLoaded && !libraryFailed && !isStudio && emptyHere\[t\]\)\);/.test(app));
-  ok("the Danish video and photo stay on Danish pages", /\{!videoError && !PAGE_ABROAD && \(/.test(app) && /background: PAGE_ABROAD \? "linear-gradient/.test(app));
+  ok("the Danish video and photo stay on Danish pages", /\{!videoError && !PAGE_ABROAD && \(/.test(app) && /background: PAGE_ABROAD \? `linear-gradient/.test(app));
   ok("the Klaipėda demo moved off the town's own address", M.KLAIPEDA_DEMO_PATH === "/lithuania/trips");
   const dp = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
   // Batch 167: the planner is built abroad, so saving is too.
@@ -80818,6 +80851,10 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   ok("and Explore is never one of them", !/\bhome: /.test(app.slice(app.indexOf("const emptyHere = {"), app.indexOf("const hideAbroad"))));
   ok("and the front page's dates and planner button go with the planner", /\{TAB_ORDER\.includes\("ai"\) && <div style=\{\{ display: "flex", gap: 10/.test(app) && /\{TAB_ORDER\.includes\("ai"\) && <button onClick=\{\(\) => \{ setDetourTab\("sightseeing"\)/.test(app));
   ok("the gold button goes with its page", /\{NAV_ITEMS\.some\(item => item\.id === featuredTab\) && <button className="gx-topnav-ai" data-testid="nav-featured"/.test(app));
+  // Oliver, 16 Oct 2026: "Just remove the navigations at the very top as well.
+  // Have them saved, but remove them visually." Not drawn on /lithuania; the
+  // strip and the gold button are kept whole inside the switch.
+  ok("no bar of pages along the top on /lithuania, its code kept", /const TOP_NAV_SHOWN = PAGE_COUNTRY !== "LT";/.test(app) && /\{TOP_NAV_SHOWN && \(<>\s*\n\s*<NavStrip C=\{C\}>/.test(app) && /<\/button>\}\s*\n\s*<\/>\)\}/.test(app));
 }
 
 // ── Batch 172: security, after Fable's audit ──
@@ -81067,10 +81104,10 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const card = M.promoCard(M.livePromotions(pools, tue1330)[0], { paid: true, today: tue1330 });
   ok("and the card carries the badge", card.timing === "now" && card.hours === "On now until 16:00");
   const appH = readFileSync(join(root, "src/App.jsx"), "utf8");
-  ok("the Studio picks the days and the hours and publishes them", /OFFER_WEEK\.map\(d => \{/.test(appH) && /setStudioOfferFrom\(e\.target\.value\)/.test(appH) && /setStudioOfferTo\(e\.target\.value\)/.test(appH) && /const offerFromFields = cleanOffer\(studioOfferFields\);/.test(appH));
+  ok("the Studio picks the days and the hours and publishes them", /OFFER_WEEK\.map\(d => \{/.test(appH) && /setStudioOfferFrom\(e\.target\.value\)/.test(appH) && /setStudioOfferTo\(e\.target\.value\)/.test(appH) && /const offerFromFields = cleanOffer\(\{ \.\.\.studioOfferFields, tr: shaped\.__offer\?\.tr \}\);/.test(appH));
   ok("and opening a published row brings its hours back", /setStudioOfferDays\(Array\.isArray\(row\.payload\?\.__offer\?\.days\)/.test(appH) && /setStudioOfferFrom\(row\.payload\?\.__offer\?\.from \|\| ""\);/.test(appH));
   const dpH = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
-  ok("the entry page reads the place's clock", /offerView\(item\.__offer, \{ paid, zone: countryProfile\(rowCountry\(item\)\)\.zone \}\)/.test(dpH) && /data-testid="offer-hours"/.test(dpH));
+  ok("the entry page reads the place's clock", /offerView\(item\.__offer, \{ paid, zone: countryProfile\(rowCountry\(item\)\)\.zone, lang \}\)/.test(dpH) && /data-testid="offer-hours"/.test(dpH));
   ok("and so does the Special deals page", /promoCard\(p, \{ paid, today, lang \}\)/.test(readFileSync(join(root, "src/components/PromotionsPage.jsx"), "utf8")));
 }
 
@@ -82062,6 +82099,19 @@ function resolveLeg(how, mode, geo) { return M.resolveLegMode(how, mode, "A", "B
   const gate = readFileSync(join(root, "src/utils/aiGate.js"), "utf8");
   ok("the member's Opus calls are counted on their own key", /\{ key: `ai:u:\$\{userId\.toLowerCase\(\)\}:opus`, limit: limits\.opusPerUser \}/.test(gate) && /opus: asksForOpus\(endpoint, body\), limits/.test(gate));
   ok("finding 8: a slow counter is a closed one after three seconds", /signal: AbortSignal\.timeout\(3000\),/.test(gate));
+  // Security review, 12 Oct 2026, section 55 (applied 15 Oct 2026).
+  ok("12 Oct: a member's OpenAI calls are counted on their own key and a members' pool", /\{ key: `ai:u:\$\{userId\.toLowerCase\(\)\}:openai`, limit: limits\.openaiPerUser \}, \{ key: "ai:members:openai", limit: limits\.membersOpenaiPerDay \}/.test(gate) && /openai: endpoint === "openai", opus: asksForOpus/.test(gate) && M.readAiLimits({}).openaiPerUser === 60 && M.readAiLimits({}).membersOpenaiPerDay === 600);
+  const counted = [];
+  const memberSays = (answer) => async (url, init) => {
+    if (String(url).endsWith("/auth/v1/user")) return { ok: true, json: async () => ({ id: "Member-1", email_confirmed_at: "x" }) };
+    counted.push(JSON.parse(init.body));
+    return { ok: true, json: async () => answer };
+  };
+  const asMember = { origin: "https://www.gemlyxtravel.com", authorization: "Bearer t" };
+  const mOpenai = await M.gateAi({ endpoint: "openai", body: {}, env: { SUPABASE_SERVICE_ROLE_KEY: "svc" }, headers: asMember, fetchImpl: memberSays("ok") });
+  ok("12 Oct: a member's OpenAI call takes the OpenAI counts as well", mOpenai.ok && counted[0].p_keys.includes("ai:u:member-1:openai") && counted[0].p_keys.includes("ai:members:openai") && counted[0].p_limits[counted[0].p_keys.indexOf("ai:u:member-1:openai")] === 60);
+  const mOver = await M.gateAi({ endpoint: "openai", body: {}, env: { SUPABASE_SERVICE_ROLE_KEY: "svc" }, headers: asMember, fetchImpl: memberSays("ai:members:openai") });
+  ok("12 Oct: and all members over the OpenAI pool hear the site is done for today", mOver.status === 429 && /used its AI for today/.test(mOver.error));
 }
 
 // ── Batch 214, finding 4: Google's dearer place search is Studio's only ──
@@ -82258,6 +82308,18 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   try { await SF.safeFetch("http://shop.example.com/start", {}, { lookup: lookupBy, send }); } catch (e) { refused = `${e.name} ${e.message}`; }
   ok("a redirect into the private network is refused before it is fetched", /RefusedAddress/.test(refused) && hops.length === 1);
   const okRes = await SF.safeFetch("http://shop.example.com/page", {}, { lookup: lookupBy, send });
+  // Security review, 13 Oct 2026: transition ranges, a total time limit, and
+  // no key carried to another host.
+  ok("IPv6 ranges that carry an IPv4 address are refused", ["2002:7f00:1::1", "2001:0:4136:e378:8000:63bf:3fff:fdd2", "64:ff9b:1::7f00:1", "::ffff:0:7f00:1", "::ffff:0:10.0.0.1"].every(a => !SF.isPublicAddress(a)) && SF.isPublicAddress("::ffff:0:808:808") && pub.every(SF.isPublicAddress));
+  // A socket that never ends keeps the process alive; the timer stands in for it.
+  const slow = (url, a, f, { signal }) => new Promise((res, rej) => { const keep = setTimeout(() => {}, 2000); signal?.addEventListener("abort", () => { clearTimeout(keep); rej(Object.assign(new Error("aborted"), { name: "AbortError" })); }, { once: true }); });
+  let cut = "";
+  try { await SF.safeFetch("http://shop.example.com/page", {}, { lookup: lookupBy, send: slow, totalMs: 50 }); } catch (e) { cut = e.name; }
+  ok("a read that never finishes is cut at the total limit", cut === "AbortError");
+  const seen = [];
+  const sendX = async (url, a, f, { headers }) => { seen.push({ host: url.host, headers: { ...headers } }); return url.pathname === "/go" ? { status: 302, location: "http://other.example.org/y", headers: {} } : { status: 200, headers: {}, buf: Buffer.from("ok") }; };
+  await SF.safeFetch("http://shop.example.com/go", { headers: { Authorization: "Bearer k", "User-Agent": "Gemlyx" } }, { lookup: lookupTo("93.184.216.34"), send: sendX });
+  ok("a redirect to another host gets no key", seen[0].headers.Authorization === "Bearer k" && !("Authorization" in seen[1].headers) && seen[1].headers["User-Agent"] === "Gemlyx");
   ok("and a public page answers in fetch's own shape", okRes.ok && okRes.status === 200 && (await okRes.text()) === "fine" && okRes.headers.get("Content-Type") === "text/plain");
   const read = (f) => readFileSync(join(root, f), "utf8");
   ok("every Studio page reader fetches through it", /pageFetch: safeFetch/.test(read("api/scan-source.js")) && /await safeFetch\(url, \{ headers/.test(read("api/find-email.js")) && /await safeFetch\(url, \{\s*signal: ctrl\.signal/.test(read("api/social-find.js")) && /await safeFetch\(url\.toString\(\)/.test(read("api/calendar.js")) && /\}, \{ httpsOnly: true \}\);/.test(read("api/calendar.js")) && /await safeFetch\(raw, \{/.test(read("api/link-alive.js")));
@@ -82273,7 +82335,7 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
 
   // The Lows.
   ok("finding 3: the inbox SQL asks is_founder(), never an email", /using \(public\.is_founder\(\)\)/.test(M.INBOX_SETUP_SQL) && !/'email'/.test(M.INBOX_SETUP_SQL));
-  ok("finding 4: Log out ends the session on Supabase too", /\/auth\/v1\/logout\?scope=local/.test(read("src/App.jsx")));
+  ok("finding 4: Log out ends the session on Supabase too", /\/auth\/v1\/logout\?scope=global/.test(read("src/App.jsx")));
   ok("finding 5: the founder's account cannot be deleted from the reader's button", /founderIds\(process\.env\.GEMLYX_FOUNDER_IDS\)\.includes\(String\(who\.userId\)\.toLowerCase\(\)\) \|\| who\.userId === FOUNDER_FALLBACK_ID/.test(read("api/delete-account.js")));
   ok("finding 6: the three missing founder routes are on the list, and the two tools carry the token", ["places", "link-alive", "calendar"].every(e => M.STUDIO_ONLY_ENDPOINTS.includes(e)) && /await studioFetch\(`\/api\/link-alive\?url=/.test(read("src/App.jsx")) && /\(studioFetch \|\| fetch\)\(`\/api\/places-locate/.test(read("src/components/CheapGemsPanel.jsx")) && /studioFetch=\{studioFetch\} \/>/.test(read("src/App.jsx")));
   ok("finding 7: scan-source answers 200 and puts the site's status in the body", /return res\.status\(200\)\.json\(\{\s*siteStatus: Number\(r\.status\) \|\| 0,/.test(read("api/scan-source.js")) && !/res\.status\(httpStatus\)/.test(read("api/scan-source.js")));
@@ -82324,7 +82386,7 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   const dny = read("src/components/DealsNearYou.jsx");
   const kd = read("src/utils/useKlaipedaDeals.js");
   ok("the QR page shows the example deals until a real one is live, marked Example", /const examples = real\.length === 0;/.test(kd) && /livePromotions\(examplePromotionPools\(\)\)/.test(kd) && /examples=\{live\.examples\}/.test(demo) && /data-testid="deals-near-examples"/.test(dny));
-  ok("only today's, on now first, with what the visitor gets", /\.filter\(x => x\.card\.timing in RANK\)/.test(dny) && /MAX_DEALS = 12/.test(dny) && /data-testid="deal-near-offer"/.test(dny));
+  ok("only today's, on now first, with what the visitor gets", /\.filter\(x => x\.card\.timing in RANK\)/.test(dny) && /MAX_DEALS = 12/.test(dny) && /deal-near-offer/.test(read("src/components/DealCard.jsx")));
   const pools = M.KEX.examplePromotionPools();
   ok("the example deals are read on Klaipėda's clock", Object.values(pools).flat().length > 0 && Object.values(pools).flat().every(p => p.country === "LT"));
 
@@ -82560,7 +82622,7 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("fix 27: the founder's email is not written into entries", !/by: studioSession\?\.email/.test(app) && /by: "founder",/.test(app));
   ok("fix 28: only a plain address becomes a reply link", /PLAIN_ADDRESS\.test\(String\(row\.email\)\) \? `mailto:/.test(read("src/components/StudioReports.jsx")));
   const lo = app.slice(app.indexOf("const studioLogout = async () => {"), app.indexOf("const studioLogout = async () => {") + 900);
-  ok("fix 29: Log out renews a lapsed token before it ends the session", lo.indexOf("tokenExpiresAt(token)") > 0 && lo.indexOf("tokenExpiresAt(token)") < lo.indexOf("/auth/v1/logout?scope=local"));
+  ok("fix 29: Log out renews a lapsed token before it ends the session", lo.indexOf("tokenExpiresAt(token)") > 0 && lo.indexOf("tokenExpiresAt(token)") < lo.indexOf("/auth/v1/logout?scope=global"));
   ok("fix 30: the old events secret is gone from the notes", /`UPDATE_EVENTS_SECRET` with this value: `<redacted>`/.test(read("CHANGES_THIS_PASS.md")));
 }
 
@@ -82687,7 +82749,8 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   is("a reach counts the place and its hour", S.eventKeys({ e: "reach", id: "food:1" }, 9), ["st:r:food:1", "st:rh:food:1:09"]);
   ok("and nothing else is counted", S.eventKeys({ e: "reach", id: "food:1" }, 24).length === 0 && S.eventKeys({ e: "other", id: "food:1" }, 3).length === 0 && S.eventKeys({ e: "walk", ids: [] }, 3).length === 0);
   ok("a walk carries at most twelve places", S.eventKeys({ e: "walk", ids: Array.from({ length: 30 }, (_, i) => `food:${i}`) }, 1).length === 12);
-  ok("the page reads four totals and 24 hours", S.readKeysFor("food:1").length === 28 && S.readKeysFor("food:1").includes("st:rh:food:1:23"));
+  // Five since 17 Oct 2026: "s", a scan of the Gemlyx code at the counter.
+  ok("the page reads five totals and 24 hours", S.readKeysFor("food:1").length === 29 && S.readKeysFor("food:1").includes("st:rh:food:1:23"));
   const st = S.statsFrom([
     { day: "2026-10-10", key: "st:w:food:1", n: 4 }, { day: "2026-10-11", key: "st:w:food:1", n: 2 },
     { day: "2026-10-11", key: "st:d:food:1", n: 1 }, { day: "2026-10-11", key: "st:r:food:1", n: 3 },
@@ -82715,10 +82778,14 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   process.env.SUPABASE_SERVICE_ROLE_KEY = "svc-key-for-tests";
   delete process.env.PARTNER_LINK_SECRET;
   const sent = [];
+  let partnersAnswer = { ok: true, status: 200, rows: [{ id: "food:7" }] };
+  let rpcAnswer = "ok";
+  R.resetPartnersCache();
   globalThis.fetch = async (url, init = {}) => {
     sent.push({ url: String(url), body: init.body ? JSON.parse(init.body) : null });
-    if (String(url).includes("/rpc/gemlyx_take_guide")) return { ok: true, json: async () => "ok" };
+    if (String(url).includes("/rpc/gemlyx_take_guide")) return { ok: true, json: async () => rpcAnswer };
     if (String(url).includes("/auth/v1/user")) return { ok: true, json: async () => ({ id: "467fb712-e3e9-4d43-b1b8-e4e1bb32b76d", email_confirmed_at: "x" }) };
+    if (String(url).includes("/rest/v1/gemlyx_partners")) return init.method === "POST" ? { ok: partnersAnswer.ok, status: partnersAnswer.ok ? 201 : partnersAnswer.status, json: async () => null } : { ok: partnersAnswer.ok, status: partnersAnswer.status, json: async () => partnersAnswer.rows };
     return { ok: true, json: async () => [{ day: "2026-10-11", key: "st:w:food:7", n: 5 }, { day: "2026-10-11", key: "st:r:food:7", n: 2 }, { day: "2026-10-11", key: "st:rh:food:7:13", n: 2 }] };
   };
   const site = { origin: "https://www.gemlyxtravel.com" };
@@ -82734,14 +82801,48 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
     const link = L.makePartnerToken({ id: "food:7", name: "Devi Indian" }, L.partnerSecret(process.env));
     const g = await run({ method: "GET", headers: { referer: "https://www.gemlyxtravel.com/lithuania/partner" }, query: { k: link } });
     ok("the partner page gets its own numbers", g.code === 200 && g.out.name === "Devi Indian" && g.out.totals.walks === 5 && g.out.totals.reached === 2 && g.out.busiest.hour === 13);
-    const q = sent[sent.length - 1].url;
-    ok("read only for its own keys and the last 30 days", /gemlyx_guide_allowance\?select=day,key,n&day=gte\.\d{4}-\d{2}-\d{2}&key=in\./.test(q) && decodeURIComponent(q).includes('"st:w:food:7"') && !decodeURIComponent(q).includes("food:8"));
+    const q = sent[sent.length - 1];
+    ok("read only for its own place and the last 30 days, through the narrow function", q.url.endsWith("/rest/v1/rpc/gemlyx_partner_stats") && q.body.p_id === "food:7" && /^\d{4}-\d{2}-\d{2}$/.test(q.body.p_from));
     is("a bad link reads nothing", (await run({ method: "GET", headers: site, query: { k: "nope.nope" } })).code, 404);
     process.env.GEMLYX_FOUNDER_IDS = "";
     const mk = await run({ method: "POST", headers: { ...site, authorization: "Bearer t" }, body: { make: { id: "food:7", name: "Devi Indian" } } });
     ok("Studio makes a link that reads back", mk.code === 200 && /^\/lithuania\/partner\?k=/.test(mk.out.path) && L.readPartnerToken(decodeURIComponent(mk.out.path.split("k=")[1]), L.partnerSecret(process.env))?.id === "food:7");
     is("and nobody else can", (await run({ method: "POST", headers: site, body: { make: { id: "food:7", name: "x" } } })).code, 401);
     ok("the days-back helper counts back across a month", R.daysBack("2026-10-12", 29) === "2026-09-13");
+    // Security review, 13 Oct 2026: only places with a partner link are counted.
+    sent.length = 0;
+    const nobody = await run({ method: "POST", headers: site, body: { e: "walk", c: "LT", ids: ["food:8", "zz:invented"] } });
+    ok("a place with no partner link writes no row", nobody.code === 200 && nobody.out.ok === false && !sent.some(x => x.url.includes("/rpc/")));
+    sent.length = 0;
+    await run({ method: "POST", headers: site, body: { e: "walk", c: "LT", ids: ["food:7", "food:8"], deals: ["food:7", "food:8"] } });
+    const only = sent.find(x => x.url.includes("/rpc/gemlyx_take_guide"));
+    ok("a walk with a partner and a stranger counts only the partner", only && only.body.p_keys.includes("st:w:food:7") && !only.body.p_keys.some(k => k.includes("food:8")));
+    ok("one network adds a bounded number of walks to one place, and a /48 is one network too", only.body.p_keys.some((k, i) => /^pst:v:[0-9a-f]+:w:food:7$/.test(k) && only.body.p_limits[i] === R.PER_PLACE_WALKS) && only.body.p_keys.some(k => k.startsWith("pst:v48:")));
+    sent.length = 0;
+    await run({ method: "POST", headers: site, body: { e: "reach", c: "LT", id: "food:7" } });
+    const rr = sent.find(x => x.url.includes("/rpc/gemlyx_take_guide"));
+    ok("and a bounded number of visits", rr && rr.body.p_keys.some((k, i) => /^pst:v:[0-9a-f]+:r:food:7$/.test(k) && rr.body.p_limits[i] === R.PER_PLACE_REACH));
+    is("a country name from the object prototype is refused", (await run({ method: "POST", headers: site, body: { e: "reach", c: "constructor", id: "food:7" } })).code, 400);
+    process.env.GEMLYX_PARTNER_PER_SITE = "0";
+    sent.length = 0;
+    const off = await run({ method: "POST", headers: site, body: { e: "reach", c: "LT", id: "food:7" } });
+    ok("GEMLYX_PARTNER_PER_SITE=0 switches counting off", off.code === 200 && off.out.ok === false && !sent.some(x => x.url.includes("/rpc/")));
+    delete process.env.GEMLYX_PARTNER_PER_SITE;
+    is("a link for a place not on the partner list reads nothing", (await run({ method: "GET", headers: site, query: { k: L.makePartnerToken({ id: "food:8", name: "x" }, L.partnerSecret(process.env)) } })).code, 404);
+    partnersAnswer = { ok: false, status: 404, rows: null };
+    R.resetPartnersCache();
+    is("before the partner SQL has run, the page says not available", (await run({ method: "GET", headers: site, query: { k: link } })).code, 503);
+    const noTable = await run({ method: "POST", headers: site, body: { e: "reach", c: "LT", id: "food:7" } });
+    ok("and nothing is counted", noTable.code === 200 && noTable.out.ok === false);
+    const mk404 = await run({ method: "POST", headers: { ...site, authorization: "Bearer t" }, body: { make: { id: "food:7", name: "x" } } });
+    ok("and Studio is told the table is missing", mk404.code === 503 && /gemlyx_partners/.test(mk404.out.error));
+    partnersAnswer = { ok: true, status: 200, rows: [{ id: "food:7" }] };
+    R.resetPartnersCache();
+    const realUser = globalThis.fetch;
+    globalThis.fetch = async (u, init) => String(u).includes("/auth/v1/user") ? { ok: true, status: 200, json: async () => ({ id: "someone-else" }) } : realUser(u, init);
+    is("a signed-in member who is not the founder cannot make a link", (await run({ method: "POST", headers: { ...site, authorization: "Bearer t" }, body: { make: { id: "food:7", name: "x" } } })).code, 403);
+    globalThis.fetch = realUser;
+    ok("a link secret set too short is refused, never replaced", L.partnerSecret({ PARTNER_LINK_SECRET: "short", SUPABASE_SERVICE_ROLE_KEY: "svc" }) === "");
   } finally {
     globalThis.fetch = realFetch;
     for (const k of Object.keys(process.env)) if (!(k in saved)) delete process.env[k];
@@ -82752,9 +82853,9 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   const np = read("src/components/NowPlanner.jsx"), wm = read("src/components/WalkMode.jsx"), app = read("src/App.jsx");
   ok("the QR walk counts the walk it shows and the places reached", /walkSeen\(walk, country\);/.test(np) && /onReach=\{\(s\) => placeReached\(s, country\)\}/.test(np) && /onReach=\{onReach\}/.test(np));
   ok("Studio's tests and the examples page count nothing", !/walkSeen|placeReached|onReach/.test(read("src/components/RandomWalkTest.jsx") + read("src/pages/KlaipedaExamples.jsx")));
-  ok("a place is reached on arrival, or on moving on without GPS", /reach\(target\); \}\s*\}, \[g\?\.here, idx\]\);/.test(wm) && /const moveOn = \(\) => \{ if \(!back && \(gpsOff \|\| !pos\)\) reach\(target\); setIdx\(i => i \+ 1\); \};/.test(wm) && (wm.match(/onClick=\{moveOn\}/g) || []).length === 2);
+  ok("a place is reached on arrival, or on moving on without GPS", /reach\(target\); \}\s*\}, \[g\?\.here, idx\]\);/.test(wm) && /const moveOn = \(\) => \{ if \(!back && gpsOff\) reach\(target\); setIdx\(i => i \+ 1\); \};/.test(wm) && (wm.match(/onClick=\{moveOn\}/g) || []).length === 2);
   ok("the partner page has its route, kept out of search", /<Route path=\{KLAIPEDA_PARTNER_PATH\} element=\{<KlaipedaPartner \/>\} \/>/.test(app) && /keepOutOfSearch\(T\.title\)/.test(read("src/pages/KlaipedaPartner.jsx")));
-  ok("Studio's offer editor makes the link for the open place", /data-testid="studio-partner-link"/.test(app) && /make: \{ id: `\$\{studioType\}:\$\{forId\}`/.test(app));
+  ok("Studio's offer editor makes the link for the open place", /data-testid="studio-partner-link"/.test(app) && /make: \{ id: `\$\{editingType \|\| studioType\}:\$\{forId\}`/.test(app));
   ok("the link code stays on the server", !/partnerLink\.js|node:crypto/.test(read("src/pages/KlaipedaPartner.jsx") + np + wm) && !/from "\.\/utils\/partnerLink"/.test(app));
   const biz = read("src/pages/KlaipedaBusiness.jsx");
   ok("the business page promises what is counted, in both languages", /visitors walked to you/.test(biz) && /lankytojų atėjo pas jus/.test(biz) && !/was opened|buvo atidaryta/.test(biz));
@@ -82800,15 +82901,16 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
 {
   const read = (f) => readFileSync(join(root, f), "utf8");
   const cm = read("src/components/DealCornerMap.jsx"), dny = read("src/components/DealsNearYou.jsx");
-  ok("the guide's own Google map, in the guide's style, fixed on the street", /mapId: GOOGLE_MAP_ID,/.test(cm) && /zoom: CLOSE_ZOOM,/.test(cm) && /CLOSE_ZOOM = 15;/.test(cm) && !/leaflet|addTileLayer|flyTo/i.test(cm.replace(/\/\/.*$/gm, "")));
+  // 16 Oct 2026: drawn dark rather than in the guide's style (Batch 248).
+  ok("Google's own map, fixed on the street", /styles: CARD_MAP_STYLE,/.test(cm) && /zoom = CLOSE_ZOOM \}\) => \{/.test(cm) && /^          zoom,$/m.test(cm) && /CLOSE_ZOOM = 15;/.test(cm) && !/leaflet|addTileLayer|flyTo/i.test(cm.replace(/\/\/.*$/gm, "")));
   ok("a picture, not a control: nothing on it moves", /disableDefaultUI: true, gestureHandling: "none", keyboardShortcuts: false, clickableIcons: false/.test(cm));
   ok("raster, so a dozen do not need a dozen WebGL canvases", /RenderingType\?\.RASTER \|\| "RASTER"/.test(cm));
   ok("made when the card first comes near the screen, then kept", /new IntersectionObserver\(/.test(cm) && /\{ seen\.disconnect\(\); setNear\(true\); \}/.test(cm) && /made\.current = true;/.test(cm));
   // Batch 237: Google's picture first, the live map only if the key refuses it.
-  ok("a Static Maps picture first, in the guide's style, never saved into the site", /maps\/api\/staticmap\?center=/.test(cm) && /&map_id=\$\{encodeURIComponent\(GOOGLE_MAP_ID\)\}/.test(cm) && /&scale=2/.test(cm) && /\{near && !live && \(/.test(cm));
+  ok("a Static Maps picture first, never saved into the site", /maps\/api\/staticmap\?center=/.test(cm) && /&scale=2&\$\{staticStyleParams\(\)\}&key=/.test(cm) && /\{near && !live && \(/.test(cm));
   ok("and the live map only when Google refuses, asked once a visit", /onError=\{\(\) => \{ staticRefused = true; setLive\(true\); \}\}/.test(cm) && /useState\(staticRefused\)/.test(cm) && /if \(!ok \|\| !near \|\| !live \|\| made\.current/.test(cm));
   ok("no key, no map, rather than a worse one", /googleMapsReady\(\)/.test(cm) && /if \(!ok\) return null;/.test(cm));
-  ok("every deal with a place gets one, and tapping it walks there", /<DealCornerMap lat=\{x\.at\.lat\} lon=\{x\.at\.lon\} name=\{x\.d\.name\}/.test(dny) && /onTap=\{\(\) => setOpened\(/.test(dny));
+  ok("every deal with a place gets one, and tapping it walks there", /<DealCornerMap fill ratio=\{ratio\} radius=\{radius\} lat=\{at\.lat\} lon=\{at\.lon\} name=\{name\}/.test(read("src/components/DealCard.jsx")) && /onOpen=\{\(\) => \{ pushSheet\(1\); setAtMap\(false\); setOpened\(key\); \}\}/.test(dny) && /onTap=\{\(\) => setAbove\(true\)\}/.test(read("src/components/DealDetail.jsx")));
 }
 
 // ── Batch 235: Explore is the deals on the Lithuanian site, and the Danish
@@ -82828,12 +82930,18 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   const pools = M.KEX.examplePromotionPools();
   const kinds = new Set(Object.values(pools).flat().map(d => D.dealKind(d)));
   ok("the example partners fill all three filters", ["discounts", "entertainment", "activities"].every(k => kinds.has(k)) && Object.values(pools).flat().find(d => d._exampleId === "food:beer")?.__dealKind === "entertainment");
-  ok("the filter words read in all four languages", ["explore.discounts", "explore.entertainment", "explore.activities", "explore.noneHere", "explore.more"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
+  ok("the filter words read in all four languages", ["explore.discounts", "explore.entertainment", "explore.activities", "explore.noneHere", "explore.coop", "explore.coopName"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
   const dny = read("src/components/DealsNearYou.jsx"), app = read("src/App.jsx"), ex = read("src/components/KlaipedaExplore.jsx");
-  ok("filtering happens before the twelve are cut, with All first", /nearbyDeals\(deals, start, \{ now: new Date\(\), lang, limit: Infinity, order: /.test(dny) && /\(kind \? all\.filter\(x => dealKind\(x\.d\) === kind\) : all\)\.slice\(0, MAX_DEALS\)/.test(dny) && /const FILTERS = \[\[null, "explore\.all"\], \.\.\.DEAL_KINDS/.test(dny));
+  ok("filtering happens before the twelve are cut, with All first", /nearbyDeals\(deals, start, \{ now: new Date\(\), lang, limit: Infinity, order: /.test(dny) && /byCategories\(all, only, x => x\.d\)\.slice\(0, MAX_DEALS\)/.test(dny) && /<CategoryNav active=\{cat\} onPick=\{pickCat\}/.test(dny));
   ok("and the tourism centre's own site is where the rest lives", /href=\{centreSite\(lang\)\}/.test(dny) && D.centreSite("lt") === "https://klaipedatravel.lt/" && D.centreSite("en") === "https://klaipedatravel.lt/en/");
-  ok("Explore on /lithuania is the deals, not the Danish front page", /\{tab === "home" && PAGE_ABROAD && \(/.test(app) && /<KlaipedaExplore lang=\{uiLang\} \/>/.test(app) && /\{tab === "home" && !PAGE_ABROAD && \(/.test(app) && /useKlaipedaDeals\(null\)/.test(ex));
-  ok("Studio sets the filter by hand and saves it with the row", /data-testid="studio-deal-kind"/.test(app) && /if \(DEAL_KINDS\.includes\(studioDealKind\)\) shaped\.__dealKind = studioDealKind;/.test(app) && /setStudioDealKind\(DEAL_KINDS\.includes\(row\.payload\?\.__dealKind\)/.test(app));
+  // 14 Oct 2026: "In cooperation with Klaipėda Tourism Center", the name the
+  // link. The old "More about Klaipėda from the tourism centre" key is gone.
+  ok("the deals end on the cooperation line, the centre's name linking to its site", ["en", "da", "de", "lt"].every(l => M.t("explore.coop", l).split("{name}").length === 2) && M.t("explore.coop", "en") === "In cooperation with {name}" && M.t("explore.coopName", "en") === "Klaipėda Tourism Center" && /uiT\("explore\.coop", lang\)\.split\("\{name\}"\)/.test(dny) && /\{uiT\("explore\.coopName", lang\)\}\s*<\/a>/.test(dny));
+  // Oliver, 16 Oct 2026: "remove the 'cooporation with Klaipeda Tourism
+  // Center'.. I'll ask them first". Kept, words and all, but not drawn.
+  ok("the cooperation line waits for the centre's yes", /export const CENTRE_LINE_SHOWN = false;/.test(dny) && /country === "LT" && CENTRE_LINE_SHOWN && \(\(\) => \{/.test(dny));
+  ok("Explore on /lithuania is the deals, not the Danish front page", /\{tab === "home" && PAGE_ABROAD && \(/.test(app) && /<KlaipedaExplore lang=\{uiLang\} version=\{liveContentVersion\}/.test(app) && /\{tab === "home" && !PAGE_ABROAD && \(/.test(app) && /useKlaipedaDeals\(null, version\)/.test(ex));
+  ok("Studio sets the filter by hand and saves it with the row", /data-testid="studio-deal-kind"/.test(app) && /if \(DEAL_CATEGORIES\.includes\(studioDealKind\)\) shaped\.__category = studioDealKind;/.test(app) && /setStudioDealKind\(DEAL_CATEGORIES\.includes\(row\.payload\?\.__category\)/.test(app));
   // The rework switch.
   const cfg = read("src/config.js");
   ok("one switch closes the Danish side", /export const DENMARK_REWORK = true;/.test(cfg) && (app.match(/element=\{<DanishSide \/>\}/g) || []).length === 6 && !/element=\{<GemlyxApp \/>\}/.test(app));
@@ -82859,9 +82967,10 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   is("Closest, from you", D.nearbyDeals(deals, me, { now: at, order: "closest" }).map(x => x.d.name), ["Žuvinė", "Bokštas", "Arbatinė"]);
   ok("and with no position nothing has minutes", D.nearbyDeals(deals, null, { now: at, order: "az" }).every(x => x.minutes === null));
   const dny = read("src/components/DealsNearYou.jsx");
-  ok("no ship and no centre: distance only from the visitor", !/NOW_STARTS|starts\[|defaultFrom/.test(dny) && /const start = here \? \{ id: "here"/.test(dny));
+  // Since 17 Oct 2026 (batch 258): from the visitor, else from the centre, never the ship.
+  ok("never the ship: from the visitor, else the centre", /const start = here \? hereAt\(here\) : centreStart;/.test(dny) && !/\.terminal\b/.test(dny));
   ok("Closest asks for the position, and a phone that said yes opens on it", /if \(k === "closest" && !here\) \{ setSort\("closest"\); locate\(\); return; \}/.test(dny) && /st\?\.state === "granted"\) locate\(\(\) => setSort\("closest"\)\)/.test(dny));
-  ok("Walk there asks for the position when it has none", /locate\(\(at\) => setGoing\(\{ \.\.\.x, minutes: walkMinutes\(at, x\.at\), _from: at \}\)\)/.test(dny));
+  ok("Walk there asks for the position when it has none", /navigator\.geolocation\.getCurrentPosition\(/.test(dny.slice(dny.indexOf("const go = (x) =>"), dny.indexOf("const openRedeem"))) && /startWalk\(x, hereAt\(at\)\);/.test(dny));
   // The filters read what the offer says before the kind of place.
   ok("a beer bar filed with food is Entertainment", D.dealKind({ _src: "food", name: "Inkaras", category: "Beer bar", __offer: { text: "Three beers" } }) === "entertainment");
   ok("a workshop or a bike hire is an Activity", D.dealKind({ _src: "food", name: "Lašas", __offer: { text: "Polish amber yourself" } }) === "activities" && D.dealKind({ _src: "shop", name: "Vėjas", __offer: { text: "Two hours bike hire, €8" } }) === "activities");
@@ -82877,9 +82986,11 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
 {
   const read = (f) => readFileSync(join(root, f), "utf8");
   const cm = read("src/components/DealCornerMap.jsx"), dny = read("src/components/DealsNearYou.jsx"), app = read("src/App.jsx");
-  ok("a step further out", /export const CLOSE_ZOOM = 15;/.test(cm) && /zoom=\$\{CLOSE_ZOOM\}/.test(cm));
-  ok("the walk map's own pointer, tip on the place", /import \{ PLACE_PIN, placePinHtml \} from "\.\/GoogleWalkMap";/.test(cm) && /marginTop: -PLACE_PIN\.h/.test(cm) && /transformOrigin: "50% 100%"/.test(cm) && /placePinHtml\(\{ sign, photo \}\)/.test(cm));
-  ok("with the place's sign or its filter's in the window", M.DNY.signFor({ emoji: "🐟" }) === "🐟" && M.DNY.signFor({ _src: "nightlife" }) === "🎵" && M.DNY.signFor({ __dealKind: "other" }) === "📍" && /sign=\{signFor\(x\.d\)\} photo=\{x\.d\.photo \|\| ""\}/.test(dny));
+  // Since 16 Oct 2026 the zoom is a setting that starts at CLOSE_ZOOM: a tile
+  // map keeps 15, the small map in a photo tile's corner asks for 16.
+  ok("a step further out", /export const CLOSE_ZOOM = 15;/.test(cm) && /size, zoom = CLOSE_ZOOM \}\) =>/.test(cm) && /&zoom=\$\{zoom\}&size=/.test(cm));
+  ok("the walk map's own pointer, tip on the place", /import \{ PLACE_PIN, placePinHtml \} from "\.\/GoogleWalkMap";/.test(cm) && /marginTop: -PLACE_PIN\.h/.test(cm) && /transformOrigin: "50% 100%"/.test(cm) && /placePinHtml\(\{ sign, photo, color: pin \}\)/.test(cm));
+  ok("with the place's sign or its filter's in the window", M.DNY.signFor({ emoji: "🐟" }) === "🐟" && M.DNY.signFor({ _src: "nightlife" }) === "🍸" && M.DNY.signFor({ __category: "rentals" }) === "🔑" && M.DNY.signFor({}) === "🏛️" && /photo=\{x\.d\.photo \|\| ""\} at=\{x\.at\} sign=\{signFor\(x\.d\)\}/.test(dny));
   ok("abroad, arriving at the planner by its address opens Explore", /if \(PAGE_ABROAD && asked === "ai"\) return "home";/.test(app) && /return asked \|\| "home";/.test(app));
 }
 
@@ -82893,9 +83004,13 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   const pv = read("src/components/DealPlaceView.jsx"), dny = read("src/components/DealsNearYou.jsx");
   ok("satellite, glided down and tilted over the building, like the walk map's arrival", /mapTypeId: "satellite"/.test(pv) && /RenderingType\?\.VECTOR/.test(pv) && /put\(glideAt\(start, end, t\)\)/.test(pv) && /to: \{ zoom: 18\.5, tilt: 55, heading: 35 \}/.test(pv));
   ok("then turns slowly round it until touched, and not at all for less motion", /heading: \(end\.heading \+ \(ms \/ 1000\) \* TURN_DEG_PER_S\) % 360/.test(pv) && /\["pointerdown", "wheel", "touchstart"\]\.forEach\(e => el\.addEventListener\(e, stop/.test(pv) && /if \(reducedMotion\(\)\) \{ put\(end\); return; \}/.test(pv));
-  ok("the walk map's own pointer on the building", /pin\.innerHTML = placePinHtml\(\{ sign, photo \}\);/.test(pv) && /new AdvancedMarkerElement\(/.test(pv));
-  ok("made only when the corner map is tapped, one at a time", /\{opened === \(x\.id \|\| x\.d\.name\) && x\.at && \(/.test(dny) && /setOpened\(cur => \(cur === \(x\.id \|\| x\.d\.name\) \? null : \(x\.id \|\| x\.d\.name\)\)\)/.test(dny));
-  ok("Show directions under it walks there from where the phone is", /onDirections=\{\(\) => go\(x\)\}/.test(dny) && /data-testid="place-view-directions"/.test(pv) && /locate\(\(at\) => setGoing\(/.test(dny));
+  ok("the walk map's own pointer on the building", /pin\.innerHTML = placePinHtml\(\{ sign, photo, color: pinColor \}\);/.test(pv) && /new AdvancedMarkerElement\(/.test(pv));
+  ok("made only when the corner map is tapped, one at a time", /const key = x\.id \|\| x\.d\.name;/.test(dny) && /\{above \? \(\s*<DealPlaceView/.test(read("src/components/DealDetail.jsx")) && /const \[above, setAbove\] = useState\(!!startOnMap && !!at\);/.test(read("src/components/DealDetail.jsx")));
+  // Since 16 Oct 2026 the view from above also opens when the deal was opened
+  // from the small map in a photo tile's corner (startOnMap).
+  // Since 16 Oct 2026 the deal's directions go through goFromDeal, which keeps
+  // the deal open while the phone is found (batch 252).
+  ok("Show directions under it walks there from where the phone is", /onDirections=\{\(\) => goFromDeal\(x\)\}/.test(dny) && /onDirections=\{onDirections\}/.test(read("src/components/DealDetail.jsx")) && /data-testid="place-view-directions"/.test(pv) && /leave\(hereAt\(at\)\);/.test(dny));
   ok("the words read in all four languages", ["explore.directions", "explore.closeMap", "explore.mapFailed"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
 }
 
@@ -82913,7 +83028,7 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   is("an offer running past midnight counts on into the night", D.minutesLeft({ from: "22:00", to: "01:00" }, new Date("2026-10-16T20:30:00Z")), 90);
   ok("an offer with no end time has no countdown", D.minutesLeft({}, fri1740) === null && D.minutesLeft({ to: "nonsense" }, fri1740) === null);
   const dny = read("src/components/DealsNearYou.jsx");
-  ok("shown on an offer that is on, within three hours, and ticking", /ENDS_SOON_MIN = 180;/.test(dny) && /const when = offerWhen\(x\.d\.__offer, x\.card\.timing, \{ now: new Date\(\), lang \}\);/.test(dny) && /setInterval\(\(\) => setTick\(n => n \+ 1\), 30000\)/.test(dny) && /data-testid="deal-near-ends"/.test(dny));
+  ok("shown on an offer that is on, within three hours, and ticking", /ENDS_SOON_MIN = 180;/.test(dny) && /const when = offerWhen\(x\.d\.__offer, x\.card\.timing, \{ now: new Date\(\), lang \}\);/.test(dny) && /setInterval\(\(\) => setTick\(n => n \+ 1\), 30000\)/.test(dny) && /deal-near-ends/.test(read("src/components/DealCard.jsx")));
 }
 
 // ── Batch 241: no "On now", and Redeem offer in place of Walk there ──
@@ -82935,8 +83050,8 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("nothing true to say, nothing said", D.offerWhen({ text: "x" }, "always", { now: fri1200 }) === null);
   const dny = read("src/components/DealsNearYou.jsx");
   ok("'On now' is gone from the deals", !/trips\.onNow/.test(dny) && !/x\.card\.hours/.test(dny));
-  ok("Redeem offer in place of Walk there, on an offer that is on", !/deal-near-go/.test(dny) && !/trips\.go/.test(dny) && /\{offer && on && \(\s*<button onClick=\{\(\) => openRedeem\(x, when\)\} data-testid="deal-near-redeem"/.test(dny) && /uiT\("offer\.redeem", lang\)/.test(dny));
-  ok("it opens the counter screen, with the walk under it", /<RedeemSheet name=\{redeem\.x\.d\.name\}/.test(dny) && /setRedeem\(null\); go\(x\);/.test(dny));
+  ok("Redeem offer in place of Walk there, on an offer that is on", !/deal-near-go/.test(dny) && !/trips\.go/.test(dny) && /onRedeem=\{!isSoon && offer \? \(\) => openRedeem\(x, when\) : null\}/.test(dny) && /data-testid="deal-near-redeem"/.test(read("src/components/DealDetail.jsx")) && /uiT\("offer\.redeem", lang\)/.test(dny));
+  ok("it opens the counter screen, with the walk under it", /<RedeemSheet name=\{redeem\.x\.d\.name\}/.test(dny) && /dropSheets\(\); setRedeem\(null\); setOpened\(null\); go\(x\);/.test(dny));
   const rs = read("src/components/RedeemSheet.jsx");
   ok("the counter screen carries Gemlyx, the offer, when, and a running clock", /<GemlyxMark/.test(rs) && /<GemlyxWordmark/.test(rs) && /data-testid="redeem-offer"/.test(rs) && /data-testid="redeem-clock"/.test(rs) && /setInterval\(\(\) => setNow\(clockNow\(zone\)\), 1000\)/.test(rs));
   ok("opening it is counted for the partner", /dealRedeemOpened\(x\.id, country\)/.test(dny) && S.eventKeys({ e: "redeem", id: "food:7" }, 12).join() === "st:x:food:7" && S.eventKeys({ e: "redeem", id: "bad id" }, 12).length === 0);
@@ -82946,6 +83061,751 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("the new words read in all four languages", ["offer.expiresAt", "offer.startsAt", "offer.validUntil", "offer.redeem", "redeem.show", "redeem.via"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
   ok("and the heading no longer says on now", M.t("trips.dealsH", "en") === "Deals near you");
   ok("the business page says the visitor shows it at the counter", /The visitor shows it at your counter/.test(read("src/pages/KlaipedaBusiness.jsx")) && /Lankytojas jį parodo prie jūsų kasos/.test(read("src/pages/KlaipedaBusiness.jsx")));
+}
+
+// ── Batch 242: a Studio for the Explore deals ──
+// Oliver, 13 Oct 2026: "Bring in a studio so i can edit", the Explore deals.
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const S = M.DST, D = M.DNY;
+  const good = { ...S.emptyDeal(), name: "Kepyklėlė Rūta", type: "food", lat: 55.7087, lon: 21.1339, text: "Free refill", until: "2099-12-31" };
+  ok("a whole deal has nothing in its way", S.dealProblems(good).length === 0);
+  const empty = S.dealProblems(S.emptyDeal());
+  ok("an empty one says what to do, once each", empty.length === 4 && empty.some(p => /its name/.test(p)) && empty.some(p => /on the map/.test(p)) && empty.some(p => /Write the offer/.test(p)) && empty.some(p => /last day/.test(p)));
+  ok("a spot outside Klaipėda is refused", S.dealProblems({ ...good, lat: 55.676, lon: 12.568 }).some(p => /outside Klaipėda/.test(p)));
+  ok("half the hours is refused", S.dealProblems({ ...good, from: "14:00" }).some(p => /both a start and an end/.test(p)));
+  ok("a booking that is neither link nor number is refused", S.dealProblems({ ...good, booking: "ring us" }).length === 1);
+  const pay = S.payloadFromDeal({ ...good, street: "Turgaus g. 7", days: [5, 1], from: "14:00", to: "16:00", dealKind: "discounts", booking: "+370 600 00000", photo: "/food/x.jpg" }, { desc: "kept", photo: "/food/x.jpg" });
+  ok("the row is a Klaipėda place with its offer", pay.country === "LT" && pay.town === "Klaipėda" && pay.location === "Turgaus g. 7" && pay.__lat === 55.7087 && pay.__offer.text === "Free refill" && pay.__offer.from === "14:00" && pay.__dealKind === "discounts" && pay.__booking === "+370 600 00000");
+  ok("and what the row already held stays", pay.desc === "kept" && pay.photo === "/food/x.jpg");
+  ok("an automatic filter and an empty booking leave nothing behind", !("__dealKind" in S.payloadFromDeal(good, { __dealKind: "activities" })) && !("__booking" in S.payloadFromDeal(good, { __booking: "+370 1" })));
+  const row = { id: 7, type: "night", published: true, payload: pay };
+  const back = S.dealFromRow(row);
+  ok("a row reads back into the form", back.id === 7 && back.type === "night" && back.published && back.name === "Kepyklėlė Rūta" && back.from === "14:00" && back.dealKind === "discounts");
+  ok("a deal row is a Klaipėda place with an offer", S.isDealRow(row) && !S.isDealRow({ ...row, payload: { ...pay, country: "DK" } }) && !S.isDealRow({ ...row, payload: { ...pay, __offer: undefined } }) && !S.isDealRow({ ...row, type: "festival" }));
+  is("the list says when at a glance", [S.dealWhenShort({ days: [1, 2, 3, 4, 5], from: "14:00", to: "16:00" }), S.dealWhenShort({ days: [6, 0] }), S.dealWhenShort({})], ["Mon to Fri, 14:00 to 16:00", "Sat, Sun, all day", "Every day, all day"]);
+  ok("a new deal starts hidden", S.emptyDeal().published === false);
+  ok("a published row's id is the database id, as the walks and the partner link use it", D.dealPlaceId({ _src: "food", id: 100012 }) === "food:12" && D.dealPlaceId({ _src: "food", id: 12 }) === "food:12" && D.LIVE_OFFSET === M.LIVE_ID_OFFSET);
+  const app = read("src/App.jsx"), ds = read("src/components/DealStudio.jsx"), ex = read("src/components/KlaipedaExplore.jsx");
+  ok("the Studio sits above the deals for him only", /studio=\{isStudio && studioSession \? <DealStudio supaFetch=\{supaFetch\} studioFetch=\{studioFetch\} onChanged=\{dealChanged\} upload=/.test(app) && /\{studio\}/.test(ex) && /useKlaipedaDeals\(null, version\)/.test(ex));
+  ok("a save reaches the page without a reload", /if \(now && !was\) await refreshLiveContent\(\);/.test(app) && /else if \(was && !now\) removeLiveRow\(after\.id, after\.type\);/.test(app) && /applyEditedRow\(after\.id, after\.type, after\.payload\)/.test(app) && /\}, \[today, version\]\);/.test(read("src/utils/useKlaipedaDeals.js")));
+  ok("a second row with the same name is refused before the insert", /payload->>name=ilike\./.test(ds) && /is already in the database as/.test(ds));
+  ok("no dashes in what he reads", !/[–—]/.test(ds) && !/[–—]/.test(read("src/utils/dealStudio.js").replace(/^\s*\/\/.*$/gm, "")));
+}
+
+// ── Batch 243: offers with no last day, and Upcoming like Lidl Plus ──
+// Oliver, 13 Oct 2026: "There is friday candy EVERY friday. You should be able
+// to have the offer being permanent, but just certain days and hours", then
+// "hide the offer the days where it is not there, and just have it as an
+// 'upcoming' offer", then "It should also display the hours..".
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const D = M.DNY, S = M.DST;
+  const candy = { text: "Friday candy", ongoing: true, days: [5], from: "15:00", to: "18:00" };
+  const tue2130 = new Date("2026-10-13T18:30:00Z"); // Tuesday 21:30 in Klaipėda
+  const fri1600 = new Date("2026-10-16T13:00:00Z"); // Friday 16:00
+  const fri1000 = new Date("2026-10-16T07:00:00Z"); // Friday 10:00
+  ok("an offer marked ongoing lives with no last day", M.offerLive(candy, new Date("2031-05-01T12:00:00Z")) && M.offerProblems(candy).length === 0);
+  ok("one that only lacks a date is still refused and still invisible", !M.offerLive({ text: "Forgot the date" }) && M.offerProblems({ text: "Forgot the date" }).some(p => /no end date/.test(p)));
+  ok("ongoing drops any stray date", M.cleanOffer({ ...candy, until: "2020-01-01" }).until === "" && M.cleanOffer({ ...candy, until: "2020-01-01" }).ongoing === true);
+  ok("and only true means ongoing", !("ongoing" in M.cleanOffer({ text: "x", until: "2099-01-01", ongoing: "yes" })));
+  is("Tuesday night, Friday candy starts Friday", D.nextStart(candy, tue2130), { inDays: 3, day: 5, from: "15:00", at: 3 * 1440 + 900 });
+  is("Friday morning it starts today", D.nextStart(candy, fri1000)?.inDays, 0);
+  ok("on now is not upcoming", !D.upcomingDeals([{ name: "Candy", country: "LT", __offer: candy }], null, { now: fri1600 }).length && D.nextStart(candy, fri1600) === null);
+  ok("all day every day is never upcoming", D.nextStart({ text: "x", ongoing: true }, tue2130) === null);
+  ok("a dated offer past its last day does not come round again", D.nextStart({ text: "x", until: "2026-10-14", days: [5], from: "15:00", to: "18:00" }, tue2130) === null && D.nextStart({ text: "x", until: "2026-10-16", days: [5], from: "15:00", to: "18:00" }, tue2130)?.inDays === 3);
+  is("said in words", [D.startsWords({ inDays: 0, day: 2, from: "16:00" }), D.startsWords({ inDays: 1, day: 3, from: "14:00" }), D.startsWords({ inDays: 3, day: 5, from: "15:00" }), D.startsWords({ inDays: 3, day: 5, from: "" })], ["Offer starts at 16:00", "Offer starts tomorrow at 14:00", "Offer starts Friday at 15:00", "Offer starts Friday"]);
+  is("Lithuanian puts the day in the accusative", D.startsWords({ inDays: 3, day: 5, from: "15:00" }, "lt"), "Pasiūlymas prasideda penktadienį 15:00");
+  is("the hours, under it", [D.hoursOf(candy), D.hoursOf({ text: "x", ongoing: true, days: [1, 2, 3, 4, 5], from: "14:00", to: "16:00" }), D.hoursOf({ text: "x", ongoing: true })], ["Fridays 15:00-18:00", "Mon to Fri 14:00-16:00", ""]);
+  is("an ongoing offer that is on says when it runs", D.offerWhen({ text: "x", ongoing: true, days: [5] }, "now", { now: fri1600 })?.text, "Fridays");
+  const deals = [
+    { name: "Candy", country: "LT", __offer: candy },
+    { name: "Coffee", country: "LT", __offer: { text: "Refill", ongoing: true, from: "22:00", to: "23:00" } },
+    { name: "Bags", country: "LT", __offer: { text: "Bags", ongoing: true } },
+  ];
+  is("Upcoming, soonest first: later tonight, then Friday", D.upcomingDeals(deals, null, { now: tue2130 }).map(x => x.d.name), ["Coffee", "Candy"]);
+  const dny = read("src/components/DealsNearYou.jsx");
+  ok("the list is only what is on, what starts later waits in Upcoming", /\.filter\(x => x\.card\.timing !== "later"\), \[deals, start\?\.lat, start\?\.lon, lang, sort, tick\]\)/.test(dny) && /data-testid="deals-upcoming"/.test(dny) && /explore\.upcoming/.test(dny));
+  const upBlock = dny.slice(dny.indexOf('data-testid="deals-upcoming"'), dny.indexOf('{(() => {'));
+  ok("an upcoming card has no Redeem", !/openRedeem|deal-near-redeem|actions=/.test(upBlock) && /testid="deal-upcoming" upcoming/.test(upBlock) && /onRedeem=\{!isSoon/.test(dny) && /\{onRedeem && !upcoming &&/.test(read("src/components/DealDetail.jsx")));
+  ok("no 'No deals' flash while loading", /\{!ready \? \(/.test(dny) && /ready=\{live\.ready\}/.test(read("src/components/KlaipedaExplore.jsx")) && /ready=\{live\.ready\}/.test(read("src/pages/KlaipedaDemo.jsx")));
+  ok("the Studio can set No last day", S.dealProblems({ ...S.emptyDeal(), name: "Lidl", lat: 55.7087, lon: 21.1339, text: "Friday candy", ongoing: true, days: [5], from: "15:00", to: "18:00" }).length === 0 && S.payloadFromDeal({ ...S.emptyDeal(), name: "Lidl", lat: 55.7, lon: 21.13, text: "x", ongoing: true }).__offer.ongoing === true && /"deal-studio-ongoing"/.test(read("src/components/DealStudio.jsx")) && /data-testid="studio-offer-ongoing"/.test(read("src/App.jsx")));
+  ok("and the walks read it too", /if \(raw\.ongoing !== true\) \{/.test(read("src/utils/nowPlanner.js")));
+  ok("the new words read in all four languages", ["offer.startsTomorrowAt", "offer.startsTomorrow", "offer.startsOnAt", "offer.startsOn", "explore.upcoming", "explore.noneNowSoon"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
+}
+
+// ── Batch 244: the 2026 dark ──
+// Oliver, 13 Oct 2026, with a design review of the deal editor: "Make the dark
+// theme. We need to move away from the 2012-16 look." And a pin colour per deal.
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const T = M.THEMES.dark;
+  is("the dark theme is charcoal and champagne", [T.bg, T.surface, T.gold, T.text], ["#0E0E11", "#17171B", "#C9A46A", "#F3EFE7"]);
+  ok("every theme has a bronze for the details", ["warm", "dark", "light"].every(k => /^#[0-9A-F]{6}$/i.test(M.THEMES[k].bronze || "")));
+  ok("and it is still the default", M.DEFAULT_THEME === "dark");
+  const card = read("src/components/DealCard.jsx"), dny = read("src/components/DealsNearYou.jsx"), ds = read("src/components/DealStudio.jsx");
+  ok("one card for Explore, Upcoming and the Studio's preview", /<DealTile key=\{key\} testid="deal-near"/.test(dny) && /<DealTile key=\{x\.id \|\| x\.d\.name\} testid="deal-upcoming" upcoming/.test(dny) && /<DealTile testid="deal-studio-card"/.test(ds));
+  ok("no gold box around a card, one hairline", /border: `1px solid \$\{C\.border\}`, borderRadius: 18/.test(card) && !/\$\{C\.gold\}66/.test(card));
+  ok("styles read the theme when drawn, not when imported", /export const eyebrow = \(\) => \(/.test(card) && /const field = \(\) => \(/.test(ds) && !/^const field = \{/m.test(ds));
+  ok("the editor is in sections", ["The place", "The offer", "On the map", "On Explore", "Preview"].every(t => ds.includes(`>${t}</h3>`)));
+  ok("the boxes you type into keep their 3:1 border", /border: `1px solid \$\{C\.fieldBorder \|\| C\.border\}`/.test(ds));
+  is("a pin colour is one of the six or none", [M.pinColourOf("#e07a5f"), M.pinColourOf("#123456"), M.pinColourOf("")], ["#E07A5F", "", ""]);
+  ok("and the deal carries it to its pins", M.DST.payloadFromDeal({ ...M.DST.emptyDeal(), name: "x", lat: 55.7, lon: 21.13, text: "x", ongoing: true, pin: "#2A9D8F" }).__pin === "#2A9D8F"
+    && !("__pin" in M.DST.payloadFromDeal({ ...M.DST.emptyDeal(), name: "x", lat: 55.7, lon: 21.13, text: "x", ongoing: true, pin: "#000000" }))
+    && /pin=\{x\.d\.__pin \|\| ""\}/.test(dny) && M.placePinHtml({ color: "#2A9D8F" }).includes('fill="#2A9D8F"'));
+  ok("the first paint is the new dark", /<meta name="theme-color" content="#0E0E11" \/>/.test(read("index.html")));
+  ok("no navy left on the Lithuanian side's own components", ["DealCard", "DealsNearYou", "DealStudio", "DealCornerMap", "DealPlaceView", "RedeemSheet"].every(n => !/#0A0F1E/i.test(read(`src/components/${n}.jsx`))));
+}
+
+// ── Batch 245: deals as tiles, the way Lidl Plus shows its offers ──
+// Oliver, 13 Oct 2026, with a screenshot of lidl.dk: "Maybe this type?" Then:
+// a photo, or the map when there is none, and two tiles to a row on a phone.
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const D = M.DNY;
+  const card = read("src/components/DealCard.jsx"), dny = read("src/components/DealsNearYou.jsx"), det = read("src/components/DealDetail.jsx"), ds = read("src/components/DealStudio.jsx");
+  // The grid moved into a stylesheet at the design review of 15 Oct 2026, so a
+  // computer can have four to a row (lidl.dk's count) while the phone keeps
+  // auto-fill. The phone arithmetic is unchanged.
+  ok("two to a row on a phone, more on a wide screen", /\.gx-deal-grid \{ grid-template-columns: repeat\(auto-fill, minmax\(150px, 1fr\)\); \}/.test(dny) && /@media \(min-width: 960px\) \{ \.gx-deal-grid \{ grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/.test(dny) && (390 - 32 - 12) / 2 >= 150 && (390 - 32 - 24) / 3 < 150);
+  ok("the picture is the photo, else the map, else the sign", /if \(src\) return <img/.test(card) && /if \(at && googleMapsReady\(\)\) return <DealCornerMap fill/.test(card) && /deal-picture-blank/.test(card));
+  ok("a photo is a web address or one deployed with the site", card.includes("export const safePhoto") && /\/\^https:/.test(card));
+  ok("the badge sits in the picture's corner, the name over its foot", /data-testid="deal-tile-badge" style=\{\{ position: "absolute", top: 8, left: 8/.test(card) && /linear-gradient\(to top, rgba\(10,10,12,0\.88\)/.test(card));
+  ok("tapping a tile opens the whole deal, where Redeem is", /<DealDetail name=\{x\.d\.name\}/.test(dny) && /onOpen=\{\(\) => \{ pushSheet\(1\); setAtMap\(false\); setOpened\(`soon:\$\{x\.id \|\| x\.d\.name\}`\); \}\}/.test(dny));
+  const tue2130 = new Date("2026-10-13T18:30:00Z");
+  is("live badges", [D.liveBadge({ to: "18:00" }, { kind: "ends", left: 20 }), D.liveBadge({ to: "18:00" }, { kind: "expires" }), D.liveBadge({ until: "2026-12-31" }, { kind: "until" }), D.liveBadge({}, { kind: "ongoing", text: "Fridays" })], ["Ends in 20 min", "Until 18:00", "Until 31 Dec", "Fridays"]);
+  is("upcoming badges", [D.upcomingBadge({ inDays: 0, day: 2, from: "16:00" }), D.upcomingBadge({ inDays: 1, day: 3, from: "14:00" }), D.upcomingBadge({ inDays: 3, day: 5, from: "18:00" }), D.upcomingBadge({ inDays: 3, day: 5, from: "" })], ["From 16:00", "Tomorrow 14:00", "From Friday 18:00", "From Friday"]);
+  is("in Danish and Lithuanian", [D.upcomingBadge({ inDays: 3, day: 5, from: "18:00" }, "da"), D.upcomingBadge({ inDays: 3, day: 5, from: "18:00" }, "lt")], ["Fra fredag kl. 18.00", "Nuo penktadienio 18:00"]);
+  ok("the Studio uploads a photo, and Use the map takes it off", /data-testid="deal-studio-photo-upload"/.test(ds) && /Use the map/.test(ds) && /mediaPathFor\(file, "deals"/.test(read("src/App.jsx")) && !("photo" in M.DST.payloadFromDeal({ ...M.DST.emptyDeal(), name: "x", lat: 55.7, lon: 21.13, text: "x", ongoing: true, photo: "" }, { photo: "/a.jpg" })));
+  ok("a photo that is neither uploaded nor a web address is refused", M.DST.dealProblems({ ...M.DST.emptyDeal(), name: "x", lat: 55.7087, lon: 21.1339, text: "x", ongoing: true, photo: "C:\\pics\\a.jpg" }).some(p => /photo/.test(p)));
+  ok("the map from above is still one tap away in the deal", /onTap=\{\(\) => setAbove\(true\)\}/.test(det));
+  ok("the badge words read in all four languages", ["badge.endsIn", "badge.until", "badge.untilDate", "badge.from", "badge.tomorrowAt", "badge.tomorrow", "badge.fromDayAt", "badge.fromDay"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
+}
+
+// ── Batch 246: the round filters, ticked on and off ──
+// Oliver, 14 Oct 2026, with lidl.dk's coloured circles: "Make it like this.
+// With nightlife, attractions, renting, and restaurants." And "we need
+// 'ticking off' filters".
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const K = M.DCAT;
+  is("the four kinds of place", K.DEAL_CATEGORIES, ["restaurants", "nightlife", "attractions", "rentals"]);
+  is("read off the place when not set by hand", [
+    K.dealCategory({ name: "Kepyklėlė Rūta", category: "Bakery café" }),
+    K.dealCategory({ name: "Alaus baras Inkaras", category: "Beer bar" }),
+    K.dealCategory({ name: "Dviračių nuoma Vėjas" }),
+    K.dealCategory({ name: "Bagažinė", __offer: { text: "Leave a bag while you walk, €3 a bag for the day" }, category: "Luggage room" }),
+    K.dealCategory({ name: "Gintaro dirbtuvė Lašas", category: "Amber workshop" }),
+    K.dealCategory({ name: "Somewhere", _src: "food" }),
+  ], ["restaurants", "nightlife", "rentals", "rentals", "attractions", "restaurants"]);
+  ok("his own setting wins", K.dealCategory({ name: "Beer bar", __category: "attractions" }) === "attractions");
+  const items = [{ n: 1, __category: "restaurants" }, { n: 2, __category: "nightlife" }, { n: 3, __category: "rentals" }];
+  is("ticking more than one shows each of them", K.byCategories(items, new Set(["restaurants", "rentals"])).map(x => x.n), [1, 3]);
+  is("none ticked shows everything", K.byCategories(items, new Set()).length, 3);
+  const cf = read("src/components/CategoryFilter.jsx"), dny = read("src/components/DealsNearYou.jsx");
+  // Round still; gold on dark since 14 Oct 2026 ("Gemlyx themed").
+  ok("round, in Gemlyx's gold", /borderRadius: "50%", display: "inline-flex"/.test(cf) && /C\.gold/.test(cf));
+  ok("Upcoming follows the same ticks", /byCategories\(upcomingDeals\(/.test(dny));
+  ok("the examples carry their kind of place", M.KXR.EXAMPLE_PARTNERS.every(p => K.DEAL_CATEGORIES.includes(p.category)));
+  ok("the deal editor picks the kind of place, and a new deal's type follows it", /deal-studio-cat-\$\{c\}/.test(read("src/components/DealStudio.jsx")) && M.DST.typeForCategory("nightlife") === "night" && M.DST.typeForCategory("rentals") === "free"
+    && M.DST.payloadFromDeal({ ...M.DST.emptyDeal(), name: "x", lat: 55.7, lon: 21.13, text: "x", ongoing: true, category: "rentals" }).__category === "rentals");
+  ok("the words read in all four languages", ["explore.cat.restaurants", "explore.cat.nightlife", "explore.cat.attractions", "explore.cat.rentals", "explore.clear"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
+}
+
+// ── Batch 247: each kind of place its own page, fading, over a turning mark ──
+// Oliver, 14 Oct 2026: "Don't have those tick-offs. Let it be seperate
+// navigations. And let change be fades. And make the background a spinning
+// Gemlyx Logo."
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const dny = read("src/components/DealsNearYou.jsx"), cf = read("src/components/CategoryFilter.jsx"), sm = read("src/components/SpinningMark.jsx"), ex = read("src/components/KlaipedaExplore.jsx");
+  ok("no tick-offs left", !/role="checkbox"|-tick|setPicked|toggleCat/.test(cf + dny));
+  ok("the round ones stay, one kind of place at a time, a ring on the one shown", /export const CategoryNav = \(\{ active = null, onPick/.test(cf) && /aria-current=\{on \? "page" : undefined\}/.test(cf) && /const only = useMemo\(\(\) => new Set\(cat \? \[cat\] : \[\]\), \[cat\]\);/.test(dny) && !/deals-cat-page/.test(dny));
+  ok("tapping the one shown again shows them all, another swaps in place", /if \(k === cat\) \{ leaveCat\(\); return; \}/.test(dny) && /window\.history\.replaceState\(/.test(dny));
+  ok("going in and out fades", /opacity: fade \? 0 : 1, transition: `opacity \$\{FADE_MS\}ms ease`/.test(dny) && /setFade\(true\);\s*setTimeout\(\(\) => \{\s*setCat\(k\);/.test(dny));
+  ok("the phone's Back comes out of a kind of place", /window\.history\.pushState\(\{ \.\.\.\(window\.history\.state \|\| \{\}\), gxCat: k \}, ""\)/.test(dny) && /window\.addEventListener\("popstate", onPop\)/.test(dny) && /window\.history\.back\(\)/.test(dny));
+  // 0.14 since the design review of 15 Oct 2026: at 0.22 the mark ran under
+  // the circles and the tile names (see SpinningMark.jsx).
+  ok("the mark turns behind Explore, stands still for less motion, takes no taps", /<SpinningMark \/>/.test(ex) && /opacity = 0\.14/.test(sm) && /<GemlyxMarkFine id="gx-bg"/.test(sm) && /animation: gx-spin \$\{SPIN_SECONDS\}s linear infinite/.test(sm) && /prefers-reduced-motion: reduce\) \{ \.gx-spin \{ animation: none; \}/.test(sm) && /pointerEvents: "none"/.test(sm) && /zIndex: 1/.test(ex));
+  ok("upcoming tiles dim without letting the mark through", /filter: upcoming \? "brightness\(0\.62\) saturate\(0\.6\)" : "none"/.test(read("src/components/DealCard.jsx")));
+  ok("the words read in all four languages", ["explore.noneCat"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
+}
+
+// ── Security review, 13 Oct 2026: Studio and founder routes ──
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const { STUDIO_ONLY_ENDPOINTS: ONLY } = await import(pathToFileURL(join(root, "src/utils/apiGuard.js")).href);
+  // The bare-fetch check covers all of src/, not App.jsx alone. geo.js reaches
+  // /api/places through installApiAuth (src/utils/apiAuth.js TOKEN_PATHS), which
+  // adds the Studio token, so it is the one file allowed a plain fetch.
+  const walkSrc = (d) => readdirSync(join(root, d), { withFileTypes: true }).flatMap(e => e.isDirectory() ? walkSrc(`${d}/${e.name}`) : /\.(jsx?|mjs)$/.test(e.name) ? [`${d}/${e.name}`] : []);
+  const bare = [];
+  for (const f of walkSrc("src")) {
+    const s = read(f);
+    for (const n of ONLY) if (new RegExp("(?<![\\w.])fetch\\(`/api/" + n + "(?![\\w-])").test(s) && !(f === "src/utils/geo.js" && n === "places")) bare.push(`${f} ${n}`);
+  }
+  is("no file in src/ calls a founder route with a plain fetch", bare, []);
+  ok("geo.js's /api/places call is carried by the token hook", /export const TOKEN_PATHS = .*\|places\)/.test(read("src/utils/apiAuth.js")) && /fetch\(`\/api\/places\?/.test(read("src/utils/geo.js")));
+  // Each founder route is called by name, not matched on a longer name's prefix.
+  const app = read("src/App.jsx");
+  const called = ONLY.filter(n => n !== "places").filter(n => !new RegExp("studioFetch\\(`/api/" + n + "(?![\\w-])").test(app));
+  is("every founder route but places is called through studioFetch by its exact name", called, []);
+  // The new ceilings are taken before the outside call.
+  const before = (f, gate, call) => { const s = read(f); return s.indexOf(gate) > 0 && s.indexOf(gate) < s.indexOf(call); };
+  ok("tickets, Commons and the page readers take a founder count first",
+     before("api/tickets.js", 'gateFounder({ route: "tickets"', "await fetch(`${HOST}") &&
+     before("api/commons-photo.js", 'gateFounder({ route: "commons-photo"', "resolveTitle(localWiki") &&
+     before("api/find-email.js", 'gateFounder({ route: "pagereads"', "findContactEmails(url, fetchHtml)") &&
+     before("api/calendar.js", 'gateFounder({ route: "pagereads"', "await safeFetch(url.toString()"));
+  ok("places-hours checks its input before the paid count", before("api/places-hours.js", "hasPoint", 'gateFounder({ route: "places-hours"') && /slice\(0, 200\)/.test(read("api/places-hours.js")));
+  ok("Studio Log out ends every session of the account", /\/auth\/v1\/logout\?scope=global/.test(app) && !/\/auth\/v1\/logout\?scope=local/.test(app));
+  ok("a partner link names the open row's own type", /const \[editingType, setEditingType\] = useState\(null\);/.test(app) && /setEditingType\(row\.type \|\| null\);/.test(app));
+}
+
+// ── Security review, 9 Oct 2026: outside data reaching the page ──
+// Applied 15 Oct 2026 from the fix brief, section 1 and the sections that add
+// to this block.
+{
+  const src = (p) => readFileSync(join(root, p), "utf8");
+  const { htmlText, hexColour } = M;
+  ok("htmlText escapes every character that starts or ends markup", htmlText(`<img src=x onerror="a">'&`) === "&lt;img src=x onerror=&quot;a&quot;&gt;&#39;&amp;" && htmlText(null) === "");
+  ok("hexColour keeps a hex value and refuses anything else", hexColour("#C9A84C", "#000") === "#C9A84C" && hexColour('red;background:url(x)', "#000") === "#000");
+  const leafletArg = /\.(?:bindTooltip|bindPopup|setContent|setTooltipContent)\(\s*([^,)]+)/g;
+  const safeArg = /^(?:esc\(|htmlText\(|escapeHtml\(|clusterLabel\(|nameHtml$|withWord$|host$)/;
+  const bad = [];
+  for (const f of readdirSync(join(root, "src/components")).filter(n => n.endsWith(".jsx"))) {
+    const code = stripComments(src("src/components/" + f));
+    for (const m of code.matchAll(leafletArg)) if (!safeArg.test(m[1].trim())) bad.push(`${f}: ${m[1].trim()}`);
+  }
+  is("no Leaflet tooltip, popup or content takes unescaped text", bad, []);
+  ok("the guide map escapes stop names and nearby names", /\.bindTooltip\(esc\(p\.name\), \{/.test(src("src/components/GuideRouteMap.jsx")) && /\.bindTooltip\(esc\(r\.name\), \{/.test(src("src/components/GuideRouteMap.jsx")));
+  const { guideShapeOk } = M.SGUIDE;
+  ok("save-guide refuses a stop name with a tag", !guideShapeOk({ days: [{ stops: [{ name: "<img src=x onerror=1>", town: "Odense" }] }] }));
+  ok("and a _geo key with one", !guideShapeOk({ days: [], _geo: { "<svg onload=1>": { lat: 55, lon: 10 } } }));
+  ok("and days that are not a list", !guideShapeOk({ days: "x" }) && !guideShapeOk({ days: [{ stops: "x" }] }));
+  ok("but keeps a real guide, a < 5 km note included", guideShapeOk({ title: "Five days on Funen", days: [{ day: 1, title: "Odense", stops: [{ name: "H.C. Andersen's House", town: "Odense", note: "Under 5 km, so < 5 km on foot." }] }] }));
+  ok("the database refuses markup in names", /create or replace function public\.gemlyx_names_are_text/.test(src("SECURITY_LOCKDOWN_30SEP.sql")) && /check \(public\.gemlyx_names_are_text\(payload\)\) not valid/.test(src("SECURITY_LOCKDOWN_30SEP.sql")));
+  // Section 2: Studio links from models, searches and scanned pages.
+  const app = stripComments(src("src/App.jsx"));
+  for (const v of ["dirSource", "c.postUrl", "p.website", "press", "pr.url", "u", "c.url", "c.sourceUrl", "r.url", "row.url", "craftDetail.bookingUrl"]) {
+    ok(`Studio link ${v} goes through externalHref`, !new RegExp(`href=\\{${v.replace(".", "\\.")}\\}`).test(app));
+  }
+  ok("the fact check keeps only an http(s) sourceUrl", /const searchUrl = httpOnly\(parsed\.sourceUrl\);/.test(src("src/utils/correction.js")) && /sourceUrl: httpOnly\(parsed\.sourceUrl\) \|\|/.test(src("src/utils/correction.js")));
+  ok("the store badge checks its link", /href=\{externalHref\(href\) \|\| undefined\}/.test(src("src/components/StoreBadge.jsx")));
+  const { instagramTarget, isEmbeddablePost } = M;
+  ok("an Instagram link must START with instagram.com", !isEmbeddablePost("javascript:alert(1)//instagram.com/p/C1a2b3C4d5") && !isEmbeddablePost("https://evil.example/?instagram.com/p/C1a2b3C4d5"));
+  ok("a pasted link without its scheme still works, as https", instagramTarget("www.instagram.com/reel/C1a2b3C4d5/")?.url === "https://www.instagram.com/reel/C1a2b3C4d5/");
+  ok("the embed renders only the checked link", /data-instgrm-permalink=\{safeUrl\}/.test(src("src/components/InstagramEmbed.jsx")) && !/href=\{url\}/.test(src("src/components/InstagramEmbed.jsx")));
+  ok("cheap gem sources go through externalHref", !/href=\{g\.source\}/.test(src("src/components/CheapGemsPage.jsx")) && !/href=\{g\.source\}/.test(src("src/pages/GuidePage.jsx")));
+  ok("Studio's reel check is the same anchored check", /if \(!isEmbeddablePost\(url\)\) \{ setMediaError\(/.test(app));
+}
+
+// ── Fable's review of the deals work, 14 Oct 2026 ──
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const dny = read("src/components/DealsNearYou.jsx"), D = M.DNY;
+  ok("1: the walk opens on the body, not inside the swiping pager", /going && walkStart && typeof document !== "undefined" && createPortal\(\s*<WalkMode/.test(dny));
+  ok("2: Show directions from Redeem closes the deal sheet too", /dropSheets\(\); setRedeem\(null\); setOpened\(null\); go\(x\);/.test(dny));
+  const ps = read("api/partner-stats.js");
+  ok("3: each kind of event has its own per-place budget", /reach: \["r", PER_PLACE_REACH\], redeem: \["x", PER_PLACE_REDEEM\], deals: \["d", PER_PLACE_WALKS\]/.test(ps) && /export const PER_PLACE_REDEEM = 8;/.test(ps));
+  ok("4: the kind of place shown is seeded from the phone's history", /useState\(\(\) => \{ try \{ const k = window\.history\.state\?\.gxCat; return DEAL_CATEGORIES\.includes\(k\) \? k : null;/.test(dny) && /if \(k !== catRef\.current\) showCat\(k\);/.test(dny));
+  ok("5: Back closes Redeem, then the deal, before it leaves Explore", /const openRedeem = \(x, when\) => \{\s*pushSheet\(2\);/.test(dny) && /if \(level < 2\) setRedeem\(null\);\s*if \(level < 1\) setOpened\(null\);/.test(dny) && /onClose=\{\(\) => closeSheet\(\(\) => setOpened\(null\)\)\}/.test(dny) && /onClose=\{\(\) => closeSheet\(\(\) => setRedeem\(null\)\)\}/.test(dny));
+  const candy = { text: "Friday candy", ongoing: true, days: [5], from: "15:00", to: "18:00" };
+  ok("6: a weekly offer over for today is not 'From Friday' on a Friday", D.nextStart(candy, new Date("2026-10-16T16:00:00Z")) === null && D.nextStart(candy, new Date("2026-10-17T09:00:00Z"))?.inDays === 6);
+  // 00:30 on 15 Oct in Klaipėda is still 14 Oct in New York.
+  const late = new Date("2026-10-14T21:30:00Z");
+  ok("7: an offer's last day is read on the place's calendar", !M.offerLive({ text: "x", until: "2026-10-14" }, late, "Europe/Vilnius") && M.offerLive({ text: "x", until: "2026-10-15" }, late, "Europe/Vilnius"));
+  ok("8: the deal sheet's map leaves the photo out of its pin", !/<DealCornerMap fill ratio="16 \/ 9" radius=\{16\} lat=\{at\.lat\} lon=\{at\.lon\} name=\{name\} sign=\{sign\} photo=/.test(read("src/components/DealDetail.jsx")));
+}
+
+// ── Languages, 14 Oct 2026: "some things are stuck in English" ──
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const S = M.DST, D = M.DNY;
+  const o = { text: "Free refill", ongoing: true, tr: { src: "Free refill", lt: "Nemokamas papildymas", da: "Gratis påfyldning", de: "Gratis Nachschenken", xx: "no" } };
+  ok("an offer keeps its translations while they are of its text", M.cleanOffer(o).tr?.lt === "Nemokamas papildymas" && !("xx" in M.cleanOffer(o).tr));
+  ok("and reads in the reader's language, English as written", M.offerTextIn(o, "lt") === "Nemokamas papildymas" && M.offerTextIn(o, "de") === "Gratis Nachschenken" && M.offerTextIn(o, "en") === "Free refill");
+  const changed = { ...o, text: "Free refill with any pastry" };
+  ok("a changed offer drops last week's translations", !M.cleanOffer(changed).tr && M.offerTextIn(changed, "lt") === "Free refill with any pastry");
+  ok("a language with no translation falls back to the text", M.offerTextIn({ text: "A", until: "2027-01-01", tr: { src: "A", lt: "B" } }, "da") === "A");
+  ok("offerView gives the text in the reader's language", M.offerView(o, { paid: true, lang: "da" }).text === "Gratis påfyldning" && M.offerView(o, { paid: true }).text === "Free refill");
+  // The examples, in all four languages.
+  const pools = M.KEX.examplePromotionPools();
+  const all = Object.values(pools).flat();
+  ok("every example offer reads in Lithuanian, Danish and German", all.length >= 9 && all.every(r => ["lt", "da", "de"].every(l => M.offerTextIn(r.__offer, l) && M.offerTextIn(r.__offer, l) !== r.__offer.text)));
+  ok("the example walk rows carry them too", M.KXR.exampleRows().filter(r => r.payload.__offer).every(r => M.offerTextIn(r.payload.__offer, "lt") !== r.payload.__offer.text));
+  ok("no example translation has a dash", !all.some(r => /[‐-―−]|\s-\s/.test(JSON.stringify(r.__offer.tr))));
+  ok("the tiles, the sheet, Redeem and the walk read the offer in the reader's language", (read("src/components/DealsNearYou.jsx").match(/offerTextIn\((x|redeem\.x)\.d\.__offer, lang\)/g) || []).length >= 6 && !/__offer\?\.text \|\| ""\)\.trim\(\)/.test(read("src/components/DealsNearYou.jsx").replace(/const words = .*$/m, "")));
+  ok("a deal page's offer box reads in the reader's language", /offerView\(item\.__offer, \{ paid, zone: countryProfile\(rowCountry\(item\)\)\.zone, lang \}\)/.test(read("src/components/DetailPage.jsx")));
+  // The Studio.
+  const f = { ...S.emptyDeal(), name: "Bakery", lat: 55.7087, lon: 21.1339, text: "Free refill", ongoing: true, lt: "Nemokamas papildymas", da: "Gratis påfyldning", de: "", trFor: "Free refill" };
+  ok("the Studio saves the translations with the offer", S.payloadFromDeal(f).__offer.tr?.da === "Gratis påfyldning" && S.translationsCurrent(f));
+  ok("and reads them back into its boxes", (() => { const g = S.dealFromRow({ id: 1, type: "food", payload: S.payloadFromDeal(f) }); return g.lt === "Nemokamas papildymas" && g.trFor === "Free refill"; })());
+  ok("translations of an older text are not current and not saved", !S.translationsCurrent({ ...f, text: "Two for one" }) && !S.payloadFromDeal({ ...f, text: "Two for one" }).__offer.tr);
+  ok("the translate reply is read, dashes taken out", (() => { const r = S.readOfferTranslation('Here: {"lt": "Du už vieno kainą", "da": "To for én – i dag", "de": "Zwei zum Preis von einem"}'); return r?.lt === "Du už vieno kainą" && r.da === "To for én, i dag" && r.de; })() && S.readOfferTranslation("no json") === null);
+  ok("the prompt avoids the words localisePrompt swaps", !/Danish|Denmark|Danmark|\bDanes?\b/.test(S.offerTranslatePrompt("Free refill")));
+  const ds = read("src/components/DealStudio.jsx"), app = read("src/App.jsx");
+  ok("the Studio has the three boxes and a Translate button", /data-testid=\{`deal-studio-tr-\$\{l\}`\}/.test(ds) && /data-testid="deal-studio-translate"/.test(ds) && /translate=\{translateDealOffer\}/.test(app));
+  ok("saving writes missing translations first", /translate && \(!current \|\| missing\) \? await runTranslate\(f, current\) : f;/.test(ds));
+  ok("the full Studio keeps a row's translations through an edit", /cleanOffer\(\{ \.\.\.studioOfferFields, tr: shaped\.__offer\?\.tr \}\)/.test(app));
+  // The page's own words.
+  const keys = ["load.failedTitle", "load.failedBody", "ess.title", "ess.lead", "tips.lead", "ess.toEss", "ess.toTips", "ess.toEssDk", "ess.toTipsDk", "ess.mistakes", "ess.weather", "faq.free.q", "faq.free.a", "faq.save.q", "faq.save.a", "faq.listed.q", "faq.listed.a", "faq.verified.q", "faq.verified.a", "faq.cities.q", "faq.citiesAbroad.a", "faq.citiesDk.a", "faq.help", "weather.loading", "weather.loadingForecast", "weather.windHumidity", "weather.failed", "weather.or"];
+  ok("the new words exist in all four languages, without dashes", keys.every(k => ["en", "da", "de", "lt"].every(l => M.UI_STRINGS[k]?.[l] && !/[‐-―−]/.test(M.UI_STRINGS[k][l]))));
+  ok("the Lithuanian ones differ from the English", keys.filter(k => !/weather\.or/.test(k)).every(k => M.UI_STRINGS[k].lt !== M.UI_STRINGS[k].en));
+  ok("the page no longer prints them in English", !/We could not load the latest content|"✓ Travel Essentials"|"Is Gemlyx free\?"|>Still need help\?<|The 3 mistakes to avoid<|label: "Weather"/.test(app));
+  const ws = read("src/components/WeatherStrip.jsx");
+  ok("a Lithuanian badge date has no dash", (() => { const t = D.liveBadge({ text: "x", until: "2027-12-31" }, { kind: "until" }, "lt"); return /gruodžio 31/.test(t) && !/-/.test(t); })());
+  ok("the weather box speaks the reader's language and names meteo.lt in Lithuania", !/Loading forecast\.\.\.<|check DMI or Yr|>Wind \{/.test(ws) && /SERVICE = \{ LT: "meteo\.lt" \}/.test(ws) && /lang=\{uiLang\}/.test(app));
+}
+
+// ── The nightlife film, 14 Oct 2026: "Behind Nightlife" ──
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const cv = read("src/components/CategoryVideo.jsx"), dny = read("src/components/DealsNearYou.jsx");
+  const { statSync } = await import("node:fs");
+  const files = ["wide", "tall"].flatMap(w => [`nightlife-${w}.mp4`, `nightlife-${w}.jpg`]);
+  ok("both films and their stills are in public/video, each under 7 MB", files.every(f => { try { return statSync(join(root, "public/video", f)).size < 7e6; } catch { return false; } }));
+  // Since lidl.dk's front page (14 Oct 2026) the film fills the banner box.
+  const eb = read("src/components/ExploreBanner.jsx");
+  ok("the film replaces the banner, only for a kind of place that has one", /<CategoryVideo k=\{cat\} playing=\{!filmPaused\} \/>/.test(eb) && /CATEGORY_VIDEO = \{\s*nightlife:/.test(cv) && /const film = !!\(cat && CATEGORY_VIDEO\[cat\]\);/.test(eb));
+  ok("the film fills its box, over the slides", /position: "absolute", inset: 0, zIndex: 2, pointerEvents: "none"/.test(cv));
+  // 15 Oct 2026: the tall film follows the banner's shape, not the screen's
+  // orientation, so an iPad held upright no longer gets it in a wide banner.
+  ok("phones get the tall film, everything wider the wide one", /TALL_QUERY = "\(max-width: 587px\)"/.test(cv) && !/orientation: portrait/.test(cv));
+  // Oliver, 15 Oct 2026: "it's like zoomed in and in poor quality". On a
+  // computer the film keeps its 16:9 at the banner's full height, on the
+  // right, its width the banner's height (clamp(300px, 30vw, 520px)) times
+  // 16/9, and its left edge fades into the dark under the name.
+  ok("on a computer the whole shot shows, on the right, fading in from the left", /@media \(min-width: 720px\) \{\s*\.gx-film-frame \{ left: auto; width: min\(100%, clamp\(533\.33px, 53\.333vw, 924\.44px\)\); \}/.test(cv) && /\.gx-banner \{ height: clamp\(300px, 30vw, 520px\); \}/.test(eb) && /className="gx-film-fade"/.test(cv) && /linear-gradient\(to right, #0B0A08 0%/.test(cv));
+  ok("on a phone the film still fills the banner", /\.gx-film-frame \{ position: absolute; inset: 0; \}/.test(cv) && /\.gx-film-fade \{ display: none; \}/.test(cv) && /const media = \{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" \};/.test(cv));
+  // The frame's 533.33 to 924.44 is the banner's 300 to 520 times 16/9: the
+  // two must move together.
+  {
+    const fm = cv.match(/\.gx-film-frame \{ left: auto; width: min\(100%, clamp\(([\d.]+)px, ([\d.]+)vw, ([\d.]+)px\)\); \}/);
+    const bm = eb.match(/\.gx-banner \{ height: clamp\((\d+)px, (\d+)vw, (\d+)px\); \}/);
+    const near = (a, b, e) => Math.abs(Number(a) * 16 / 9 - Number(b)) < e;
+    ok("the frame's width is the banner's height times 16/9", !!(fm && bm && near(bm[1], fm[1], 0.01) && near(bm[2], fm[2], 0.001) && near(bm[3], fm[3], 0.01)));
+  }
+  // MP4 only since 14 Oct 2026: WebM smoothed the grain away ("far inferior").
+  ok("no sound, inline, looping, MP4 only", /autoPlay muted defaultMuted loop playsInline/.test(cv) && /type="video\/mp4"/.test(cv) && !/<source[^>]*webm/.test(cv));
+  ok("less motion or saving data shows the still, and so does a film that will not play", /prefers-reduced-motion: reduce/.test(cv) && /saveData/.test(cv) && /still \|\| failed \?/.test(cv));
+  ok("it pauses out of sight", /IntersectionObserver/.test(cv) && /v\.pause\?\.\(\)/.test(cv));
+  ok("it never takes a tap", /pointerEvents: "none"/.test(cv));
+}
+
+// ── The banner across the top of Explore, as lidl.dk's, 14 Oct 2026 ──
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const eb = read("src/components/ExploreBanner.jsx"), dny = read("src/components/DealsNearYou.jsx"), ke = read("src/components/KlaipedaExplore.jsx"), app = read("src/App.jsx"), logo = read("src/components/GemlyxLogo.jsx");
+  ok("Explore on /lithuania opens on the banner, the circles under it", /sticky=\{false\} banner \/>/.test(ke) && dny.indexOf("<ExploreBanner") < dny.indexOf('<CategoryNav active={cat} onPick={pickCat}'));
+  ok("the banner runs the full width of the page, the rest in a column", /data-testid="explore-abroad" style=\{\{ paddingBottom: 48 \}\}/.test(app) && /maxWidth: 1120, margin: "0 auto", padding: "8px 16px 0"/.test(dny));
+  ok("Gemlyx's own slide first, then up to three deals that are on now", /\[\{ kind: "brand", key: "brand" \}, \.\.\.all\.slice\(0, MAX_DEAL_SLIDES\)/.test(dny) && /export const MAX_DEAL_SLIDES = 3;/.test(eb));
+  ok("a deal slide opens the deal, as its tile does", /onOpen=\{\(key\) => \{ pushSheet\(1\); setOpened\(key\); \}\}/.test(dny));
+  ok("arrows on a computer, dots under it, a pause button", /\.gx-banner-arrow \{ display: none; \}/.test(eb) && /@media \(hover: hover\) and \(min-width: 720px\) \{ \.gx-banner-arrow \{ display: flex; \} \}/.test(eb) && /role="tablist"/.test(eb) && /data-testid="banner-pause"/.test(eb));
+  ok("it moves on by itself, but not when paused, calm, filmed or hidden", /if \(paused \|\| calm \|\| film \|\| n < 2\) return undefined;/.test(eb) && /document\.visibilityState !== "hidden"/.test(eb));
+  ok("a swipe turns it and the page pager leaves that swipe alone", /data-own-swipe=""/.test(eb) && /if \(el\.hasAttribute\?\.\("data-own-swipe"\)\) return true;/.test(app));
+  // The name stays while its film fades out (design review, 15 Oct 2026), so
+  // the box holds the last label rather than "" the moment the film goes.
+  ok("the kind of place is named over its film, as Lidl's", /data-testid="banner-film-title"/.test(eb) && /\{film \? catLabel : lastLabel\.current\}/.test(eb) && /if \(film\) lastLabel\.current = catLabel;/.test(eb));
+  ok("the Example mark stays on the banner while examples show", /\{examples && \(\s*<span data-testid="deals-near-examples"/.test(eb));
+  const keys = ["banner.only", "banner.sub", "banner.see", "banner.prev", "banner.next", "banner.pause", "banner.play"];
+  ok("the banner speaks all four languages, no dashes", keys.every(k => ["en", "da", "de", "lt"].every(l => M.UI_STRINGS[k]?.[l] && !/[‐-―−]/.test(M.UI_STRINGS[k][l]))));
+  ok("the large mark is the icon as cut gold, not flat shapes", /export const GemlyxMarkFine = /.test(logo) && /linearGradient id=\{g\("lit"\)\}/.test(logo) && /<GemlyxMarkFine id="gx-banner" \/>/.test(eb));
+}
+
+// ── The circles in Gemlyx's colours, the mark inside the banner, 14 Oct 2026 ──
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const cf = read("src/components/CategoryFilter.jsx"), eb = read("src/components/ExploreBanner.jsx");
+  ok("the circles are dark with a gold edge and gold drawings, the chosen one gold", /inset 0 0 0 1px \$\{C\.gold\}66/.test(cf) && /CATEGORY_ICON\[k\]\(on \? "#16130E" : C\.gold, 1\.6\)/.test(cf) && /linear-gradient\(145deg, #F1D594 0%, \$\{C\.gold\} 55%/.test(cf) && !/CATEGORY_COLOUR\[k\]/.test(cf));
+  ok("the chosen circle's name turns gold", /color: on \? C\.gold : C\.light/.test(cf));
+  ok("the mark sits inside the banner, ring and all", /top: "9%", height: "82%", aspectRatio: "1 \/ 1", right: "clamp\(24px, 7vw, 140px\)"/.test(eb) && !/right: "max\(-12%/.test(eb));
+  ok("the deal slides draw their kind of place in gold", /const colour = C\.gold;/.test(eb) && /\{Icon\(colour, 1\.2\)\}/.test(eb));
+}
+
+// ── Deal alerts, 15 Oct 2026 ──
+// Oliver, 14 Oct 2026: "make a notification system for users, so they can see
+// whenever a new discount has popped up. Also a mail one, but make it so people
+// can tick off what notifications they want from as well." For members who are
+// signed in, in the app and by mail; the mail once a day, and a short
+// promotion ("for the next 3 hours we give free table") at once.
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const A = M.DAL, R = M.DALR, O = M.DOPEN;
+  // Noon on Thursday 15 Oct 2026 in Klaipėda, summer time (UTC+3).
+  const noon = new Date("2026-10-15T09:00:00Z");
+  const three = { text: "Free table for the next 3 hours", until: "2026-10-15", from: "12:00", to: "15:00" };
+
+  // What is short, and so mailed at once.
+  ok("a three hour offer today is a short promotion", A.isShortPromotion(three, noon));
+  ok("a week long one is not", !A.isShortPromotion({ text: "Kvass all week", until: "2026-10-22" }, noon));
+  ok("an ongoing one is not, however narrow its hours", !A.isShortPromotion({ text: "Friday candy", ongoing: true, days: [5], from: "15:00", to: "18:00" }, noon));
+  ok("one that has ended is not", !A.isShortPromotion(three, new Date("2026-10-15T12:30:00Z")));
+  ok("today only is short, and so is tomorrow until 11:00 seen at noon", A.isShortPromotion({ text: "x", until: "2026-10-15" }, noon) && A.isShortPromotion({ text: "x", until: "2026-10-16", from: "09:00", to: "11:00" }, noon));
+  ok("a whole day more is not", !A.isShortPromotion({ text: "x", until: "2026-10-16" }, noon));
+  is("it ends at 15:00 Klaipėda time, 12:00 UTC in summer", A.endsAt(three)?.toISOString(), "2026-10-15T12:00:00.000Z");
+  is("an all day offer ends at midnight there, 22:00 UTC in winter", A.endsAt({ text: "x", until: "2026-12-01" })?.toISOString(), "2026-12-01T22:00:00.000Z");
+  is("a Fridays only offer ends on its last Friday", A.endsAt({ text: "x", until: "2026-10-18", days: [5], from: "15:00", to: "18:00" })?.toISOString(), "2026-10-16T15:00:00.000Z");
+  ok("an ongoing offer has no end", A.endsAt({ text: "x", ongoing: true }) === null);
+
+  // The fingerprint that makes a changed offer a new deal.
+  const sig = A.offerSig(three);
+  ok("the fingerprint is stable, and translations do not change it", !!sig && sig === A.offerSig({ ...three }) && sig === A.offerSig({ ...three, from: "12.00", tr: { src: three.text, lt: "Nemokamas staliukas" } }));
+  ok("a new text, last day, end time or no last day makes a new one", [{ ...three, text: "Free table for two" }, { ...three, until: "2026-10-16" }, { ...three, to: "16:00" }, { ...three, ongoing: true }].every(o => A.offerSig(o) !== sig));
+
+  // The morning roundup, at 09:00 in Klaipėda: 07:00 UTC in winter, 06:00 in summer.
+  ok("the roundup waits for 09:00 in winter", !A.digestDue(new Date("2026-01-15T06:59:00Z")) && A.digestDue(new Date("2026-01-15T07:00:00Z")));
+  ok("and for 09:00 in summer", !A.digestDue(new Date("2026-07-15T05:59:00Z")) && A.digestDue(new Date("2026-07-15T06:00:00Z")));
+  ok("once a Klaipėda day", !A.digestDue(new Date("2026-07-15T15:00:00Z"), "2026-07-15T06:10:00Z") && A.digestDue(new Date("2026-07-16T06:00:00Z"), "2026-07-15T06:10:00Z"));
+  ok("one sent late in the evening still counts for that day", !A.digestDue(new Date("2026-07-15T20:30:00Z"), "2026-07-15T20:00:00Z"));
+
+  // What one member sees.
+  const at = (min) => new Date(noon.getTime() - min * 60000).toISOString();
+  const rows = [
+    { id: 1, deal_id: "food:1", category: "restaurants", name: "Bakery", offer: "a", created_at: at(5), ends_at: null },
+    { id: 2, deal_id: "free:2", category: "attractions", name: "Museum", offer: "b", created_at: at(10), ends_at: null },
+    { id: 3, deal_id: "night:3", category: "nightlife", name: "Bar", offer: "c", created_at: at(600), ends_at: null },
+    { id: 4, deal_id: "food:4", category: "restaurants", name: "Quiet", offer: "d", created_at: at(20), quiet: true },
+    { id: 5, deal_id: "food:5", category: "restaurants", name: "Over", offer: "e", created_at: at(30), ends_at: at(1) },
+    { id: 6, deal_id: "food:1", category: "restaurants", name: "Bakery", offer: "older", created_at: at(900), ends_at: null },
+  ];
+  const mine = { cats: ["restaurants", "nightlife"], seenAt: at(60) };
+  is("ticked kinds only, nothing quiet or over, newest first, one row a deal", A.newsForMember(rows, { ...mine, now: noon }).map(r => r.id), [1, 3]);
+  ok("no museums for somebody who unticked attractions", !A.newsForMember(rows, { ...mine, now: noon }).some(r => r.category === "attractions"));
+  is("what came after the bell was last opened is new", A.newsForMember(rows, { ...mine, now: noon }).map(r => r.unread), [true, false]);
+  is("and the count on the bell is those", A.unreadCount(rows, mine, noon), 1);
+  is("all four kinds are ticked by default", A.unreadCount(rows, { seenAt: at(60) }, noon), 2);
+  is("the roundup leaves out what was mailed already", A.digestNews(rows, { cats: ["restaurants", "nightlife"], last_digest_at: at(24 * 60) }, { now: noon, mailed: new Set([1]) }).map(r => r.id), [3]);
+  ok("mail goes only to a member with mail on who ticked the kind", A.wantsMail({ email_on: true, cats: ["nightlife"] }, "nightlife") && !A.wantsMail({ email_on: true, cats: ["nightlife"] }, "attractions") && !A.wantsMail({ email_on: false }, "nightlife"));
+
+  // The news the server writes, named as Explore names the deal.
+  const liveRows = [
+    { id: 7, type: "night", payload: { name: "Rūsys", country: "LT", __category: "nightlife", __offer: { text: "No cover before 21:00", until: "2026-12-31" } } },
+    { id: 8, type: "food", payload: { name: "Ended", country: "LT", __offer: { text: "Gone", until: "2026-10-01" } } },
+    { id: 9, type: "food", payload: { name: "Danish place", __offer: { text: "x", until: "2026-12-31" } } },
+    { id: 10, type: "event", payload: { name: "Not a deal type", country: "LT", __offer: { text: "x", until: "2026-12-31" } } },
+  ];
+  const made = A.newsFromRows(liveRows, noon);
+  is("news is written for a Klaipėda deal that is on, and only that", made.map(n => n.deal_id), ["night:7"]);
+  ok("named as Explore names it, so the bell opens the right deal", made[0]?.deal_id === M.DNY.dealPlaceId({ id: 100007, _src: "nightlife" }) && made[0].category === "nightlife" && made[0].short === false && made[0].sig === A.offerSig(liveRows[0].payload.__offer));
+  is("the offer's limit is offer.js's", A.OFFER_MAX, M.OFFER_TEXT_MAX);
+  // A mail reads the offer in the member's language, off the live deal, but
+  // only while the deal still holds the offer the news row is about.
+  const trOffer = { text: "No cover before 21:00", until: "2026-12-31", tr: { src: "No cover before 21:00", lt: "Iki 21:00 įėjimas nemokamas" } };
+  const n7 = { deal_id: "night:7", sig: A.offerSig(trOffer), offer: trOffer.text };
+  const live7 = new Map([["night:7", trOffer]]);
+  ok("a mail gives the offer in the member's language", A.newsIn(n7, live7, "lt").offer === "Iki 21:00 įėjimas nemokamas" && A.newsIn(n7, live7, "da").offer === trOffer.text && A.newsIn(n7, live7, "en").offer === trOffer.text);
+  ok("but not once the offer has changed, and not a translation of an older text", A.newsIn(n7, new Map([["night:7", { ...trOffer, text: "Changed" }]]), "lt").offer === trOffer.text && A.offerTextFor({ ...trOffer, text: "Changed" }, "lt") === "Changed");
+
+  // The mails.
+  const evil = { id: 9, deal_id: "food:9", category: "restaurants", name: "<img src=x onerror=1>", offer: 'Free <b>table</b> & "kvass"', short: true, ends_at: A.endsAt(three).toISOString(), created_at: at(1) };
+  const token = "8c6f0b52-1d4e-4a8e-9f3e-2b7c1d5e6f70";
+  const visible = (html) => html.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ");
+  const dashy = /[\u2012-\u2015\u2212]|\s-\s/;
+  for (const lang of ["en", "da", "de", "lt"]) {
+    const one = A.instantMail({ news: evil, lang, unsub: token, now: noon });
+    const day = A.digestMail({ items: [evil, rows[0], rows[2]], lang, unsub: token, now: noon });
+    for (const [kind, m] of [["the instant mail", one], ["the roundup", day]]) {
+      ok(`${lang}, ${kind}: a name like <img src=x onerror=1> is escaped`, !/<img src=x/.test(m.html) && /&lt;img src=x onerror=1&gt;/.test(m.html) && !/<b>table/.test(m.html));
+      ok(`${lang}, ${kind}: it carries the unsubscribe link`, m.html.includes(`https://www.gemlyxtravel.com/api/deal-alerts?unsub=${token}`) && m.text.includes(`unsub=${token}`));
+      ok(`${lang}, ${kind}: it links to the deal in the app`, m.html.includes("https://www.gemlyxtravel.com/lithuania?deal=food%3A9") && m.text.includes("lithuania?deal=food%3A9"));
+      ok(`${lang}, ${kind}: no dash in what is read`, !dashy.test(visible(m.html)) && !dashy.test(m.text) && !dashy.test(m.subject));
+      ok(`${lang}, ${kind}: in its language, no images, phone sized`, m.html.includes(`<html lang="${lang}">`) && !/<img/i.test(m.html) && /max-width:560px/.test(m.html) && /name="viewport"/.test(m.html));
+    }
+  }
+  is("the roundup reads in all four languages", ["en", "da", "de", "lt"].map(l => A.digestMail({ items: [rows[0], rows[2]], lang: l, unsub: token, now: noon }).subject), ["New deals in Klaipėda", "Nye tilbud i Klaipėda", "Neue Angebote in Klaipėda", "Nauji pasiūlymai Klaipėdoje"]);
+  is("and says when a short one ends, on Klaipėda's clock", ["en", "da", "de", "lt"].map(l => A.endsWords(evil.ends_at, noon, l)), ["Ends today at 15:00", "Slutter i dag kl. 15.00", "Endet heute um 15:00", "Baigiasi šiandien 15:00"]);
+  is("the instant subject says the place and the end", A.instantMail({ news: { ...evil, name: "Rūkykla Marios" }, lang: "en", unsub: token, now: noon }).subject, "New deal at Rūkykla Marios, ends today at 15:00");
+  ok("the unsubscribe page reads in the member's language, a button only for a scanner's visit", /Pasiūlymai el\. paštu išjungti/.test(A.unsubPage({ state: "off", lang: "lt" })) && /<form method="post" action="\/api\/deal-alerts\?unsub=x"/.test(A.unsubPage({ state: "confirm", lang: "da", action: "/api/deal-alerts?unsub=x" })) && !/<form/.test(A.unsubPage({ state: "off" })));
+  is("a visitor with no row reads it in their browser's language", [A.langFromHeader("lt-LT,lt;q=0.9,en;q=0.8"), A.langFromHeader("fr-FR,de;q=0.7"), A.langFromHeader("")], ["lt", "de", "en"]);
+
+  // Every word, in four languages.
+  const keys = Object.keys(M.UI_STRINGS).filter(k => /^(alerts|mail|unsub)\./.test(k));
+  ok("every new word is in English, Danish, German and Lithuanian", keys.length >= 30 && keys.every(k => ["en", "da", "de", "lt"].every(l => M.UI_STRINGS[k]?.[l])));
+  ok("with no dash and none of his banned words", keys.every(k => ["en", "da", "de", "lt"].every(l => !dashy.test(M.UI_STRINGS[k][l]) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(M.UI_STRINGS[k][l]))));
+  ok("and the Lithuanian is not the English", keys.every(k => M.UI_STRINGS[k].lt !== M.UI_STRINGS[k].en));
+  const bell = read("src/components/DealAlerts.jsx");
+  const used = [...new Set([...bell.matchAll(/uiT\("([a-zA-Z.]+)"/g)].map(m => m[1]))];
+  ok("every word the bell uses is in the catalogue", used.length >= 10 && used.every(k => !!M.UI_STRINGS[k]));
+  const newFiles = ["src/utils/dealAlerts.js", "src/utils/dealAlertsStore.js", "src/utils/dealOpen.js", "src/components/DealAlerts.jsx", "api/deal-alerts.js", "DEAL_ALERTS_15OCT.sql"];
+  ok("no em or en dash and none of his banned words in the new files", newFiles.every(f => { const t = read(f); return !/[\u2013\u2014]/.test(t) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(t); }));
+
+  // The bell.
+  const app = read("src/App.jsx");
+  ok("the bell is only for members who are signed in, on the Lithuanian site", /\{PAGE_COUNTRY === "LT" && userSession\?\.userId && \(\s*<DealAlertsBell session=\{userSession\} lang=\{uiLang\}/.test(app));
+  ok("in the header row beside the account picture, not fixed on top of it", app.indexOf("<DealAlertsBell") > 0 && app.indexOf('<button className="gemlyx-account"') - app.indexOf("<DealAlertsBell") > 0 && app.indexOf('<button className="gemlyx-account"') - app.indexOf("<DealAlertsBell") < 400 && !/position: "fixed"[^\n]*data-testid="alerts-bell"/.test(bell));
+  ok("it says what it is and whether it is open", /aria-label=\{label\}/.test(bell) && /aria-expanded=\{open\}/.test(bell) && /\[uiT\("alerts\.bell", lang\), count \? fill\(uiT\("alerts\.newCount", lang\)/.test(bell));
+  ok("it draws nothing until its tables exist", /if \(!uid \|\| state === ALERTS\.MISSING \|\| state === "loading"\) return null;/.test(bell) && /state !== ALERTS\.READY[\s\S]{0,200}alerts\.unavailable/.test(bell));
+  ok("Escape closes it and the focus goes back to the bell", /if \(e\.key === "Escape"\) \{ e\.preventDefault\(\); close\(\); return; \}/.test(bell) && /setTimeout\(\(\) => bell\.current\?\.focus\(\), 0\)/.test(bell));
+  ok("less motion is respected", /@media \(prefers-reduced-motion: reduce\) \{ \.gx-alerts-anim \{ animation: none !important; \}/.test(bell));
+  ok("a list under the bell on a computer, a sheet from the bottom on a phone", /data-layout=\{phone \? "sheet" : "dropdown"\}/.test(bell) && /PHONE_QUERY = "\(max-width: 640px\)"/.test(bell));
+  ok("it reads again on load, on focus and every five minutes while the page is seen", /POLL_MS = 5 \* 60 \* 1000/.test(bell) && /window\.addEventListener\("focus", again\)/.test(bell) && /document\.visibilityState === "visible"\) load\(\)/.test(bell));
+  ok("opening it marks everything seen, on the row and on the device", /saveAlerts\(session, \{ seen_at: at, lang \}\)/.test(bell) && /setLocalSeen\(uid, at\)/.test(bell));
+  ok("a tap opens the deal on Explore", /onOpenDeal=\{\(id\) => \{ setShowMenu\(false\); goTab\("home"\); requestOpenDeal\(id\); \}\}/.test(app) && /window\.addEventListener\(DEAL_OPEN_EVENT, on\)/.test(read("src/components/DealsNearYou.jsx")));
+  ok("and so does the link in a mail, read once and taken out of the address", /const id = dealFromSearch\(window\.location\.search\);/.test(app) && /q\.delete\("deal"\);/.test(app));
+  O.clearPendingDeal();
+  ok("an alert asks for one deal by its partner id, and the ask lapses after half a minute", O.requestOpenDeal("food:12", 1000) && O.pendingDeal(1500) === "food:12" && O.pendingDeal(32000) === null);
+  ok("nothing else can be asked for", !O.requestOpenDeal("javascript:alert(1)") && !O.requestOpenDeal("") && O.dealFromSearch("?deal=night%3A7&x=1") === "night:7" && O.dealFromSearch("?deal=<b>") === "");
+  O.clearPendingDeal();
+  const me = read("src/components/AboutMePage.jsx");
+  ok("the same settings are on the account page", /alerts: alertsSection/.test(me) && /<DealAlertsCard session=\{session\} lang=\{lang\} \/>/.test(me) && /<AboutMePage\s+open=\{aboutMeOpen && !!userSession\}\s+session=\{userSession\}\s+lang=\{uiLang\}/.test(app));
+  ok("each setting is a label and a switch, nothing written under it", /role="switch" aria-checked=\{on\}/.test(bell) && !/<p[ >]/.test(bell));
+
+  // The route.
+  const route = read("api/deal-alerts.js");
+  is("vercel.json runs the deal alerts every ten minutes", JSON.parse(read("vercel.json")).crons, [{ path: "/api/deal-alerts", schedule: "*/10 * * * *" }]);
+  ok("the cron's secret is compared in constant time", /timingSafeEqual\(a, b\)/.test(route) && /createHash\("sha256"\)\.update\(header\(headers, "authorization"\)\)/.test(route));
+  ok("and a wrong or missing secret is refused", R.cronAllowed({ authorization: "Bearer right-secret-123" }, "right-secret-123") && !R.cronAllowed({ authorization: "Bearer wrong" }, "right-secret-123") && !R.cronAllowed({}, "right-secret-123") && !R.cronAllowed({ authorization: "Bearer " }, ""));
+  ok("POST is the founder's alone, from the site", /if \(!requestIsFromSite\(req\.headers\)\) \{\s*return res\.status\(403\)/.test(route) && /const who = await resolveUser\(req\.headers/.test(route) && /if \(!isFounder\(who\.userId, env\.GEMLYX_FOUNDER_IDS\)\) return res\.status\(403\)/.test(route));
+  ok("a missing key is a 503 before anything is read or sent", /if \(!env\.CRON_SECRET\) return res\.status\(503\)/.test(route) && (route.match(/if \(!ctx\.serviceKey \|\| !ctx\.resendKey\) return res\.status\(503\)/g) || []).length === 2 && /if \(!ctx\.serviceKey\) return answer\(503/.test(route));
+  ok("every fetch has a time limit", (route.match(/\bfetch\(/g) || []).length === (route.match(/signal: AbortSignal\.timeout\(/g) || []).length);
+  ok("every reply is checked", /if \(!r\.ok\) throw new Failure\(where, r\.status\)/.test(route) && /if \(!r\.ok\) console\.error\("deal-alerts send:", r\.status\)/.test(route));
+  const errs = [...route.matchAll(/json\(\{ error: ([^}]+)\}/g)].map(m => m[1].trim());
+  ok("no upstream error and no key is echoed", errs.length >= 6 && errs.every(e => /^"[^"]*"$/.test(e) || e === "who.error" || e === "NOT_FROM_SITE") && !/console\.error\([^)]*(serviceKey|resendKey|CRON_SECRET)/.test(route));
+  ok("it reads only published Klaipėda deal rows", /gemlyx_content\?select=id,type,payload&published=eq\.true&type=in\.\(\$\{DEAL_TYPES\.join\(","\)\}\)&payload->>country=eq\.LT/.test(route));
+  ok("the first run writes what is already on quietly", /const quiet = \(await listOf\(await sb\(ctx, "gemlyx_deal_news\?select=id&limit=1"\), "news"\)\)\.length === 0;/.test(route) && /resolution=ignore-duplicates,return=representation/.test(route));
+  ok("mail is from deals@, through Resend, with one click unsubscribe and a key against doubles", R.FROM === "Gemlyx <deals@gemlyxtravel.com>" && /fetch\("https:\/\/api\.resend\.com\/emails"/.test(route) && /"Idempotency-Key": key/.test(route)
+    && JSON.stringify(R.resendPayload({ to: "a@b.lt", mail: { subject: "s", html: "h", text: "t" }, unsubUrl: "https://www.gemlyxtravel.com/api/deal-alerts?unsub=x" }).headers) === JSON.stringify({ "List-Unsubscribe": "<https://www.gemlyxtravel.com/api/deal-alerts?unsub=x>", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" }));
+  ok("both mails read the offer in the member's language", /instantMail\(\{ news: newsIn\(n, offers, cleanLang\(m\.lang\)\)/.test(route) && /items: items\.map\(i => newsIn\(i, offers, cleanLang\(m\.lang\)\)\)/.test(route));
+  ok("a run sends a capped number of mails inside a time budget", R.MAX_MAILS_PER_RUN > 0 && R.MAX_MAILS_PER_RUN <= 100 && R.RUN_BUDGET_MS < 60000 && JSON.parse(read("vercel.json")).functions?.["api/deal-alerts.js"]?.maxDuration >= 60);
+  ok("the roundup marks the day done even with nothing to send, and the log goes after 90 days", /body: \{ last_digest_at: now\.toISOString\(\) \}/.test(route) && R.MAIL_LOG_DAYS === 90 && /gemlyx_deal_mail_log\?sent_at=lt\./.test(route));
+  ok("a person's tap turns mail off, a scanner's visit changes nothing", R.personOpened({ "sec-fetch-mode": "navigate", "sec-fetch-dest": "document" }) && !R.personOpened({}) && !R.personOpened({ "sec-fetch-mode": "no-cors", "sec-fetch-dest": "document" }) && /if \(req\.method === "GET" && !personOpened\(req\.headers\)\) return answer\(200, "confirm", lang\);/.test(route));
+  ok("only a well formed token is read", R.cleanToken("8C6F0B52-1D4E-4A8E-9F3E-2B7C1D5E6F70") === "8c6f0b52-1d4e-4a8e-9f3e-2b7c1d5e6f70" && R.cleanToken("x) or 1=1") === "" && R.cleanToken(undefined) === "");
+  ok("only a confirmed address is mailed, never a banned one", R.mailableAddress({ email: "a@b.lt", email_confirmed_at: "2026-10-01" }) === "a@b.lt" && R.mailableAddress({ email: "a@b.lt" }) === "" && R.mailableAddress({ email: "a@b.lt", email_confirmed_at: "x", banned_until: "2999-01-01" }) === "");
+  const specs = (f) => [...read(f).matchAll(/from "([^"]+)"/g)].map(m => m[1]);
+  ok("the rules and the route import only what a server can load", ["src/utils/dealAlerts.js", "api/deal-alerts.js"].every(f => specs(f).every(x => /\.js$/.test(x) || /^node:/.test(x))) && ["uiLanguage", "offerClock", "dealCategories", "countries"].every(f => !/^import /m.test(read(`src/utils/${f}.js`))) && !/import\.meta/.test(stripComments(read("src/utils/dealAlerts.js"))));
+  ok("the account deletion route is left alone: the rows go with the account by cascade", !/deal_alerts|deal_mail/.test(read("api/delete-account.js")) && (read("DEAL_ALERTS_15OCT.sql").match(/references auth\.users \(id\) on delete cascade/g) || []).length === 2);
+
+  // The SQL.
+  const sql = read("DEAL_ALERTS_15OCT.sql");
+  const T = ["gemlyx_deal_news", "gemlyx_deal_alerts", "gemlyx_deal_mail_log"];
+  ok("the SQL turns row level security on for all three tables", T.every(t => new RegExp(`alter table public\\.${t} enable row level security;`).test(sql)));
+  ok("and revokes them from anon", T.every(t => new RegExp(`revoke all on public\\.${t} from anon, authenticated;`).test(sql)));
+  ok("members read the news and nobody but the server writes it", /create policy "members read deal news" on public\.gemlyx_deal_news\s+for select to authenticated using \(auth\.uid\(\) is not null\);/.test(sql) && /grant select on public\.gemlyx_deal_news to authenticated;/.test(sql) && !/grant (insert|update|delete|all)[^;]*gemlyx_deal_news to authenticated/.test(sql));
+  ok("a member writes only their own row, and only their own columns", /for update to authenticated using \(auth\.uid\(\) = user_id\) with check \(auth\.uid\(\) = user_id\);/.test(sql) && /grant update \(user_id, cats, email_on, lang, seen_at, updated_at\) on public\.gemlyx_deal_alerts to authenticated;/.test(sql) && !/grant (update|insert)[^;]*(last_digest_at|unsub)/.test(sql));
+  ok("mail is opt in, all four kinds by default, one news row per offer", /email_on boolean not null default false/.test(sql) && /default array\['restaurants', 'nightlife', 'attractions', 'rentals'\]::text\[\]/.test(sql) && /unique \(deal_id, sig\)/.test(sql));
+  ok("the mail log has no policy at all", !/create policy [^;]* on public\.gemlyx_deal_mail_log/.test(sql));
+  ok("the SQL can run twice", T.every(t => new RegExp(`create table if not exists public\\.${t}`).test(sql)) && (sql.match(/create policy/g) || []).length === (sql.match(/drop policy if exists/g) || []).length);
+
+  // The privacy policy and the Studio.
+  const pv = read("public/privacy.html");
+  ok("the privacy policy names deal emails, Resend, consent and the 90 days", /<h3 id="deal-alerts">Deal alerts and deal emails<\/h3>/.test(pv) && /Deal emails are delivered by <strong>Resend<\/strong>/.test(pv) && /consent, Article 6\(1\)\(a\)/.test(pv) && /removed after 90 days/.test(pv) && /Neither is available without an account/.test(pv));
+  const ds = read("src/components/DealStudio.jsx");
+  ok("a deal saved and shown tells the server, never in the way of the save", /Promise\.resolve\(studioFetch\("\/api\/deal-alerts", \{ method: "POST" \}\)\)\.catch\(\(\) => \{\}\)/.test(ds) && (ds.match(/if \((made|after)\.published\) tellMembers\(\);/g) || []).length === 3);
+}
+
+// ── Batch 248: the deal tiles' maps, dark like the page ──
+// Oliver, 16 Oct 2026, of a design review of the Lithuanian page: "try out
+// the ideas that google and you agreed on". The tiles were bright light
+// Google maps on a dark page; they are now drawn in the page's own browns.
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const cm = read("src/components/DealCornerMap.jsx");
+  const { CARD_MAP_STYLE: S, staticStyleParams: P } = M.CMS;
+  const q = P();
+  const params = q.split("&").map(x => decodeURIComponent(x.replace(/^style=/, "")));
+  ok("one style= per rule, in the same order", q.split("&").every(x => x.startsWith("style=")) && params.length === S.length);
+  ok("land in the page's surface brown, water a deep blue, colours spelled 0xRRGGBB", params[0] === "element:geometry|color:0x1C1912" && params.includes("feature:water|element:geometry|color:0x10232F") && !/#/.test(params.join("")));
+  ok("every place of interest off, then parks and sights back on, in that order", params.indexOf("feature:poi|visibility:off") > -1 && params.indexOf("feature:poi|visibility:off") < params.indexOf("feature:poi.park|element:geometry|visibility:on") && params.indexOf("feature:poi|visibility:off") < params.indexOf("feature:poi.attraction|element:labels.text|visibility:on"));
+  ok("so no shop or bar next door shows on a partner's tile", !S.some(r => /^poi\.business/.test(r.featureType || "") && r.stylers.some(s => s.visibility === "on")));
+  ok("the | and : travel encoded", /%7C/.test(q) && /%3A/.test(q) && !/\|/.test(q));
+  ok("the picture and the live map take the same rules", /from "\.\.\/utils\/cardMapStyle"/.test(cm) && /&scale=2&\$\{staticStyleParams\(\)\}&key=/.test(cm) && /styles: CARD_MAP_STYLE,/.test(cm));
+  ok("and no Map ID on the tile map, which Google asks not to mix with style rules", !/GOOGLE_MAP_ID|map_id=|mapId:/.test(stripComments(cm)));
+  ok("the walk map and the place view keep the guide's style", /mapId: GOOGLE_MAP_ID, center: bounds\.getCenter\(\)/.test(read("src/components/GoogleWalkMap.jsx")) && /mapId: GOOGLE_MAP_ID,/.test(read("src/components/DealPlaceView.jsx")));
+  ok("still raster, still a picture and not a control", /RenderingType\?\.RASTER \|\| "RASTER"/.test(cm) && /disableDefaultUI: true, gestureHandling: "none", keyboardShortcuts: false, clickableIcons: false/.test(cm));
+}
+
+// ── Batch 249: example pictures on some of the deals ──
+// Oliver, 16 Oct 2026: "the map will be in a different area when we have
+// actual pictures. Can we have examples of pictures on some? Just examples."
+{
+  const { examplePromotionPools: pools, EXAMPLE_DEAL_PHOTO: PH, EXAMPLE_PARTNERS: EP, pageFor } = M.KEX;
+  const items = Object.values(pools()).flat();
+  const keyOf = (it) => String(it._exampleId || "").split(":")[1];
+  const withPhoto = items.filter(it => it.photo).map(keyOf).sort();
+  ok("five of the made-up deals carry a picture", withPhoto.join(",") === "amber,bakery,bike,jazz,tea");
+  ok("the rest keep the map, so both looks show side by side", items.filter(it => !it.photo).length >= 4);
+  ok("no picture on the beer bar's deal", !items.find(it => keyOf(it) === "beer")?.photo && !PH.beer);
+  ok("each is a free Unsplash photo over https, sized for the banner too", Object.values(PH).every(u => /^https:\/\/images\.unsplash\.com\/photo-[0-9a-f-]+\?auto=format&fit=crop&w=1200&q=65$/.test(u)));
+  ok("only on the deals: the examples page and the walk keep the partners' signs", EP.every(p => !pageFor(`${p.type}:${p.key}`)?.item?.photo));
+}
+
+// ── Batch 250: a map in the photo, and how far it is ──
+// Oliver, 16 Oct 2026: "in the pictures, we want to input maps somehow as
+// well.. and obviously distance meter."
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const W = M.DCARD.distanceWords;
+  is("metres to the nearest ten, km with one decimal under ten", [W(4), W(347), W(995), W(1234), W(9960), W(12400)], ["10 m", "350 m", "1.0 km", "1.2 km", "10 km", "12 km"]);
+  is("a decimal comma in Danish, German and Lithuanian", [W(1234, "da"), W(1234, "de"), W(1234, "lt"), W(350, "lt")], ["1,2 km", "1,2 km", "1,2 km", "350 m"]);
+  is("nothing for no distance", [W(null), W(undefined), W(-5), W("x")], ["", "", "", ""]);
+  const card = read("src/components/DealCard.jsx"), dny = read("src/components/DealsNearYou.jsx"), cm = read("src/components/DealCornerMap.jsx");
+  ok("a photo tile carries the dark map in its top right corner", /const inset = !!safePhoto\(photo\) && !!at && googleMapsReady\(\);/.test(card) && /data-testid="deal-tile-inset" style=\{\{ pointerEvents: onMap \? "auto" : "none", position: "absolute", top: 8, right: 8/.test(card) && /<DealCornerMap fill ratio="1 \/ 1" radius=\{0\} ask=\{180\} pinScale=\{0\.42\} zoom=\{16\}/.test(card));
+  ok("the badge leaves room for it", /maxWidth: inset \? "calc\(100% - 22px - var\(--gx-tile-inset, 60px\)\)" : "calc\(100% - 16px\)"/.test(card));
+  ok("the corner map asks Google for a small picture and a small pointer", /const px = fill \? \(ask \|\| 360\) : size;/.test(cm) && /transform: `scale\(\$\{pinScale\}\)`/.test(cm));
+  ok("the distance sits beside the name, from the visitor only", /data-testid="deal-tile-away"/.test(card) && (dny.match(/id: dealPlaceId\(d\), \.\.\.distanceFrom\(start, at, country, now\) \}/g) || []).length === 2 && (dny.match(/away=\{awayOf\(x\)\}/g) || []).length === 2 && /const metres = Math\.round\(kmApart\(start, at\) \* 1000\);/.test(dny));
+}
+
+// ── Batch 251: the corner map as its own tap, and the ferry ──
+// Oliver, 16 Oct 2026, "Sure. Try these out", of two suggestions: tapping the
+// small map in a photo tile opens the deal on its map, and a place across the
+// strait says "By ferry" instead of metres that make it look close.
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const D = M.DNY;
+  const theatre = { lat: 55.7106, lon: 21.1318 }, castle = { lat: 55.7076, lon: 21.1339 }, seaMuseum = { lat: 55.7175, lon: 21.0995 };
+  const july = new Date("2026-07-10T10:00:00Z"), nov = new Date("2026-11-10T10:00:00Z");
+  const near = D.distanceFrom(theatre, castle, "LT", july);
+  ok("on this side, metres and the plain walk", !near.ferry && near.metres > 300 && near.metres < 450 && near.minutes === M.NP.walkMinutes(theatre, castle));
+  const sm = D.distanceFrom(theatre, seaMuseum, "LT", july), smNov = D.distanceFrom(theatre, seaMuseum, "LT", nov);
+  ok("across the strait, the ferry and its wait", sm.ferry && sm.minutes > M.NP.walkMinutes(theatre, seaMuseum) && smNov.minutes - sm.minutes === 30);
+  is("nothing without the visitor", D.distanceFrom(null, castle), { minutes: null, metres: null, ferry: false });
+  const dny = read("src/components/DealsNearYou.jsx"), card = read("src/components/DealCard.jsx"), det = read("src/components/DealDetail.jsx");
+  ok("the tile says By ferry, and the walk line counts the ferry", /x\.ferry \? uiT\("explore\.byFerry", lang\)/.test(dny) && /uiT\(x\.ferry \? "explore\.ferryMin" : "trips\.walkMin", lang\)/.test(dny) && (dny.match(/distance=\{howFar\(x\)\}/g) || []).length === 3);
+  ok("closest sorts by the minutes, ferry included", /order === "closest" \? \(a, b\) => \(a\.minutes \?\? 9999\) - \(b\.minutes \?\? 9999\)/.test(dny) && /country \}\)\.filter\(x => x\.card\.timing !== "later"\)/.test(dny));
+  ok("the corner map is told apart by where the tap landed, in one button", /e\?\.target\?\.closest\?\.\('\[data-testid="deal-tile-inset"\]'\)\) onMap\(\);/.test(card) && (card.match(/<button /g) || []).length >= 1 && !/<button[^>]*deal-tile-inset/.test(card));
+  ok("and opens the deal on the view from above, brought into sight", (dny.match(/onMap=\{\(\) => \{ pushSheet\(1\); setAtMap\(true\);/g) || []).length === 2 && /startOnMap=\{atMap\}/.test(dny) && /key=\{opened\}/.test(dny) && /scrollIntoView\(\{ block: "center", behavior: "smooth" \}\)/.test(det));
+  ok("a deal opened any other way starts at the top", /useEffect\(\(\) => \{ if \(!opened\) setAtMap\(false\); \}, \[opened\]\);/.test(dny));
+  ok("the words read in all four languages, no dashes", ["explore.byFerry", "explore.ferryMin"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
+}
+
+// ── Batch 252: Show directions asks where you are, and answers in the deal ──
+// Oliver, 16 Oct 2026: "When people click 'Show directions' have the website
+// give them the 'access to location' question."
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const dny = read("src/components/DealsNearYou.jsx"), det = read("src/components/DealDetail.jsx");
+  const body = dny.slice(dny.indexOf("const goFromDeal = (x) => {"), dny.indexOf("const walkStart = going"));
+  ok("a tap asks the browser for the phone's place", /navigator\.geolocation\.getCurrentPosition\(/.test(body) && /askForCompass\(\);\s*setFinding\(true\);/.test(body));
+  // 17 Oct 2026: outside Klaipėda, a refusal or a miss walks from the centre (batch 258).
+  ok("the deal stays open until the walk can start", /const leave = \(from\) => \{ setFinding\(false\); dropSheets\(\); setOpened\(null\); startWalk\(x, from\); \};/.test(body) && /if \(!inNowArea\(country, at\)\) \{ fallback\(\); return; \}/.test(body));
+  ok("a phone already found walks straight away", /if \(here\) \{ leave\(hereAt\(here\)\); return; \}/.test(body));
+  ok("a refusal or a miss walks from the centre", /\}, fallback, \{ enableHighAccuracy: true/.test(body) && /if \(centreStart\) leave\(centreStart\); else/.test(body));
+  ok("under the buttons, read aloud, brought into sight", /\{dirNote && <div ref=\{dirBox\} role="status" data-testid="deal-detail-dir-note"/.test(det) && /dirBox\.current\.scrollIntoView\(\{ block: "nearest"/.test(det));
+  ok("the button says it is looking and takes no second tap", /onClick=\{finding \? undefined : onDirections\}/.test(det) && /labels\.finding \|\| "Finding you"/.test(det) && /finding: uiT\("dir\.finding", lang\)/.test(dny));
+  ok("a new deal starts with no old answer", /useEffect\(\(\) => \{ setDirNote\(""\); setFinding\(false\); \}, \[opened\]\);/.test(dny));
+  ok("the words read in all four languages, no dashes, the button's own name in each", ["dir.finding", "dir.notHere", "dir.blocked", "dir.noFix", "dir.cannot"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))) && ["en", "da", "de", "lt"].every(l => M.t("dir.blocked", l).includes("{btn}")));
+}
+
+// ── Batch 253: the menu and the burger, modernised ──
+// Oliver, 16 Oct 2026, with a UI guide: "We need the menu and burger menu
+// fixed. Modernised."
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const app = read("src/App.jsx"), lp = read("src/components/LanguagePicker.jsx");
+  ok("three gold bars that cross into an X while the menu is open", /\.gx-burger-bars > i \{[^}]*background: \$\{C\.gold\}/.test(app) && /\.gemlyx-account\[aria-expanded="true"\] \.gx-burger-bars > i:nth-child\(1\) \{ top: 6px; transform: rotate\(45deg\); \}/.test(app) && /\.gemlyx-account\[aria-expanded="true"\] \.gx-burger-bars > i:nth-child\(3\) \{ top: 6px; transform: rotate\(-45deg\); \}/.test(app) && /onClick=\{\(\) => setShowMenu\(!showMenu\)\} aria-expanded=\{showMenu\}/.test(app));
+  ok("a gold ring on hover and on keyboard focus", /\.gemlyx-account:hover \{ border-color: \$\{C\.gold\}88 !important;/.test(app) && /\.gemlyx-account:focus-visible \{/.test(app));
+  ok("the panel slides in from the right, frosted, with a gold edge", /className="gx-drawer" aria-label=\{uiT\("header\.menu", uiLang\)\}/.test(app) && /backdropFilter: "blur\(14px\) saturate\(140%\)"/.test(app) && /borderLeft: `1px solid \$\{C\.gold\}33`/.test(app) && /@keyframes gxDrawerIn \{ from \{ transform: translateX\(100%\); \}/.test(app));
+  ok("under the header, which stays on top so its X closes the menu", /<div ref=\{headerRef\} style=\{\{.*zIndex: showMenu \? 310 : "auto" \}\}>/.test(app) && /top: headerRef\.current \? Math\.round\(headerRef\.current\.getBoundingClientRect\(\)\.bottom\) : 0/.test(app));
+  ok("Escape closes it", /if \(e\.key === "Escape"\) setShowMenu\(false\);/.test(app));
+  ok("no motion for those who ask for none", /@media \(prefers-reduced-motion: reduce\) \{ \.gx-drawer, \.gx-drawer-dim \{ animation: none; \}/.test(app));
+  ok("the main rows in the headline serif, each sign on a gold disc", /fontSize: 19, fontWeight: 500, letterSpacing: -0\.1, cursor: "pointer", fontFamily: "'Fraunces', serif"/.test(app) && /<Ico name=\{item\.ico\} size=\{16\} color=\{C\.gold\} strokeWidth=\{2\.2\} \/>/.test(app));
+  ok("hairline gold dividers", (app.match(/background: `\$\{C\.gold\}1A`/g) || []).length >= 2);
+  ok("themes and languages as circles with a gold ring on the one in use", /className="gx-swatch-dot"/.test(app) && /className="gx-flag-dot"/.test(lp) && (app + lp).split("0 0 0 3.5px ${C.gold}").length - 1 === 2);
+  ok("flags grey until pointed at or chosen", /\.gx-flag-dot svg \{ filter: grayscale\(\.9\) brightness\(\.78\);/.test(app) && /\.gx-flag\[aria-pressed="true"\] \.gx-flag-dot svg \{ filter: none; \}/.test(app));
+}
+
+// ── Batch 254: no pages or saved trips in the Lithuanian menu ──
+// Oliver, 16 Oct 2026: "The saved trips and tours and all that gotta be
+// temporarily removed. Not sure if we keep it at all."
+{
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("off on /lithuania, kept for Denmark", /const MENU_PAGES_SHOWN = PAGE_COUNTRY !== "LT";/.test(app));
+  ok("the Saved trips row and the counts under the name wait behind it", /\{MENU_PAGES_SHOWN && \(<>\s*<button className="gx-menu-row" onClick=\{\(\) => \{ setShowMenu\(false\); readTripChanges\(\);/.test(app) && /\{MENU_PAGES_SHOWN && <div style=\{\{ fontSize: 10\.5, color: C\.muted \}\}>\{savedGuides\.length\} saved/.test(app));
+  ok("and so do the pages", /\{MENU_PAGES_SHOWN && \(<div className="gx-nav-in-menu">/.test(app));
+  ok("the code is kept, not deleted", /uiT\("menu\.saved", uiLang\)/.test(app) && /navGroups\.map\(\(g, i\) =>/.test(app));
+}
+
+// ── Batch 255: About Gemlyx, a page of its own, linked from the foot ──
+// Oliver, 16 Oct 2026: About as its own page ("I mean at the end of the page,
+// not the menu"), and "About Gemlyx, I want to stay as little part of it as
+// possible."
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const ab = read("src/components/AboutPage.jsx"), app = read("src/App.jsx"), dny = read("src/components/DealsNearYou.jsx");
+  ok("its own address", /export const ABOUT_PATH = "\/about";/.test(ab) && /<Route path=\{ABOUT_PATH\} element=\{<AboutPage \/>\} \/>/.test(app));
+  ok("linked at the foot of /lithuania, not from the menu", /<a href=\{ABOUT_PATH\} data-testid="deals-foot-about"/.test(dny) && !/ABOUT_PATH/.test(app.slice(app.indexOf("{showMenu && ("), app.indexOf("── PAGER"))));
+  ok("about the app, with no founder on it", !/Oliver|Verhein|Hoffmann|founder|founded by/i.test(stripComments(ab)) && !/Oliver|Verhein|founder/i.test(["about.lead", "about.whatBody", "about.howBody", "about.freeBody", "about.placesBody", "about.made"].map(k => ["en", "da", "de", "lt"].map(l => M.t(k, l)).join(" ")).join(" ")));
+  ok("no ads claim and no partner money terms", !/\bads?\b|advertis|commission|%/i.test(["about.lead", "about.whatBody", "about.howBody", "about.freeBody", "about.placesBody"].map(k => M.t(k, "en")).join(" ")));
+  ok("the redeem button is named by its own label", /say\("about\.howBody"\)\.split\("\{redeem\}"\)/.test(ab) && /\{say\("offer\.redeem"\)\}/.test(ab) && ["en", "da", "de", "lt"].every(l => M.t("about.howBody", l).split("{redeem}").length === 2));
+  ok("the words read in four languages, no dashes, none of his banned words", Object.keys({ "about.link": 1, "about.title": 1, "about.back": 1, "about.lead": 1, "about.whatH": 1, "about.whatBody": 1, "about.howH": 1, "about.howBody": 1, "about.freeH": 1, "about.freeBody": 1, "about.placesH": 1, "about.placesBody": 1, "about.made": 1 }).every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)) && !/ - /.test(M.t(k, l)))) && !/\b(actually|genuine|genuinely|simply|truly)\b/i.test(Object.keys(M).length ? ["about.lead", "about.whatBody", "about.howBody", "about.freeBody", "about.placesBody", "about.made"].map(k => M.t(k, "en")).join(" ") : ""));
+  ok("a way to write, and a way back", /mailto:\$\{ABOUT_EMAIL\}/.test(ab) && /export const ABOUT_EMAIL = "hello@gemlyxtravel\.com";/.test(ab) && /navigate\("\/lithuania"\)/.test(ab));
+}
+
+// ── Batch 256: what a deal may not promote, and the beer bar's new deal ──
+// Oliver, 17 Oct 2026: "make rules for people what they're allowed to
+// promote. Like 'no alcohol promotions' and 'No 18+ promotions' written in
+// red. And obviously it has to be put into terms of use."
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const D = M.DST;
+  const deal = (text, x = {}) => ({ ...D.emptyDeal(), name: "x", lat: 55.7087, lon: 21.1339, ongoing: true, text, ...x });
+  // "alcoholic drinks. Remember. Because you can have non-alcoholic drinks or sodas.."
+  ok("the two rules, as he named them", JSON.stringify(D.DEAL_RULES) === JSON.stringify(["No alcoholic drink promotions", "No 18+ promotions"]) && D.DEAL_RULES_ALLOWED === "Soft drinks and alcohol-free drinks are fine.");
+  ok("and what is allowed is said beside them", /data-testid="deal-studio-rules-allowed"/.test(read("src/components/DealStudio.jsx")) && /data-testid="about-rules-allowed"/.test(read("src/components/AboutPage.jsx")) && ["en", "da", "de", "lt"].every(l => M.t("about.ruleAllowed", l) !== "about.ruleAllowed" && /alcohol|alkohol/i.test(M.t("about.ruleAlcohol", l))));
+  ok("an alcohol deal does not save, in any of the four languages", ["Three beers for the price of one", "Happy hour cocktails 2 for 1", "Free glass of wine with lunch"].every(t => D.dealProblems(deal(t)).some(p => /^No alcoholic drink promotions/.test(p)))
+    && D.dealProblems(deal("x", { lt: "Trys alaus bokalai" })).some(p => /^No alcohol/.test(p)) && D.dealProblems(deal("x", { da: "Gratis øl" })).some(p => /^No alcohol/.test(p)) && D.dealProblems(deal("x", { de: "Ein Glas Wein gratis" })).some(p => /^No alcohol/.test(p)));
+  ok("alcohol free drinks are fine", !D.dealProblems(deal("Alcohol-free beer for €2")).some(p => /^No alcohol/.test(p)));
+  ok("an 18+ deal does not save", ["Shisha lounge 20% off", "Poker night entry free", "Casino chips for €5", "18+ party"].every(t => D.dealProblems(deal(t)).some(p => /^No 18\+ promotions/.test(p))));
+  ok("ordinary words are not caught", ["Polish a raw piece of Baltic amber yourself", "Gintaro dirbtuvė", "Lunch of the day with a glass of kvass, €9", "Time slots for pottery", "Free darts and board games for your table, with any order"].every(t => D.ruleProblems({ text: t }).length === 0));
+  ok("none of the made-up partners breaks a rule", M.KXR.EXAMPLE_PARTNERS.every(p => D.ruleProblems({ text: p.offer.text, lt: p.lt?.offer, da: p.da?.offer, de: p.de?.offer }).length === 0));
+  const beer = M.KXR.EXAMPLE_PARTNERS.find(p => p.key === "beer");
+  ok("the bar's deal is darts and board games now, not beer", beer.name === "Baras Inkaras" && beer.what === "Games bar" && /darts and board games/i.test(beer.offer.text) && !/beer|alus|øl|bier/i.test([beer.offer.text, beer.lt.offer, beer.da.offer, beer.de.offer, beer.idea].join(" ")));
+  const ds = read("src/components/DealStudio.jsx"), ab = read("src/components/AboutPage.jsx");
+  ok("in red in the deal editor and on the About page", /data-testid="deal-studio-rules"/.test(ds) && /color: "#E5484D"/.test(ds.slice(ds.indexOf("deal-studio-rules"))) && /data-testid="about-rules"/.test(ab) && /color: "#E5484D"/.test(ab.slice(ab.indexOf("about-rules"))));
+  const terms = read("public/terms.html");
+  ok("and in the terms, clauses 14.6 and 14.7", /<span class="n">14\.6<\/span> No Special deal shall consist of, include, promote or be conditional upon the purchase of:/.test(terms) && /14\.6\.1<\/span> any alcoholic beverage/.test(terms) && /14\.6\.2<\/span> any product, service or activity which by law may be offered or supplied only to persons who have attained the age of 18 years/.test(terms) && /<span class="n">14\.7<\/span>/.test(terms) && /Version 2\.4, in force from 1 November 2026, was published on 17 October 2026/.test(terms));
+  ok("no dashes in the new terms text", !/[–—]/.test(terms.slice(terms.indexOf("14.6</span>"), terms.indexOf("14.7</span>") + 600)));
+  ok("and breaking one means immediate suspension, said in red and in the terms", /<span class="n">14\.8<\/span> A business which publishes, or seeks to publish, a Special deal in breach of clause 14\.6 or clause 14\.7 shall be suspended from offering Special deals with immediate effect/.test(terms)
+    && D.DEAL_RULES_BREACH === "Breaking either rule means immediate suspension." && /data-testid="deal-studio-rules-breach" style=\{\{[^}]*color: "#E5484D"/.test(ds) && /data-testid="about-rules-breach" style=\{\{[^}]*color: "#E5484D"/.test(ab));
+  ok("the rule words read in four languages", ["about.ruleAlcohol", "about.ruleAdult", "about.ruleBreach", "about.ruleAllowed"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
+}
+
+// ── Batch 257: the Gemlyx code at the counter, and How it works ──
+// Oliver, 17 Oct 2026: "So we obviously need a 'how to use'.. I guess both the
+// business would scan the user's QR code?" Turned round, he said "Sure": the
+// visitor scans a Gemlyx sticker by the till.
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const Q = M.SCAN, S = M.PSTATS, D = M.DST;
+  const codes = Array.from({ length: 200 }, () => Q.newScanCode());
+  ok("a code is eight letters and digits a sticker cannot confuse", codes.every(c => /^[a-hj-km-np-z2-9]{8}$/.test(c)) && new Set(codes).size > 190);
+  is("only a clean code is read", [Q.cleanScanCode(" AbC23xyz "), Q.cleanScanCode("x"), Q.cleanScanCode("abc/../x"), Q.cleanScanCode(null)], ["abc23xyz", "", "", ""]);
+  ok("the sticker holds a plain web address, so an app can open it later", Q.scanUrl("abc23xyz") === "https://gemlyxtravel.com/s/abc23xyz" && Q.scanLanding("abc23xyz") === "/lithuania?scan=abc23xyz" && Q.scanFromSearch("?scan=ABC23XYZ&x=1") === "abc23xyz");
+  const saved = D.payloadFromDeal({ ...D.emptyDeal(), name: "x", lat: 55.7, lon: 21.13, text: "x", ongoing: true });
+  ok("a deal gets its code on its first save, and keeps it", Q.cleanScanCode(saved.__scan) === saved.__scan && D.payloadFromDeal({ ...D.emptyDeal(), name: "x", lat: 55.7, lon: 21.13, text: "x", ongoing: true }, { __scan: "keepthis" }).__scan === "keepthis" && D.dealFromRow({ payload: { __scan: "keepthis" } }).scan === "keepthis");
+  ok("the made-up partners carry demo codes", Object.values(M.KEX.examplePromotionPools()).flat().every(it => /^demo[a-z0-9]+$/.test(it.__scan) && Q.cleanScanCode(it.__scan) === it.__scan));
+  is("a scan is counted as its own kind", S.eventKeys({ e: "scan", id: "food:1" }, 3), ["st:s:food:1"]);
+  ok("and shown on the partner's page", S.statsFrom([{ day: "2026-10-17", key: "st:s:food:1", n: 3 }], "food:1").totals.scanned === 3 && /totals\.scanned, T\.scanned/.test(read("src/pages/KlaipedaPartner.jsx")));
+  const dny = read("src/components/DealsNearYou.jsx"), rs = read("src/components/RedeemSheet.jsx"), app = read("src/App.jsx"), st = read("src/pages/ScanSticker.jsx");
+  ok("a scan opens the place's offer as Redeemed, counted once a day per phone", /setRedeem\(\{ x: live, when: when\?\.text \|\| "", scanned: true, at \}\);/.test(dny) && /if \(live\.id && firstScanToday\(live\.id, day\)\) dealScanned\(live\.id, country\);/.test(dny) && /scanned=\{!!redeem\.scanned\}/.test(dny));
+  ok("an offer not on now says so, and an unknown code says so", /note: uiT\("redeem\.notNow", lang\)/.test(dny) && /setNote\(uiT\("redeem\.unknown", lang\)\)/.test(dny));
+  ok("the Redeemed screen moves, so a picture of it cannot pass", /data-testid="redeem-scanned"/.test(rs) && /className="gx-redeem-sweep"/.test(rs) && /gx-redeem-turn/.test(rs) && /@keyframes gxRedeemSweep/.test(rs));
+  ok("the routes: the sticker's address and the sticker page", /<Route path=\{`\$\{SCAN_PATH\}\/:code`\} element=\{<ScanRedirect \/>\} \/>/.test(app) && /<Route path=\{`\$\{STICKER_PATH\}\/:code`\} element=\{<StickerPage \/>\} \/>/.test(app));
+  ok("the sticker is drawn dark on white, with no markup handed in", /from "qrcode-generator"/.test(st) && !/dangerouslySetInnerHTML/.test(st) && /fill="#FFFFFF"/.test(st) && /<g fill="#111111">/.test(st));
+  ok("Studio prints a sticker for each saved deal", /data-testid="deal-studio-sticker"/.test(read("src/components/DealStudio.jsx")) && /stickerPath\(f\.scan, f\.name\)/.test(read("src/components/DealStudio.jsx")));
+  // One sentence since 17 Oct 2026: "Pick any of the venues with an active offer and scan the QR code at the counter".
+  ok("How it works over the list, closed for good once closed", /data-testid="deals-howto"/.test(dny) && /\["how\.one", "how\.two", "how\.three"\]/.test(dny) && /localStorage\.setItem\(HOW_KEY, "1"\)/.test(dny));
+  ok("the words read in four languages, no dashes", ["redeem.scanHint", "redeem.scanHow", "redeem.done", "redeem.doneAt", "redeem.notNow", "redeem.unknown", "how.title", "how.one", "how.two", "how.three", "how.close"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))) && ["en", "da", "de", "lt"].every(l => M.t("redeem.doneAt", l).includes("{time}")));
+  ok("the library is pinned", JSON.parse(read("package.json")).dependencies["qrcode-generator"] === "1.4.4");
+}
+
+// ── Batch 258: from the centre when the visitor's place is not known ──
+// Oliver, 17 Oct 2026: "It should be from center if the user's own location is
+// not specified. Also, we need it written more professionally. 'Pick any of
+// the venues with an active offer and scan the QR code at the counter' I don't
+// you need to tell people they should walk there.."
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const dny = read("src/components/DealsNearYou.jsx");
+  ok("the centre is the Tourist Information Centre", /const centre = NOW_STARTS\[String\(country \|\| ""\)\.toUpperCase\(\)\]\?\.centre \|\| null;/.test(dny) && M.NP.NOW_STARTS.LT.centre.ship === false);
+  ok("and the list says distances are from there", /\{fromCentre && <div data-testid="deals-from-centre"/.test(dny) && /const fromCentre = !here && !!centreStart;/.test(dny));
+  ok("a phone outside Klaipėda or one that says no stays quiet", !/now\.notHere|explore\.needLocation|now\.noLocation/.test(dny.slice(dny.indexOf("const locate = "), dny.indexOf("const locate = ") + 700)));
+  ok("Show directions without a place walks from the centre", /const fallback = \(\) => \{ if \(centreStart\) startWalk\(x, centreStart\); \};/.test(dny) && /const walkStart = going\?\._from \|\| start;/.test(dny));
+  // Three steps again the same night: "pick a venue", "scan the QR code at
+  // the counter", "show to the cashier" (staff, which every venue has).
+  is("the how-to is his three steps", ["how.one", "how.two", "how.three"].map(k => M.t(k, "en")), ["Pick a venue", "Scan the QR code at the counter", "Show the screen to staff"]);
+  ok("and nothing tells a visitor to walk", !/walk/i.test(["how.one", "how.two", "how.three"].map(k => M.t(k, "en")).join(" ")) && ["explore.centre", "explore.fromCentre", "how.one", "how.two", "how.three"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

@@ -63,11 +63,14 @@ const READY_TIMEOUT_MS = 12000;
 // it. The handle sits in the path on a profile-style permalink and is simply
 // absent from the /p/ and /reel/ forms, which is honest to show as absent.
 export const instagramTarget = (url) => {
-  const clean = String(url || "").trim();
-  const m = /instagram\.com\/(?:([A-Za-z0-9._]+)\/)?(p|reel|reels|tv)\/([A-Za-z0-9_-]+)/i.exec(clean);
+  // Security review, 9 Oct 2026: anchored to the start, so a value that only
+  // CONTAINS instagram.com (javascript:...//instagram.com/p/x) is refused. A
+  // pasted link without its scheme is given https:// first.
+  const clean = String(url || "").trim().replace(/^(?!https?:\/\/)(?=(?:www\.)?instagram\.com\/)/i, "https://");
+  const m = /^https?:\/\/(?:www\.)?instagram\.com\/(?:([A-Za-z0-9._]+)\/)?(p|reel|reels|tv)\/([A-Za-z0-9_-]+)/i.exec(clean);
   if (!m) return null;
   const kind = /^reels?$/i.test(m[2]) ? "reel" : m[2].toLowerCase() === "tv" ? "video" : "post";
-  return { handle: m[1] ? `@${m[1]}` : null, kind, id: m[3] };
+  return { handle: m[1] ? `@${m[1]}` : null, kind, id: m[3], url: clean.replace(/^http:/i, "https:") };
 };
 
 // True only for a link Instagram's embed library can actually render. A profile
@@ -115,6 +118,9 @@ export const InstagramEmbed = ({ url }) => {
   }, [url]);
 
   const target = instagramTarget(url);
+  // Nothing but a checked https Instagram link reaches an href or the embed.
+  if (!target) return null;
+  const safeUrl = target.url;
   const label = target
     ? `${target.handle ? `${target.handle} · ` : ""}${target.kind} on Instagram`
     : "View on Instagram";
@@ -133,13 +139,13 @@ export const InstagramEmbed = ({ url }) => {
             a browser whose blocker refuses instagram.com outright. It should
             therefore say where it goes. Gold rather than muted, because it was
             the least visible thing in a card whose middle is not clickable. */}
-        <a href={url} target="_blank" rel="noreferrer"
+        <a href={safeUrl} target="_blank" rel="noreferrer"
           style={{ marginLeft: "auto", fontSize: 11, fontWeight: 600, color: C.gold, textDecoration: "none", whiteSpace: "nowrap" }}>
           {target?.handle ? `${target.handle} ↗` : "Open on Instagram ↗"}
         </a>
       </div>
       <div style={{ padding: 8, background: C.bg }}>
-        <blockquote className="instagram-media" data-instgrm-permalink={url} data-instgrm-version="14"
+        <blockquote className="instagram-media" data-instgrm-permalink={safeUrl} data-instgrm-version="14"
           style={{ width: "100%", margin: 0, background: C.surface, border: "none", borderRadius: 10, minWidth: 0, overflow: "hidden" }}>
           {/* THE FALLBACK IS THE WHOLE BOX, NOT A LINE OF TEXT INSIDE IT. When
               the embed does not render this is everything the reader gets, and it
@@ -147,7 +153,7 @@ export const InstagramEmbed = ({ url }) => {
               reads as broken rather than as something to press. Instagram
               replaces this entire node the moment process() succeeds, so nothing
               here ever has to coexist with the iframe. */}
-          <a href={url} target="_blank" rel="noreferrer"
+          <a href={safeUrl} target="_blank" rel="noreferrer"
             style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, minHeight: 88, padding: "18px 14px", fontSize: 12.5, fontWeight: 600, color: C.light, textDecoration: "none", textAlign: "center" }}>
             {label} ↗
           </a>

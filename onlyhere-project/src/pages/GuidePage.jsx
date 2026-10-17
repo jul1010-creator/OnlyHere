@@ -59,7 +59,7 @@ import { journeyFromStored, legSteps, worthShowingLegs, journeyAgencies, JOURNEY
 import { dayWeather, weatherIsStale, weatherChanges, weatherNoteNow } from "../utils/weather";
 import { dayWarnings, dayCrossings, tripWeatherWarning } from "../utils/weatherWarn";
 import { askClaude } from "../utils/aiClient";
-import { testTravelerLine, isFerryText, daysUntil, readerView, guideWithoutFiller } from "../utils/helpers";
+import { testTravelerLine, isFerryText, daysUntil, readerView, guideWithoutFiller, externalHref } from "../utils/helpers";
 import { aiDisclosureFor } from "../utils/aiDisclosure";
 import { stopKind, tripScaleLine, tripCharacter, bookingActions, tripDayDate, stopEventWhen, clampNote } from "../utils/guideReading";
 import { bedStateOf, needsABed } from "../utils/nightsOpen";
@@ -2805,7 +2805,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide, now = new Date(
                   {g.how && <div>{g.how}</div>}
                   {g.catch && <div style={{ color: C.text }}><b>The catch:</b> {g.catch}</div>}
                   <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>
-                    {checkedLabel(g)} · <a href={g.source} target="_blank" rel="noreferrer" style={{ color: C.gold, fontWeight: 700, textDecoration: "none" }}>{isOwnSite(g.source, g.name) ? "Their page" : "Where this comes from"} ↗</a>
+                    {checkedLabel(g)} · <a href={externalHref(g.source) || undefined} target="_blank" rel="noreferrer" style={{ color: C.gold, fontWeight: 700, textDecoration: "none" }}>{isOwnSite(g.source, g.name) ? "Their page" : "Where this comes from"} ↗</a>
                   </div>
                 </div>
               );

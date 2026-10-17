@@ -32,9 +32,11 @@ const reducedMotion = () => {
   try { return !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches; } catch { return false; }
 };
 
-export const DealPlaceView = ({ lat, lon, name = "", sign = "📍", photo = "", lang = "en", onDirections = null, onClose = null, height = 260 }) => {
+export const DealPlaceView = ({ lat, lon, name = "", sign = "📍", photo = "", pin = "", lang = "en", onDirections = null, onClose = null, height = 260 }) => {
   const box = useRef(null);
   const [failed, setFailed] = useState(false);
+  // The deal's own pin colour; `pin` inside the effect is the marker element.
+  const pinColor = pin;
   const ok = Number.isFinite(Number(lat)) && Number.isFinite(Number(lon)) && googleMapsReady();
 
   useEffect(() => {
@@ -62,7 +64,7 @@ export const DealPlaceView = ({ lat, lon, name = "", sign = "📍", photo = "", 
         const pin = document.createElement("div");
         pin.setAttribute("data-testid", "place-view-pin");
         pin.style.cssText = `position:relative;width:${PLACE_PIN.w}px;height:${PLACE_PIN.h}px;filter:drop-shadow(0 3px 5px rgba(0,0,0,.45))`;
-        pin.innerHTML = placePinHtml({ sign, photo });
+        pin.innerHTML = placePinHtml({ sign, photo, color: pinColor });
         pin.querySelector("img")?.addEventListener("error", (e) => { try { e.target.remove(); } catch { /* gone */ } });
         new AdvancedMarkerElement({ map, position: { lat: at.lat, lng: at.lon }, content: pin, title: name });
         const put = (cam) => map.moveCamera({ center: { lat: cam.lat, lng: cam.lon }, zoom: cam.zoom, tilt: cam.tilt, heading: cam.heading });
@@ -108,7 +110,7 @@ export const DealPlaceView = ({ lat, lon, name = "", sign = "📍", photo = "", 
       {failed ? (
         <div style={{ fontSize: 12.5, color: C.muted, padding: "10px 0" }}>{uiT("explore.mapFailed", lang)}</div>
       ) : (
-        <div ref={box} aria-label={name} style={{ width: "100%", height, borderRadius: 14, overflow: "hidden", border: `1px solid ${C.gold}55`, background: "#0A0F1E" }} />
+        <div ref={box} aria-label={name} style={{ width: "100%", height, borderRadius: 16, overflow: "hidden", border: `1px solid ${C.border}`, background: C.bg }} />
       )}
       <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
         {onDirections && (

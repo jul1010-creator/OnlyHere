@@ -37,6 +37,11 @@ export const placeClock = (now = new Date(), zone = "") => {
   return { day: now.getDay(), minutes: now.getHours() * 60 + now.getMinutes() };
 };
 
+// The calendar day at the place, "YYYY-MM-DD", or "" where Intl cannot say.
+export const placeDayKey = (now = new Date(), zone = "") => {
+  try { return new Intl.DateTimeFormat("en-CA", { timeZone: zone || undefined, year: "numeric", month: "2-digit", day: "2-digit" }).format(now); } catch { return ""; }
+};
+
 // The window of a cleaned offer ({ days, from, to }), or null for an all
 // day, every day one.
 export const windowOf = (o) => {

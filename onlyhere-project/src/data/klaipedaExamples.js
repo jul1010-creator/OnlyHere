@@ -33,7 +33,7 @@ export const KLAIPEDA_EXAMPLES_PATH = "/lithuania/examples";
 // the ship.. so seperate it."
 export const KLAIPEDA_BUSINESS_PATH = "/lithuania/business";
 
-import { EXAMPLE_PARTNERS, exampleRows, isExamplePartner, UNTIL } from "./klaipedaExampleRows";
+import { EXAMPLE_PARTNERS, exampleRows, isExamplePartner, exampleOffer } from "./klaipedaExampleRows";
 export { EXAMPLE_PARTNERS, exampleRows, isExamplePartner };
 
 // ── FOUR MOMENTS ────────────────────────────────────────────────────
@@ -92,7 +92,7 @@ export const EXAMPLE_WALKS = [
     order: [
       { id: "free:theatre", stay: 15, why: "The square as the Old Town lights come on." },
       { id: "free:ghost", stay: 15, why: "He is at his best after dark." },
-      { id: "food:beer", stay: 60, why: "Three local breweries in one sitting." },
+      { id: "food:beer", stay: 60, why: "Darts and a board game before the music." },
       { id: "booking:jazz", stay: 120, why: "A brick cellar, and the band starts at 20:00." },
     ],
   },
@@ -574,7 +574,7 @@ export const EXAMPLE_PAGES = {
 
   "food:fish": page({
     kind: "food",
-    row: { id: "x-fish", name: "Rūkykla Marios", location: "Žvejų g., Klaipėda", category: "Smokehouse", price: "Lunch €9", emoji: "🐟", __lat: 55.70890, __lon: 21.13120, mapHint: "Žvejų g., Klaipėda", __offer: { ...EXAMPLE_PARTNERS.find(p => p.key === "fish").offer, until: UNTIL } },
+    row: { id: "x-fish", name: "Rūkykla Marios", location: "Žvejų g., Klaipėda", category: "Smokehouse", price: "Lunch €9", emoji: "🐟", __lat: 55.70890, __lon: 21.13120, mapHint: "Žvejų g., Klaipėda", __offer: exampleOffer(EXAMPLE_PARTNERS.find(p => p.key === "fish")) },
     en: {
       ...fromGuide("fish", "en"),
       tip: "Ask what came in that morning.",
@@ -870,7 +870,7 @@ const PARTNER_PAGE = {
   bakery: { kind: "food", emoji: "🥐", category: "Bakery café", price: "Pastries from €2", desc: "A small bakery café round the corner from the tourist centre. Rye bread, cinnamon buns and filter coffee.", tip: "The afternoon is quiet, which is when the refill runs." },
   amber: { kind: "shop", emoji: "🟠", desc: "A workshop where Baltic amber is cut and polished by hand. Visitors can try it at the bench.", tip: "" },
   tea: { kind: "food", emoji: "🫖", category: "Tea room", price: "Tea from €3", desc: "A tea room with low tables and a long list of herbal teas.", tip: "Weekend mornings are the quiet ones." },
-  beer: { kind: "nightlife", emoji: "🍺", category: "Beer bar", priceNote: "Beer from €4", crowd: "Locals after work, visitors later", desc: "Lithuanian beer on tap from small breweries around the country." },
+  beer: { kind: "nightlife", emoji: "🎯", category: "Games bar", priceNote: "Snacks from €3", crowd: "Locals after work, visitors later", desc: "Darts, board games and long tables, where locals meet after work." },
   post: { kind: "shop", emoji: "✉️", desc: "Postcards of Klaipėda old and new, and a table to write them at." },
   jazz: { kind: "nightlife", emoji: "🎷", category: "Jazz cellar", priceNote: "Cover €8 after 21:00", crowd: "Mixed, quiet until the band starts", desc: "A brick cellar with live jazz from Wednesday to Saturday." },
   bike: { kind: "shop", emoji: "🚲", desc: "Bikes, helmets and locks for the day. A bike can be handed back at the cruise terminal." },
@@ -882,7 +882,7 @@ EXAMPLE_PARTNERS.forEach(p => {
   const { kind, desc, tip, ...rest } = PARTNER_PAGE[p.key];
   EXAMPLE_PAGES[id] = page({
     kind,
-    row: { id: `x-${p.key}`, name: p.name, location: `${p.street}, Klaipėda`, town: "Klaipėda", __lat: p.lat, __lon: p.lon, mapHint: `${p.street}, Klaipėda`, __offer: { ...p.offer, until: UNTIL }, ...rest },
+    row: { id: `x-${p.key}`, name: p.name, location: `${p.street}, Klaipėda`, town: "Klaipėda", __lat: p.lat, __lon: p.lon, mapHint: `${p.street}, Klaipėda`, __offer: exampleOffer(p), ...rest },
     en: { desc, ...(tip ? { tip } : {}), body: [["h", "Being There"], ["p", `${p.what} on ${p.street}${p.street.endsWith(".") ? "" : "."} Made up for this page, like its offer.`]] },
   });
 });
@@ -901,6 +901,36 @@ export const pageFor = (id) => EXAMPLE_PAGES[id] || null;
 // so a card opens the same page the examples page opens.
 // Which list each kind of page opens from, as utils/promotions.js names them.
 const PROMO_SRC = { food: "food", nightlife: "nightlife", shop: "shop", free: "free", craft: "craft" };
+
+// ── EXAMPLE PICTURES ON SOME OF THE DEALS ───────────────────────────
+// Oliver, 16 Oct 2026, of the dark maps on the tiles: "the map will be in a
+// different area when we have actual pictures. Can we have examples of
+// pictures on some? Just examples." So five of the made-up partners carry a
+// photo on their deal: the tile, the banner slide and the top of the deal
+// sheet, with the map moving down the sheet as it will for a real partner.
+// The other four keep the map, so both looks can be shown side by side. The
+// beer bar is one of the four, so no picture of beer goes on the page.
+//
+// Free photos from Unsplash (unsplash.com/license: free to use, no permission
+// needed), loaded from Unsplash's own image server at a size the banner can
+// use as well. Only on the deals: the examples page and the walk keep the
+// partners' signs, as before.
+export const EXAMPLE_DEAL_PHOTO = {
+  // "coffee surrounded by four baked breads"
+  bakery: "https://images.unsplash.com/photo-1515823662972-da6a2e4d3002?auto=format&fit=crop&w=1200&q=65",
+  // "white and brown ceramic teapot on wooden tray"
+  tea: "https://images.unsplash.com/photo-1564890369478-c89ca6d9cde9?auto=format&fit=crop&w=1200&q=65",
+  // "a close up of some very pretty yellow rocks", amber to the eye
+  amber: "https://images.unsplash.com/photo-1686043626878-9e391a70632d?auto=format&fit=crop&w=1200&q=65",
+  // "lined red, blue, and black bicycles on display"
+  bike: "https://images.unsplash.com/photo-1561840884-9dda41ed54e4?auto=format&fit=crop&w=1200&q=65",
+  // "person playing saxophone"
+  jazz: "https://images.unsplash.com/photo-1415201364774-f6f0bb35f28f?auto=format&fit=crop&w=1200&q=65",
+};
+
+// The made-up partners' sticker codes (17 Oct 2026, utils/scanCode.js), so a
+// sticker can be printed and scanned at the pitch: /sticker/demobakery.
+export const exampleScanCode = (key) => `demo${String(key || "").toLowerCase().replace(/[^a-z0-9]/g, "")}`.slice(0, 12);
 export const examplePromotionPools = () => {
   const pools = {};
   EXAMPLE_PARTNERS.forEach(p => {
@@ -910,7 +940,7 @@ export const examplePromotionPools = () => {
     if (!src) return;
     // country, so the offer's hours are read on Klaipėda's clock and not
     // Copenhagen's, an hour behind (found 7 Oct 2026).
-    (pools[src] = pools[src] || []).push({ ...pg.item, country: "LT", _exampleId: id, _kind: pg.kind, ...(p.dealKind ? { __dealKind: p.dealKind } : {}) });
+    (pools[src] = pools[src] || []).push({ ...pg.item, country: "LT", _exampleId: id, _kind: pg.kind, ...(p.dealKind ? { __dealKind: p.dealKind } : {}), ...(p.category ? { __category: p.category } : {}), ...(EXAMPLE_DEAL_PHOTO[p.key] ? { photo: EXAMPLE_DEAL_PHOTO[p.key] } : {}), __scan: exampleScanCode(p.key) });
   });
   return pools;
 };

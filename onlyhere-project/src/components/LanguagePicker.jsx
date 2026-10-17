@@ -87,19 +87,24 @@ export const Flag = ({ code, size = 15 }) => {
 // showing all of it IS the control. A dropdown inside a dropdown would also be
 // the second one on that panel to need opening.
 export const LanguageChoice = ({ lang, onChange, C }) => (
-  <div style={{ display: "flex", gap: 6, padding: "0 12px 10px" }}>
+  // Circles since 16 Oct 2026, from a UI guide Oliver brought: the flag in a
+  // round frame, quiet and grey until it is pointed at or chosen, so four
+  // bright flags do not shout on a dark menu. The chosen one has the gold ring
+  // the theme circles above it have.
+  <div style={{ display: "flex", gap: 4, padding: "2px 8px 12px" }}>
     {UI_LANGUAGES.map(l => {
       const on = l.code === lang;
       return (
-        <button key={l.code} onClick={() => onChange(l.code)} aria-pressed={on} title={l.name}
+        <button key={l.code} className="gx-flag" onClick={() => onChange(l.code)} aria-pressed={on} title={l.name}
           style={{
-            flex: 1, background: "transparent", border: `1px solid ${on ? C.gold : C.border}`,
-            borderRadius: 10, padding: "7px 6px 6px", cursor: "pointer",
+            flex: 1, background: "transparent", border: "none", padding: "6px 2px", cursor: "pointer",
             fontFamily: "'Inter', sans-serif", display: "flex", flexDirection: "column",
-            alignItems: "center", gap: 5,
+            alignItems: "center", gap: 7,
           }}>
-          <Flag code={l.code} size={18} />
-          <span style={{ fontSize: 10.5, fontWeight: 700, color: on ? C.gold : C.muted }}>{l.name}</span>
+          <span className="gx-flag-dot" style={{ width: 30, height: 30, borderRadius: "50%", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", border: `1px solid ${C.border}`, boxShadow: on ? `0 0 0 2px ${C.bg}, 0 0 0 3.5px ${C.gold}` : "none" }}>
+            <Flag code={l.code} size={44} />
+          </span>
+          <span style={{ fontSize: 11, fontWeight: 600, color: on ? C.gold : C.muted }}>{l.name}</span>
         </button>
       );
     })}

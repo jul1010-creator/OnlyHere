@@ -1,5 +1,8 @@
+// Only an http(s) link reaches the href (security review, 9 Oct 2026).
+import { externalHref } from "../utils/helpers";
+
 export const StoreBadge = ({ type, href }) => (
-  <a href={href} target="_blank" rel="noreferrer"
+  <a href={externalHref(href) || undefined} target="_blank" rel="noreferrer"
     style={{ display: "inline-flex", alignItems: "center", gap: 9, background: "#000", border: "1px solid #3a3a3a", borderRadius: 8, padding: "7px 13px", textDecoration: "none" }}>
     {type === "ios" ? (
       <svg width="19" height="22" viewBox="0 0 24 28" fill="#fff"><path d="M19.6 14.7c0-3.2 2.6-4.7 2.7-4.8-1.5-2.2-3.8-2.5-4.6-2.5-2-.2-3.8 1.2-4.8 1.2-1 0-2.5-1.1-4.2-1.1-2.1 0-4.1 1.2-5.2 3.2-2.2 3.8-.6 9.5 1.6 12.6 1.1 1.5 2.3 3.2 4 3.2 1.6-.1 2.2-1 4.1-1 1.9 0 2.5 1 4.2 1 1.7 0 2.8-1.6 3.8-3.1 1.2-1.8 1.7-3.5 1.7-3.6-.1 0-3.3-1.3-3.3-5.1zM16.4 4.9c.9-1.1 1.5-2.5 1.3-4-1.3.1-2.8.9-3.7 1.9-.8 1-1.5 2.5-1.3 3.9 1.4.1 2.8-.7 3.7-1.8z"/></svg>
