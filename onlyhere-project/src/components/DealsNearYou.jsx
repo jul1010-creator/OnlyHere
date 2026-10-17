@@ -654,7 +654,17 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
       {howOpen && (
         <div data-testid="deals-howto" style={{ position: "relative", background: C.surface, border: `1px solid ${C.gold}33`, borderRadius: 16, padding: "14px 44px 14px 16px", margin: "0 0 14px" }}>
           <div style={{ ...eyebrow(), marginBottom: 10 }}>{uiT("how.title", lang)}</div>
-          <p data-testid="deals-howto-body" style={{ margin: 0, fontSize: 14.5, color: C.text, lineHeight: 1.5 }}>{uiT("how.body", lang)}</p>
+          {/* Three steps again, in his words (17 Oct 2026): "pick a venue",
+              "scan the QR code at the counter", "show to the cashier", with
+              staff for cashier, since a café or a workshop has no cashier. */}
+          <ol style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: "10px 18px" }}>
+            {["how.one", "how.two", "how.three"].map((k, i) => (
+              <li key={k} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14, color: C.text, lineHeight: 1.35 }}>
+                <span aria-hidden="true" style={{ width: 26, height: 26, borderRadius: "50%", background: `${C.gold}1F`, color: C.gold, fontFamily: "'Fraunces', serif", fontSize: 14, fontWeight: 600, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{i + 1}</span>
+                {uiT(k, lang)}
+              </li>
+            ))}
+          </ol>
           <button onClick={closeHow} aria-label={uiT("how.close", lang)} data-testid="deals-howto-close"
             style={{ position: "absolute", top: 10, right: 10, width: 28, height: 28, borderRadius: "50%", border: "none", background: "transparent", color: C.muted, fontSize: 14, cursor: "pointer" }}>✕</button>
         </div>
