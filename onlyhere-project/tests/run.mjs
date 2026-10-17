@@ -83857,5 +83857,70 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("the sign-up form asks nothing that only shaped a guide", /\{show === "all" && AI_GUIDES_SHOWN && \(/.test(read("src/components/ProfileQuestions.jsx")) && /show === "all" && moreOpen && AI_GUIDES_SHOWN/.test(read("src/components/ProfileQuestions.jsx")));
 }
 
+// ── Batch 261: no secret key can reach GitHub or the browser ──
+// Oliver, 17 Oct 2026: "I can't keep on changing the fking keys every update.
+// Fix this." The history was checked that day: no secret key value was ever
+// committed. The only key in it is the Supabase anon key, which is public by
+// design (every visitor's browser gets it; row rules guard the data). Long ago
+// the browser read VITE_OPENAI_KEY and VITE_GEMINI_KEY, which put those keys in
+// the public bundle; that code is gone, Gemini is not used at all, and the AI
+// calls now run on the server. So a key needs changing only if one leaks, and
+// this batch is what stops a leak: it fails the build if any secret key shape
+// appears in a tracked file, if a Supabase key other than the anon one does,
+// or if the browser code reads a variable whose name sounds secret. Vite puts
+// every VITE_ variable the code reads into the public JavaScript, so a secret
+// must never be one. The Maps browser key and the Supabase anon key are meant
+// to be public and are not rotated per update.
+{
+  const repoTop = join(root, "..");
+  const SKIP_DIR = new Set(["node_modules", ".git", "dist", ".vercel", "Claude outputs"]);
+  const TEXT = /\.(m?js|jsx|ts|tsx|json|html|css|md|txt|sql|ya?ml|toml|env|example|cjs|svg|xml|sh)$|^\.env|^\.gitignore$|^vercel\.json$/i;
+  const files = [];
+  const walk = (d) => {
+    for (const e of readdirSync(d, { withFileTypes: true })) {
+      if (e.isDirectory()) { if (!SKIP_DIR.has(e.name)) walk(join(d, e.name)); continue; }
+      if (!TEXT.test(e.name)) continue;
+      const f = join(d, e.name);
+      try { if (statSync(f).size < 3_000_000) files.push(f); } catch { /* gone */ }
+    }
+  };
+  walk(repoTop);
+  const SHAPES = [
+    ["an OpenAI key", new RegExp("sk-(proj-)?[A-Za-z0-9_-]{32,}")],
+    ["an Anthropic key", new RegExp("sk-ant-[A-Za-z0-9_-]{20,}")],
+    ["a Google key", new RegExp("AIza[0-9A-Za-z_-]{35}")],
+    ["a Perplexity key", new RegExp("pplx-[A-Za-z0-9]{20,}")],
+    ["a Resend key", new RegExp("\\bre_[A-Za-z0-9]{8,}_[A-Za-z0-9]{16,}")],
+    ["a private key block", new RegExp("-----BEGIN [A-Z ]*PRIVATE KEY-----")],
+  ];
+  const jwtRole = (tok) => { try { return JSON.parse(Buffer.from(tok.split(".")[1], "base64url").toString("utf8")).role || ""; } catch { return "?"; } };
+  const found = [];
+  for (const f of files) {
+    let txt = ""; try { txt = readFileRaw(f, "utf8"); } catch { continue; }
+    const rel = f.slice(repoTop.length + 1);
+    for (const [what, re] of SHAPES) if (re.test(txt)) found.push(`${rel}: ${what}`);
+    for (const tok of txt.match(/eyJhbGciOi[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g) || []) {
+      if (jwtRole(tok) !== "anon") found.push(`${rel}: a Supabase key that is not the anon key`);
+    }
+  }
+  ok(`no secret key in any file that could be pushed (${files.length} read)${found.length ? ": " + [...new Set(found)].join("; ") : ""}`, files.length > 200 && found.length === 0);
+
+  const srcFiles = files.filter(f => f.startsWith(join(root, "src")) || f === join(root, "index.html"));
+  const secretVite = [];
+  for (const f of srcFiles) {
+    const txt = readFileRaw(f, "utf8");
+    for (const m of txt.match(/VITE_[A-Z0-9_]+/g) || []) if (/OPENAI|ANTHROPIC|CLAUDE|GEMINI|PERPLEXITY|SERVICE|SECRET|RESEND|PRIVATE|CRON|TOKEN|PASSWORD/.test(m)) secretVite.push(`${f.slice(root.length)}: ${m}`);
+  }
+  ok(`the browser reads no variable with a secret-sounding name${secretVite.length ? ": " + [...new Set(secretVite)].join("; ") : ""}`, secretVite.length === 0);
+  const envRead = new Set();
+  for (const f of srcFiles) for (const m of readFileRaw(f, "utf8").match(/import\.meta\.env\.VITE_[A-Z0-9_]+/g) || []) envRead.add(m.slice("import.meta.env.".length));
+  ok(`the browser reads only the public variables (${[...envRead].sort().join(", ")})`, [...envRead].every(v => ["VITE_FOUNDER_IDS", "VITE_GOOGLE_MAP_ID", "VITE_GOOGLE_MAPS_BROWSER_KEY", "VITE_SUPABASE_URL", "VITE_SUPABASE_ANON_KEY"].includes(v)));
+  // The scan itself is checked: each shape it looks for is caught when present.
+  const fakeOpenAi = "sk-" + "proj-" + "x".repeat(40), fakeGoogle = "AI" + "za" + "Q".repeat(35);
+  ok("the key scan would catch an OpenAI or Google key", SHAPES[0][1].test(`k = "${fakeOpenAi}"`) && SHAPES[2][1].test(fakeGoogle));
+  const fakeJwt = (role) => ["eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9", Buffer.from(JSON.stringify({ role })).toString("base64url"), "sig"].join(".");
+  ok("the key scan tells the anon key from the service key", jwtRole(fakeJwt("anon")) === "anon" && jwtRole(fakeJwt("service_role")) === "service_role");
+}
+
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
 if (failed) { fails.forEach(f => console.log("  FAIL " + f + "\n")); process.exit(1); }
