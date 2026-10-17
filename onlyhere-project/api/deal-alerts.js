@@ -50,9 +50,12 @@ const header = (headers, k) => {
 // Vercel sends Authorization: Bearer <CRON_SECRET> when the variable is set.
 // Compared in constant time, over two hashes of equal length, so neither the
 // secret nor its length can be read off the timing. No secret, no run.
+// A secret under 16 characters is refused as if there were none (security
+// review, 17 Oct 2026): a short one can be guessed.
+export const CRON_SECRET_MIN = 16;
 export const cronAllowed = (headers, secret) => {
   const want = String(secret || "");
-  if (!want) return false;
+  if (want.length < CRON_SECRET_MIN) return false;
   const a = createHash("sha256").update(header(headers, "authorization")).digest();
   const b = createHash("sha256").update(`Bearer ${want}`).digest();
   return timingSafeEqual(a, b);
@@ -310,9 +313,11 @@ export default async function handler(req, res) {
   }
 
   if (req.method === "GET") {
-    if (!env.CRON_SECRET) return res.status(503).json({ error: "Not set up yet." });
+    // One 401 for every refused caller, set up or not, so the answer never says
+    // which keys exist (security review, 17 Oct 2026). Only the cron, which
+    // holds the secret, learns that a key is missing.
     if (!cronAllowed(req.headers, env.CRON_SECRET)) return res.status(401).json({ error: "Not allowed." });
-    if (!ctx.serviceKey || !ctx.resendKey) return res.status(503).json({ error: "Not set up yet." });
+    if (!ctx.serviceKey || !ctx.resendKey) { console.error("deal-alerts: a key is not set"); return res.status(503).json({ error: "Not set up yet." }); }
     try {
       const now = new Date();
       const run = newRun();
@@ -331,7 +336,9 @@ export default async function handler(req, res) {
     if (!requestIsFromSite(req.headers)) {
       return res.status(403).json({ error: NOT_FROM_SITE });
     }
-    if (!ctx.serviceKey || !ctx.resendKey) return res.status(503).json({ error: "Not set up yet." });
+    // The sign-in check needs the service key, so a missing key answers as a
+    // refusal does, and the reason goes to the server log only (17 Oct 2026).
+    if (!ctx.serviceKey || !ctx.resendKey) { console.error("deal-alerts studio: a key is not set"); return res.status(401).json({ error: "Not allowed." }); }
     const who = await resolveUser(req.headers, { supabaseUrl: ctx.supabaseUrl, serviceKey: ctx.serviceKey });
     if (!who.ok) return res.status(who.status).json({ error: who.error });
     if (!isFounder(who.userId, env.GEMLYX_FOUNDER_IDS)) return res.status(403).json({ error: "Only Studio can send deal alerts." });

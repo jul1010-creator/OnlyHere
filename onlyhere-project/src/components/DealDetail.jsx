@@ -37,7 +37,15 @@ export const DealDetail = ({
     return () => clearTimeout(t);
   }, [startOnMap]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    const esc = (e) => { if (e.key === "Escape") onClose?.(); };
+    // Not while the Redeem sheet is open above it: that one closes first, so
+    // one Escape is one step back (Fable's review, 17 Oct 2026).
+    const esc = (e) => {
+      if (e.key !== "Escape") return;
+      let level = 0;
+      try { level = Number(window.history.state?.gxSheet) || 0; } catch { /* none */ }
+      if (level > 1) return;
+      onClose?.();
+    };
     window.addEventListener("keydown", esc);
     return () => window.removeEventListener("keydown", esc);
   }, [onClose]);

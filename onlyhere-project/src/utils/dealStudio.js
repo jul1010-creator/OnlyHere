@@ -88,8 +88,8 @@ export const DEAL_RULES_ALLOWED = "Soft drinks and alcohol-free drinks are fine.
 // Oliver, same night: "It also needs to be clear that doing any of these
 // promotions will lead to a immediate suspension." Terms clause 14.8.
 export const DEAL_RULES_BREACH = "Breaking either rule means immediate suspension.";
-const ALCOHOL = /(?:^|[^\p{L}])(beers?|lagers?|ales?|stouts?|ipa|ciders?|wines?|prosecco|champagne|cocktails?|vodka|gin|rum|whisk(?:e)?y|brandy|cognac|liqueurs?|tequila|mead|spritz|aperol|mojitos?|happy hour|alus|alaus|vynas|vyno|degtinė|degtinės|kokteili\p{L}*|sidras|midus|øl|vin|vinen|snaps|bier|biere|wein|sekt|schnaps)(?![\p{L}])/iu;
-const ALCOHOL_FREE = /(alcohol[ -]?free|non[ -]?alcoholic|0[.,]0\s*%?|nealkoholin\p{L}*|be alkoholio|alkoholfri\p{L}*|alkoholfrei\p{L}*)/iu;
+const ALCOHOL = /(?:^|[^\p{L}])(beers?|lagers?|ales?|stouts?|ipa|ciders?|wines?|prosecco|champagne|cocktails?|vodka|gin|whisk(?:e)?y|brandy|cognac|liqueurs?|tequila|mead|spritz|aperol|mojitos?|happy hour|alus|alaus|vynas|vyno|degtinė|degtinės|kokteili\p{L}*|sidras|midus|øl|vin|vinen|snaps|bier|biere|wein|sekt|schnaps)(?![\p{L}])/iu;
+const ALCOHOL_FREE = /(alcohol[ -]?free|non[ -]?alcoholic|(?:^|[^\d])0[.,]0\s*%|nealkoholin\p{L}*|be alkoholio|alkoholfri\p{L}*|alkoholfrei\p{L}*)/iu;
 const ADULT = /(?:^|[^\p{L}\d])(18\+|tobacco|cigarettes?|cigars?|vape|vapes|vaping|e-?cig\p{L}*|hookah|shisha|casino|gambling|betting|poker|erotic|strip ?club|adults? only|tabak\p{L}*|cigaret\p{L}*|kaljan\p{L}*|lošim\p{L}*|kazino|glücksspiel|spillested)(?![\p{L}])/iu;
 const offerWords = (f) => [f?.text, f?.lt, f?.da, f?.de].map(v => String(v || "")).join(" \n ");
 export const promotesAlcohol = (f) => { const w = offerWords(f); return ALCOHOL.test(w) && !ALCOHOL_FREE.test(w); };

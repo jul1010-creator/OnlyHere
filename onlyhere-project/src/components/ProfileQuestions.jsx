@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { C } from "../utils/theme";
+import { AI_GUIDES_SHOWN } from "../utils/features";
 import { BORN_DATE_MIN, BORN_DATE_MAX, cleanBornDate, SEX_OPTIONS, COMPANY, PACE, INTERESTS, TRANSPORT, TRAVEL_STYLE, TRAVEL_STYLE_MIX, COUNTRIES, DESCRIPTION_MAX, REQUIRED_PROFILE } from "../utils/profile";
 
 // ── THE QUESTIONS, IN ONE PLACE ──────────────────────────────────────
@@ -209,7 +210,9 @@ export const ProfileQuestions = ({ value, onChange, required = false, showGaps =
           finetuning." Same bordered gold button, same chevron, same rule his dad
           taught this codebase once already: a borderless text row reads as a
           heading rather than something you can press. */}
-      {show === "all" && (
+      {/* Out of sight with the AI guides (utils/features.js, 17 Oct 2026):
+          these answers only ever shaped a guide. */}
+      {show === "all" && AI_GUIDES_SHOWN && (
       <button onClick={() => setMoreOpen(o => !o)}
         style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", background: moreOpen ? `${C.gold}14` : C.bg, border: `1px solid ${C.gold}55`, borderRadius: 10, padding: "12px 14px", marginBottom: moreOpen ? 16 : 4, cursor: "pointer", fontFamily: "'Inter', sans-serif", textAlign: "left" }}>
         <span style={{ fontSize: 13, fontWeight: 700, color: C.gold }}>✦ Optional: about yourself</span>
@@ -218,7 +221,7 @@ export const ProfileQuestions = ({ value, onChange, required = false, showGaps =
       </button>
       )}
 
-      {(show === "travel" || (show === "all" && moreOpen)) && (<div>
+      {(show === "travel" || (show === "all" && moreOpen && AI_GUIDES_SHOWN)) && (<div>
         {groupMany("Interests", "", INTERESTS, "interests")}
         {groupMany("Preferred transport", "", TRANSPORT, "transport")}
         {groupMany("Preferred travelling", "", TRAVEL_STYLE, "style")}

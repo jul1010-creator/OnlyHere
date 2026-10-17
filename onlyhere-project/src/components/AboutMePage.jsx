@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { noticeWhen } from "../utils/nearbyNotices";
+import { AI_GUIDES_SHOWN } from "../utils/features";
 import { C } from "../utils/theme";
 import { EMPTY_PROFILE, cleanProfile, cleanLearned, isBlank, saveProfile, SETUP_SQL, OBSERVED_FIELDS, knownAboutTraveller, REPLY_LENGTHS } from "../utils/profile";
 import { settledObservations, learnedIsEmpty, OBSERVED_MIN } from "../utils/profileLearning";
@@ -126,11 +127,16 @@ export const ME_SECTIONS = [
   { id: "plan", label: "Plan", blurb: "What your account includes." },
   { id: "legal", label: "Legal", blurb: "Terms of Service and Privacy Policy." },
 ];
+// The sections about guides, out of sight while utils/features.js says so
+// (17 Oct 2026): Saved trips, About me (what guides are built from), Plan
+// (the paid guide tier).
+export const GUIDE_SECTIONS = ["trips", "about", "plan"];
+export const SHOWN_ME_SECTIONS = ME_SECTIONS.filter(s => AI_GUIDES_SHOWN || !GUIDE_SECTIONS.includes(s.id));
 export const DEFAULT_ME_SECTION = "general";
 // An unknown id in the address is not a section. Falls back rather than
 // rendering an empty shell, because /me/nonsense is a link somebody can type.
 export const meSectionFor = (id) =>
-  ME_SECTIONS.some(s => s.id === id) ? id : DEFAULT_ME_SECTION;
+  SHOWN_ME_SECTIONS.some(s => s.id === id) ? id : DEFAULT_ME_SECTION;
 
 export const NOTICED_LABEL = {
   interests: "Interests",
@@ -839,7 +845,7 @@ export const AboutMePage = ({
              it, before anything is opened. His father is the accessibility test
              for this product and a name alone on a row is a guess. */
           <div>
-            {ME_SECTIONS.map(sec => (
+            {SHOWN_ME_SECTIONS.map(sec => (
               <button key={sec.id} onClick={() => onSection?.(sec.id)}
                 style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", textAlign: "left", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "16px 16px", cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 10 }}>
                 <div style={{ flex: "1 1 auto", minWidth: 0 }}>
@@ -854,7 +860,7 @@ export const AboutMePage = ({
           <div style={{ display: "flex", alignItems: "flex-start", gap: wide ? 24 : 0 }}>
             {wide && (
               <nav style={{ flex: "0 0 216px", width: 216, position: "sticky", top: 26 }}>
-                {ME_SECTIONS.map(railItem)}
+                {SHOWN_ME_SECTIONS.map(railItem)}
               </nav>
             )}
             <div style={{ flex: "1 1 auto", minWidth: 0 }}>

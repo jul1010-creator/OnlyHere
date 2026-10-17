@@ -105,7 +105,7 @@ export const distanceWords = (m, lang = "en") => {
   const n = m == null || m === "" ? NaN : Number(m);
   if (!Number.isFinite(n) || n < 0) return "";
   const r = Math.round(n / 10) * 10;
-  if (r < 1000) return `${Math.max(10, r)} m`;
+  if (r < 1000) return `${r} m`;
   const tenths = Math.round(n / 100) / 10;
   const km = tenths < 10 ? tenths.toFixed(1) : String(Math.round(n / 1000));
   return `${lang === "en" ? km : km.replace(".", ",")} km`;

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 // The questions themselves live in one place, shared with ProfileSheet.
 import { ProfileQuestions } from "./ProfileQuestions";
+import { AI_GUIDES_SHOWN } from "../utils/features";
 import { EMPTY_PROFILE, saveProfile, holdProfile, signupCarry, missingRequired, REQUIRED_LABEL, underMinimumAge, MIN_ACCOUNT_AGE, TERMS_VERSION } from "../utils/profile";
 import { C } from "../utils/theme";
 import { t as uiT, DEFAULT_UI_LANGUAGE } from "../utils/uiLanguage";
@@ -621,8 +622,10 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
               ? <>{uiT("auth.whyReview", lang)}</>
               : reason === "plan" ? <>{uiT("auth.whyPlan", lang)}</>
               : reason === "deal" ? <>{uiT("auth.whyDeal", lang)}</>
-              : <>{uiT("auth.whyDefault", lang)}</>}
-          {localSaveCount > 0 && (
+              : <>{uiT(AI_GUIDES_SHOWN ? "auth.whyDefault" : "auth.whyNoGuides", lang)}</>}
+          {/* No count of saved things while the guides are out of sight
+              (utils/features.js, 17 Oct 2026). */}
+          {AI_GUIDES_SHOWN && localSaveCount > 0 && (
             <span style={{ color: C.gold }}> {localSaveCount} {uiT(localSaveCount === 1 ? "auth.savedOne" : "auth.savedMany", lang)}</span>
           )}
         </div>
@@ -823,7 +826,7 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
             His rule for entries applied to his own product: never let the
             promise turn out to have been smaller than it sounded. A free
             account keeps the guide. It does not keep the guide CURRENT. */}
-        {mode !== "newpass" && <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.border}`, fontSize: 11, color: C.muted, lineHeight: 1.6 }}>
+        {AI_GUIDES_SHOWN && mode !== "newpass" && <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.border}`, fontSize: 11, color: C.muted, lineHeight: 1.6 }}>
           {uiT("auth.freeAccount", lang)}
         </div>}
 
@@ -838,7 +841,7 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
             Anything added to what an account holds gets added here in the same
             change, and to public/privacy.html on the same day. */}
         <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.55, marginTop: 12 }}>
-          {uiT("auth.storeLead", lang)} <a href="/privacy.html" target="_blank" rel="noopener noreferrer" style={{ color: C.muted, textDecoration: "underline" }}>{uiT("auth.privacy", lang)}</a> {uiT("auth.storeTail", lang)}
+          {uiT(AI_GUIDES_SHOWN ? "auth.storeLead" : "auth.storeLeadNoGuides", lang)} <a href="/privacy.html" target="_blank" rel="noopener noreferrer" style={{ color: C.muted, textDecoration: "underline" }}>{uiT("auth.privacy", lang)}</a> {uiT("auth.storeTail", lang)}
         </div>
         </>)}
       </div>

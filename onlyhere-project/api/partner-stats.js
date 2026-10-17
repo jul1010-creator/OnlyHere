@@ -30,6 +30,10 @@ export const PER_PLACE_WALKS = 12;
 export const PER_PLACE_REACH = 3;
 // Opening an offer to show at the counter: a family of four, twice.
 export const PER_PLACE_REDEEM = 8;
+// A scan of the Gemlyx code at the counter (17 Oct 2026) on its own key, and
+// few a day from one network: a till is visited, not refreshed (Fable's
+// review, 17 Oct 2026, found it falling into the walks budget).
+export const PER_PLACE_SCAN = 4;
 const COUNTED = 1e9;
 
 // ── ONLY PLACES THAT HAVE A PARTNER LINK ARE COUNTED ────────────────
@@ -154,7 +158,7 @@ export default async function handler(req, res) {
   // Each kind of event on its own per-place key (Fable's review, 14 Oct 2026):
   // with one shared key, a hotel wifi that opened Explore a dozen times had
   // spent the place's budget, and every later Redeem from it went uncounted.
-  const PER_PLACE = { reach: ["r", PER_PLACE_REACH], redeem: ["x", PER_PLACE_REDEEM], deals: ["d", PER_PLACE_WALKS] };
+  const PER_PLACE = { reach: ["r", PER_PLACE_REACH], redeem: ["x", PER_PLACE_REDEEM], deals: ["d", PER_PLACE_WALKS], scan: ["s", PER_PLACE_SCAN] };
   const [tag, cap] = PER_PLACE[body.e] || ["w", PER_PLACE_WALKS];
   const perPlace = [...new Set(keys.map(idOfStatKey))].map(id => ({ key: `${net}:${tag}:${id}`, limit: cap }));
   const took = await takeDaily({

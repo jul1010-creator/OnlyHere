@@ -16,9 +16,10 @@
 //   x   a visitor opened the offer with "Redeem offer" to show at the
 //       counter (13 Oct 2026). What the visitor did, not proof the counter
 //       took it: nothing on the screen can know that.
-//   s   a visitor scanned the Gemlyx code at the place's counter (17 Oct
-//       2026, utils/scanCode.js). The closest thing to proof there is: the
-//       sticker is at the till. Once per place per phone per day.
+//   s   a visitor opened the address on the Gemlyx sticker at the place's
+//       counter (17 Oct 2026, utils/scanCode.js). Once per place per phone
+//       per day, and a few per network. The address is not secret, so this
+//       is approximate like the rest, not proof of a visit.
 //
 // No account, no browser identifier and nothing about the visitor goes in.
 // The counts live in the same daily counter table as the guide limits, so they

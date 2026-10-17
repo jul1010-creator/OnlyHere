@@ -90,8 +90,11 @@ export default async function handler(req, res) {
   const to = asked[0];
 
   try {
+    // A time limit, so a slow provider cannot hold every call until Vercel
+    // stops it (security review, 17 Oct 2026).
     const r = await fetch(`https://api.frankfurter.dev/v1/latest?base=DKK&symbols=${asked.join(",")}`, {
       headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(5000),
     });
     if (!r.ok) {
       // Named rather than swallowed, so a rate that stops arriving is visible in
@@ -117,6 +120,9 @@ export default async function handler(req, res) {
       return res.status(502).json({ error: "No rate available just now." });
     }
     const first = rates[0];
+    // The ECB rate moves once a working day, so the CDN answers repeats for an
+    // hour instead of the function (17 Oct 2026).
+    res.setHeader("Cache-Control", "public, s-maxage=3600, stale-while-revalidate=600");
     return res.status(200).json({
       base: "DKK",
       baseAmount: BASE_AMOUNT,

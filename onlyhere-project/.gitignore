@@ -31,3 +31,9 @@ node_modules/.gx-render/
 # committed. Re-download from rejseplanen.info/labs/GTFS.zip when that extract
 # needs refreshing, which is about once a year for the question it answers.
 GTFS/
+
+# Git bundles and the dated Claude output folders hold unreleased work and
+# private hand-off notes (security review, 17 Oct 2026). Files already
+# committed there stay tracked; nothing new goes in.
+*.bundle
+Claude outputs/

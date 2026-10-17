@@ -16893,7 +16893,8 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // is asserted gone through stripComments, which is the only scan that can
   // see the difference between a string and the comment quoting it.
   ok("it says what is actually stored",
-     /uiT\("auth\.storeLead", lang\)/.test(asheet)
+     // Chosen by utils/features.js since 17 Oct 2026 (batch 259).
+     /uiT\(AI_GUIDES_SHOWN \? "auth\.storeLead" : "auth\.storeLeadNoGuides", lang\)/.test(asheet)
      && /We store your email, what you fill in here, and your saved list/.test(M.UI_STRINGS["auth.storeLead"].en));
   // In every language, because this is the sentence that says what is kept
   // about somebody, and a reader who cannot read it has not been told.
@@ -18559,7 +18560,8 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   }
 
   // ── AN ADDRESS SOMEBODY CAN TYPE IS AN ADDRESS SOMEBODY CAN GET WRONG
-  is("a real section is itself", meSectionFor("plan"), "plan");
+  // "plan" waits out of sight with the AI guides since 17 Oct 2026 (batch 259).
+  is("a real section is itself", meSectionFor("legal"), "legal");
   is("an unknown one falls back", meSectionFor("nonsense"), DEFAULT_ME_SECTION);
   is("and so does nothing at all", meSectionFor(undefined), DEFAULT_ME_SECTION);
   is("the fallback is a real section", sections.some(x => x.id === DEFAULT_ME_SECTION), true);
@@ -49832,7 +49834,8 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
       ok("and names the regulation the report route answers to", /2022\/2065/.test(policy));
       ok("and states a legal basis for it", /Answering a message sent through the contact page/.test(policy));
       ok("and how long a message is kept", /Messages sent through the contact page/.test(policy));
-      ok("and the version moved when the notice did", /Version 2\.4 · In force from/.test(policy) && /What changed in version 2\.4/.test(policy) && /Version 2\.3\./.test(policy));
+      // Version 2.5 since 17 Oct 2026 (Google Maps and Unsplash named, batch 259).
+      ok("and the version moved when the notice did", /Version 2\.5 · In force from/.test(policy) && /What changed in version 2\.5/.test(policy) && /What changed in version 2\.4/.test(policy) && /Version 2\.3\./.test(policy));
       // The one promise the form itself makes, checked against the notice
       // rather than assumed: the page tells the reader it is not recording
       // where they came from, so the notice must not describe one either.
@@ -82908,7 +82911,8 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("made when the card first comes near the screen, then kept", /new IntersectionObserver\(/.test(cm) && /\{ seen\.disconnect\(\); setNear\(true\); \}/.test(cm) && /made\.current = true;/.test(cm));
   // Batch 237: Google's picture first, the live map only if the key refuses it.
   ok("a Static Maps picture first, never saved into the site", /maps\/api\/staticmap\?center=/.test(cm) && /&scale=2&\$\{staticStyleParams\(\)\}&key=/.test(cm) && /\{near && !live && \(/.test(cm));
-  ok("and the live map only when Google refuses, asked once a visit", /onError=\{\(\) => \{ staticRefused = true; setLive\(true\); \}\}/.test(cm) && /useState\(staticRefused\)/.test(cm) && /if \(!ok \|\| !near \|\| !live \|\| made\.current/.test(cm));
+  ok("and the live map only when Google refuses, asked once a visit", /onError=\{\(\) => \{ staticRefused = true; setLive\(true\); \}\}/.test(cm) && /useState\(staticRefused\)/.test(cm) && /if \(!ok \|\| !near \|\| !live \|\| !LIVE_FALLBACK \|\| made\.current/.test(cm));
+  // Since 17 Oct 2026 the live map waits behind LIVE_FALLBACK, off: a refused picture shows the sign (batch 259).
   ok("no key, no map, rather than a worse one", /googleMapsReady\(\)/.test(cm) && /if \(!ok\) return null;/.test(cm));
   ok("every deal with a place gets one, and tapping it walks there", /<DealCornerMap fill ratio=\{ratio\} radius=\{radius\} lat=\{at\.lat\} lon=\{at\.lon\} name=\{name\}/.test(read("src/components/DealCard.jsx")) && /onOpen=\{\(\) => \{ pushSheet\(1\); setAtMap\(false\); setOpened\(key\); \}\}/.test(dny) && /onTap=\{\(\) => setAbove\(true\)\}/.test(read("src/components/DealDetail.jsx")));
 }
@@ -83557,7 +83561,9 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("the cron's secret is compared in constant time", /timingSafeEqual\(a, b\)/.test(route) && /createHash\("sha256"\)\.update\(header\(headers, "authorization"\)\)/.test(route));
   ok("and a wrong or missing secret is refused", R.cronAllowed({ authorization: "Bearer right-secret-123" }, "right-secret-123") && !R.cronAllowed({ authorization: "Bearer wrong" }, "right-secret-123") && !R.cronAllowed({}, "right-secret-123") && !R.cronAllowed({ authorization: "Bearer " }, ""));
   ok("POST is the founder's alone, from the site", /if \(!requestIsFromSite\(req\.headers\)\) \{\s*return res\.status\(403\)/.test(route) && /const who = await resolveUser\(req\.headers/.test(route) && /if \(!isFounder\(who\.userId, env\.GEMLYX_FOUNDER_IDS\)\) return res\.status\(403\)/.test(route));
-  ok("a missing key is a 503 before anything is read or sent", /if \(!env\.CRON_SECRET\) return res\.status\(503\)/.test(route) && (route.match(/if \(!ctx\.serviceKey \|\| !ctx\.resendKey\) return res\.status\(503\)/g) || []).length === 2 && /if \(!ctx\.serviceKey\) return answer\(503/.test(route));
+  // Since 17 Oct 2026 (batch 259) a refused caller hears 401 whatever is set up,
+  // and only the cron, holding the secret, learns a key is missing.
+  ok("a missing key stops the run before anything is read or sent", /if \(!cronAllowed\(req\.headers, env\.CRON_SECRET\)\) return res\.status\(401\)/.test(route) && /if \(!ctx\.serviceKey \|\| !ctx\.resendKey\) \{ console\.error\("deal-alerts: a key is not set"\); return res\.status\(503\)/.test(route) && /if \(!ctx\.serviceKey \|\| !ctx\.resendKey\) \{ console\.error\("deal-alerts studio: a key is not set"\); return res\.status\(401\)/.test(route) && /if \(!ctx\.serviceKey\) return answer\(503/.test(route));
   ok("every fetch has a time limit", (route.match(/\bfetch\(/g) || []).length === (route.match(/signal: AbortSignal\.timeout\(/g) || []).length);
   ok("every reply is checked", /if \(!r\.ok\) throw new Failure\(where, r\.status\)/.test(route) && /if \(!r\.ok\) console\.error\("deal-alerts send:", r\.status\)/.test(route));
   const errs = [...route.matchAll(/json\(\{ error: ([^}]+)\}/g)].map(m => m[1].trim());
@@ -83636,7 +83642,7 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
 {
   const read = (f) => readFileSync(join(root, f), "utf8");
   const W = M.DCARD.distanceWords;
-  is("metres to the nearest ten, km with one decimal under ten", [W(4), W(347), W(995), W(1234), W(9960), W(12400)], ["10 m", "350 m", "1.0 km", "1.2 km", "10 km", "12 km"]);
+  is("metres to the nearest ten, km with one decimal under ten", [W(4), W(347), W(995), W(1234), W(9960), W(12400)], ["0 m", "350 m", "1.0 km", "1.2 km", "10 km", "12 km"]);
   is("a decimal comma in Danish, German and Lithuanian", [W(1234, "da"), W(1234, "de"), W(1234, "lt"), W(350, "lt")], ["1,2 km", "1,2 km", "1,2 km", "350 m"]);
   is("nothing for no distance", [W(null), W(undefined), W(-5), W("x")], ["", "", "", ""]);
   const card = read("src/components/DealCard.jsx"), dny = read("src/components/DealsNearYou.jsx"), cm = read("src/components/DealCornerMap.jsx");
@@ -83678,7 +83684,7 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   const body = dny.slice(dny.indexOf("const goFromDeal = (x) => {"), dny.indexOf("const walkStart = going"));
   ok("a tap asks the browser for the phone's place", /navigator\.geolocation\.getCurrentPosition\(/.test(body) && /askForCompass\(\);\s*setFinding\(true\);/.test(body));
   // 17 Oct 2026: outside Klaipėda, a refusal or a miss walks from the centre (batch 258).
-  ok("the deal stays open until the walk can start", /const leave = \(from\) => \{ setFinding\(false\); dropSheets\(\); setOpened\(null\); startWalk\(x, from\); \};/.test(body) && /if \(!inNowArea\(country, at\)\) \{ fallback\(\); return; \}/.test(body));
+  ok("the deal stays open until the walk can start", /const leave = \(from\) => \{ if \(mine !== dirSeq\.current\) return; setFinding\(false\); dropSheets\(\); setOpened\(null\); startWalk\(x, from\); \};/.test(body) && /if \(!inNowArea\(country, at\)\) \{ fallback\(\); return; \}/.test(body));
   ok("a phone already found walks straight away", /if \(here\) \{ leave\(hereAt\(here\)\); return; \}/.test(body));
   ok("a refusal or a miss walks from the centre", /\}, fallback, \{ enableHighAccuracy: true/.test(body) && /if \(centreStart\) leave\(centreStart\); else/.test(body));
   ok("under the buttons, read aloud, brought into sight", /\{dirNote && <div ref=\{dirBox\} role="status" data-testid="deal-detail-dir-note"/.test(det) && /dirBox\.current\.scrollIntoView\(\{ block: "nearest"/.test(det));
@@ -83711,7 +83717,7 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
 {
   const app = readFileSync(join(root, "src/App.jsx"), "utf8");
   ok("off on /lithuania, kept for Denmark", /const MENU_PAGES_SHOWN = PAGE_COUNTRY !== "LT";/.test(app));
-  ok("the Saved trips row and the counts under the name wait behind it", /\{MENU_PAGES_SHOWN && \(<>\s*<button className="gx-menu-row" onClick=\{\(\) => \{ setShowMenu\(false\); readTripChanges\(\);/.test(app) && /\{MENU_PAGES_SHOWN && <div style=\{\{ fontSize: 10\.5, color: C\.muted \}\}>\{savedGuides\.length\} saved/.test(app));
+  ok("the Saved trips row and the counts under the name wait behind it", /\{MENU_PAGES_SHOWN && AI_GUIDES_SHOWN && \(<>\s*<button className="gx-menu-row" onClick=\{\(\) => \{ setShowMenu\(false\); readTripChanges\(\);/.test(app) && /\{MENU_PAGES_SHOWN && AI_GUIDES_SHOWN && <div style=\{\{ fontSize: 10\.5, color: C\.muted \}\}>\{savedGuides\.length\} saved/.test(app));
   ok("and so do the pages", /\{MENU_PAGES_SHOWN && \(<div className="gx-nav-in-menu">/.test(app));
   ok("the code is kept, not deleted", /uiT\("menu\.saved", uiLang\)/.test(app) && /navGroups\.map\(\(g, i\) =>/.test(app));
 }
@@ -83806,6 +83812,49 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   // the counter", "show to the cashier" (staff, which every venue has).
   is("the how-to is his three steps", ["how.one", "how.two", "how.three"].map(k => M.t(k, "en")), ["Pick a venue", "Scan the QR code at the counter", "Show the screen to staff"]);
   ok("and nothing tells a visitor to walk", !/walk/i.test(["how.one", "how.two", "how.three"].map(k => M.t(k, "en")).join(" ")) && ["explore.centre", "explore.fromCentre", "how.one", "how.two", "how.three"].every(k => ["en", "da", "de", "lt"].every(l => M.t(k, l) && M.t(k, l) !== k && !/[–—]/.test(M.t(k, l)))));
+}
+
+// ── Batch 259: the security review of 17 Oct, and the AI guides out of sight ──
+// Oliver, 17 Oct 2026: "Look through the security finds of the night. Anything
+// you want to work on while I go to sleep?" Then: "Find ANYTHING related to
+// our AI guides and remove it. At least temporarily." And the footer: "'about
+// us' stands out. all should be same color."
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const notes = readdirSync(root).filter(f => /^HANDOFF.*\.md$/i.test(f));
+  ok("no hand-off note in the repo carries open security work, keys, bundles or a blacklist", notes.length > 10 && notes.every(f => !/salmonella|Blacklisted:|rotate the (OpenAI|Gemini|Maps)|\.bundle\b|stage-b\d|SECURITY_FIXES_/i.test(read(f))));
+  ok("bundles and the output folders are never committed", ["../.gitignore", ".gitignore"].every(f => /^\*\.bundle$/m.test(read(f)) && /^Claude outputs\/$/m.test(read(f))));
+  const cm = read("src/components/DealCornerMap.jsx");
+  ok("a refused map picture shows the sign, not a live map", /export const LIVE_FALLBACK = false;/.test(cm) && /if \(live && !LIVE_FALLBACK\) \{/.test(cm) && /data-testid="deal-corner-sign"/.test(cm));
+  ok("the Maps key note names both APIs and the quota", /Maps Static API/.test(read("src/utils/googleMapsLoader.js")) && /daily quota/.test(read("src/utils/googleMapsLoader.js")));
+  const da = read("api/deal-alerts.js");
+  ok("a short cron secret is refused", /export const CRON_SECRET_MIN = 16;/.test(da) && /if \(want\.length < CRON_SECRET_MIN\) return false;/.test(da));
+  const fx = read("api/fx.js");
+  ok("the currency lookup has a time limit and a cache", /signal: AbortSignal\.timeout\(5000\)/.test(fx) && /s-maxage=3600/.test(fx));
+  const pv = read("public/privacy.html");
+  ok("the privacy list names Google Maps and Unsplash", /<li><strong>Google Maps<\/strong>, operated by Google, from which the maps and map pictures/.test(pv) && /<li><strong>Unsplash<\/strong>/.test(pv));
+  const mw = read("middleware.js");
+  ok("the sitemap and card reads are capped, a query is redirected, a miss remembered", (mw.match(/&limit=\$\{READ_LIMIT\}/g) || []).length === 2 && /if \(url\.search\) return Response\.redirect\(`\$\{url\.origin\}\/sitemap\.xml`, 301\);/.test(mw) && /if \(missed\(missKey\)\) return null;/.test(mw) && /if \(!found\) rememberMiss\(missKey\);/.test(mw));
+  ok("the AI guides are out of sight, nothing deleted", /export const AI_GUIDES_SHOWN = false;/.test(read("src/utils/features.js")) && /AI_GUIDES_SHOWN && localSaveCount > 0/.test(read("src/components/AuthSheet.jsx")) && /\{AI_GUIDES_SHOWN && mode !== "newpass"/.test(read("src/components/AuthSheet.jsx")));
+  ok("the sign-in sheet says nothing about guides or saving", !/guide|saved/i.test(M.t("auth.whyNoGuides", "en") + M.t("auth.storeLeadNoGuides", "en")) && ["en", "da", "de", "lt"].every(l => M.t("auth.whyNoGuides", l) !== "auth.whyNoGuides" && M.t("auth.storeLeadNoGuides", l) !== "auth.storeLeadNoGuides"));
+  ok("the account page leaves out Saved trips, About me and Plan", /export const GUIDE_SECTIONS = \["trips", "about", "plan"\];/.test(read("src/components/AboutMePage.jsx")) && /\{SHOWN_ME_SECTIONS\.map\(railItem\)\}/.test(read("src/components/AboutMePage.jsx")));
+  ok("no saved guide in the support topics", !/guide/i.test(read("src/utils/support.js").match(/\{ id: "account", label: "[^"]*" \}/)?.[0] || "guide"));
+  ok("the footer links all read alike", /data-testid="deals-foot-about" style=\{\{ color: C\.muted, textDecoration: "none" \}\}/.test(read("src/components/DealsNearYou.jsx")));
+}
+
+// ── Batch 260: Fable's review of 17 Oct, and the sign-up profile out of sight ──
+{
+  const read = (f) => readFileSync(join(root, f), "utf8");
+  const ps = read("api/partner-stats.js"), dny = read("src/components/DealsNearYou.jsx"), D = M.DST;
+  ok("a scan has its own small per-place budget", /export const PER_PLACE_SCAN = 4;/.test(ps) && /scan: \["s", PER_PLACE_SCAN\]/.test(ps));
+  ok("a scan opens the deal under the Redeemed sheet, so Back and Show directions step right", /pushSheet\(1\); setAtMap\(false\); setOpened\(live\.id \|\| live\.d\.name\);\s*pushSheet\(2\);/.test(dny) && /pushSheet\(1\); setAtMap\(false\); setOpened\(`soon:\$\{later\.id \|\| later\.d\.name\}`\);\s*pushSheet\(2\);/.test(dny));
+  ok("a late position for a deal no longer open starts nothing", /const mine = \+\+dirSeq\.current;/.test(dny) && /if \(mine !== dirSeq\.current\) return;/.test(dny) && /useEffect\(\(\) => \{ dirSeq\.current \+= 1; \}, \[opened\]\);/.test(dny));
+  ok("a price with 0,0 in it does not excuse beer", ["2 beers for 10,00 EUR", "Beer at 20.0% off"].every(t => D.ruleProblems({ text: t }).length === 1) && D.ruleProblems({ text: "Alcohol-free beer, 0.0%" }).length === 0);
+  ok("a Danish room is not rum", D.ruleProblems({ text: "A room for 10 people", da: "Et rum til 10 personer" }).length === 0);
+  ok("one Escape is one step back with Redeem open", /if \(level > 1\) return;\s*onClose\?\.\(\);/.test(read("src/components/DealDetail.jsx")));
+  ok("no Saved trips row anywhere while the guides are out of sight", /\{MENU_PAGES_SHOWN && AI_GUIDES_SHOWN && \(<>/.test(read("src/App.jsx")) && /\{MENU_PAGES_SHOWN && AI_GUIDES_SHOWN && <div style=\{\{ fontSize: 10\.5, color: C\.muted \}\}>\{savedGuides\.length\} saved/.test(read("src/App.jsx")));
+  ok("the scan count is described as approximate, not as proof", /not proof somebody stood at the\s*\/\/ till/.test(read("src/utils/scanCode.js")) && /not proof of a visit/.test(read("src/utils/partnerStats.js")));
+  ok("the sign-up form asks nothing that only shaped a guide", /\{show === "all" && AI_GUIDES_SHOWN && \(/.test(read("src/components/ProfileQuestions.jsx")) && /show === "all" && moreOpen && AI_GUIDES_SHOWN/.test(read("src/components/ProfileQuestions.jsx")));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
