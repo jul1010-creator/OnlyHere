@@ -35342,7 +35342,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
         }} />
 
       <AuthSheet open={(authOpen && !userSession) || !!recoverySession} onSignedIn={handleSignedIn}
-        lang={uiLang}
+        lang={uiLang} onLang={changeUiLanguage}
         recoverySession={recoverySession}
         onClose={() => {
           setAuthOpen(false); setAuthReason(null); setRecoverySession(null);
