@@ -11,6 +11,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { C } from "../utils/theme";
+import { stickerPath } from "../utils/scanCode";
 import { SUPABASE_URL } from "../config";
 import { DEAL_PLACE_TYPES, DEAL_FILTERS, DEAL_CATEGORIES, typeForCategory, DAY_SHORT, WEEK_ORDER, isDealRow, emptyDeal, dealFromRow, dealProblems, payloadFromDeal, dealWhenShort, offerOf, OFFER_LANG_NAMES, translationsCurrent, DEAL_RULES, DEAL_RULES_BREACH, DEAL_RULES_ALLOWED } from "../utils/dealStudio";
 import { offerWhen, signFor, nextStart, liveBadge, upcomingBadge } from "./DealsNearYou";
@@ -496,6 +497,9 @@ export const DealStudio = ({ supaFetch, studioFetch, onChanged, upload = null, t
                   <button onClick={() => { setError(""); setEditing(f); }} style={small(false)}>Edit</button>
                   <button onClick={() => flip(row)} style={small(false)}>{row.published ? "Hide" : "Show"}</button>
                   <button onClick={() => partnerLink(row)} style={small(false)}>Partner link</button>
+                  {/* The sticker for the till (17 Oct 2026, utils/scanCode.js).
+                      A deal saved before then gets its code on its next save. */}
+                  <button onClick={() => { try { window.open(stickerPath(f.scan, f.name), "_blank", "noopener"); } catch { /* no window */ } }} disabled={!f.scan} data-testid="deal-studio-sticker" style={{ ...small(false), opacity: f.scan ? 1 : 0.45 }}>{f.scan ? "Sticker" : "Sticker after next save"}</button>
                 </div>
                 {links[row.id] && <div style={{ fontSize: 11.5, color: C.light, marginTop: 6, wordBreak: "break-all", userSelect: "all" }}>{links[row.id]}</div>}
               </div>

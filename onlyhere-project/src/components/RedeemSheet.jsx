@@ -14,6 +14,12 @@
 // as before (WalkMode.jsx). Each opening is counted for the partner's own page
 // as "opened to redeem" (utils/partnerStats.js), which is what a visitor did,
 // not proof the counter accepted it.
+// ── AND SCANNED AT THE COUNTER, 17 OCT 2026 ─────────────────────────
+// With the Gemlyx sticker by the till (utils/scanCode.js), a scan opens this
+// sheet `scanned`: a green Redeemed, the time of the scan, and a band of light
+// sweeping the card while the gold mark turns, so staff can see at a glance
+// it is live and not a picture. Opened from the deal instead, it says to scan
+// the sticker, and keeps the offer card to show where there is no sticker yet.
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { C } from "../utils/theme";
@@ -24,7 +30,7 @@ const clockNow = (zone) => {
   try { return new Intl.DateTimeFormat("en-GB", { timeZone: zone, hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }).format(new Date()); } catch { return ""; }
 };
 
-export const RedeemSheet = ({ name = "", offer = "", when = "", lang = "en", zone = "Europe/Vilnius", onDirections = null, onClose = null }) => {
+export const RedeemSheet = ({ name = "", offer = "", when = "", lang = "en", zone = "Europe/Vilnius", onDirections = null, onClose = null, scanned = false, scannedAt = "", note = "" }) => {
   const [now, setNow] = useState(() => clockNow(zone));
   useEffect(() => { const t = setInterval(() => setNow(clockNow(zone)), 1000); return () => clearInterval(t); }, [zone]);
   // Back closes it, the way a sheet on a phone closes.
@@ -45,10 +51,31 @@ export const RedeemSheet = ({ name = "", offer = "", when = "", lang = "en", zon
     <div role="dialog" aria-label={uiT("offer.redeem", lang)} data-testid="redeem-sheet"
       style={{ position: "fixed", inset: 0, zIndex: 10000, background: C.bg, display: "flex", flexDirection: "column", fontFamily: "'Inter', sans-serif" }}>
       <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "calc(24px + env(safe-area-inset-top, 0px)) 20px 20px", textAlign: "center" }}>
-        <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 1.8, textTransform: "uppercase", color: C.bronze || C.muted, marginBottom: 18 }}>{uiT("redeem.show", lang)}</div>
-        <div style={{ width: "100%", maxWidth: 380, border: `1px solid ${C.gold}66`, borderRadius: 24, background: `linear-gradient(180deg, ${C.gold}14 0%, ${C.surface} 45%)`, padding: "28px 22px 24px", boxSizing: "border-box", boxShadow: "0 24px 60px rgba(0,0,0,0.45)" }}>
+        <style>{`
+          @keyframes gxRedeemSweep { from { transform: translateX(-120%) skewX(-18deg); } to { transform: translateX(320%) skewX(-18deg); } }
+          @keyframes gxRedeemTurn { to { transform: rotate(360deg); } }
+          @keyframes gxRedeemPop { 0% { transform: scale(.6); opacity: 0; } 70% { transform: scale(1.08); opacity: 1; } 100% { transform: scale(1); } }
+          .gx-redeem-sweep { position: absolute; top: 0; bottom: 0; left: 0; width: 34%; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.14), transparent); animation: gxRedeemSweep 2.4s linear infinite; pointer-events: none; }
+          .gx-redeem-turn { animation: gxRedeemTurn 6s linear infinite; display: inline-flex; }
+          .gx-redeem-pop { animation: gxRedeemPop .45s cubic-bezier(.2,.7,.2,1) both; }
+          @media (prefers-reduced-motion: reduce) { .gx-redeem-turn, .gx-redeem-pop { animation: none; } .gx-redeem-sweep { animation-duration: 6s; } }
+        `}</style>
+        {scanned ? (
+          <div data-testid="redeem-scanned" className="gx-redeem-pop" style={{ display: "inline-flex", alignItems: "center", gap: 10, color: "#3DD68C", fontSize: 26, fontWeight: 800, fontFamily: "'Fraunces', serif", marginBottom: 6 }}>
+            <span aria-hidden="true" style={{ width: 34, height: 34, borderRadius: "50%", background: "#3DD68C", color: "#0B1F14", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 20, fontFamily: "'Inter', sans-serif" }}>✓</span>
+            {uiT("redeem.done", lang)}
+          </div>
+        ) : (
+          <div data-testid="redeem-scan-hint" style={{ maxWidth: 380, marginBottom: 18 }}>
+            <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 1.8, textTransform: "uppercase", color: C.bronze || C.muted, marginBottom: 8 }}>{uiT("redeem.scanHint", lang)}</div>
+            <div style={{ fontSize: 13.5, color: C.light, lineHeight: 1.55 }}>{uiT("redeem.scanHow", lang)}</div>
+          </div>
+        )}
+        {scanned && scannedAt && <div data-testid="redeem-scanned-at" style={{ fontSize: 13, color: C.light, marginBottom: 16 }}>{uiT("redeem.doneAt", lang).replace("{time}", scannedAt)}</div>}
+        <div style={{ position: "relative", overflow: "hidden", width: "100%", maxWidth: 380, border: `1px solid ${scanned ? "#3DD68C88" : `${C.gold}66`}`, borderRadius: 24, background: `linear-gradient(180deg, ${scanned ? "#3DD68C1A" : `${C.gold}14`} 0%, ${C.surface} 45%)`, padding: "28px 22px 24px", boxSizing: "border-box", boxShadow: "0 24px 60px rgba(0,0,0,0.45)" }}>
+          {scanned && <span aria-hidden="true" className="gx-redeem-sweep" />}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, marginBottom: 18 }}>
-            <GemlyxMark size={34} />
+            <span className={scanned ? "gx-redeem-turn" : undefined}><GemlyxMark size={34} /></span>
             <GemlyxWordmark height={12} />
           </div>
           <div style={{ fontSize: 28, fontWeight: 500, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.15, letterSpacing: -0.2, overflowWrap: "anywhere" }}>{name}</div>
@@ -57,6 +84,7 @@ export const RedeemSheet = ({ name = "", offer = "", when = "", lang = "en", zon
           <div aria-hidden="true" data-testid="redeem-clock" style={{ marginTop: 20, fontSize: 34, fontWeight: 600, letterSpacing: 3, color: C.text, fontVariantNumeric: "tabular-nums" }}>{now}</div>
           <div style={{ fontSize: 11.5, color: C.muted, marginTop: 4 }}>{uiT("redeem.via", lang)}</div>
         </div>
+        {note && <div data-testid="redeem-note" style={{ maxWidth: 380, marginTop: 16, fontSize: 13.5, color: "#E8A35C", lineHeight: 1.5 }}>{note}</div>}
       </div>
       <div style={{ display: "flex", gap: 10, padding: "12px 16px calc(14px + env(safe-area-inset-bottom, 0px))", borderTop: `1px solid ${C.border}`, background: C.surface }}>
         {onDirections && <button onClick={onDirections} data-testid="redeem-directions" style={btn(true)}>▶ {uiT("explore.directions", lang)}</button>}

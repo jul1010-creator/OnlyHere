@@ -28,7 +28,8 @@ import { offerHoursLabel, offerLive, cleanOffer, offerTextIn } from "../utils/of
 import { NOW_AREAS, inNowArea, walkMinutes, crossesWater, legBetween } from "../utils/nowPlanner";
 import { kmApart, ferryWait } from "../utils/walkable";
 import { cleanBooking, busyAt } from "../utils/dealExtras";
-import { dealsSeen, placeReached, dealRedeemOpened } from "../utils/partnerStats";
+import { dealsSeen, placeReached, dealRedeemOpened, dealScanned } from "../utils/partnerStats";
+import { scanFromSearch, cleanScanCode, firstScanToday } from "../utils/scanCode";
 import { WalkMode, askForCompass } from "./WalkMode";
 import { DealCornerMap } from "./DealCornerMap";
 import { DealPlaceView } from "./DealPlaceView";
@@ -501,6 +502,52 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
       }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
     } catch { setFinding(false); setDirNote(uiT("dir.cannot", lang)); }
   };
+  // ── A SCAN OF THE GEMLYX CODE AT THE COUNTER ──────────────────────
+  // 17 Oct 2026 (utils/scanCode.js). The sticker opens /s/<code>, which lands
+  // here with ?scan=<code>. Once the deals are in, the place's offer opens
+  // marked Redeemed with the time, and the scan is counted once per place per
+  // phone per day. An offer that is not on now opens with its hours and a
+  // line saying so; a code nobody holds says that at the top of the list.
+  const [scanAsked, setScanAsked] = useState(() => (typeof window !== "undefined" ? scanFromSearch(window.location.search) : ""));
+  useEffect(() => {
+    if (!scanAsked || !ready) return;
+    const code = scanAsked;
+    setScanAsked("");
+    try {
+      const u = new URL(window.location.href);
+      u.searchParams.delete("scan");
+      window.history.replaceState(window.history.state, "", `${u.pathname}${u.search}${u.hash}`);
+    } catch { /* the address keeps it, harmlessly */ }
+    const now = new Date();
+    const mine = (x) => cleanScanCode(x?.d?.__scan) === code;
+    const live = all.find(mine);
+    if (live) {
+      let at = "";
+      try { at = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Vilnius", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(now); } catch { /* no clock */ }
+      const when = offerWhen(live.d.__offer, live.card.timing, { now, lang });
+      pushSheet(2);
+      setRedeem({ x: live, when: when?.text || "", scanned: true, at });
+      const day = dayKey(dateIn(now, "Europe/Vilnius")) || "";
+      if (live.id && firstScanToday(live.id, day)) dealScanned(live.id, country);
+      return;
+    }
+    const later = upcomingDeals(deals, null, { now, lang, limit: Infinity, country }).find(mine);
+    if (later) {
+      pushSheet(2);
+      setRedeem({ x: later, when: startsWords(later.next, lang), note: uiT("redeem.notNow", lang) });
+      return;
+    }
+    setNote(uiT("redeem.unknown", lang));
+  }, [scanAsked, ready, all]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── HOW IT WORKS ─────────────────────────────────────────────────
+  // Oliver, 17 Oct 2026: "So we obviously need a 'how to use'". Three steps
+  // over the list until the visitor closes it; closed stays closed on that
+  // phone.
+  const HOW_KEY = "gx.howto.closed";
+  const [howOpen, setHowOpen] = useState(() => { try { return !localStorage.getItem(HOW_KEY); } catch { return true; } });
+  const closeHow = () => { setHowOpen(false); try { localStorage.setItem(HOW_KEY, "1"); } catch { /* shows again next visit */ } };
+
   const walkStart = going?._from ? { id: "here", name: uiT("now.whereYouAre", lang), lat: going._from.lat, lon: going._from.lon, ship: false } : start;
 
   // ── A DEAL ASKED FOR BY AN ALERT OR A MAIL ─────────────────────────
@@ -582,6 +629,21 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
           ))}
         </div>
       </div>
+      {howOpen && (
+        <div data-testid="deals-howto" style={{ position: "relative", background: C.surface, border: `1px solid ${C.gold}33`, borderRadius: 16, padding: "14px 44px 14px 16px", margin: "0 0 14px" }}>
+          <div style={{ ...eyebrow(), marginBottom: 10 }}>{uiT("how.title", lang)}</div>
+          <ol style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: "10px 18px" }}>
+            {["how.one", "how.two", "how.three"].map((k, i) => (
+              <li key={k} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14, color: C.text, lineHeight: 1.35 }}>
+                <span aria-hidden="true" style={{ width: 26, height: 26, borderRadius: "50%", background: `${C.gold}1F`, color: C.gold, fontFamily: "'Fraunces', serif", fontSize: 14, fontWeight: 600, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{i + 1}</span>
+                {uiT(k, lang)}
+              </li>
+            ))}
+          </ol>
+          <button onClick={closeHow} aria-label={uiT("how.close", lang)} data-testid="deals-howto-close"
+            style={{ position: "absolute", top: 10, right: 10, width: 28, height: 28, borderRadius: "50%", border: "none", background: "transparent", color: C.muted, fontSize: 14, cursor: "pointer" }}>✕</button>
+        </div>
+      )}
       {note && <div data-testid="deals-near-note" style={{ fontSize: 12, color: "#FFB347", margin: "0 0 10px" }}>{note}</div>}
       {!ready ? (
         <div data-testid="deals-near-loading" style={{ height: 120 }} />
@@ -683,6 +745,7 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
 
       {redeem && (
         <RedeemSheet name={redeem.x.d.name} offer={offerTextIn(redeem.x.d.__offer, lang)} when={redeem.when} lang={lang}
+          scanned={!!redeem.scanned} scannedAt={redeem.at || ""} note={redeem.note || ""}
           onDirections={redeem.x.at ? () => { const x = redeem.x; dropSheets(); setRedeem(null); setOpened(null); go(x); } : null}
           onClose={() => closeSheet(() => setRedeem(null))} />
       )}
