@@ -928,6 +928,9 @@ export const EXAMPLE_DEAL_PHOTO = {
   jazz: "https://images.unsplash.com/photo-1415201364774-f6f0bb35f28f?auto=format&fit=crop&w=1200&q=65",
 };
 
+// The made-up partners' sticker codes (17 Oct 2026, utils/scanCode.js), so a
+// sticker can be printed and scanned at the pitch: /sticker/demobakery.
+export const exampleScanCode = (key) => `demo${String(key || "").toLowerCase().replace(/[^a-z0-9]/g, "")}`.slice(0, 12);
 export const examplePromotionPools = () => {
   const pools = {};
   EXAMPLE_PARTNERS.forEach(p => {
@@ -937,7 +940,7 @@ export const examplePromotionPools = () => {
     if (!src) return;
     // country, so the offer's hours are read on Klaipėda's clock and not
     // Copenhagen's, an hour behind (found 7 Oct 2026).
-    (pools[src] = pools[src] || []).push({ ...pg.item, country: "LT", _exampleId: id, _kind: pg.kind, ...(p.dealKind ? { __dealKind: p.dealKind } : {}), ...(p.category ? { __category: p.category } : {}), ...(EXAMPLE_DEAL_PHOTO[p.key] ? { photo: EXAMPLE_DEAL_PHOTO[p.key] } : {}) });
+    (pools[src] = pools[src] || []).push({ ...pg.item, country: "LT", _exampleId: id, _kind: pg.kind, ...(p.dealKind ? { __dealKind: p.dealKind } : {}), ...(p.category ? { __category: p.category } : {}), ...(EXAMPLE_DEAL_PHOTO[p.key] ? { photo: EXAMPLE_DEAL_PHOTO[p.key] } : {}), __scan: exampleScanCode(p.key) });
   });
   return pools;
 };
