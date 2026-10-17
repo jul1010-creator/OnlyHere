@@ -15,7 +15,7 @@ export const PARTNER_TEXT = {
     title: "Your place on Gemlyx · Gemlyx",
     eyebrow: "Your numbers",
     lead: "The last 30 days, counted with no names and no accounts.",
-    walks: "walks it was in", deals: "times your offer was shown", reached: "visitors who walked to you", redeemed: "times a visitor opened your offer to redeem it",
+    walks: "walks it was in", deals: "times your offer was shown", reached: "visitors who walked to you", redeemed: "times a visitor opened your offer to redeem it", scanned: "visitors who scanned your Gemlyx code", scannedShort: "scanned",
     busiest: "your busiest hour", hour: "{from} to {to}",
     byDay: "Day by day", walksShort: "walks", dealsShort: "offer shown", reachedShort: "came", redeemedShort: "opened to redeem",
     none: "No walks with your place yet. The numbers fill in as visitors walk.",
@@ -23,13 +23,13 @@ export const PARTNER_TEXT = {
     bad: "This link does not work. Ask Gemlyx for a new one.",
     error: "The numbers could not be loaded just now. Try again in a moment.",
     keep: "Keep this link to yourself: anyone who has it can see these numbers.",
-    foot: "A walk counts when a visitor is shown it with your place in it. A visit counts when their phone says they reached you, or, without GPS, when they move on from your place. An opened offer counts when a visitor taps Redeem offer to show it at your counter. The counts are approximate: they are not checked against a booking or a payment, and a day is a Copenhagen day. Counts are kept for 30 days.",
+    foot: "A walk counts when a visitor is shown it with your place in it. A visit counts when their phone says they reached you, or, without GPS, when they move on from your place. An opened offer counts when a visitor taps Redeem offer to show it at your counter. A scan counts when a visitor scans the Gemlyx code at your counter, once per phone per day. The counts are approximate: they are not checked against a booking or a payment, and a day is a Copenhagen day. Counts are kept for 30 days.",
   },
   lt: {
     title: "Jūsų vieta Gemlyx · Gemlyx",
     eyebrow: "Jūsų skaičiai",
     lead: "Paskutinės 30 dienų, suskaičiuota be vardų ir be paskyrų.",
-    walks: "maršrutų su jūsų vieta", deals: "kartų parodytas jūsų pasiūlymas", reached: "lankytojų atėjo pas jus", redeemed: "kartų lankytojas atidarė jūsų pasiūlymą, kad juo pasinaudotų",
+    walks: "maršrutų su jūsų vieta", deals: "kartų parodytas jūsų pasiūlymas", reached: "lankytojų atėjo pas jus", redeemed: "kartų lankytojas atidarė jūsų pasiūlymą, kad juo pasinaudotų", scanned: "lankytojų nuskaitė jūsų Gemlyx kodą", scannedShort: "nuskaitė",
     busiest: "judriausia jūsų valanda", hour: "nuo {from} iki {to}",
     byDay: "Pagal dienas", walksShort: "maršrutai", dealsShort: "pasiūlymas parodytas", reachedShort: "atėjo", redeemedShort: "atidarė pasinaudoti",
     none: "Maršrutų su jūsų vieta dar nėra. Skaičiai atsiras, kai lankytojai vaikščios.",
@@ -37,7 +37,7 @@ export const PARTNER_TEXT = {
     bad: "Ši nuoroda neveikia. Paprašykite Gemlyx naujos.",
     error: "Šiuo metu skaičių įkelti nepavyko. Pabandykite po akimirkos.",
     keep: "Šią nuorodą laikykite sau: kas ją turi, gali matyti šiuos skaičius.",
-    foot: "Maršrutas skaičiuojamas, kai jis su jūsų vieta parodomas lankytojui. Apsilankymas skaičiuojamas, kai lankytojo telefonas rodo, kad jis pasiekė jūsų vietą, arba, be GPS, kai jis eina toliau. Atidarytas pasiūlymas skaičiuojamas, kai lankytojas paspaudžia „Pasinaudoti pasiūlymu“, kad parodytų jį prie jūsų kasos. Skaičiai apytiksliai: jie netikrinami pagal užsakymą ar mokėjimą, o diena skaičiuojama Kopenhagos laiku. Skaičiai saugomi 30 dienų.",
+    foot: "Maršrutas skaičiuojamas, kai jis su jūsų vieta parodomas lankytojui. Apsilankymas skaičiuojamas, kai lankytojo telefonas rodo, kad jis pasiekė jūsų vietą, arba, be GPS, kai jis eina toliau. Atidarytas pasiūlymas skaičiuojamas, kai lankytojas paspaudžia „Pasinaudoti pasiūlymu“, kad parodytų jį prie jūsų kasos. Nuskaitymas skaičiuojamas, kai lankytojas nuskaito Gemlyx kodą prie jūsų kasos, vieną kartą per dieną viename telefone. Skaičiai apytiksliai: jie netikrinami pagal užsakymą ar mokėjimą, o diena skaičiuojama Kopenhagos laiku. Skaičiai saugomi 30 dienų.",
   },
 };
 
@@ -76,7 +76,7 @@ export const KlaipedaPartner = () => {
 
   const card = { background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px 15px" };
   const d = state.data;
-  const totals = { walks: 0, deals: 0, reached: 0, redeemed: 0, ...(d?.totals || {}) };
+  const totals = { walks: 0, deals: 0, reached: 0, redeemed: 0, scanned: 0, ...(d?.totals || {}) };
   const days = Array.isArray(d?.byDay) ? [...d.byDay].reverse() : [];
 
   return (
@@ -105,7 +105,7 @@ export const KlaipedaPartner = () => {
             <p style={{ fontSize: 14.5, lineHeight: 1.6, color: C.light, margin: "0 0 22px" }}>{T.lead}</p>
 
             <div data-testid="partner-totals" style={{ ...card, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 14, marginBottom: 14 }}>
-              {[[totals.walks, T.walks], [totals.deals, T.deals], [totals.redeemed, T.redeemed], [totals.reached, T.reached]].map(([n, what]) => (
+              {[[totals.scanned, T.scanned], [totals.walks, T.walks], [totals.deals, T.deals], [totals.redeemed, T.redeemed], [totals.reached, T.reached]].map(([n, what]) => (
                 <div key={what}>
                   <div style={{ fontSize: 26, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.gold }}>{n}</div>
                   <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.4 }}>{what}</div>
@@ -120,7 +120,7 @@ export const KlaipedaPartner = () => {
               </div>
             )}
 
-            {totals.walks === 0 && totals.reached === 0 && totals.deals === 0 && totals.redeemed === 0 ? (
+            {totals.walks === 0 && totals.reached === 0 && totals.deals === 0 && totals.redeemed === 0 && totals.scanned === 0 ? (
               <p data-testid="partner-none" style={{ fontSize: 13.5, color: C.light, lineHeight: 1.6, margin: "6px 0 24px" }}>{T.none}</p>
             ) : (
               <div style={{ marginBottom: 24 }}>
@@ -132,6 +132,7 @@ export const KlaipedaPartner = () => {
                       <span style={{ color: C.light }}>{x.walks} {T.walksShort}</span>
                       {x.deals > 0 && <span style={{ color: C.light }}>{x.deals} {T.dealsShort}</span>}
                       {x.redeemed > 0 && <span style={{ color: C.light }}>{x.redeemed} {T.redeemedShort}</span>}
+                      {x.scanned > 0 && <span style={{ color: C.light }}>{x.scanned} {T.scannedShort}</span>}
                       <span style={{ color: C.gold, fontWeight: 700 }}>{x.reached} {T.reachedShort}</span>
                     </div>
                   ))}
