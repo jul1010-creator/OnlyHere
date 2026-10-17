@@ -25,7 +25,7 @@ import { C } from "../utils/theme";
 import { t as uiT } from "../utils/uiLanguage";
 import { promoCard } from "../utils/promotions";
 import { offerHoursLabel, offerLive, cleanOffer, offerTextIn } from "../utils/offer";
-import { NOW_AREAS, inNowArea, walkMinutes, crossesWater, legBetween } from "../utils/nowPlanner";
+import { NOW_AREAS, NOW_STARTS, inNowArea, walkMinutes, crossesWater, legBetween } from "../utils/nowPlanner";
 import { kmApart, ferryWait } from "../utils/walkable";
 import { cleanBooking, busyAt } from "../utils/dealExtras";
 import { dealsSeen, placeReached, dealRedeemOpened, dealScanned } from "../utils/partnerStats";
@@ -420,19 +420,30 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
   const only = useMemo(() => new Set(cat ? [cat] : []), [cat]);
   const [sort, setSort] = useState("az");
   const canLocate = typeof navigator !== "undefined" && !!navigator.geolocation && !!NOW_AREAS[country];
-  // Distance only ever from the visitor (13 Oct 2026). No ship, no centre.
-  const start = here ? { id: "here", name: uiT("now.whereYouAre", lang), lat: here.lat, lon: here.lon, ship: false } : null;
+  // ── FROM THE VISITOR, ELSE FROM THE CENTRE ───────────────────────
+  // Distance was only ever from the visitor (13 Oct 2026). Oliver, 17 Oct
+  // 2026: "It should be from center if the user's own location is not
+  // specified." So without a phone in Klaipėda that has said where it is,
+  // distances, Closest and the walk start at the Tourist Information Centre,
+  // and a line over the list says so. Never from the ship.
+  const centre = NOW_STARTS[String(country || "").toUpperCase()]?.centre || null;
+  const centreStart = centre ? { id: "centre", name: uiT("explore.centre", lang), lat: centre.lat, lon: centre.lon, ship: false } : null;
+  const hereAt = (at) => ({ id: "here", name: uiT("now.whereYouAre", lang), lat: at.lat, lon: at.lon, ship: false });
+  const start = here ? hereAt(here) : centreStart;
+  const fromCentre = !here && !!centreStart;
+  // Quiet either way: a phone outside Klaipėda, or one that says no, keeps
+  // the centre, which the line over the list already names.
   const locate = (then = null) => {
     setNote("");
-    if (!canLocate) { setNote(uiT("now.noLocation", lang)); return; }
+    if (!canLocate) return;
     try {
       navigator.geolocation.getCurrentPosition((p) => {
         const at = { lat: p.coords.latitude, lon: p.coords.longitude };
-        if (!inNowArea(country, at)) { setNote(uiT("now.notHere", lang)); return; }
+        if (!inNowArea(country, at)) return;
         setHere(at);
         if (then) then(at);
-      }, () => { setNote(uiT("explore.needLocation", lang)); setSort("az"); }, { enableHighAccuracy: false, timeout: 10000, maximumAge: 120000 });
-    } catch { setNote(uiT("now.noLocation", lang)); }
+      }, () => {}, { enableHighAccuracy: false, timeout: 10000, maximumAge: 120000 });
+    } catch { /* the centre stands in */ }
   };
   // A phone that has already said yes is not asked again: the list opens on
   // Closest. Anyone else starts A to Z and is asked only when they tap Closest.
@@ -460,10 +471,21 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
     const when = offerWhen(x.d.__offer, x.card.timing, { now: new Date(), lang });
     return { kind: "deal", key: x.id || x.d.name, name: x.d.name, offer: offerTextIn(x.d.__offer, lang), tag: tagFor(x.d, lang), badge: liveBadge(x.d.__offer, when, lang), photo: x.d.photo || "", cat: dealCategory(x.d) };
   })], [all, lang]);
+  // A walk from where the phone is, or from the centre when that is not known.
+  const startWalk = (x, from) => setGoing({ ...x, minutes: walkMinutes(from, x.at), _from: from });
   const go = (x) => {
     askForCompass();
-    if (start) { setGoing(x); return; }
-    locate((at) => setGoing({ ...x, minutes: walkMinutes(at, x.at), _from: at }));
+    if (here) { startWalk(x, hereAt(here)); return; }
+    const fallback = () => { if (centreStart) startWalk(x, centreStart); };
+    if (!canLocate) { fallback(); return; }
+    try {
+      navigator.geolocation.getCurrentPosition((p) => {
+        const at = { lat: p.coords.latitude, lon: p.coords.longitude };
+        if (!inNowArea(country, at)) { fallback(); return; }
+        setHere(at);
+        startWalk(x, hereAt(at));
+      }, fallback, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
+    } catch { fallback(); }
   };
   const openRedeem = (x, when) => {
     pushSheet(2);
@@ -482,25 +504,24 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
   const [dirNote, setDirNote] = useState("");
   const [finding, setFinding] = useState(false);
   useEffect(() => { setDirNote(""); setFinding(false); }, [opened]);
+  // Since 17 Oct 2026 a phone outside Klaipėda, one that says no, or one
+  // that cannot find itself walks from the Tourist Information Centre.
   const goFromDeal = (x) => {
     setDirNote("");
-    if (start) { dropSheets(); setOpened(null); go(x); return; }
-    if (!canLocate) { setDirNote(uiT("dir.cannot", lang)); return; }
+    const leave = (from) => { setFinding(false); dropSheets(); setOpened(null); startWalk(x, from); };
+    if (here) { leave(hereAt(here)); return; }
+    const fallback = () => { if (centreStart) leave(centreStart); else { setFinding(false); setDirNote(uiT("dir.cannot", lang)); } };
+    if (!canLocate) { fallback(); return; }
     askForCompass();
     setFinding(true);
     try {
       navigator.geolocation.getCurrentPosition((p) => {
-        setFinding(false);
         const at = { lat: p.coords.latitude, lon: p.coords.longitude };
-        if (!inNowArea(country, at)) { setDirNote(uiT("dir.notHere", lang)); return; }
+        if (!inNowArea(country, at)) { fallback(); return; }
         setHere(at);
-        dropSheets(); setOpened(null);
-        setGoing({ ...x, minutes: walkMinutes(at, x.at), _from: at });
-      }, (err) => {
-        setFinding(false);
-        setDirNote(err?.code === 1 ? fill(uiT("dir.blocked", lang), { btn: uiT("explore.directions", lang) }) : uiT("dir.noFix", lang));
-      }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
-    } catch { setFinding(false); setDirNote(uiT("dir.cannot", lang)); }
+        leave(hereAt(at));
+      }, fallback, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
+    } catch { fallback(); }
   };
   // ── A SCAN OF THE GEMLYX CODE AT THE COUNTER ──────────────────────
   // 17 Oct 2026 (utils/scanCode.js). The sticker opens /s/<code>, which lands
@@ -548,7 +569,7 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
   const [howOpen, setHowOpen] = useState(() => { try { return !localStorage.getItem(HOW_KEY); } catch { return true; } });
   const closeHow = () => { setHowOpen(false); try { localStorage.setItem(HOW_KEY, "1"); } catch { /* shows again next visit */ } };
 
-  const walkStart = going?._from ? { id: "here", name: uiT("now.whereYouAre", lang), lat: going._from.lat, lon: going._from.lon, ship: false } : start;
+  const walkStart = going?._from || start;
 
   // ── A DEAL ASKED FOR BY AN ALERT OR A MAIL ─────────────────────────
   // 15 Oct 2026 (utils/dealOpen.js): the bell's list and a deal mail's link
@@ -629,17 +650,11 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
           ))}
         </div>
       </div>
+      {fromCentre && <div data-testid="deals-from-centre" style={{ fontSize: 12, color: C.muted, margin: "0 0 10px" }}>{uiT("explore.fromCentre", lang)}</div>}
       {howOpen && (
         <div data-testid="deals-howto" style={{ position: "relative", background: C.surface, border: `1px solid ${C.gold}33`, borderRadius: 16, padding: "14px 44px 14px 16px", margin: "0 0 14px" }}>
           <div style={{ ...eyebrow(), marginBottom: 10 }}>{uiT("how.title", lang)}</div>
-          <ol style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: "10px 18px" }}>
-            {["how.one", "how.two", "how.three"].map((k, i) => (
-              <li key={k} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14, color: C.text, lineHeight: 1.35 }}>
-                <span aria-hidden="true" style={{ width: 26, height: 26, borderRadius: "50%", background: `${C.gold}1F`, color: C.gold, fontFamily: "'Fraunces', serif", fontSize: 14, fontWeight: 600, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{i + 1}</span>
-                {uiT(k, lang)}
-              </li>
-            ))}
-          </ol>
+          <p data-testid="deals-howto-body" style={{ margin: 0, fontSize: 14.5, color: C.text, lineHeight: 1.5 }}>{uiT("how.body", lang)}</p>
           <button onClick={closeHow} aria-label={uiT("how.close", lang)} data-testid="deals-howto-close"
             style={{ position: "absolute", top: 10, right: 10, width: 28, height: 28, borderRadius: "50%", border: "none", background: "transparent", color: C.muted, fontSize: 14, cursor: "pointer" }}>✕</button>
         </div>
