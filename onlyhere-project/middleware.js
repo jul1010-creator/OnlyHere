@@ -134,11 +134,32 @@ export const config = { matcher: ["/guide/:path*", "/denmark/:path*", "/lithuani
 //   engine about a hundred stubs is the "many pages without adding value" shape
 //   from Google's own scaled-content policy, which is the thing this whole night
 //   was about avoiding, not a step towards it.
+// ── A CEILING ON EVERY READ, AND NO SECOND READ FOR A MISS ──────────
+// Security review, 17 Oct 2026: these reads had no limit, the sitemap ran a
+// fresh one for every made-up query string, and a crawler User-Agent on a
+// made-up address read a whole type each time, never cached. So every read
+// stops at READ_LIMIT rows (far above what is published), a sitemap address
+// with a query is sent to the plain one, and an address that matched nothing
+// is remembered for ten minutes on this edge instance.
+const READ_LIMIT = 2000;
+const MISS_TTL_MS = 10 * 60 * 1000;
+const MISS_MAX = 500;
+const misses = new Map();
+const missed = (key) => {
+  const at = misses.get(key);
+  if (at && Date.now() - at < MISS_TTL_MS) return true;
+  if (at) misses.delete(key);
+  return false;
+};
+const rememberMiss = (key) => {
+  if (misses.size >= MISS_MAX) misses.delete(misses.keys().next().value);
+  misses.set(key, Date.now());
+};
 const publishedEntries = async () => {
   const entries = hardcodedTowns.map(t => t?.name).filter(Boolean).map(name => ({ type: "town", name }));
   try {
     const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/gemlyx_content?select=type,payload&published=eq.true&order=id.desc`,
+      `${SUPABASE_URL}/rest/v1/gemlyx_content?select=type,payload&published=eq.true&order=id.desc&limit=${READ_LIMIT}`,
       { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }, signal: AbortSignal.timeout(2500) },
     );
     if (res.ok) {
@@ -217,15 +238,19 @@ const findTown = async (slug, country = DEFAULT_COUNTRY) => {
 const findEntry = async (seg, slug, country = DEFAULT_COUNTRY) => {
   const types = seg ? typesForSeg(seg) : ["town"];
   if (!types.length) return null;
+  const missKey = `${country}|${seg}|${slug}`;
+  if (missed(missKey)) return null;
   try {
     const filter = types.length === 1 ? `type=eq.${types[0]}` : `type=in.(${types.join(",")})`;
     const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/gemlyx_content?select=payload&${filter}&published=eq.true&order=id.desc`,
+      `${SUPABASE_URL}/rest/v1/gemlyx_content?select=payload&${filter}&published=eq.true&order=id.desc&limit=${READ_LIMIT}`,
       { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }, signal: AbortSignal.timeout(2500) },
     );
     if (!res.ok) return null;
     const rows = await res.json();
-    return findBySlug((Array.isArray(rows) ? rows : []).map(r => r?.payload).filter(Boolean).filter(p => rowCountry(p) === country), slug);
+    const found = findBySlug((Array.isArray(rows) ? rows : []).map(r => r?.payload).filter(Boolean).filter(p => rowCountry(p) === country), slug);
+    if (!found) rememberMiss(missKey);
+    return found;
   } catch { return null; }
 };
 
@@ -243,6 +268,8 @@ export default async function middleware(request) {
     // anywhere in the app for a crawler to follow. Making the URLs exist does
     // not make them discoverable; something has to list them, and this is it.
     if (url.pathname === "/sitemap.xml") {
+      // One address, so the CDN's copy answers every request (17 Oct 2026).
+      if (url.search) return Response.redirect(`${url.origin}/sitemap.xml`, 301);
       const all = await publishedEntries();
       const home = all.filter(e => !e.country || e.country === DEFAULT_COUNTRY);
       let xml = sitemapXml(SITE_ORIGIN, home);
