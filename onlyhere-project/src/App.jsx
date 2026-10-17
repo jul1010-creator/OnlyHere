@@ -73,6 +73,8 @@ import { dueForCheck, lastCheckOf, checkRecord, checkKey, LOCAL_CHECKS_KEY } fro
 const LAST_CHECK_RESULTS_KEY = "gemlyx_event_check_results";
 import { SupportPage } from "./components/SupportPage";
 import { AboutPage, ABOUT_PATH } from "./components/AboutPage";
+import { ScanRedirect, StickerPage } from "./pages/ScanSticker";
+import { SCAN_PATH, STICKER_PATH } from "./utils/scanCode";
 // ── THE PAGE THAT SAYS HOW THIS IS PAID FOR ─────────────────────────
 // Oliver, 9 Sep 2026: "make an 'affiliate' in the burgermenu where we list all
 // our affiliates and why we use them." A route rather than a file in public/,
@@ -35984,6 +35986,10 @@ export default function Gemlyx() {
       {/* About Gemlyx, 16 Oct 2026: a page of its own, linked from the foot of
           /lithuania. See components/AboutPage.jsx. */}
       <Route path={ABOUT_PATH} element={<AboutPage />} />
+      {/* The Gemlyx code at the counter, 17 Oct 2026 (utils/scanCode.js): the
+          address a sticker holds, and the page a sticker is printed from. */}
+      <Route path={`${SCAN_PATH}/:code`} element={<ScanRedirect />} />
+      <Route path={`${STICKER_PATH}/:code`} element={<StickerPage />} />
       <Route path={AFFILIATES_PATH} element={<AffiliatesPage />} />
       {/* ── KLAIPĖDA, A DEMO FOR THE TOURISM CENTRE ──────────────
           Oliver, 29 Sep 2026. Two hand-written trips, linked from nowhere and
