@@ -506,9 +506,14 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
   useEffect(() => { setDirNote(""); setFinding(false); }, [opened]);
   // Since 17 Oct 2026 a phone outside Klaipėda, one that says no, or one
   // that cannot find itself walks from the Tourist Information Centre.
+  // A position that arrives after the visitor has moved on to another deal
+  // starts nothing (Fable's review, 17 Oct 2026).
+  const dirSeq = useRef(0);
+  useEffect(() => { dirSeq.current += 1; }, [opened]);
   const goFromDeal = (x) => {
     setDirNote("");
-    const leave = (from) => { setFinding(false); dropSheets(); setOpened(null); startWalk(x, from); };
+    const mine = ++dirSeq.current;
+    const leave = (from) => { if (mine !== dirSeq.current) return; setFinding(false); dropSheets(); setOpened(null); startWalk(x, from); };
     if (here) { leave(hereAt(here)); return; }
     const fallback = () => { if (centreStart) leave(centreStart); else { setFinding(false); setDirNote(uiT("dir.cannot", lang)); } };
     if (!canLocate) { fallback(); return; }
@@ -546,6 +551,9 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
       let at = "";
       try { at = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Vilnius", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(now); } catch { /* no clock */ }
       const when = offerWhen(live.d.__offer, live.card.timing, { now, lang });
+      // The deal under it as well, so the history holds the two steps the
+      // sheets expect and Back lands on the deal (Fable's review, 17 Oct 2026).
+      pushSheet(1); setAtMap(false); setOpened(live.id || live.d.name);
       pushSheet(2);
       setRedeem({ x: live, when: when?.text || "", scanned: true, at });
       const day = dayKey(dateIn(now, "Europe/Vilnius")) || "";
@@ -554,6 +562,7 @@ export const DealsNearYou = ({ deals = [], examples = false, ready = true, lang 
     }
     const later = upcomingDeals(deals, null, { now, lang, limit: Infinity, country }).find(mine);
     if (later) {
+      pushSheet(1); setAtMap(false); setOpened(`soon:${later.id || later.d.name}`);
       pushSheet(2);
       setRedeem({ x: later, when: startsWords(later.next, lang), note: uiT("redeem.notNow", lang) });
       return;
