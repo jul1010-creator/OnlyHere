@@ -83875,6 +83875,28 @@ ok("a guest count is written the reader's way", M.CR.aboutGuests(1936) === "1,90
   ok("the sign-up form asks nothing that only shaped a guide", /\{show === "all" && AI_GUIDES_SHOWN && \(/.test(read("src/components/ProfileQuestions.jsx")) && /show === "all" && moreOpen && AI_GUIDES_SHOWN/.test(read("src/components/ProfileQuestions.jsx")));
 }
 
+// ── Batch 263: nothing private is tracked by git ──
+// 17 Oct 2026: a push from the laptop sent the Claude outputs folder (private
+// hand-off notes, a security SQL file, work bundles) to GitHub, which is
+// public. They had been committed before the ignore rule reached the laptop,
+// and an ignore rule does not stop a file git already tracks. Oliver: "How to
+// prevent this from happening in the future?" The pre-push hook refuses such a
+// push on the laptop; this is the same rule on GitHub, so one that slips past
+// the hook still fails the build and sends the mail. Asked of git, not of the
+// folder on disk: on the laptop the folder is meant to exist, untracked.
+{
+  const repoTop = join(root, "..");
+  let tracked = null;
+  try { tracked = execFileSync("git", ["ls-files"], { cwd: repoTop, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }).split("\n").filter(Boolean); } catch { tracked = null; }
+  const PRIVATE = /(^|\/)Claude outputs\/|\.bundle$|_private\.md$/;
+  const caught = (tracked || []).filter(f => PRIVATE.test(f));
+  ok(`git tracks no Claude outputs, bundle or private note${caught.length ? ": " + caught.slice(0, 8).join(", ") + (caught.length > 8 ? ` and ${caught.length - 8} more` : "") : ""}`, Array.isArray(tracked) && tracked.length > 200 && caught.length === 0);
+  ok("the rule would catch each kind", ["onlyhere-project/Claude outputs/16OCT/HANDOFF.md", "Claude outputs/App.jsx", "x/gemlyx-stage-b5.bundle", "HANDOFF_17OCT_private.md"].every(f => PRIVATE.test(f)) && !PRIVATE.test("onlyhere-project/src/App.jsx"));
+  const hook = readFileSync(join(repoTop, ".githooks/pre-push"), "utf8");
+  ok("and the push is refused on the laptop before it leaves", /git ls-tree -r --name-only HEAD \| grep -E '\(\^\|\/\)Claude outputs\/\|\\\.bundle\$\|_private\\\.md\$'/.test(hook) && hook.indexOf("NOTHING PRIVATE GOES UP") < hook.indexOf("cd onlyhere-project"));
+  ok("both ignore files keep the folder and bundles out", ["../.gitignore", ".gitignore"].every(f => /^Claude outputs\/$/m.test(readFileSync(join(root, f), "utf8")) && /^\*\.bundle$/m.test(readFileSync(join(root, f), "utf8"))));
+}
+
 // ── Batch 262: the sign-in sheet against Oliver's brief, and its language picker ──
 // Oliver, 17 Oct 2026, with a brief for the sign-in sheet: "This is a document
 // from ChatGPT I think you should look at. At the sign in, I also want you to
