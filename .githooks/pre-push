@@ -20,6 +20,29 @@
 # To bypass once, deliberately: git push --no-verify
 
 set -e
+
+# ── NOTHING PRIVATE GOES UP ─────────────────────────────────────────
+#
+# 17 Oct 2026. A push from the laptop sent the whole Claude outputs folder to
+# GitHub, which is public: private hand-off notes, a security SQL file and
+# work bundles. They had been committed that morning, before the ignore rule
+# for the folder reached the laptop, and an ignore rule does not stop a file
+# git already tracks. Oliver: "How to prevent this from happening in the
+# future?"
+#
+# So the push itself is refused while any such file is in the commit being
+# pushed, with the exact command that takes it off GitHub and keeps it on the
+# laptop. The suite checks the same thing on GitHub (batch 263).
+private=$(git ls-tree -r --name-only HEAD | grep -E '(^|/)Claude outputs/|\.bundle$|_private\.md$' || true)
+if [ -n "$private" ]; then
+  printf "\npre-push: REFUSED. These private files would go to GitHub, which is public:\n\n%s\n\n" "$private"
+  printf "Take them off GitHub and keep them on this laptop with:\n"
+  printf '  git rm -r --cached --ignore-unmatch "Claude outputs" "onlyhere-project/Claude outputs"\n'
+  printf '  git commit -m "Keep private files off GitHub"\n'
+  printf "then push again.\n\n"
+  exit 1
+fi
+
 cd onlyhere-project
 
 printf "pre-push: running the suite\\n"
